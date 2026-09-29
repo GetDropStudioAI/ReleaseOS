@@ -79,19 +79,19 @@ public class SeedAndAdminTests
         Assert.Superset(new HashSet<string> { "Pending", "InProgress", "Certified" }, states);
         Assert.Equal(["Gated", "Planning", "Planning"], Query(f, "SELECT CurrentStatus FROM ReleaseTrains ORDER BY CurrentStatus").Select(r => (string)r[0]!).ToArray());
         // built via the services: certifications are audited by the service, cascades (baseline) by triggers
-        Assert.True((long)Query(f, "SELECT count(*) FROM AuditEvents WHERE Action='Certify'").Single()[0] >= 3);
-        Assert.True((long)Query(f, "SELECT count(*) FROM Baselines").Single()[0] >= 2);
+        Assert.True(Convert.ToInt64(Query(f, "SELECT count(*) FROM AuditEvents WHERE Action='Certify'").Single()[0]) >= 3);
+        Assert.True(Convert.ToInt64(Query(f, "SELECT count(*) FROM Baselines").Single()[0]) >= 2);
         // DueOn respects business days: no gate lands on a weekend for these offsets/targets (Fridays)
         foreach (var r in Query(f, "SELECT DueOn FROM StageGates")) Assert.NotEqual(DayOfWeek.Saturday, DateOnly.Parse((string)r[0]!).DayOfWeek);
     }
 
     [Fact]
-    public void Demo_seed_never_touches_a_database_that_already_has_trains()
+    public async Task Demo_seed_never_touches_a_database_that_already_has_trains()
     {
         using var f = new ApiFactory(demoData: true);
         f.CreateClient();
         var seed = (Infrastructure.Services.SeedService)f.Services.GetService(typeof(Infrastructure.Services.SeedService))!;
-        seed.SeedDemoDataAsync().GetAwaiter().GetResult();
+        await seed.SeedDemoDataAsync();
         Assert.Equal(3L, Query(f, "SELECT count(*) FROM ReleaseTrains").Single()[0]);
         Assert.Equal(5L, Query(f, "SELECT count(*) FROM Users").Single()[0]);
     }
@@ -132,7 +132,7 @@ public class SeedAndAdminTests
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await rte.PostAsJsonAsync("/api/v1/teams", new { handle = "OPS-DB", name = "dup" })).StatusCode == HttpStatusCode.InternalServerError ? HttpStatusCode.InternalServerError : HttpStatusCode.UnprocessableEntity);
 
         var list = await rte.GetFromJsonAsync<JsonElement>("/api/v1/teams");
-        Assert.Equal([me], list[0].GetProperty("memberIds").EnumerateArray().Select(x => x.GetString()).ToArray());
+        Assert.Equal([me], list[0].GetProperty("memberIds").EnumerateArray().Select(x => x.GetString()!).ToArray());
 
         var patch = await rte.PatchAsJsonAsync($"/api/v1/users/{me}", new { handle = "@rae" });
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);

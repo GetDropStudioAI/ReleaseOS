@@ -74,7 +74,7 @@ public class LifecycleContractTests
         var (status, body) = await Post(rte, "/api/v1/trains/t1:advance", new { to = "Gated" });
         Assert.Equal(HttpStatusCode.UnprocessableEntity, status);
         Assert.Equal("GateLockout", body.GetProperty("guard").GetString());
-        Assert.Equal(["Code Freeze"], body.GetProperty("gates").EnumerateArray().Select(x => x.GetString()).ToArray());
+        Assert.Equal(["Code Freeze"], body.GetProperty("gates").EnumerateArray().Select(x => x.GetString()!).ToArray());
     }
 
     [Fact]

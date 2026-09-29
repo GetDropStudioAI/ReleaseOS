@@ -16,9 +16,10 @@ public sealed class WaiverService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         {
             var g = await db.Set<StageGates>().SingleOrDefaultAsync(x => x.Id == gateId, ct);
             if (g is null) return ServiceResult<GateWaivers>.NotFound("gate");
-            if ((reason ?? "").Trim().Length < MinReasonLength)
+            var text = (reason ?? "").Trim();
+            if (text.Length < MinReasonLength)
                 return ServiceResult<GateWaivers>.Fail(new GuardFailure(Guards.WaiverReason, $"A waiver needs a written reason of at least {MinReasonLength} characters"));
-            var w = new GateWaivers { Id = Ids.New(), StageGateId = gateId, Reason = reason.Trim(), RequestedByUserId = actor.UserId, RequestedAt = Now };
+            var w = new GateWaivers { Id = Ids.New(), StageGateId = gateId, Reason = text, RequestedByUserId = actor.UserId, RequestedAt = Now };
             db.Set<GateWaivers>().Add(w);
             Audit(db, actor, g.ReleaseTrainId, "GateWaiver", w.Id, "Request", null, new { gateId, reason = w.Reason });
             await db.SaveChangesAsync(ct);

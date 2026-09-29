@@ -7,7 +7,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 public sealed record ForecastStepDto(string Step, string State, string? Start, string? End, int? EndVarianceMin);
-public sealed record RunForecastDto(string RunId, string Mode, string AsOf, string? ForecastFinish, string PlannedFinish, int RollbackPlannedMin, string? RollbackDeadline,
+public sealed record RunForecastDto(string RunId, string Mode, string AsOf, string? WindowStart, string? WindowEnd, string? ForecastFinish, string PlannedFinish, int RollbackPlannedMin, string? RollbackDeadline,
                                     int? CrossesDeadlineByMin, bool AlertRaised, int? WindowClosesInSec, IReadOnlyList<string> BlockedByFailed, IReadOnlyList<ForecastStepDto> Steps);
 
 /// <summary>Reads a run and its plan and applies <see cref="RunForecasting"/> at the injected clock. A Rehearsal shifts the plan and the window by the same D28 offset. Read-only.</summary>
@@ -39,7 +39,7 @@ public sealed class ForecastService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         now = new DateTime(now.Ticks - now.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
         var r = RunForecasting.Compute(now, window is null ? null : window.EndsAt + shift, input);
         string? F(DateTime? d) => d?.ToString(Iso, CultureInfo.InvariantCulture);
-        return ServiceResult<RunForecastDto>.Ok(new RunForecastDto(run.Id, run.Mode, F(now)!, F(r.ForecastFinish), F(r.PlannedFinish)!, r.RollbackPlannedMin, F(r.RollbackDeadline),
+        return ServiceResult<RunForecastDto>.Ok(new RunForecastDto(run.Id, run.Mode, F(now)!, F(window is null ? null : window.StartsAt + shift), F(window is null ? null : window.EndsAt + shift), F(r.ForecastFinish), F(r.PlannedFinish)!, r.RollbackPlannedMin, F(r.RollbackDeadline),
             r.CrossesDeadlineByMin, r.AlertRaised, r.WindowClosesInSec, r.BlockedByFailed, [.. r.Steps.Select(x => new ForecastStepDto(x.Step, x.State, F(x.Start), F(x.End), x.EndVarianceMin))]));
     }
 }

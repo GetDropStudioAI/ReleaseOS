@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getOwners, type Owner } from './api'
 import { day } from './format'
+import { fmtDayTime, zoneAbbr } from './time'
 
 /** A 409 from the API: somebody else saved first. The body carries the row as it is now (`current`). */
 export const isConflict = (e: unknown): e is ApiError => e instanceof ApiError && e.status === 409
@@ -8,7 +9,7 @@ export const isConflict = (e: unknown): e is ApiError => e instanceof ApiError &
 let people: Promise<Owner[]> | undefined
 const whoIs = async (id: unknown) => (typeof id === 'string' ? (await (people ??= getOwners().catch(() => []))).find(o => o.id === id)?.name : undefined) ?? 'someone else'
 
-const zoneTime = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
+const zoneTime = (iso: string) => `${fmtDayTime(iso)} ${zoneAbbr(iso)}`
 
 /** Plain words for what the row looks like now, whatever kind of row it is. */
 function describe(current: Record<string, unknown> | undefined): string {

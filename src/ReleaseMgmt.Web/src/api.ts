@@ -97,3 +97,18 @@ export const commitTasks = (trainId: string, previewId: string, acknowledgeDecer
 
 export interface FreezeAhead { id: string; name: string; kind: string; startsAt: string; endsAt: string; scope: string; active: boolean; overridesGranted: number }
 export const getFreezesAhead = () => get<FreezeAhead[]>('/api/v1/freeze-windows/ahead')
+
+export const getConfig = () => get<{ displayTimeZone: string }>('/api/v1/config')
+
+export interface RunSummary { id: string; mode: 'Rehearsal' | 'Live'; startedAt: string; endedAt: string | null; outcome: string | null; version: number }
+export interface RunStepRow { stepId: string; stepCode: string; section: string; title: string; ownerName: string | null; plannedStartAt: string; plannedEndAt: string; plannedDurationMin: number; status: string; actualStartAt: string | null; actualEndAt: string | null; actorName: string | null; note: string | null; dependsOn: string[]; blocks: string[]; instructions: string | null; canAct: boolean; version: number }
+export interface RunDetail { id: string; trainId: string; mode: 'Rehearsal' | 'Live'; startedAt: string; startedBy: string | null; endedAt: string | null; outcome: string | null; shiftMinutes: number; version: number; steps: RunStepRow[] }
+export interface ForecastStepRow { step: string; state: string; start: string | null; end: string | null; endVarianceMin: number | null }
+export interface RunForecast { runId: string; mode: string; asOf: string; windowStart: string | null; windowEnd: string | null; forecastFinish: string | null; plannedFinish: string; rollbackPlannedMin: number; rollbackDeadline: string | null; crossesDeadlineByMin: number | null; alertRaised: boolean; windowClosesInSec: number | null; blockedByFailed: string[]; steps: ForecastStepRow[] }
+export const getRuns = (trainId: string) => get<RunSummary[]>(`/api/v1/trains/${trainId}/runs`)
+export const getRun = (id: string) => get<RunDetail>(`/api/v1/runs/${id}`)
+export const getForecast = (id: string) => get<RunForecast>(`/api/v1/runs/${id}/forecast`)
+export const startRun = (trainId: string, mode: 'Rehearsal' | 'Live') => post<RunSummary>(`/api/v1/trains/${trainId}/runs`, { mode })
+export const runStepAction = (runId: string, stepId: string, action: 'start' | 'done' | 'fail' | 'skip', note: string | null, version: number) =>
+  post<unknown>(`/api/v1/runs/${runId}/steps/${stepId}:${action}`, { note }, version)
+export const endRun = (runId: string, outcome: 'Completed' | 'RolledBack' | 'Aborted', version: number) => post<unknown>(`/api/v1/runs/${runId}:end`, { outcome }, version)

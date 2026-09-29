@@ -2,28 +2,31 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Selection } from './Planning'
 
 /** The URL carries the train and the selected node, so a deep link or a refresh reopens the same Inspector (PROJECT_SCOPE 5.4). */
-export interface Route { view: 'trains' | 'admin'; trainId: string | null; selection: Selection }
+export type Mode = 'plan' | 'rehearsal' | 'live'
+export interface Route { view: 'trains' | 'admin'; trainId: string | null; selection: Selection; mode: Mode }
 
-export const ROOT: Route = { view: 'trains', trainId: null, selection: null }
+export const ROOT: Route = { view: 'trains', trainId: null, selection: null, mode: 'plan' }
 
 export function parsePath(path: string): Route {
   const seg = path.split('/').filter(Boolean).map(decodeURIComponent)
-  if (seg[0] === 'admin') return { view: 'admin', trainId: null, selection: null }
+  if (seg[0] === 'admin') return { view: 'admin', trainId: null, selection: null, mode: 'plan' }
   if (seg[0] !== 'trains' || !seg[1]) return ROOT
   const trainId = seg[1]
+  let mode: Mode = 'plan'
+  if (seg[2] === 'live' || seg[2] === 'rehearsal') { mode = seg[2]; seg.splice(2, 1) }
   if (seg[2] === 'gates' && seg[3]) {
-    if (seg[4] === 'tasks' && seg[5]) return { view: 'trains', trainId, selection: { kind: 'task', gateId: seg[3], id: seg[5] } }
-    return { view: 'trains', trainId, selection: { kind: 'gate', id: seg[3] } }
+    if (seg[4] === 'tasks' && seg[5]) return { view: 'trains', trainId, mode, selection: { kind: 'task', gateId: seg[3], id: seg[5] } }
+    return { view: 'trains', trainId, mode, selection: { kind: 'gate', id: seg[3] } }
   }
-  if (seg[2] === 'steps' && seg[3]) return { view: 'trains', trainId, selection: { kind: 'step', id: seg[3] } }
-  if (seg[2] === 'products' && seg[3]) return { view: 'trains', trainId, selection: { kind: 'product', id: seg[3] } }
-  return { view: 'trains', trainId, selection: null }
+  if (seg[2] === 'steps' && seg[3]) return { view: 'trains', trainId, mode, selection: { kind: 'step', id: seg[3] } }
+  if (seg[2] === 'products' && seg[3]) return { view: 'trains', trainId, mode, selection: { kind: 'product', id: seg[3] } }
+  return { view: 'trains', trainId, selection: null, mode }
 }
 
 export function buildPath(r: Route): string {
   if (r.view === 'admin') return '/admin'
   if (!r.trainId) return '/'
-  const e = encodeURIComponent, base = `/trains/${e(r.trainId)}`
+  const e = encodeURIComponent, base = `/trains/${e(r.trainId)}${!r.mode || r.mode === 'plan' ? '' : '/' + r.mode}`
   const s = r.selection
   if (!s) return base
   if (s.kind === 'gate') return `${base}/gates/${e(s.id)}`

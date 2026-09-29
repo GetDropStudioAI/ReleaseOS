@@ -79,3 +79,28 @@ section > h2.cap { margin: 22px 0 6px; }
 .bulk-text { display: block; width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 12.5px; color: inherit; background: transparent; border: 0; border-bottom: 1px solid var(--tertiary); padding: 6px 0; resize: vertical; }
 .stream .freeze-footer { position: sticky; bottom: -16px; margin: auto -16px -16px; padding: 12px 16px 14px; border-top: 1px solid var(--separator); font-size: var(--text-caption); background: var(--sidebar-fallback); }
 .stream > section:last-of-type { margin-bottom: 20px; }
+
+.metrics { display: flex; flex-wrap: wrap; gap: 8px 36px; border-top: 1px solid var(--separator-strong); border-bottom: 1px solid var(--separator); padding: 10px 0; margin: 12px 0; }
+.metrics .big { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+.drawer-metrics { border: 0; padding: 0; margin: 8px 0 12px; }
+.alert-line { margin: 8px 0; }
+.mode-tabs { display: flex; gap: 16px; }
+.runtable tr.sec td { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--secondary); padding-top: 12px; border-bottom: 1px solid var(--separator-strong); }
+.runtable th.axis { display: flex; justify-content: space-between; width: 200px; font-weight: 400; color: var(--secondary); }
+.small { font-size: 12px; }
+.gantt { display: block; overflow: visible; }
+.gantt .g-plan { fill: var(--separator-strong); } .gantt .g-actual { fill: var(--label); } .gantt .g-running { fill: var(--accent); }
+.gantt .g-now { stroke: var(--accent); } .gantt .g-deadline { stroke: var(--bad); } .gantt .g-fc { stroke: var(--accent); } .gantt .g-fc.late { stroke: var(--warn); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 12px; }
+.legend .lg { display: inline-block; width: 14px; height: 6px; margin-right: 2px; } .lg.plan { background: var(--separator-strong); } .lg.actual { background: var(--label); } .lg.fc { border-top: 2px dashed var(--warn); height: 0; }
+.instr { padding-left: 18px; margin: 4px 0 12px; }
+/* muted text on the selection tint is under 4.5:1; selected rows use the label colour (axe) */
+table.grid tr.selected .muted, table.grid tr.selected td.muted { color: var(--label); }
+/* status colours on the selection tint: mix toward the label colour (lighter in dark, darker in light) to keep 4.5:1, no colour literals */
+table.grid tr.selected .bad { color: color-mix(in srgb, var(--bad) 65%, var(--label)); }
+table.grid tr.selected .warn { color: color-mix(in srgb, var(--warn) 65%, var(--label)); }
+table.grid tr.selected .ok { color: color-mix(in srgb, var(--ok) 65%, var(--label)); }
+table.grid tr.selected .accent { color: color-mix(in srgb, var(--accent) 65%, var(--label)); }
+.toolbar > *, .toolbar a, .toolbar button, .toolbar .muted, .toolbar strong { white-space: nowrap; }
+.toolbar { gap: 16px; }
+.metrics { gap: 8px 28px; }

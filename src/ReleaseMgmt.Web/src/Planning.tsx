@@ -4,6 +4,7 @@ import {
   type GateDetail, type GateRow, type Owner, type ProductsResponse, type WindowRow,
 } from './api'
 import { day, errMsg, tMinus } from './format'
+import { fmtDay, fmtDayTime, fmtHM, utcToZonedInput, zonedInputToUtc, zoneAbbr } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
 import type { ApiError } from './api'
@@ -18,15 +19,12 @@ const STATUS: Record<string, { g: string; cls: string; word: string }> = {
 }
 
 // ---- Deployment window (GET/PUT /trains/{id}/window). Shown in the viewer's zone with its abbreviation (Q-008). -----------------------------
-const hm = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-const zone = (d: Date) => new Intl.DateTimeFormat('en-GB', { timeZoneName: 'short' }).formatToParts(d).find(p => p.type === 'timeZoneName')?.value ?? ''
-const localInput = (iso: string) => { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
-const toUtc = (local: string) => new Date(local).toISOString().replace(/\.\d{3}Z$/, 'Z')
+const localInput = utcToZonedInput
+const toUtc = zonedInputToUtc
 
 export function windowText(w: WindowRow) {
-  const a = new Date(w.startsAt), b = new Date(w.endsAt)
-  const same = a.toDateString() === b.toDateString()
-  return same ? `${hm(a)}–${hm(b)} ${zone(b)}` : `${day(w.startsAt.slice(0, 10))} ${hm(a)} – ${day(w.endsAt.slice(0, 10))} ${hm(b)} ${zone(b)}`
+  const same = fmtDay(w.startsAt) === fmtDay(w.endsAt)
+  return same ? `${fmtHM(w.startsAt)}–${fmtHM(w.endsAt)} ${zoneAbbr(w.endsAt)}` : `${fmtDayTime(w.startsAt)} – ${fmtDayTime(w.endsAt)} ${zoneAbbr(w.endsAt)}`
 }
 
 export function WindowLine({ trainId, canEdit, refreshKey, onChanged }: { trainId: string; canEdit: boolean; refreshKey: number; onChanged: () => void }) {
@@ -191,7 +189,7 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
                   <td><button type="button" className="text plainlink" onClick={() => onSelect({ kind: 'task', gateId: gate.id, id: t.id })}>{t.description}</button></td>
                   <td>{t.owner ?? <span className="muted">—</span>}</td>
                   <td>{t.product ?? <span className="muted">—</span>}</td>
-                  <td className="mono muted nowrap">{t.completedAt ? new Date(t.completedAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                  <td className="mono muted nowrap">{t.completedAt ? fmtDayTime(t.completedAt) : '—'}</td>
                   <td><button type="button" className="text" onClick={() => toggle(t)}>{t.done ? 'Reopen' : 'Mark done'}</button></td>
                 </tr>
               )
@@ -236,7 +234,7 @@ export function Inspector({ selection, trainId, canPlan, refreshKey, onClose, on
     return (<>{head('task')}
       <h2>{t.description}</h2>
       <dl className="facts"><dt>State</dt><dd className={t.done ? 'ok' : undefined}>{t.done ? '✓ done' : '○ open'}</dd><dt>Owner</dt><dd>{t.owner ?? '—'}</dd><dt>Product</dt><dd>{t.product ?? '—'}</dd>
-        <dt>Gate</dt><dd>{gate.name}</dd>{t.done && <><dt>Completed</dt><dd>{t.completedBy ?? ''} {t.completedAt ? new Date(t.completedAt).toLocaleString('en-GB') : ''}</dd></>}</dl>
+        <dt>Gate</dt><dd>{gate.name}</dd>{t.done && <><dt>Completed</dt><dd>{t.completedBy ?? ''} {t.completedAt ? fmtDayTime(t.completedAt) : ''}</dd></>}</dl>
       <p><button type="button" className="text" onClick={() => act(() => taskAction(t.id, t.done ? 'reopen' : 'complete', t.version))}>{t.done ? 'Reopen task' : 'Mark done'}</button></p>
       {err && <p className="bad" role="alert">✗ {err}</p>}
       {conflict && <Conflict error={conflict} what="task" />}</>)

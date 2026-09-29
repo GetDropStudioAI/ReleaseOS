@@ -4,12 +4,15 @@ import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
 import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
 import { Inspector } from './Planning'
+import { LiveRun, RunStepDrawer, useRun } from './LiveRun'
 import { BulkDrawer, bulkKey, type BulkDraft } from './Bulk'
 import { getTrain, type TrainDetail } from './api'
 import { useDraft } from './session'
 import { parsePath, ROOT, useRoute, type Route } from './route'
 import { SessionProvider, useSession } from './session'
 import { useLive, type LiveState } from './live'
+import { fmtDayTime, setDisplayZone, zoneAbbr } from './time'
+import { getConfig } from './api'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
@@ -85,7 +88,7 @@ const LIVE: Record<LiveState, { g: string; cls: string; word: string }> = {
 // Server clock pushed every 10 s, so every tab shows the same time; the state is words + glyph, never a badge.
 function LiveStatus({ state, time }: { state: LiveState; time: string | null }) {
   const x = LIVE[state]
-  const when = time ? new Date(time).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null
+  const when = time ? `${fmtDayTime(time)} ${zoneAbbr(time)}` : null
   return <span className="muted live" role="status">{when && <>{when} · </>}<span className={x.cls}>{x.g} {x.word}</span></span>
 }
 
@@ -134,11 +137,15 @@ export default function App() {
 function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => void; onStopped: () => void }) {
   const { route, go } = useRoute()
   const session = useSession()
+  const [zoneReady, setZoneReady] = useState(false)
+  useEffect(() => { getConfig().then(c => setDisplayZone(c.displayTimeZone)).catch(() => { /* keep the D24 default */ }).finally(() => setZoneReady(true)) }, [])
   const { rows, reload } = useStream(true)
   const [rev, setRev] = useState(0)
   const refetch = () => { setRev(n => n + 1); reload() }
-  const live = useLive(true, { onTrainChanged: refetch, onResync: refetch })
+  const live = useLive(true, { onTrainChanged: refetch, onResync: refetch, onForecastChanged: refetch })
   const { view, trainId: selected, selection } = route
+  const mode = route.mode ?? 'plan'
+  const runData = useRun(selected, mode, rev)
   const [bulk, setBulk] = useDraft<BulkDraft>(bulkKey(selected ?? ''))
   const [gates, setGates] = useState<TrainDetail['gates']>([])
   useEffect(() => { if (selected && bulk?.open) getTrain(selected).then(t => setGates(t.gates)).catch(() => setGates([])) }, [selected, bulk?.open, rev])
@@ -148,11 +155,11 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   useEffect(() => {
     if (!session.ready || restored.current) return
     restored.current = true
-    if (parsePath(window.location.pathname) === ROOT && session.restoredRoute && (session.restoredRoute.trainId || session.restoredRoute.view === 'admin')) go(session.restoredRoute, true)
+    if (parsePath(window.location.pathname) === ROOT && session.restoredRoute && (session.restoredRoute.trainId || session.restoredRoute.view === 'admin')) go({ ...ROOT, ...session.restoredRoute }, true)
   }, [session.ready, session.restoredRoute, go])
   useEffect(() => { if (session.ready && restored.current) session.saveRoute(route) }, [route, session.ready])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!session.ready) return <main className="signin"><p className="muted">Loading…</p></main>
+  if (!session.ready || !zoneReady) return <main className="signin"><p className="muted">Loading…</p></main>
 
   const canAdmin = me.roles.includes('RTE') || me.roles.includes('ReleaseManager')
   const to = (r: Partial<Route>) => go({ ...route, ...r })
@@ -172,18 +179,20 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
         <SessionControls onSignedOut={onSignedOut} onStopped={onStopped} />
       </header>
       <aside className="stream" aria-label="Stream">
-        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null })} />
+        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} />
         <FreezeFooter refreshKey={rev} />
       </aside>
       <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
         {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">
           {selected && bulk?.open && canAdmin
             ? <BulkDrawer trainId={selected} gates={gates} onClose={() => setBulk(bulk && bulk.text ? { ...bulk, open: false } : undefined)} onChanged={refetch} />
-            : <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />}
+            : selected && mode !== 'plan' && selection?.kind === 'step'
+              ? <RunStepDrawer stepId={selection.id} data={runData} onClose={() => to({ selection: null })} onChanged={refetch} />
+              : <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />}
         </aside>
       )}
     </div>

@@ -17,8 +17,8 @@ public static class RunEndpoints
     public sealed record EndRunBody(string Outcome);
     public sealed record RunSummary(string Id, string Mode, string StartedAt, string? EndedAt, string? Outcome, int Version);
     public sealed record RunStep(string StepId, string StepCode, string Section, string Title, string? OwnerName, string PlannedStartAt, string PlannedEndAt, int PlannedDurationMin,
-                                 string Status, string? ActualStartAt, string? ActualEndAt, string? ActorName, string? Note, string[] DependsOn, bool CanAct, int Version);
-    public sealed record RunDetail(string Id, string TrainId, string Mode, string StartedAt, string? EndedAt, string? Outcome, int ShiftMinutes, int Version, RunStep[] Steps);
+                                 string Status, string? ActualStartAt, string? ActualEndAt, string? ActorName, string? Note, string[] DependsOn, string[] Blocks, string? Instructions, bool CanAct, int Version);
+    public sealed record RunDetail(string Id, string TrainId, string Mode, string StartedAt, string? StartedBy, string? EndedAt, string? Outcome, int ShiftMinutes, int Version, RunStep[] Steps);
 
     private const string Iso = "yyyy-MM-dd'T'HH:mm:ss'Z'";
     private static Actor ActorOf(ClaimsPrincipal u) => new(u.FindFirstValue("uid") ?? throw new InvalidOperationException("Signed-in user has no uid claim"));
@@ -101,8 +101,9 @@ public static class RunEndpoints
             rows.Add(new RunStep(s.Id, s.StepCode, s.Section, s.Title, s.OwnerUserId is not null ? people.GetValueOrDefault(s.OwnerUserId) : teams.GetValueOrDefault(s.OwnerTeamId ?? ""),
                 start.ToString(Iso), start.AddMinutes(s.PlannedDurationMin).ToString(Iso), s.PlannedDurationMin,
                 e?.Status ?? "Scheduled", e?.ActualStartAt?.ToString(Iso), e?.ActualEndAt?.ToString(Iso), e?.ActorUserId is null ? null : people.GetValueOrDefault(e.ActorUserId), e?.Note,
-                [.. deps[s.Id].Select(d => code[d.DependsOnStepId]).Order(StringComparer.Ordinal)], run.EndedAt is null && await CanActAsync(db, s, u, ct), e?.Version ?? 1));
+                [.. deps[s.Id].Select(d => code[d.DependsOnStepId]).Order(StringComparer.Ordinal)],
+                [.. steps.Where(o => deps[o.Id].Any(d => d.DependsOnStepId == s.Id)).Select(o => o.StepCode).Order(StringComparer.Ordinal)], s.Instructions, run.EndedAt is null && await CanActAsync(db, s, u, ct), e?.Version ?? 1));
         }
-        return new RunDetail(run.Id, run.ReleaseTrainId, run.Mode, run.StartedAt.ToString(Iso), run.EndedAt?.ToString(Iso), run.Outcome, (int)shift.TotalMinutes, run.Version, [.. rows]);
+        return new RunDetail(run.Id, run.ReleaseTrainId, run.Mode, run.StartedAt.ToString(Iso), people.GetValueOrDefault(run.StartedByUserId), run.EndedAt?.ToString(Iso), run.Outcome, (int)shift.TotalMinutes, run.Version, [.. rows]);
     }
 }

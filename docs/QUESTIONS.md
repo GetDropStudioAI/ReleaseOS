@@ -60,10 +60,7 @@ Options considered: (a) purely from data we hold: Ready = it has tasks and all a
 Blocked: nothing. Built (a) as a provisional default in `TrainQueryEndpoints` (`/trains/{id}/products`): no schema change, no manual input to drift, and it can be swapped without touching the API shape. A product with no tasks is On track, never Ready. Say if Governance wants severity weighting (c).
 
 ## Q-008 · M2 · Time zone of the deployment window (REOS-24)
-Context: the mockup shows "Window 01:00–05:00 CT". `DeploymentWindows` stores UTC text like every timestamp (rule 5).
-Question: which zone does the UI use to show and edit the window?
-Options considered: (a) the viewer's browser zone / (b) one organisation zone from config (e.g. `Display:TimeZone = America/Chicago`) / (c) per-train zone (schema change).
-Blocked: nothing. API is UTC only (`PUT /trains/{id}/window` takes UTC instants). Building (a) for the UI provisionally, with the zone abbreviation shown next to the times so nobody misreads them; (b) is a small change once you name the zone.
+**Resolved 2026-09-29: this was already decided by D24, and the provisional answer I first built (the viewer's browser zone) was wrong.** D24: the server stores and returns UTC; the client formats in `Display:TimeZone` (default `America/Chicago`). Corrected in REOS-32: `GET /api/v1/config` exposes the zone, every screen formats and the window/step editors convert in it (DST-safe), and the zone abbreviation is shown next to times. No open question remains.
 
 ## Q-009 · M2 · Do UI-state autosaves get an audit row and a Version? (REOS-26)
 Context: CLAUDE.md rule 3 says every service write stamps `Version` and writes one `AuditEvents` row. `UserSessionState` (per-tab UI state, saved every second while typing) has no `Version` column in schema.sql.

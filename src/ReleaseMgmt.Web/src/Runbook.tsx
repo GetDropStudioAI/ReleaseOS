@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { createStep, getOwners, getSteps, patchStep, SECTIONS, setStepDependencies, type Owner, type StepRow } from './api'
-import { day, errMsg } from './format'
+import { errMsg } from './format'
+import { fmtDay, fmtHM, utcToZonedInput, zonedInputToUtc } from './time'
 import { Conflict, isConflict } from './Conflict'
 import { useDraft } from './session'
 import type { Selection } from './Planning'
 
-const hm = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-const localInput = (iso: string) => { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
-const toUtc = (local: string) => new Date(local).toISOString().replace(/\.\d{3}Z$/, 'Z')
-const planned = (s: StepRow) => `${day(s.plannedStartAt.slice(0, 10))} ${hm(s.plannedStartAt)}–${hm(s.plannedEndAt)} · ${s.plannedDurationMin} min`
+const hm = fmtHM
+const localInput = utcToZonedInput
+const toUtc = zonedInputToUtc
+const planned = (s: StepRow) => `${fmtDay(s.plannedStartAt)} ${hm(s.plannedStartAt)}–${hm(s.plannedEndAt)} · ${s.plannedDurationMin} min`
 
 // ---- The runbook: steps grouped by section, in planned order ---------------------------------------------------------------------------
 export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onChanged }: { trainId: string; canPlan: boolean; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void }) {

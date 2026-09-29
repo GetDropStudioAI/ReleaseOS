@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSession } from './session'
+import { fmtDayTime } from './time'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
@@ -57,7 +58,7 @@ export function Stream({ rows, selected, onSelect }: { rows: StreamRow[] | null;
   )
 }
 
-export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, canPlan }: { id: string; refreshKey: number; onChanged: () => void; selection: Selection; onSelect: (s: Selection) => void; canPlan: boolean }) {
+export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, canPlan, onMode }: { id: string; refreshKey: number; onChanged: () => void; selection: Selection; onSelect: (s: Selection) => void; canPlan: boolean; onMode: (m: import('./route').Mode) => void }) {
   const [t, setT] = useState<TrainDetail | null>(null)
   const [r, setR] = useState<Readiness | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -98,6 +99,8 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       <div className="header-line">
         <span className="cap">Release train{t.changeTicketNumber ? <> · <span className="mono">{t.changeTicketNumber}</span></> : ''} · Risk {t.riskTier} · <span className="lc">v{t.version}</span></span>
         <span className="actions">
+          <button type="button" className="text" onClick={() => onMode('rehearsal')}>Rehearsal</button>
+          <button type="button" className="text" onClick={() => onMode('live')}>Live runbook</button>
           <button type="button" className="text" disabled title={soon}>Record Go/No-Go</button>
           <button type="button" className="text" disabled title={soon}>Communicate</button>
           <button type="button" className="text" disabled title={soon}>Export</button>
@@ -133,7 +136,7 @@ export function useStream(enabled: boolean) {
   return { rows, reload: () => setTick(n => n + 1) }
 }
 
-const stamp = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+const stamp = fmtDayTime
 
 /** Pinned to the bottom of the Stream (mockups/Main.html): freezes and chills that are running or coming, with the overrides already granted. */
 export function FreezeFooter({ refreshKey }: { refreshKey: number }) {

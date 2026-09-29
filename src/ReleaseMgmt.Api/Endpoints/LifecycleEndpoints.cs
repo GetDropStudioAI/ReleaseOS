@@ -22,6 +22,8 @@ public static class LifecycleEndpoints
 
     public static void MapLifecycle(this RouteGroupBuilder api)
     {
+        api.MapGet("/trains/{id}/readiness", async (string id, string? target, IReadinessService s, CancellationToken ct) =>
+            (await s.GetAsync(id, target ?? "Executing", ct)).ToHttp()).RequireAuthorization(Policies.Read);
         api.MapPost("/trains/{id}:advance", (string id, AdvanceRequest body, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
             s.AdvanceAsync(id, body.To, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapPost("/trains/{id}:abort", (string id, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>

@@ -47,6 +47,7 @@ public sealed class ServiceTests(TriggerSuiteFixture fx) : IClassFixture<Trigger
         }
 
         public long Count(string sql, params object?[] p) => Convert.ToInt64(Query(sql, p)[0][0]);
+        public string Status(string trainId) => (string)Query("SELECT CurrentStatus FROM ReleaseTrains WHERE Id=?", trainId)[0][0]!;
     }
 
     private Env NewEnv()
@@ -341,5 +342,71 @@ public sealed class ServiceTests(TriggerSuiteFixture fx) : IClassFixture<Trigger
         Assert.Equal(Domain.Services.Guards.DbRule, f.Guard);
         Assert.Equal("Illegal gate status transition", f.Message);
         Assert.Equal("Pending", e.Query("SELECT Status FROM StageGates WHERE Id='g1'").Single()[0]); // rolled back
+    }
+
+    // ---- readiness: the "To reach Executing" line must agree with :advance on every guard (REOS-23) -------------------------------
+    private static string[] Names(IEnumerable<GuardFailure> f) => [.. f.Select(x => x.Guard).Order()];
+
+    private async Task AssertAgrees(Env e, string hop)
+    {
+        var ready = new ReadinessService(e.Db, e.Trains);
+        var r = (await ready.GetAsync("t1", hop)).Value!;
+        var advance = await e.Trains.AdvanceAsync("t1", hop, Rte);
+        if (advance.IsOk) { Assert.True(r.Ready, "advance succeeded but readiness said not ready"); Assert.Empty(r.Blockers); }
+        else
+        {
+            Assert.False(r.Ready);
+            // readiness lists every hop; the hop being attempted must match :advance exactly
+            Assert.Equal(Names(advance.Failures), Names(r.Blockers.Where(b => b.Hop == hop).Select(b => b.Failure)));
+        }
+    }
+
+    [Fact]
+    public async Task Readiness_and_advance_agree_at_every_step_from_a_fresh_train_to_Executing()
+    {
+        var e = NewEnv();
+        await AssertAgrees(e, "Gated");                       // Code Freeze open: GateLockout
+        await Certify(e, "g1");
+        var ready = new ReadinessService(e.Db, e.Trains);
+        Assert.True((await ready.GetAsync("t1", "Gated")).Value!.Ready);
+        await AssertAgrees(e, "Gated");                       // ready: :advance succeeds
+        Assert.Equal("Gated", e.Status("t1"));
+
+        await AssertAgrees(e, "Executing");                   // g2 open, no Go, no rollback rehearsal
+        Assert.True((await e.Tasks.CompleteAsync("k2", Gov1)).IsOk);
+        Assert.True((await e.Gates.CertifyAsync("g2", Gov2)).IsOk);
+        await AssertAgrees(e, "Executing");                   // no Go, no rehearsal
+        e.Sql("INSERT INTO GoNoGoDecisions(Id,ReleaseTrainId,Decision,DecidedByUserId,DecidedAt,GateSnapshotJson) VALUES('d1','t1','Go','rm','2026-10-20T13:00:00Z','{}')");
+        await AssertAgrees(e, "Executing");                   // rollback rehearsal only
+        Assert.True((await e.Trains.RecordRollbackRehearsedAsync("t1", Rte)).IsOk);
+        await AssertAgrees(e, "Executing");                   // ready: :advance succeeds
+        Assert.Equal("Executing", e.Status("t1"));
+    }
+
+    [Fact]
+    public async Task Readiness_lists_each_hop_separately_for_a_Planning_train_heading_to_Executing()
+    {
+        var e = NewEnv();
+        var r = (await new ReadinessService(e.Db, e.Trains).GetAsync("t1", "Executing")).Value!;
+        Assert.False(r.Ready);
+        Assert.Equal("Planning", r.Status);
+        var byHop = r.Blockers.GroupBy(b => b.Hop).ToDictionary(g => g.Key, g => Names(g.Select(b => b.Failure)));
+        Assert.Equal([Domain.Services.Guards.GateLockout], byHop["Gated"]);
+        Assert.Contains(Domain.Services.Guards.ExecutingRequiresGo, byHop["Executing"]);
+        Assert.Contains(Domain.Services.Guards.RollbackNotRehearsed, byHop["Executing"]);
+    }
+
+    [Fact]
+    public async Task Readiness_handles_finished_trains_and_bad_targets()
+    {
+        var e = NewEnv();
+        var svc = new ReadinessService(e.Db, e.Trains);
+        Assert.Equal(ResultKind.NotFound, (await svc.GetAsync("nope")).Kind);
+        Assert.Equal(ResultKind.GuardFailed, (await svc.GetAsync("t1", "Aborted")).Kind);
+        Assert.Equal(ResultKind.GuardFailed, (await svc.GetAsync("t1", "Planning")).Kind);
+        e.Sql("UPDATE ReleaseTrains SET CurrentStatus='Aborted' WHERE Id='t1'");
+        var r = (await svc.GetAsync("t1", "Executing")).Value!;
+        Assert.False(r.Ready);
+        Assert.Equal([Domain.Services.Guards.IllegalTransition], Names(r.Blockers.Select(b => b.Failure)));
     }
 }

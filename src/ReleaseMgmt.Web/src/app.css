@@ -34,3 +34,14 @@ table.grid td { white-space: nowrap; }
 .stream-gates { letter-spacing: 0.2em; }
 .plain { list-style: none; padding: 0; margin: 4px 0 16px; }
 .gate-row { padding: 6px 0; border-bottom: 1px solid var(--separator); }
+
+.stream-top, .stream-bottom, .header-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.stream-top { font-size: 11px; } .stream-bottom { font-size: var(--text-caption); }
+.stream-gates { letter-spacing: 2px; }
+.cap { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--secondary); }
+.label { color: var(--label); }
+.block { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; }
+input.line { border: 0; border-bottom: 1px solid var(--tertiary); background: transparent; font: inherit; color: inherit; padding: 4px 0; }
+.actions { display: flex; gap: 14px; }
+.readiness { border-top: 1px solid var(--separator-strong); border-bottom: 1px solid var(--separator); padding: 8px 0; margin: 12px 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; }
+.header-line { flex-wrap: wrap; } .header-line .cap, .actions button { white-space: nowrap; } .header-line .lc { text-transform: none; }

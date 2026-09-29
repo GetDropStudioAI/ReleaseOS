@@ -106,7 +106,8 @@ export default function App() {
   const [view, setView] = useState<View>('trains')
   const [stopped, setStopped] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-  const { rows } = useStream(!!me)
+  const { rows, reload } = useStream(!!me)
+  const [rev, setRev] = useState(0)
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
   useEffect(() => { refresh() }, [])
 
@@ -134,7 +135,7 @@ export default function App() {
         <Stream rows={rows} selected={selected} onSelect={id => { setSelected(id); setView('trains') }} />
       </aside>
       <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={0} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={() => { setRev(n => n + 1); reload() }} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">

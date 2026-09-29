@@ -52,11 +52,12 @@ export async function getAuthConfig(): Promise<AuthConfig> {
   try { return await get<AuthConfig>('/auth/config') } catch { return { organisationSignIn: true, passwordResetUrl: null } }
 }
 
-export interface StreamRow { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; blockers: number; gates: string[]; version: number }
+export interface StreamRow { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; blockers: number; gates: string[]; closeCode: string | null; endedOn: string | null; version: number }
 export interface GateRow { id: string; name: string; class: string; status: string; dueOn: string; requiredBeforeStatus: string; tasksDone: number; tasksTotal: number; version: number }
-export interface TrainDetail { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; changeTicketNumber: string | null; closeCode: string | null; rollbackRehearsed: boolean; version: number; gates: GateRow[] }
+export interface TrainDetail { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; changeTicketNumber: string | null; closeCode: string | null; rollbackRehearsed: boolean; nextStatus: string | null; version: number; gates: GateRow[] }
 export interface Blocker { hop: string; failure: { guard: string; message: string; items?: string[] | null } }
 export interface Readiness { trainId: string; version: number; status: string; target: string; ready: boolean; blockers: Blocker[] }
 export const getStream = () => get<StreamRow[]>('/api/v1/trains')
 export const getTrain = (id: string) => get<TrainDetail>(`/api/v1/trains/${id}`)
 export const getReadiness = (id: string, target = 'Executing') => get<Readiness>(`/api/v1/trains/${id}/readiness?target=${target}`)
+export const advanceTrain = (id: string, to: string, version: number) => post<unknown>(`/api/v1/trains/${id}:advance`, { to }, version)

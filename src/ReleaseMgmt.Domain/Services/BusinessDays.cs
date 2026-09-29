@@ -32,4 +32,17 @@ public static class BusinessDays
         }
         return d;
     }
+
+    /// <summary>"T-n" in business days: how many business days after <paramref name="from"/> the <paramref name="to"/> date falls
+    /// (<paramref name="from"/> itself is not counted, <paramref name="to"/> is if it is a business day). Zero on the same day, negative once past.</summary>
+    public static int Between(DateOnly from, DateOnly to, IReadOnlySet<DateOnly> holidays)
+    {
+        if (to == from) return 0;
+        var sign = to > from ? 1 : -1;
+        var (lo, hi) = sign > 0 ? (from, to) : (to, from);
+        var n = 0;
+        for (var d = lo.AddDays(1); d <= hi; d = d.AddDays(1))
+            if (IsBusinessDay(d, holidays)) n++;
+        return sign * n;
+    }
 }

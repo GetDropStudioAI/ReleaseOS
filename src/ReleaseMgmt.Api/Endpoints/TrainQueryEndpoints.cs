@@ -9,11 +9,14 @@ namespace ReleaseMgmt.Api.Endpoints;
 /// <summary>Read side for the Stream and the train header (REOS-22). Reads never change state.</summary>
 public static class TrainQueryEndpoints
 {
-    public sealed record StreamRow(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, int Blockers, string[] Gates, int Version);
+    public sealed record StreamRow(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, int Blockers, string[] Gates, string? CloseCode, string? EndedOn, int Version);
     public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, string RequiredBeforeStatus, int TasksDone, int TasksTotal, int Version);
-    public sealed record TrainDetail(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, string? ChangeTicketNumber, string? CloseCode, bool RollbackRehearsed, int Version, GateRow[] Gates);
+    public sealed record TrainDetail(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, string? ChangeTicketNumber, string? CloseCode, bool RollbackRehearsed, string? NextStatus, int Version, GateRow[] Gates);
 
     private static readonly string[] Next = ["Planning", "Gated", "Executing", "Complete"];
+
+    private static async Task<HashSet<DateOnly>> HolidaysAsync(ReleaseDbContext db, CancellationToken ct) =>
+        [.. await db.Set<Holidays>().AsNoTracking().Select(h => h.Day).ToListAsync(ct)];
 
     public static void MapTrainQueries(this RouteGroupBuilder api)
     {
@@ -21,6 +24,7 @@ public static class TrainQueryEndpoints
         {
             await using var db = await dbf.CreateDbContextAsync(ct);
             var today = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
+            var holidays = await HolidaysAsync(db, ct);
             var cutoff = time.GetUtcNow().UtcDateTime.AddDays(-30);
             var trains = await db.Set<ReleaseTrains>().AsNoTracking()
                 .Where(t => t.ArchivedAt == null && t.CurrentStatus != "Aborted" && (t.CurrentStatus != "Complete" || t.ActualEndAt >= cutoff))
@@ -36,8 +40,8 @@ public static class TrainQueryEndpoints
                 if (i >= 0 && i < Next.Length - 1)   // blockers for the next hop: the same guards :advance runs
                     blockers = (await readiness.GetAsync(t.Id, Next[i + 1], ct)).Value?.Blockers.Count ?? 0;
                 rows.Add(new StreamRow(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
-                    t.TargetReleaseDate.DayNumber - today.DayNumber, blockers,
-                    [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.Version));
+                    BusinessDays.Between(today, t.TargetReleaseDate, holidays), blockers,
+                    [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, t.ActualEndAt?.ToString("yyyy-MM-dd"), t.Version));
             }
             return Results.Ok(rows);
         }).RequireAuthorization(Policies.Read);
@@ -52,8 +56,11 @@ public static class TrainQueryEndpoints
             var tasks = (await db.Set<ChecklistTasks>().AsNoTracking().Where(k => gateIds.Contains(k.StageGateId)).Select(k => new { k.StageGateId, k.IsCompleted }).ToListAsync(ct))
                 .ToLookup(k => k.StageGateId);
             var today = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
+            var holidays = await HolidaysAsync(db, ct);
+            var i = Array.IndexOf(Next, t.CurrentStatus);
             return Results.Ok(new TrainDetail(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
-                t.TargetReleaseDate.DayNumber - today.DayNumber, t.ChangeTicketNumber, t.CloseCode, t.RollbackRehearsedAt != null, t.Version,
+                BusinessDays.Between(today, t.TargetReleaseDate, holidays), t.ChangeTicketNumber, t.CloseCode, t.RollbackRehearsedAt != null,
+                i >= 0 && i < Next.Length - 1 ? Next[i + 1] : null, t.Version,
                 [.. gates.Select(g => new GateRow(g.Id, g.GateName, g.GateClass, g.Status, g.DueOn.ToString("yyyy-MM-dd"), g.RequiredBeforeStatus,
                     tasks[g.Id].Count(k => k.IsCompleted), tasks[g.Id].Count(), g.Version))]));
         }).RequireAuthorization(Policies.Read);

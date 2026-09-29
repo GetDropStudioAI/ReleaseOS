@@ -92,6 +92,11 @@ public sealed class SeedService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
                 db.Set<ChecklistTasks>().Add(new ChecklistTasks { Id = Ids.New(), StageGateId = gate.Id, TaskDescription = g.Class == "Compliance" ? "Evidence attached and reviewed" : $"{g.Name}: all items complete", OwnerUserId = gate.OwnerUserId, SequenceOrder = 1, BundledProductId = products[(order - 1) % products.Count].Id });
             }
         }
+        // A freeze ahead with one granted override, so the Stream footer has something to show in the demo.
+        var freezeStart = new DateTime(nextFriday.Year, nextFriday.Month, nextFriday.Day, 0, 0, 0, DateTimeKind.Utc).AddDays(21);
+        var freeze = new FreezeWindows { Id = Ids.New(), Name = "Q4 close", Kind = "Freeze", StartsAt = freezeStart, EndsAt = freezeStart.AddDays(3), ProductPattern = "Payments*", CreatedByUserId = rm.Id };
+        db.Set<FreezeWindows>().Add(freeze);
+        db.Set<FreezeOverrides>().Add(new FreezeOverrides { Id = Ids.New(), FreezeWindowId = freeze.Id, ReleaseTrainId = ids[0], Reason = "Payments hotfix agreed with the business owner", RequestedByUserId = rte.Id, ApprovedByUserId = gov1.Id, ApprovedAt = stamp, ExpiresAt = freezeStart.AddDays(3) });
         await db.SaveChangesAsync(ct);
 
         // Mixed states through the services. Train 1: Code Freeze certified, QA in progress. Train 2: both Gated gates certified, train Gated, Compliance in progress.

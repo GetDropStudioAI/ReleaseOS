@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
-import { Stream, TrainHeader, useStream } from './Trains'
+import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
 import { Inspector } from './Planning'
 import { BulkDrawer, bulkKey, type BulkDraft } from './Bulk'
 import { getTrain, type TrainDetail } from './api'
@@ -173,6 +173,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </header>
       <aside className="stream" aria-label="Stream">
         <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null })} />
+        <FreezeFooter refreshKey={rev} />
       </aside>
       <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
         {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}

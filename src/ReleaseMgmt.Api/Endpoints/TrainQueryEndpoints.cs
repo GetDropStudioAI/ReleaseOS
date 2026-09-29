@@ -16,6 +16,7 @@ public static class TrainQueryEndpoints
     public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, int TMinus, string RequiredBeforeStatus, string? OwnerName, string? CertifiedBy, string? CertifiedOn, int TasksDone, int TasksTotal, int Version);
     public sealed record TrainDetail(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, string? ChangeTicketNumber, string? CloseCode, bool RollbackRehearsed, string? NextStatus, int Version, GateRow[] Gates);
 
+    public sealed record FreezeAhead(string Id, string Name, string Kind, string StartsAt, string EndsAt, string Scope, bool Active, int OverridesGranted);
     public sealed record ProductRow(string Id, string Name, string VersionTag, string ProjectCode, int TasksDone, int TasksTotal, string[] OpenBlockers, string Health);
     public sealed record ProductsResponse(int TasksDone, int TasksTotal, ProductRow[] Products);
     public sealed record TaskRow(string Id, string Description, string? Owner, string? Product, bool Done, string? CompletedAt, string? CompletedBy, int Version);
@@ -57,6 +58,20 @@ public static class TrainQueryEndpoints
                     [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, t.ActualEndAt?.ToString("yyyy-MM-dd"), t.Version));
             }
             return Results.Ok(rows);
+        }).RequireAuthorization(Policies.Read);
+
+        // The Stream footer: freezes and chills that are running now or start within the next 45 days, nearest first, with how many unexpired overrides each has.
+        api.MapGet("/freeze-windows/ahead", async (IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, CancellationToken ct) =>
+        {
+            await using var db = await dbf.CreateDbContextAsync(ct);
+            var now = time.GetUtcNow().UtcDateTime;
+            var horizon = now.AddDays(45);
+            var windows = (await db.Set<FreezeWindows>().AsNoTracking().ToListAsync(ct)).Where(w => w.EndsAt > now && w.StartsAt < horizon).OrderBy(w => w.StartsAt).Take(3).ToList();
+            var ids = windows.Select(w => w.Id).ToList();
+            var overrides = (await db.Set<FreezeOverrides>().AsNoTracking().Where(o => ids.Contains(o.FreezeWindowId)).ToListAsync(ct)).Where(o => o.ExpiresAt > now).ToLookup(o => o.FreezeWindowId);
+            const string iso = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+            return Results.Ok(windows.Select(w => new FreezeAhead(w.Id, w.Name, w.Kind, w.StartsAt.ToString(iso), w.EndsAt.ToString(iso),
+                w.ProductPattern is null ? "All products" : $"Products matching {w.ProductPattern}", w.StartsAt <= now, overrides[w.Id].Count())));
         }).RequireAuthorization(Policies.Read);
 
         // Who a task can be assigned to: active users and teams (user xor team, D-level rule in the schema).

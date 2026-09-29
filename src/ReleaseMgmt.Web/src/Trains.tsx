@@ -3,7 +3,7 @@ import { useSession } from './session'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
-import { advanceTrain, getReadiness, getStream, getTrain, type Readiness, type StreamRow, type TrainDetail } from './api'
+import { advanceTrain, getFreezesAhead, getReadiness, getStream, getTrain, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
 
 const GROUPS: { label: string; status: string }[] = [
   { label: 'Executing', status: 'Executing' }, { label: 'Gated', status: 'Gated' },
@@ -131,4 +131,23 @@ export function useStream(enabled: boolean) {
   const [tick, setTick] = useState(0)
   useEffect(() => { if (enabled) getStream().then(setRows).catch(() => setRows([])) }, [tick, enabled])
   return { rows, reload: () => setTick(n => n + 1) }
+}
+
+const stamp = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+
+/** Pinned to the bottom of the Stream (mockups/Main.html): freezes and chills that are running or coming, with the overrides already granted. */
+export function FreezeFooter({ refreshKey }: { refreshKey: number }) {
+  const [rows, setRows] = useState<FreezeAhead[]>([])
+  useEffect(() => { getFreezesAhead().then(setRows).catch(() => setRows([])) }, [refreshKey])
+  if (rows.length === 0) return null
+  return (
+    <div className="freeze-footer" aria-label="Freeze ahead">
+      <div className="cap">{rows.some(r => r.active) ? 'Freeze in effect' : 'Freeze ahead'}</div>
+      {rows.map(r => (
+        <div key={r.id}>
+          <div><span className={r.kind === 'Freeze' ? 'bad' : 'warn'}>{r.name}</span> · {stamp(r.startsAt)} – {stamp(r.endsAt)}{r.active ? <span className="bad"> · now</span> : null}</div>
+          <div className="muted">Scope: {r.scope.replace('Products matching ', '')}{r.overridesGranted > 0 ? ` · ${plural(r.overridesGranted, 'override')} granted` : ''}</div>
+        </div>))}
+    </div>
+  )
 }

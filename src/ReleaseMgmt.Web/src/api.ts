@@ -94,3 +94,6 @@ export interface ParseIssue { line: number; severity: string; code: string; mess
 export interface ParsePreview { previewId: string; trainVersion: number; expiresAt: string; errorCount: number; warningCount: number; tasks: ParsedTask[]; issues: ParseIssue[]; decertifiesGates: string[] }
 export const parseTasks = (trainId: string, text: string, defaultGateId: string | null) => post<ParsePreview>(`/api/v1/trains/${trainId}/tasks:parse`, { text, defaultGateId })
 export const commitTasks = (trainId: string, previewId: string, acknowledgeDecertify: boolean) => post<{ inserted: number; decertifiedGates: string[] }>(`/api/v1/trains/${trainId}/tasks:commit`, { previewId, acknowledgeDecertify })
+
+export interface FreezeAhead { id: string; name: string; kind: string; startsAt: string; endsAt: string; scope: string; active: boolean; overridesGranted: number }
+export const getFreezesAhead = () => get<FreezeAhead[]>('/api/v1/freeze-windows/ahead')

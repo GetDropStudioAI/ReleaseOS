@@ -127,4 +127,32 @@ public class PlanningWorkspaceTests
         Assert.Equal("2", Scalar(f, "SELECT COUNT(*) FROM AuditEvents WHERE EntityType='DeploymentWindow'"));      // Set + Change; refused writes leave no audit row
         Assert.Equal("2026-10-30T07:00:00Z", Scalar(f, "SELECT StartsAt FROM DeploymentWindows WHERE ReleaseTrainId='t1'"));
     }
+
+    // REOS-22: the Stream footer
+    [Fact]
+    public async Task Freeze_footer_lists_running_and_upcoming_windows_with_unexpired_override_counts()
+    {
+        using var f = new ApiFactory();
+        var rte = await As(f, Roles.RTE, "rte@x.com");
+        await As(f, Roles.GovernanceOfficer, "gov@x.com");
+        var r = UserId(f, "rte@x.com"); var g = UserId(f, "gov@x.com");
+        SeedTrain(f, r, g);
+        string T(int days) => DateTime.UtcNow.AddDays(days).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        Sql(f, $@"INSERT INTO FreezeWindows(Id,Name,Kind,StartsAt,EndsAt,ProductPattern,CreatedByUserId) VALUES
+                    ('past','Old freeze','Freeze','{T(-20)}','{T(-10)}',NULL,'{r}'),
+                    ('now','Running now','Freeze','{T(-1)}','{T(2)}',NULL,'{r}'),
+                    ('soon','Q4 close','Freeze','{T(10)}','{T(13)}','Payments*','{r}'),
+                    ('far','Next year','Chill','{T(200)}','{T(203)}',NULL,'{r}');
+                  INSERT INTO FreezeOverrides(Id,FreezeWindowId,ReleaseTrainId,Reason,RequestedByUserId,ApprovedByUserId,ApprovedAt,ExpiresAt) VALUES
+                    ('o1','soon','t1','Payments hotfix agreed with the owner','{r}','{g}','{T(-1)}','{T(12)}'),
+                    ('o2','soon','t1','An older override that has expired now','{r}','{g}','{T(-5)}','{T(-2)}');");
+        var rows = (await Json(await rte.GetAsync("/api/v1/freeze-windows/ahead"))).EnumerateArray().ToList();
+        Assert.Equal(["Running now", "Q4 close"], rows.Select(x => x.GetProperty("name").GetString()!).ToArray());   // past and far-off ones are left out, nearest first
+        Assert.True(rows[0].GetProperty("active").GetBoolean());
+        Assert.False(rows[1].GetProperty("active").GetBoolean());
+        Assert.Equal("Products matching Payments*", rows[1].GetProperty("scope").GetString());
+        Assert.Equal("All products", rows[0].GetProperty("scope").GetString());
+        Assert.Equal(1, rows[1].GetProperty("overridesGranted").GetInt32());                                            // the expired override does not count
+        Assert.Equal(0, rows[0].GetProperty("overridesGranted").GetInt32());
+    }
 }

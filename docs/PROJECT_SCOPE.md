@@ -147,7 +147,7 @@ REST under `/api/v1`. Mutations take `If-Match: <Version>`; 409 returns the curr
 | Change record | `GET/PUT /trains/{id}/change-record`, `GET/POST/DELETE /trains/{id}/cis` |
 | Products | `GET/POST /trains/{id}/products`, `PATCH/DELETE /products/{id}` |
 | Gates | `GET/POST /trains/{id}/gates`, `PATCH /gates/{id}`, `POST /gates/{id}:start` `:certify` `:fail` `:reopen`, `GET /gates/{id}/transitions` |
-| Waivers | `POST /gates/{id}/waivers`, `POST /waivers/{id}:approve` `:reject` |
+| Waivers | `POST /gates/{id}/waivers`, `POST /waivers/{id}:approve` (no `:reject`; see Q-005) |
 | Tasks | `GET/POST /gates/{id}/tasks`, `PATCH /tasks/{id}`, `POST /tasks/{id}:complete` `:reopen` |
 | Parser | `POST /trains/{id}/tasks:parse`, `POST /trains/{id}/tasks:commit` |
 | Runbook | `GET/POST /trains/{id}/steps`, `PATCH /steps/{id}`, `PUT /steps/{id}/dependencies` |

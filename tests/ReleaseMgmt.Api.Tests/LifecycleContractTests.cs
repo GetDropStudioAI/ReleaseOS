@@ -200,4 +200,45 @@ public class LifecycleContractTests
         var handled = await new DbRuleExceptionHandler().TryHandleAsync(new DefaultHttpContext(), new InvalidOperationException("boom"), default);
         Assert.False(handled);
     }
+
+    // Q-004 decision: If-Match is required on versioned mutations by default.
+    [Fact]
+    public async Task Versioned_mutation_without_If_Match_is_428_when_required()
+    {
+        using var f = new ApiFactory(requireIfMatch: true);
+        var rte = await As(f, Roles.RTE, "rte@x.com");
+        SeedTrain(f, UserId(f, "rte@x.com"), UserId(f, "rte@x.com"));
+        var (status, body) = await Post(rte, "/api/v1/trains/t1:advance", new { to = "Gated" });
+        Assert.Equal(HttpStatusCode.PreconditionRequired, status);
+        Assert.Equal("PreconditionRequired", body.GetProperty("guard").GetString());
+        var (s2, _) = await Post(rte, "/api/v1/trains/t1:advance", new { to = "Gated" }, ifMatch: "\"1\"");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, s2);   // header present: the normal guard answer (Code Freeze still open)
+    }
+
+    // REOS-22: Stream and header reads
+    [Fact]
+    public async Task Stream_and_detail_report_gates_blockers_and_days_to_target()
+    {
+        using var f = new ApiFactory();
+        var rte = await As(f, Roles.RTE, "rte@x.com");
+        SeedTrain(f, UserId(f, "rte@x.com"), UserId(f, "rte@x.com"));
+        var list = await rte.GetFromJsonAsync<JsonElement>("/api/v1/trains");
+        var row = list.EnumerateArray().Single();
+        Assert.Equal("R26.10", row.GetProperty("title").GetString());
+        Assert.Equal("Planning", row.GetProperty("status").GetString());
+        Assert.Equal(["Pending", "InProgress"], row.GetProperty("gates").EnumerateArray().Select(x => x.GetString()!).ToArray());
+        Assert.True(row.GetProperty("blockers").GetInt32() >= 1);          // Code Freeze open blocks Gated
+        var d = await rte.GetFromJsonAsync<JsonElement>("/api/v1/trains/t1");
+        Assert.Equal(2, d.GetProperty("gates").GetArrayLength());
+        Assert.Equal(1, d.GetProperty("gates")[0].GetProperty("tasksTotal").GetInt32());
+        Assert.Equal(HttpStatusCode.NotFound, (await rte.GetAsync("/api/v1/trains/nope")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Stream_requires_sign_in()
+    {
+        using var f = new ApiFactory();
+        var r = await f.CreateClient(new() { AllowAutoRedirect = false }).GetAsync("/api/v1/trains");
+        Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
+    }
 }

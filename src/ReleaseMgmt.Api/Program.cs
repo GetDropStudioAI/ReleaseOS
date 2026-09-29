@@ -128,6 +128,7 @@ api.MapGet("/me", (ClaimsPrincipal u) => new
     roles = u.FindAll(ClaimTypes.Role).Select(c => c.Value)
 }).RequireAuthorization(Policies.Read);
 api.MapLifecycle();
+api.MapTrainQueries();
 api.MapAdmin();
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.

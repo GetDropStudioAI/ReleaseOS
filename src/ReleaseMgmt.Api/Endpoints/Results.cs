@@ -26,7 +26,14 @@ public static class Results2
         };
     }
 
-    /// <summary>Parses If-Match: 3 or "3" (Q-004: optional).</summary>
-    public static int? IfMatch(this HttpRequest req) =>
-        int.TryParse(req.Headers.IfMatch.ToString().Trim('"', ' '), out var v) ? v : null;
+    /// <summary>Parses If-Match: 3 or "3". Q-004: required by default (missing or unparseable -> 428); Api:RequireIfMatch=false relaxes it.</summary>
+    public static int? IfMatch(this HttpRequest req)
+    {
+        if (int.TryParse(req.Headers.IfMatch.ToString().Trim('"', ' '), out var v)) return v;
+        var require = req.HttpContext.RequestServices.GetRequiredService<IConfiguration>().GetValue("Api:RequireIfMatch", true);
+        return require ? throw new PreconditionRequiredException() : null;
+    }
 }
+
+/// <summary>Thrown by <see cref="Results2.IfMatch"/>; DbRuleExceptionHandler maps it to 428.</summary>
+public sealed class PreconditionRequiredException() : Exception("This change needs an If-Match header carrying the Version you loaded");

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace ReleaseMgmt.Api.Tests;
 
-public sealed class ApiFactory(string environment = "Development", bool demoData = false, string? passwordResetUrl = null) : WebApplicationFactory<Program>
+public sealed class ApiFactory(string environment = "Development", bool demoData = false, string? passwordResetUrl = null, bool requireIfMatch = false) : WebApplicationFactory<Program>
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("reos-api-").FullName;
     public string DbPath => Path.Combine(_dir, "app.db");
@@ -20,6 +20,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         builder.UseSetting("Db:Path", DbPath);
         builder.UseSetting("Seed:Demo", demoData ? "true" : "false");
         if (passwordResetUrl is not null) builder.UseSetting("Auth:PasswordResetUrl", passwordResetUrl);
+        builder.UseSetting("Api:RequireIfMatch", requireIfMatch ? "true" : "false");   // existing contract tests predate Q-004; the 428 tests opt in
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
         builder.UseSetting("Logging:File", Path.Combine(_dir, "log-.txt"));
     }

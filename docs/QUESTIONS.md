@@ -52,3 +52,15 @@ Options considered:
 - (c) (b) plus emailed or texted codes: needs SMTP, which is off in v1 (OI-7), and an SMS provider.
 Blocked: REOS-59 only. Nothing else waits on it.
 **Answered 2026-09-29: option (a).** Built as config `Auth:PasswordResetUrl` (absolute https only, else ignored with a logged warning), exposed via anonymous `GET /auth/config`, shown as a link on the sign-in page. Reset and MFA are the identity provider's (e.g. Entra SSPR); the app stores no passwords or MFA secrets.
+
+## Q-007 · M2 · What "Health" means in the Bundled products table (REOS-24)
+Context: the Main mockup shows Health per product (On track, At risk, Ready) but no document defines it.
+Question: how is a product's health derived?
+Options considered: (a) purely from data we hold: Ready = it has tasks and all are done and no open blocker; At risk = any unresolved blocker on the product; On track = everything else / (b) add a manual health field (schema change) / (c) weight by blocker severity or task lateness.
+Blocked: nothing. Built (a) as a provisional default in `TrainQueryEndpoints` (`/trains/{id}/products`): no schema change, no manual input to drift, and it can be swapped without touching the API shape. A product with no tasks is On track, never Ready. Say if Governance wants severity weighting (c).
+
+## Q-008 · M2 · Time zone of the deployment window (REOS-24)
+Context: the mockup shows "Window 01:00–05:00 CT". `DeploymentWindows` stores UTC text like every timestamp (rule 5).
+Question: which zone does the UI use to show and edit the window?
+Options considered: (a) the viewer's browser zone / (b) one organisation zone from config (e.g. `Display:TimeZone = America/Chicago`) / (c) per-train zone (schema change).
+Blocked: nothing. API is UTC only (`PUT /trains/{id}/window` takes UTC instants). Building (a) for the UI provisionally, with the zone abbreviation shown next to the times so nobody misreads them; (b) is a small change once you name the zone.

@@ -48,4 +48,5 @@ public static class Guards
     public const string WaiverAlreadyDecided = "WaiverAlreadyDecided";
     public const string BaselineExists = "BaselineExists";
     public const string DbRule = "DbRule";
+    public const string InvalidWindow = "InvalidWindow";
 }

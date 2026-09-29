@@ -72,11 +72,18 @@ public static class LifecycleEndpoints
         await using var db = await dbf.CreateDbContextAsync(ct);
         var g = await db.Set<StageGates>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
         if (g is null) return Results.NotFound(new { message = "gate not found" });
+        var (allowed, denial) = await GateAccessAsync(db, g, u, forbidComplianceNonGo, ct);
+        return allowed ? (await act()).ToHttp() : Results.Json(new { message = denial }, statusCode: StatusCodes.Status403Forbidden);
+    }
+
+    /// <summary>Who may act on a gate (shared by the action endpoints and the Inspector's "why is Certify disabled" line): RTE/RM always; otherwise the owner; Compliance certification only by a Governance Officer.</summary>
+    internal static async Task<(bool Allowed, string? Denial)> GateAccessAsync(ReleaseDbContext db, StageGates g, ClaimsPrincipal u, bool complianceRestricted, CancellationToken ct)
+    {
         var uid = u.FindFirstValue("uid");
         var planner = u.IsInRole(Roles.RTE) || u.IsInRole(Roles.ReleaseManager);
         var owner = g.OwnerUserId == uid || (g.OwnerTeamId is not null && await db.Set<TeamMembers>().AnyAsync(m => m.TeamId == g.OwnerTeamId && m.UserId == uid, ct));
-        var compliance = forbidComplianceNonGo && g.GateClass == "Compliance";
+        var compliance = complianceRestricted && g.GateClass == "Compliance";
         var allowed = compliance ? u.IsInRole(Roles.GovernanceOfficer) : planner || owner;
-        return allowed ? (await act()).ToHttp() : Results.Json(new { message = compliance ? "Compliance gates are certified by Governance Officers" : "Only the gate owner, an RTE or a Release Manager can do this" }, statusCode: StatusCodes.Status403Forbidden);
+        return (allowed, allowed ? null : compliance ? "Compliance gates are certified by Governance Officers" : "Only the gate owner, an RTE or a Release Manager can do this");
     }
 }

@@ -47,6 +47,7 @@ builder.Services.AddSingleton<WaiverService>();
 builder.Services.AddSingleton<TaskService>();
 builder.Services.AddSingleton<BaselineService>();
 builder.Services.AddSingleton<ScheduleService>();
+builder.Services.AddSingleton<WindowService>();
 builder.Services.AddSingleton<AdminService>();
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();

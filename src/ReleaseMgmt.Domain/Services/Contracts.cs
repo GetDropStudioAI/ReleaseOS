@@ -24,6 +24,8 @@ public interface IRealtimePublisher
 {
     Task TrainChangedAsync(string trainId, int version, CancellationToken ct = default);
     Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default);
+    /// <summary>A step event changed a run's forecast; clients on that train refetch GET /runs/{id}/forecast.</summary>
+    Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default);
 }
 
 /// <summary>Used where no live channel exists (tests, tools).</summary>
@@ -31,4 +33,5 @@ public sealed class NullRealtimePublisher : IRealtimePublisher
 {
     public Task TrainChangedAsync(string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
     public Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
+    public Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
 }

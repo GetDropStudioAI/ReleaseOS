@@ -17,6 +17,7 @@ public sealed class TrainsHub : Hub
     public const string TrainChanged = "TrainChanged";
     public const string NotificationCreated = "NotificationCreated";
     public const string ServerTime = "ServerTime";
+    public const string ForecastChanged = "ForecastChanged";
 }
 
 /// <summary>Routes Clients.User(id) by the Users.Id in the "uid" claim (set at sign-in by UserProvisioner).</summary>
@@ -32,6 +33,9 @@ public sealed class SignalRPublisher(IHubContext<TrainsHub> hub) : IRealtimePubl
 
     public Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default) =>
         hub.Clients.User(userId).SendAsync(TrainsHub.NotificationCreated, notificationId, ct);
+
+    public Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(TrainsHub.ForecastChanged, trainId, runId, ct);
 }
 
 /// <summary>

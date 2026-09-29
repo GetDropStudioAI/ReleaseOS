@@ -51,6 +51,7 @@ builder.Services.AddSingleton<WindowService>();
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<RunbookService>();
 builder.Services.AddSingleton<RunService>();
+builder.Services.AddSingleton<ForecastService>();
 builder.Services.AddSingleton<TaskParserService>();
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.SessionStateJanitor>();
 builder.Services.AddSingleton<AdminService>();

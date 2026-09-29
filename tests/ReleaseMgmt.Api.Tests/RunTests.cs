@@ -232,4 +232,22 @@ public class RunTests
         Assert.Contains("Freeze window", body.GetProperty("message").GetString());
         Assert.Equal("Scheduled", Scalar(f, $"SELECT Status FROM StepExecutions WHERE StepId='{b}'"));
     }
+
+    [Fact]
+    public async Task Forecast_endpoint_reports_finish_rollback_deadline_and_per_step_variance()
+    {
+        var (f, c, o) = await Setup(); using var _ = f;
+        var (a, b, r) = await Plan(c, "t3", o);
+        Sql(f, "INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('w3','t3','2026-10-30T06:00:00Z','2026-10-30T10:00:00Z')");
+        var run = await StartRun(c, "t3", "Live");
+        var fc = await Json(await c.GetAsync($"/api/v1/runs/{run}/forecast"));
+        Assert.Equal("Live", fc.GetProperty("mode").GetString());
+        Assert.Equal(45, fc.GetProperty("rollbackPlannedMin").GetInt32());                                   // the single Rollback step (45 min)
+        Assert.Equal("2026-10-30T09:15:00Z", fc.GetProperty("rollbackDeadline").GetString());                // window end 10:00 minus 45
+        Assert.Equal(2, fc.GetProperty("steps").GetArrayLength());                                            // Rollback steps are not part of the forecast itself
+        Assert.Equal("R-001", fc.GetProperty("steps")[0].GetProperty("step").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync("/api/v1/runs/nope/forecast")).StatusCode);
+        var viewer = await As(f, Roles.Viewer, "v@x.com");
+        Assert.Equal(HttpStatusCode.OK, (await viewer.GetAsync($"/api/v1/runs/{run}/forecast")).StatusCode);   // anyone signed in can read it
+    }
 }

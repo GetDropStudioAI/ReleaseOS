@@ -76,3 +76,13 @@ Context: `RunbookSteps` is the plan; actuals live in `StepExecutions` and never 
 Question: may steps be added, edited or re-wired while a train is Executing, or while a Live run is open?
 Options considered: (a) editable until the train is Complete or Aborted / (b) locked once the train is Executing / (c) locked while a Live run is open (and once Complete or Aborted); rehearsals never lock.
 Blocked: nothing. **Decided 2026-09-29 (best practice, on the instruction to use judgement): (c).** Editing the plan under a live run would move the goalposts the run is being measured against and make late/on-time answers depend on when someone edited; rehearsals stay editable because that is how a plan gets fixed. Guards `RunInProgress` and `TrainClosed`; every plan change is audited with before/after. (b) would also block legitimate pre-window fixes while Executing.
+
+## Q-011 · M3 · Forecast rules the scope leaves open (REOS-31)
+Context: PROJECT_SCOPE section 3 gives the forecast formula and the escalation thresholds; a few cases it does not settle. The handoff scenario (`r26-24-scenario.json`) pins the main path and passes exactly; these are the edges.
+Question and what was built (all provisional, one place each in `RunForecasting` / `RunService`; say if any should change):
+- **A step that has not started cannot start in the past:** its forecast start is the latest of its planned start, its dependencies' forecast ends and *now* (the text only names "now" for the running step's successors; a general floor is the same rule without the special case).
+- **Skipped** is transparent (it ends when its dependencies end). **Failed** stops the forecast: everything after it, and the finish, are unknown and reported in `blockedByFailed`; no alert is raised on an unknown finish (the failure itself is the alert).
+- **Rehearsal:** the plan and the window are shifted by the same D28 offset, so a rehearsal has its own deadline. Rehearsals never page anyone.
+- **Late escalation** fires when a Live step *starts* 5+ minutes behind its plan (owner or owning team's members + all RTEs, level 1) and, at 30+ minutes, also the Release Managers (level 2). A step that is late because it has not started yet is REOS-37's timer (NotificationScheduler).
+- **Rollback deadline crossing** notifies all RTEs and Release Managers once per run, the first time the forecast finish passes the deadline.
+- Notification or push failures after a committed step are raised through `IAlertSink`, never swallowed and never undo the step.

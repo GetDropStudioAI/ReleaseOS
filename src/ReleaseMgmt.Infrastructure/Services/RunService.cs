@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Persistence;
@@ -10,8 +11,16 @@ namespace ReleaseMgmt.Infrastructure.Services;
 /// (rule 7). The service checks each rule first for a readable 422; the triggers (Live needs an Executing train, dependencies Done, freeze
 /// lockout) are the backstop. Step and run writes are audited and stamped with Version in the same transaction.
 /// </summary>
-public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
+public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, INotifier? notifier = null, IAlertSink? alerts = null)
+    : ServiceBase(dbf, time, realtime)
 {
+    private readonly IDbContextFactory<ReleaseDbContext> _dbf = dbf;
+    private readonly IRealtimePublisher? _realtime = realtime;
+    private readonly TimeProvider _time = time;
+    /// <summary>Late escalation (PROJECT_SCOPE 3): a Live step that starts this late after its plan warns its owner and the RTEs; this late, it also pages the Release Managers.</summary>
+    public const int WarnLateMin = 5, CriticalLateMin = 30;
+    private sealed record StepEvent(string TrainId, string RunId, string Mode, string Action, string StepCode, string? OwnerUserId, string? OwnerTeamId, int LateMin);
+
     public static readonly string[] Outcomes = ["Completed", "RolledBack", "Aborted"];
 
     public Task<ServiceResult<RunbookRuns>> StartRunAsync(string trainId, string mode, Actor actor, CancellationToken ct = default) =>
@@ -48,7 +57,15 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
     public Task<ServiceResult<StepExecutions>> SkipStepAsync(string runId, string stepId, string? note, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
         StepAsync(runId, stepId, "Skip", note, actor, expectedVersion, ct);
 
-    private Task<ServiceResult<StepExecutions>> StepAsync(string runId, string stepId, string action, string? note, Actor actor, int? expectedVersion, CancellationToken ct) =>
+    private async Task<ServiceResult<StepExecutions>> StepAsync(string runId, string stepId, string action, string? note, Actor actor, int? expectedVersion, CancellationToken ct)
+    {
+        StepEvent? evt = null;
+        var result = await StepCoreAsync(runId, stepId, action, note, actor, expectedVersion, e => evt = e, ct);
+        if (result.IsOk && evt is not null) await AfterEventAsync(evt, ct);
+        return result;
+    }
+
+    private Task<ServiceResult<StepExecutions>> StepCoreAsync(string runId, string stepId, string action, string? note, Actor actor, int? expectedVersion, Action<StepEvent> captured, CancellationToken ct) =>
         RunAsync(async db =>
         {
             var run = await db.Set<RunbookRuns>().SingleOrDefaultAsync(r => r.Id == runId, ct);
@@ -87,6 +104,15 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
             if (action is "Done" or "Fail") ex.ActualEndAt = now;
             Audit(db, actor, run.ReleaseTrainId, "StepExecution", ex.Id, action, before, new { status = ex.Status, version = ex.Version, step = step.StepCode, run = run.Mode });
             await db.SaveChangesAsync(ct);
+
+            var late = 0;
+            if (action == "Start")   // how far behind its (D28-effective) plan the step actually started
+            {
+                var all = await db.Set<RunbookSteps>().AsNoTracking().Where(x => x.ReleaseTrainId == run.ReleaseTrainId).ToListAsync(ct);
+                var shift = run.Mode == "Rehearsal" ? RunPlan.RehearsalShift(run.StartedAt, all.Select(x => (x.Section, x.PlannedStartAt))) : TimeSpan.Zero;
+                late = (int)Math.Floor((now - (step.PlannedStartAt + shift)).TotalMinutes);
+            }
+            captured(new StepEvent(run.ReleaseTrainId, run.Id, run.Mode, action, step.StepCode, step.OwnerUserId, step.OwnerTeamId, late));
             return ServiceResult<StepExecutions>.Ok(ex);
         }, ct);
 
@@ -115,6 +141,58 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
             await db.SaveChangesAsync(ct);
             return ServiceResult<RunbookRuns>.Ok(run);
         }, ct);
+
+    // ---- after a committed step event: push the new forecast, and escalate ------------------------------------------------------------------
+    // The step is already saved, so nothing here may undo it; but nothing is swallowed either: a failed push or notification is raised through IAlertSink (rule 8).
+    private async Task AfterEventAsync(StepEvent e, CancellationToken ct)
+    {
+        try
+        {
+            if (_realtime is not null) await _realtime.ForecastChangedAsync(e.TrainId, e.RunId, ct);
+            if (notifier is null || e.Mode != "Live") return;   // rehearsals never page anyone
+
+            if (e.Action == "Start" && e.LateMin >= WarnLateMin)
+            {
+                var critical = e.LateMin >= CriticalLateMin;
+                var who = await RecipientsAsync(e.OwnerUserId, e.OwnerTeamId, includeRte: true, includeManagers: critical, ct);
+                var msg = $"Step {e.StepCode} started {e.LateMin} min after its plan" + (critical ? " (critical)" : "");
+                foreach (var u in who) await notifier.NotifyAsync(new NotificationRequest(u, "StepLate", "RunbookRun", e.RunId, msg, critical ? 2 : 1), ct);
+            }
+
+            await NotifyIfDeadlineCrossedAsync(e, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (alerts is not null) await alerts.RaiseAsync("Runbook", "EscalationFailed", e.RunId, $"Step {e.StepCode} was saved but its forecast push or escalation failed: {ex.Message}", ct);
+            else throw;
+        }
+    }
+
+    /// <summary>The first time the forecast finish passes the rollback deadline, tell the RTEs and Release Managers, once per run.</summary>
+    private async Task NotifyIfDeadlineCrossedAsync(StepEvent e, CancellationToken ct)
+    {
+        var forecast = await new ForecastService(_dbf, _time).ComputeAsync(e.RunId, ct);
+        if (!forecast.IsOk || !forecast.Value!.AlertRaised) return;
+        await using var db = await _dbf.CreateDbContextAsync(ct);
+        if (await db.Set<Notifications>().AnyAsync(n => n.Kind == "RollbackDeadline" && n.EntityId == e.RunId, ct)) return;
+        var f = forecast.Value;
+        var msg = $"Forecast finish {f.ForecastFinish} is {f.CrossesDeadlineByMin} min past the rollback deadline {f.RollbackDeadline}: a rollback might not fit in the window";
+        foreach (var u in await RecipientsAsync(null, null, includeRte: true, includeManagers: true, ct))
+            await notifier!.NotifyAsync(new NotificationRequest(u, "RollbackDeadline", "RunbookRun", e.RunId, msg, 2), ct);
+    }
+
+    private async Task<List<string>> RecipientsAsync(string? ownerUserId, string? ownerTeamId, bool includeRte, bool includeManagers, CancellationToken ct)
+    {
+        await using var db = await _dbf.CreateDbContextAsync(ct);
+        var ids = new HashSet<string>();
+        if (ownerUserId is not null) ids.Add(ownerUserId);
+        if (ownerTeamId is not null) foreach (var m in await db.Set<TeamMembers>().Where(x => x.TeamId == ownerTeamId).Select(x => x.UserId).ToListAsync(ct)) ids.Add(m);
+        var roles = new List<string>();
+        if (includeRte) roles.Add(Roles.RTE);
+        if (includeManagers) roles.Add(Roles.ReleaseManager);
+        foreach (var u in await db.Set<Users>().Where(x => x.IsActive && roles.Contains(x.Role)).Select(x => x.Id).ToListAsync(ct)) ids.Add(u);
+        return [.. ids.Order(StringComparer.Ordinal)];
+    }
 
     private static async Task<List<string>> UnfinishedDependenciesAsync(ReleaseDbContext db, string runId, string stepId, CancellationToken ct)
     {

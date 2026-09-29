@@ -69,6 +69,8 @@ public static class RunEndpoints
             }).RequireAuthorization(Policies.Read);
         }
 
+        api.MapGet("/runs/{id}/forecast", async (string id, ForecastService f, CancellationToken ct) => (await f.ComputeAsync(id, ct)).ToHttp()).RequireAuthorization(Policies.Read);
+
         api.MapPost("/runs/{id}:end", async (string id, EndRunBody b, ClaimsPrincipal u, HttpRequest req, RunService s, CancellationToken ct) =>
             (await s.EndRunAsync(id, b.Outcome, ActorOf(u), req.IfMatch(), ct)).ToHttp()).RequireAuthorization(Policies.Plan);
     }

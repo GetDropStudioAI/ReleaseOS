@@ -49,6 +49,11 @@ public static class Guards
     public const string BaselineExists = "BaselineExists";
     public const string DbRule = "DbRule";
     public const string InvalidWindow = "InvalidWindow";
+    public const string DependencyCycle = "DependencyCycle";
+    public const string InvalidStep = "InvalidStep";
+    public const string DuplicateStepCode = "DuplicateStepCode";
+    public const string TrainClosed = "TrainClosed";
+    public const string RunInProgress = "RunInProgress";
     public const string InvalidSessionState = "InvalidSessionState";
     public const string SessionStateTooLarge = "SessionStateTooLarge";
 }

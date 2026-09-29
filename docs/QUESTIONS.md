@@ -70,3 +70,9 @@ Context: CLAUDE.md rule 3 says every service write stamps `Version` and writes o
 Question: does rule 3 apply to it?
 Options considered: (a) exempt it: it is a private UI scratchpad, not a domain record; auditing would bury the real audit log in autosaves / (b) audit each save / (c) audit only draft commits (those already are audited by the domain write they produce).
 Blocked: nothing. Built (a): `SessionService` writes no audit rows and no Version; a save only ever touches the caller's own (user, clientId) row. Domain writes made from a draft (add task, set window) are audited as before.
+
+## Q-010 · M3 · When does the runbook stop being editable? (REOS-29)
+Context: `RunbookSteps` is the plan; actuals live in `StepExecutions` and never overwrite it (rule 7), but a run has no copy of the plan: lateness is measured against the plan as it stands.
+Question: may steps be added, edited or re-wired while a train is Executing, or while a Live run is open?
+Options considered: (a) editable until the train is Complete or Aborted / (b) locked once the train is Executing / (c) locked while a Live run is open (and once Complete or Aborted); rehearsals never lock.
+Blocked: nothing. **Decided 2026-09-29 (best practice, on the instruction to use judgement): (c).** Editing the plan under a live run would move the goalposts the run is being measured against and make late/on-time answers depend on when someone edited; rehearsals stay editable because that is how a plan gets fixed. Guards `RunInProgress` and `TrainClosed`; every plan change is audited with before/after. (b) would also block legitimate pre-window fixes while Executing.

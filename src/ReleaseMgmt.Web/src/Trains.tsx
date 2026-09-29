@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from './session'
 import { day, errMsg, plural, splitId, tMinus } from './format'
+import { Runbook } from './Runbook'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { advanceTrain, getReadiness, getStream, getTrain, type Readiness, type StreamRow, type TrainDetail } from './api'
 
@@ -120,6 +121,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} />
       <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} />
       {checklistGate && <Checklist gateId={checklistGate.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
+      <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
     </>
   )
 }

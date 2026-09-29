@@ -49,6 +49,7 @@ builder.Services.AddSingleton<BaselineService>();
 builder.Services.AddSingleton<ScheduleService>();
 builder.Services.AddSingleton<WindowService>();
 builder.Services.AddSingleton<SessionService>();
+builder.Services.AddSingleton<RunbookService>();
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.SessionStateJanitor>();
 builder.Services.AddSingleton<AdminService>();
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
@@ -140,6 +141,7 @@ api.MapGet("/me", (ClaimsPrincipal u) => new
 api.MapLifecycle();
 api.MapTrainQueries();
 api.MapSession();
+api.MapRunbook();
 api.MapAdmin();
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.

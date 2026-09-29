@@ -80,3 +80,11 @@ export const gateAction = (id: string, action: 'start' | 'certify' | 'fail' | 'r
 export const taskAction = (id: string, action: 'complete' | 'reopen', version: number) => post<unknown>(`/api/v1/tasks/${id}:${action}`, {}, version)
 export const addTask = (gateId: string, description: string, owner: Owner) =>
   post<unknown>(`/api/v1/gates/${gateId}/tasks`, { description, ownerUserId: owner.kind === 'user' ? owner.id : null, ownerTeamId: owner.kind === 'team' ? owner.id : null })
+
+export interface StepRow { id: string; stepCode: string; section: string; title: string; instructions: string | null; ownerUserId: string | null; ownerTeamId: string | null; ownerName: string | null; productId: string | null; productName: string | null; plannedStartAt: string; plannedEndAt: string; plannedDurationMin: number; dependsOn: { id: string; code: string }[]; version: number }
+export const SECTIONS = ['PreCheck', 'Deploy', 'Verify', 'Rollback', 'Hypercare'] as const
+export const getSteps = (trainId: string) => get<StepRow[]>(`/api/v1/trains/${trainId}/steps`)
+export interface NewStepBody { title: string; section: string; ownerUserId?: string | null; ownerTeamId?: string | null; plannedStartAt: string; plannedDurationMin: number }
+export const createStep = (trainId: string, b: NewStepBody) => post<StepRow>(`/api/v1/trains/${trainId}/steps`, b)
+export const patchStep = (id: string, b: Partial<NewStepBody> & { instructions?: string }, version: number) => patch<StepRow>(`/api/v1/steps/${id}`, b, version)
+export const setStepDependencies = (id: string, dependsOn: string[], version: number) => call<StepRow>('PUT', `/api/v1/steps/${id}/dependencies`, { dependsOn }, version)

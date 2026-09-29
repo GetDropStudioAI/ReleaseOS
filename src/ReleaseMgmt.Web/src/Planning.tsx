@@ -7,8 +7,9 @@ import { day, errMsg, tMinus } from './format'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
 import type { ApiError } from './api'
+import { StepInspector } from './Runbook'
 
-export type Selection = { kind: 'gate'; id: string } | { kind: 'task'; gateId: string; id: string } | { kind: 'product'; id: string } | null
+export type Selection = { kind: 'gate'; id: string } | { kind: 'task'; gateId: string; id: string } | { kind: 'product'; id: string } | { kind: 'step'; id: string } | null
 
 const STATUS: Record<string, { g: string; cls: string; word: string }> = {
   Certified: { g: '●', cls: 'ok', word: 'certified' }, Waived: { g: '●', cls: 'warn', word: 'waived' }, Failed: { g: '✗', cls: 'bad', word: 'failed' },
@@ -199,7 +200,7 @@ export function Checklist({ gateId, refreshKey, selection, onSelect, onChanged }
 }
 
 // ---- Inspector (right pane): gate, task or product, with the reason Certify is unavailable -------------------------------------------------
-export function Inspector({ selection, trainId, refreshKey, onClose, onChanged }: { selection: Selection; trainId: string | null; refreshKey: number; onClose: () => void; onChanged: () => void }) {
+export function Inspector({ selection, trainId, canPlan, refreshKey, onClose, onChanged }: { selection: Selection; trainId: string | null; canPlan: boolean; refreshKey: number; onClose: () => void; onChanged: () => void }) {
   const gateId = selection?.kind === 'gate' ? selection.id : selection?.kind === 'task' ? selection.gateId : null
   const [gate, setGate] = useState<GateDetail | null>(null)
   const [products, setProducts] = useState<ProductsResponse | null>(null)
@@ -214,6 +215,7 @@ export function Inspector({ selection, trainId, refreshKey, onClose, onChanged }
   const act = async (fn: () => Promise<unknown>) => { setErr(null); setConflict(null); try { await fn(); onChanged() } catch (e) { if (isConflict(e)) setConflict(e); else setErr(errMsg(e)); onChanged() } }
   const head = (kind: string) => <div className="section-head"><span className="cap">Inspector · {kind}</span><button type="button" className="text quiet" aria-label="Close inspector" onClick={onClose}>Close</button></div>
 
+  if (selection.kind === 'step') return <>{head('step')}{trainId ? <StepInspector stepId={selection.id} trainId={trainId} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} /> : null}</>
   if (selection.kind === 'product') {
     const p = products?.products.find(x => x.id === selection.id)
     return (<>{head('product')}{!p ? <p className="muted">Loading…</p> : (<>

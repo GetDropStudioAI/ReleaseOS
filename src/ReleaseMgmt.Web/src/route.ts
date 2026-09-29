@@ -15,6 +15,7 @@ export function parsePath(path: string): Route {
     if (seg[4] === 'tasks' && seg[5]) return { view: 'trains', trainId, selection: { kind: 'task', gateId: seg[3], id: seg[5] } }
     return { view: 'trains', trainId, selection: { kind: 'gate', id: seg[3] } }
   }
+  if (seg[2] === 'steps' && seg[3]) return { view: 'trains', trainId, selection: { kind: 'step', id: seg[3] } }
   if (seg[2] === 'products' && seg[3]) return { view: 'trains', trainId, selection: { kind: 'product', id: seg[3] } }
   return { view: 'trains', trainId, selection: null }
 }
@@ -27,6 +28,7 @@ export function buildPath(r: Route): string {
   if (!s) return base
   if (s.kind === 'gate') return `${base}/gates/${e(s.id)}`
   if (s.kind === 'task') return `${base}/gates/${e(s.gateId)}/tasks/${e(s.id)}`
+  if (s.kind === 'step') return `${base}/steps/${e(s.id)}`
   return `${base}/products/${e(s.id)}`
 }
 

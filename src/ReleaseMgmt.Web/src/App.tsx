@@ -174,7 +174,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">
-          <Inspector selection={selection} trainId={selected} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />
+          <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />
         </aside>
       )}
     </div>

@@ -63,5 +63,5 @@ test('a window edit that loses the race keeps the draft and offers overwrite or 
   await b.click('button:has-text("Overwrite with mine")')                                          // Bob decides
   await expect(b.locator('.conflict')).toHaveCount(0)
   const now = await b.evaluate(async id => (await (await fetch(`/api/v1/trains/${id}/window`)).json() as { startsAt: string }).startsAt, t.id)
-  expect(new Date(now).getUTCHours()).toBe(new Date('2026-12-01T20:00').getUTCHours())
+  expect(now).toBe('2026-12-02T02:00:00Z')                                                          // 20:00 on 1 Dec in the display zone (America/Chicago, CST = UTC-6, D24)
 })

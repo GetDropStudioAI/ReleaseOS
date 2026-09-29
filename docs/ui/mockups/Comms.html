@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Communication drawer — mockup</title>
+<!-- Static reference mockup. Data is illustrative. Fonts resolve to the OS (SF on macOS, Segoe UI on Windows). -->
+
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#1d1d1f;background:#ffffff;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;font-feature-settings:'tnum' 0}
+.mono{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;letter-spacing:-0.02em}
+.q{color:#6e6e73}
+.cap{font-size:12px;color:#6e6e73;font-weight:600}
+.ok{color:#1e7b34}.warn{color:#a14d00}.bad{color:#c4161c}.acc{color:#0a64d8}
+table.t{border-collapse:collapse;width:100%}
+table.t th{font-size:11.5px;color:#6e6e73;font-weight:500;text-align:left;padding:5px 10px 5px 0;border-bottom:1px solid #d1d1d6}
+table.t td{padding:5px 10px 5px 0;border-bottom:1px solid #e5e5ea;vertical-align:baseline;white-space:nowrap}
+table.t .n{text-align:right;font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.src{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:12px;line-height:19px;white-space:pre-wrap}
+.tk{color:#0a64d8;background:#eaf2fd}
+button{font:inherit;background:none;border:0;padding:0;cursor:pointer;color:#0a64d8;font-weight:600}
+button:hover{text-decoration:underline;text-underline-offset:3px}
+button[disabled]{color:#8e8e93;cursor:not-allowed;text-decoration:none}
+a{color:#0a64d8;text-decoration:none}a:hover{color:#084fad;text-decoration:underline;text-underline-offset:3px}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #ffffff">
+
+<header style="height: 44px; flex-shrink: 0; background: rgba(255,255,255,0.8); backdrop-filter: saturate(180%) blur(20px); display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid #d1d1d6; white-space: nowrap">
+<div class="serif" style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Release Management</div>
+<nav style="display: flex; gap: 20px; font-weight: 500; align-self: stretch; align-items: stretch">
+<a href="Main.html" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; display: flex; align-items: center; text-decoration: none">Trains</a>
+<a href="#" style="color: #6e6e73; display: flex; align-items: center">Calendar</a>
+<a href="Analytics.html" style="color: #6e6e73; display: flex; align-items: center">Analytics</a>
+<a href="SyncHealth.html" style="color: #6e6e73; display: flex; align-items: center">Sync health</a>
+<a href="ImportExport.html" style="color: #6e6e73; display: flex; align-items: center">Imports &amp; exports</a>
+</nav>
+<div style="flex-grow: 1"></div>
+<div class="q" style="font-size: 12px">Thu 29 Oct 15:12 CT · Jira <span class="ok">●</span> ServiceNow <span class="ok">●</span></div>
+<div>Rae Tanaka <span class="q">· RTE</span></div>
+</header>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<aside style="width: 248px; flex-shrink: 0; border-right: 1px solid #d8d8dc; background: rgba(245,245,247,0.72); backdrop-filter: saturate(180%) blur(30px); -webkit-backdrop-filter: saturate(180%) blur(30px); display: flex; flex-direction: column">
+<div class="cap" style="padding: 16px 16px 4px">Gated</div>
+<a href="Main.html" aria-current="page" style="display: block; padding: 8px 16px 10px; color: inherit; text-decoration: none; background: #e6effc">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span class="mono q">R26.24</span><span class="mono warn">▲ 1 blocker</span></div>
+<div class="serif acc" style="font-size: 15px; font-weight: 600">Q4 Payments Consolidated</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span class="q">Fri 30 Oct · T−1</span><span class="mono ok" style="letter-spacing: 2px">●●●●</span></div>
+</a>
+<div class="cap" style="padding: 12px 16px 4px">Planning</div>
+<a href="#" style="display: block; padding: 6px 16px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.25 </span>Merchant Onboarding<div class="q" style="font-size: 12px">Fri 13 Nov · T−11</div></a>
+<a href="#" style="display: block; padding: 6px 16px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.26 </span>Ledger Year-End Close<div class="q" style="font-size: 12px">Fri 4 Dec · T−26</div></a>
+<div class="cap" style="padding: 12px 16px 4px">Complete · last 30 days</div>
+<a href="#" style="display: block; padding: 6px 16px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.23 </span>Merchant UI 5.2 <span class="ok" style="font-size: 12px">✓</span></a>
+</aside>
+
+<main style="flex-grow: 1; min-width: 0; padding: 18px 24px 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<section>
+<div class="cap">Release train · <span class="mono">CHG0041872</span> · Risk High</div>
+<h1 class="serif" style="margin: 2px 0 2px; font-size: 24px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; white-space: nowrap">R26.24 Q4 Payments Consolidated</h1>
+<div class="q" style="white-space: nowrap">Gated · Target Fri 30 Oct · window 01:00–05:00 CT · <span class="mono">T−1</span></div>
+</section>
+
+<section style="border-top: 1px solid #d1d1d6; border-bottom: 1px solid #e5e5ea; padding: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px">
+<span class="cap" style="padding-top: 1px">To reach Executing</span>
+<span><span class="ok">✓</span> All 4 gates</span>
+<span><span class="ok">✓</span> Go with conditions</span>
+<span><span class="ok">✓</span> Baseline</span>
+<span><span class="ok">✓</span> Rollback rehearsed Wed 28</span>
+<span><span class="ok">✓</span> Freeze override FO-3</span>
+<span class="ok" style="font-weight: 600">Ready at window start</span>
+</section>
+
+<section>
+<h2 class="cap" style="margin: 0 0 6px; color: #1d1d1f">Go/No-Go decision · recorded, cannot be edited</h2>
+<div style="display: flex; gap: 28px; align-items: baseline">
+<div class="serif" style="font-size: 22px; font-weight: 600">Go with conditions</div>
+<div class="q">Marcus Bell · Release Manager · Thu 29 Oct 15:00</div>
+</div>
+<div class="q" style="font-size: 12.5px">Gate states captured at decision: 4 of 4 certified · 1 open blocker (Medium)</div>
+<table class="t" style="margin-top: 8px">
+<thead><tr><th>Condition</th><th>Owner</th><th>Expires</th><th>State</th></tr></thead>
+<tbody>
+<tr><td style="white-space: normal">Card Portal pen-test exceptions signed by CISO</td><td>Priya Nair</td><td class="mono">Fri 00:30</td><td class="warn">Open · 9 h 18 m left</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2 class="cap" style="margin: 0 0 4px; color: #1d1d1f">Bundled products</h2>
+<table class="t">
+<thead><tr><th>Product</th><th>Version</th><th class="n">Tasks</th><th>Health</th></tr></thead>
+<tbody>
+<tr><td style="font-weight: 600">Payments API</td><td class="mono">4.5.0</td><td class="n">16 / 16</td><td class="ok">Ready</td></tr>
+<tr><td style="font-weight: 600">Card Portal</td><td class="mono">2.1.0</td><td class="n">13 / 13</td><td class="ok">Ready</td></tr>
+<tr><td style="font-weight: 600">Ledger Svc</td><td class="mono">3.8.2</td><td class="n">12 / 12</td><td class="warn">▲ Medium blocker</td></tr>
+<tr><td style="font-weight: 600">Fraud Engine</td><td class="mono">1.12.0</td><td class="n">8 / 8</td><td class="ok">Ready</td></tr>
+</tbody>
+</table>
+</section>
+</main>
+
+<aside aria-label="Communication drawer" style="width: 620px; flex-shrink: 0; border-left: 1px solid #d1d1d6; background: #fbfbfd; padding: 18px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span class="cap">Drawer · communicate</span><button type="button" style="color: #6e6e73; font-weight: 400">Close</button></div>
+<h2 class="serif" style="margin: 2px 0 0; font-size: 22px; font-weight: 600">T−1 Go/No-Go outcome</h2>
+<div class="q">All stakeholders · exec, operations, support desk · from template library v3</div>
+</div>
+
+<nav aria-label="Drawer sections" style="display: flex; gap: 18px; font-weight: 500; border-bottom: 1px solid #e5e5ea">
+<a href="#" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; padding-bottom: 4px; text-decoration: none">Message</a>
+<a href="#" style="color: #6e6e73; padding-bottom: 4px">Schedule</a>
+<a href="#" style="color: #6e6e73; padding-bottom: 4px">Sent log</a>
+</nav>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; min-height: 0">
+<div>
+<div style="display: flex; justify-content: space-between"><span class="cap">Template</span><span class="ok" style="font-size: 12px">12 tokens · all known ✓</span></div>
+<div class="src" style="border-top: 1px solid #d1d1d6; padding-top: 6px; margin-top: 2px">Subject: [<span class="tk">{ReleaseTitle}</span>] Go/No-Go: <span class="tk">{GoNoGoDecision}</span>
+
+**<span class="tk">{ReleaseTitle}</span>** is <span class="tk">{GoNoGoDecision}</span>.
+Window: <span class="tk">{Window}</span>
+Change: <span class="tk">{ChangeTicket}</span>
+**Conditions**
+<span class="tk">{Conditions}</span>
+**Scope** (<span class="tk">{ProductCount}</span> products)
+<span class="tk">{ProductList}</span>
+**Gates**
+<span class="tk">{GateTable}</span>
+**Open blockers** (<span class="tk">{BlockerCount}</span>)
+<span class="tk">{BlockerList}</span>
+**Known issues**
+<span class="tk">{KnownIssues}</span>
+Questions: <span class="tk">{Owners}</span></div>
+<div class="q" style="font-size: 12px; margin-top: 6px">An unknown token, such as a typo, blocks sending. Empty lists print “None”.</div>
+</div>
+
+<div>
+<div style="display: flex; justify-content: space-between"><span class="cap">Preview</span><span class="q" style="font-size: 12px">data as of 15:12 · train v51</span></div>
+<div style="border-top: 1px solid #d1d1d6; padding-top: 6px; margin-top: 2px; font-size: 12.5px; line-height: 1.5">
+<div style="font-weight: 600">[R26.24 Q4 Payments Consolidated] Go/No-Go: Go with conditions</div>
+<div style="margin-top: 6px"><b>R26.24 Q4 Payments Consolidated</b> is Go with conditions (Marcus Bell, Thu 29 Oct 15:00).</div>
+<div>Window: Fri 30 Oct 01:00–05:00 CT</div>
+<div>Change: <span class="mono">CHG0041872</span></div>
+<div style="margin-top: 6px; font-weight: 600">Conditions</div>
+<div>• Card Portal pen-test exceptions signed by CISO · Priya Nair · by Fri 00:30</div>
+<div style="margin-top: 6px"><b>Scope</b> (4 products)</div>
+<div>Payments API 4.5.0 · Card Portal 2.1.0 · Ledger Svc 3.8.2 · Fraud Engine 1.12.0</div>
+<div style="margin-top: 6px; font-weight: 600">Gates</div>
+<div class="mono" style="font-size: 11.5px; line-height: 1.55">Code Freeze ....... ✓ Thu 22<br>QA Sign-off ....... ✓ Mon 26<br>Compliance ........ ✓ Wed 28<br>CAB Approval ...... ✓ Thu 29</div>
+<div style="margin-top: 6px"><b>Open blockers</b> (1)</div>
+<div>• Medium · Migration 0042 slow in staging (14 vs 8 min) · Dana Ortiz</div>
+<div style="margin-top: 6px; font-weight: 600">Known issues</div>
+<div>None</div>
+<div style="margin-top: 6px">Questions: Rae Tanaka · Marcus Bell</div>
+</div>
+</div>
+</div>
+
+<div style="flex-grow: 1"></div>
+
+<div style="border-top: 1px solid #e5e5ea; padding-top: 8px">
+<div class="cap" style="margin-bottom: 2px">T−minus schedule for R26.24</div>
+<div style="display: grid; grid-template-columns: 54px minmax(0, 1fr) 150px 120px; gap: 2px 10px; font-size: 12.5px">
+<span class="mono q">T−7</span><span>Readiness notice · all</span><span class="mono q">Fri 23 09:00</span><span class="ok">✓ sent 08:51</span>
+<span class="mono q">T−3</span><span>Checkpoint · ops, support</span><span class="mono q">Tue 27 09:00</span><span class="warn">✓ sent 10:40 late</span>
+<span class="mono acc" style="font-weight: 600">T−1</span><span style="font-weight: 600">Go/No-Go outcome · all</span><span class="mono">Thu 29 17:00</span><span class="acc">ready to send</span>
+<span class="mono q">T0</span><span>Cutover start · ops</span><span class="mono q">Fri 30 00:45</span><span class="q">scheduled</span>
+<span class="mono q">T0</span><span>Complete · all</span><span class="mono q">at close</span><span class="q">scheduled</span>
+</div>
+</div>
+
+<div style="border-top: 1px solid #d1d1d6; padding-top: 10px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; gap: 22px; align-items: baseline"><span class="cap">Send</span><button type="button">Copy as rich text</button><button type="button">Open in mail</button><button type="button">Post to #release-ops</button></div>
+<div class="q" style="font-size: 12px">Each send stores the exact text, channel and time. #release-ops is an admin-approved Teams webhook.</div>
+</div>
+</aside>
+
+</div>
+</div>
+
+</body>
+</html>

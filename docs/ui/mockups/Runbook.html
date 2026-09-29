@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live runbook — mockup</title>
+<!-- Static reference mockup. Data is illustrative. Fonts resolve to the OS (SF on macOS, Segoe UI on Windows). -->
+
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#1d1d1f;background:#ffffff;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;font-feature-settings:'tnum' 0}
+.mono{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;letter-spacing:-0.02em}
+.q{color:#6e6e73}
+.cap{font-size:12px;color:#6e6e73;font-weight:600}
+.ok{color:#1e7b34}.warn{color:#a14d00}.bad{color:#c4161c}.acc{color:#0a64d8}
+table.t{border-collapse:collapse;width:100%}
+table.t th{font-size:11.5px;color:#6e6e73;font-weight:500;text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid #d1d1d6}
+table.t td{padding:3px 10px 3px 0;border-bottom:1px solid #ececf0;vertical-align:middle;white-space:nowrap}
+table.t .n{text-align:right;font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+table.t tr.sec td{padding-top:8px;border-bottom:1px solid #d8d8dc;font-size:12px;color:#6e6e73;font-weight:600}
+table.t td svg{display:block}
+.st{font-size:11.5px;line-height:1.2}
+button{font:inherit;background:none;border:0;padding:0;cursor:pointer;color:#0a64d8;font-weight:600}
+button:hover{text-decoration:underline;text-underline-offset:3px}
+button[disabled]{color:#8e8e93;cursor:not-allowed;text-decoration:none}
+a{color:#0a64d8;text-decoration:none}a:hover{color:#084fad;text-decoration:underline;text-underline-offset:3px}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #ffffff">
+
+<header style="height: 44px; flex-shrink: 0; background: rgba(255,255,255,0.8); backdrop-filter: saturate(180%) blur(20px); display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid #d1d1d6; white-space: nowrap">
+<div class="serif" style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Release Management</div>
+<nav style="display: flex; gap: 20px; font-weight: 500; align-self: stretch; align-items: stretch">
+<a href="Main.html" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; display: flex; align-items: center; text-decoration: none">Trains</a>
+<a href="#" style="color: #6e6e73; display: flex; align-items: center">Calendar</a>
+<a href="Analytics.html" style="color: #6e6e73; display: flex; align-items: center">Analytics</a>
+<a href="SyncHealth.html" style="color: #6e6e73; display: flex; align-items: center">Sync health</a>
+<a href="ImportExport.html" style="color: #6e6e73; display: flex; align-items: center">Imports &amp; exports</a>
+</nav>
+<div style="flex-grow: 1"></div>
+<div class="q" style="font-size: 12px; white-space: nowrap">Polling 1 min · Jira <span class="ok">● 0:41 ago</span>  ·  ServiceNow <span class="ok">● 0:52 ago</span></div>
+<div>Rae Tanaka <span class="q">· RTE</span></div>
+</header>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<aside style="width: 248px; flex-shrink: 0; border-right: 1px solid #d8d8dc; background: rgba(245,245,247,0.72); backdrop-filter: saturate(180%) blur(30px); -webkit-backdrop-filter: saturate(180%) blur(30px); display: flex; flex-direction: column">
+<div class="cap" style="padding: 16px 16px 4px">Executing</div>
+<a href="Runbook.html" aria-current="page" style="display: block; padding: 8px 16px 10px; color: inherit; text-decoration: none; background: #e6effc">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span class="mono q">R26.24</span><span class="mono bad">+19 min</span></div>
+<div class="serif acc" style="font-size: 15px; font-weight: 600">Q4 Payments Consolidated</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span class="q">Live · 5 of 12 steps</span><span class="mono" style="letter-spacing: 2px">●●●●</span></div>
+</a>
+<div class="cap" style="padding: 12px 16px 4px">Planning</div>
+<a href="#" style="display: block; padding: 6px 16px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.25 </span>Merchant Onboarding<div class="q" style="font-size: 12px; white-space: nowrap">Fri 13 Nov · T−10</div></a>
+<a href="#" style="display: block; padding: 6px 16px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.26 </span>Ledger Year-End Close<div class="q" style="font-size: 12px; white-space: nowrap">Fri 4 Dec · T−25</div></a>
+<div class="cap" style="padding: 12px 16px 4px">Complete · last 30 days</div>
+<a href="#" style="display: block; padding: 6px 16px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.23 </span>Merchant UI 5.2 <span class="ok" style="font-size: 12px">✓</span></a>
+<a href="#" style="display: block; padding: 6px 16px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.22 </span>Card Tokenisation <span class="ok" style="font-size: 12px">✓</span></a>
+<div style="flex-grow: 1"></div>
+<div style="padding: 12px 16px 14px; border-top: 1px solid #d8d8dc; font-size: 12px">
+<div class="cap">Freeze active</div>
+<div><span class="bad">Q4 close</span> · until Mon 2 Nov 00:00</div>
+<div class="q">Override FO-3 for R26.24 · Priya Nair · expires Fri 06:00</div>
+</div>
+</aside>
+
+<main style="flex-grow: 1; min-width: 0; padding: 14px 24px 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+
+<section style="display: flex; justify-content: space-between; align-items: flex-start">
+<div>
+<div class="cap">Live run · started 01:02 by Rae Tanaka · <span class="mono">CHG0041872</span> <span class="ok">Implement ✓</span></div>
+<h1 class="serif" style="margin: 2px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15">R26.24 Q4 Payments Consolidated</h1>
+</div>
+<nav aria-label="Runbook mode" style="display: flex; gap: 18px; padding-top: 16px; font-weight: 500">
+<a href="#" style="color: #6e6e73">Plan</a>
+<a href="#" style="color: #6e6e73">Rehearsal</a>
+<a href="#" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; padding-bottom: 2px; text-decoration: none">Live</a>
+</nav>
+</section>
+
+<section style="display: flex; gap: 0; border-top: 1px solid #d1d1d6; border-bottom: 1px solid #d1d1d6">
+<div style="padding: 6px 18px 6px 0; border-right: 1px solid #e5e5ea">
+<div class="mono" style="font-size: 26px; font-weight: 500; line-height: 1.1; white-space: nowrap">02:37:14</div>
+<div class="q" style="font-size: 12px; white-space: nowrap">Now · Fri 30 Oct CT</div>
+</div>
+<div style="padding: 6px 18px; border-right: 1px solid #e5e5ea">
+<div class="mono" style="font-size: 26px; font-weight: 500; line-height: 1.1; white-space: nowrap">2:22:46</div>
+<div class="q" style="font-size: 12px; white-space: nowrap">Window closes 05:00</div>
+</div>
+<div style="padding: 6px 18px; border-right: 1px solid #e5e5ea">
+<div class="mono bad" style="font-size: 26px; font-weight: 500; line-height: 1.1; white-space: nowrap">04:29</div>
+<div class="q" style="font-size: 12px; white-space: nowrap">Finish forecast · plan 04:10</div>
+</div>
+<div style="padding: 6px 18px; border-right: 1px solid #e5e5ea">
+<div class="mono warn" style="font-size: 26px; font-weight: 500; line-height: 1.1; white-space: nowrap">1:37:46</div>
+<div class="q" style="font-size: 12px; white-space: nowrap">To rollback deadline</div>
+</div>
+<div style="padding: 6px 0 6px 18px">
+<div class="mono" style="font-size: 26px; font-weight: 500; line-height: 1.1; white-space: nowrap">5 / 12</div>
+<div class="q" style="font-size: 12px; white-space: nowrap">Steps done</div>
+</div>
+</section>
+
+<section role="alert" style="display: flex; justify-content: space-between; align-items: baseline; gap: 20px; white-space: nowrap">
+<div><span class="bad" style="font-weight: 600">Forecast crosses the rollback deadline by 14 min.</span> Rollback must start by 04:15; decide at R-009.</div>
+<div style="display: flex; gap: 16px; white-space: nowrap"><button type="button">Escalate</button><a href="Comms.html" style="font-weight: 600">Send update</a></div>
+</section>
+
+<section style="min-height: 0">
+<table class="t">
+<thead>
+<tr><th style="width: 46px">Step</th><th>Title · owner · plan</th><th style="width: 100px">Actual / fc</th><th class="n" style="width: 38px">Var</th><th style="width: 92px">State</th><th style="width: 250px; padding-right: 0">
+<svg width="250" height="14" viewBox="0 0 250 14" aria-hidden="true"><text x="4" y="11" font-size="10" fill="#6e6e73" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace">01:00</text><text x="64" y="11" font-size="10" fill="#6e6e73" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="middle">02:00</text><text x="124" y="11" font-size="10" fill="#6e6e73" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="middle">03:00</text><text x="184" y="11" font-size="10" fill="#6e6e73" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="middle">04:00</text><text x="246" y="11" font-size="10" fill="#6e6e73" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="end">05:00</text></svg>
+</th></tr>
+</thead>
+<tbody>
+<tr class="sec"><td colspan="6">Pre-check</td></tr>
+<tr><td class="mono q">R-001</td><td><div>Confirm Go and freeze override</div><div class="q st">Rae Tanaka · 01:00 · 5 min</div></td><td class="mono st">01:02–01:06</td><td class="n st">+1</td><td class="ok st">✓ Done</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="4" y="3" width="5" height="4" fill="#d8d8dc"></rect><rect x="6" y="9" width="4" height="5" fill="#1d1d1f"></rect></svg></td></tr>
+<tr><td class="mono q">R-002</td><td><div>Drain traffic from blue pool</div><div class="q st">@netops · 01:05 · 10 min</div></td><td class="mono st">01:06–01:18</td><td class="n st">+3</td><td class="ok st">✓ Done</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="9" y="3" width="10" height="4" fill="#d8d8dc"></rect><rect x="10" y="9" width="12" height="5" fill="#1d1d1f"></rect></svg></td></tr>
+<tr class="sec"><td colspan="6">Deploy</td></tr>
+<tr><td class="mono q">R-003</td><td><div>Snapshot ledger database</div><div class="q st">Dana Ortiz · 01:15 · 15 min</div></td><td class="mono st">01:18–01:35</td><td class="n st warn">+5</td><td class="ok st">✓ Done</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="19" y="3" width="15" height="4" fill="#d8d8dc"></rect><rect x="22" y="9" width="17" height="5" fill="#1d1d1f"></rect></svg></td></tr>
+<tr><td class="mono q">R-004</td><td><div>Run migration 0042</div><div class="q st">Dana Ortiz · 01:30 · 20 min · <span class="warn">esc. 01:55</span></div></td><td class="mono st">01:35–02:06</td><td class="n st bad">+16</td><td class="ok st">✓ Done</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="34" y="3" width="20" height="4" fill="#d8d8dc"></rect><rect x="39" y="9" width="31" height="5" fill="#1d1d1f"></rect></svg></td></tr>
+<tr><td class="mono q">R-005</td><td><div>Deploy Ledger Svc 3.8.2</div><div class="q st">@ledger · 01:50 · 15 min</div></td><td class="mono st">02:06–02:24</td><td class="n st bad">+19</td><td class="ok st">✓ Done</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="54" y="3" width="15" height="4" fill="#d8d8dc"></rect><rect x="70" y="9" width="18" height="5" fill="#1d1d1f"></rect></svg></td></tr>
+<tr style="background: #eaf2fd"><td class="mono acc" style="font-weight: 600">R-006</td><td><div style="font-weight: 600">Deploy Payments API 4.5.0</div><div class="q st">@payments · 02:05 · 20 min · <span class="warn">19 late</span></div></td><td class="mono st">02:24–<span class="q">02:44</span></td><td class="n st bad">+19</td><td class="acc st" style="font-weight: 600">● 13:14</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="69" y="3" width="20" height="4" fill="#d8d8dc"></rect><rect x="88" y="9" width="13" height="5" fill="#0a64d8"></rect><line x1="101" x2="108" y1="11.5" y2="11.5" stroke="#0a64d8" stroke-width="2" stroke-dasharray="3 2"></line></svg></td></tr>
+<tr><td class="mono q">R-007</td><td><div>Deploy Fraud Engine 1.12.0</div><div class="q st">@fraud · 02:25 · 15 min · after R-006</div></td><td class="mono st q">02:44–02:59</td><td class="n st bad">+19</td><td class="q st">○ Waiting</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="89" y="3" width="15" height="4" fill="#d8d8dc"></rect><line x1="108" x2="123" y1="11.5" y2="11.5" stroke="#a14d00" stroke-width="2" stroke-dasharray="3 2"></line></svg></td></tr>
+<tr><td class="mono q">R-008</td><td><div>Deploy Card Portal 2.1.0</div><div class="q st">@cards · 02:40 · 15 min · after R-007</div></td><td class="mono st q">02:59–03:14</td><td class="n st bad">+19</td><td class="q st">○ Waiting</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="104" y="3" width="15" height="4" fill="#d8d8dc"></rect><line x1="123" x2="138" y1="11.5" y2="11.5" stroke="#a14d00" stroke-width="2" stroke-dasharray="3 2"></line></svg></td></tr>
+<tr class="sec"><td colspan="6">Verify</td></tr>
+<tr><td class="mono q">R-009</td><td><div>Smoke test card auth <span class="warn st">· rollback decision</span></div><div class="q st">Lee Chen · 02:55 · 20 min</div></td><td class="mono st q">03:14–03:34</td><td class="n st bad">+19</td><td class="q st">○ Waiting</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="119" y="3" width="20" height="4" fill="#d8d8dc"></rect><line x1="138" x2="158" y1="11.5" y2="11.5" stroke="#a14d00" stroke-width="2" stroke-dasharray="3 2"></line></svg></td></tr>
+<tr><td class="mono q">R-010</td><td><div>Reconcile ledger totals</div><div class="q st">Dana Ortiz · 03:15 · 25 min</div></td><td class="mono st q">03:34–03:59</td><td class="n st bad">+19</td><td class="q st">○ Waiting</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="139" y="3" width="25" height="4" fill="#d8d8dc"></rect><line x1="158" x2="183" y1="11.5" y2="11.5" stroke="#a14d00" stroke-width="2" stroke-dasharray="3 2"></line></svg></td></tr>
+<tr><td class="mono q">R-011</td><td><div>Restore traffic to blue pool</div><div class="q st">@netops · 03:40 · 15 min</div></td><td class="mono st q">03:59–04:14</td><td class="n st bad">+19</td><td class="q st">○ Waiting</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="164" y="3" width="15" height="4" fill="#d8d8dc"></rect><line x1="183" x2="198" y1="11.5" y2="11.5" stroke="#a14d00" stroke-width="2" stroke-dasharray="3 2"></line></svg></td></tr>
+<tr><td class="mono q">R-012</td><td><div>Business verification sign-off</div><div class="q st">Marcus Bell · 03:55 · 15 min</div></td><td class="mono st bad">04:14–04:29</td><td class="n st bad">+19</td><td class="q st">○ Waiting</td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><line x1="199" x2="199" y1="0" y2="18" stroke="#c4161c" stroke-dasharray="2 2"></line><rect x="179" y="3" width="15" height="4" fill="#d8d8dc"></rect><line x1="198" x2="213" y1="11.5" y2="11.5" stroke="#c4161c" stroke-width="2" stroke-dasharray="3 2"></line></svg></td></tr>
+<tr class="sec"><td colspan="6">Rollback · 3 steps · 45 min · rehearsed Wed 28 in 42 min</td></tr>
+<tr><td class="mono q">R-901</td><td colspan="4" class="q st">Roll back 0042 · redeploy Ledger 3.8.1 · repoint Payments · <button type="button" style="font-size: 12px">Show</button></td><td><svg width="250" height="18" viewBox="0 0 250 18" aria-hidden="true"><line x1="101" x2="101" y1="0" y2="18" stroke="#0a64d8" stroke-dasharray="2 2"></line><rect x="199" y="6" width="45" height="6" fill="none" stroke="#c4161c" stroke-width="1" stroke-dasharray="3 2"></rect></svg></td></tr>
+</tbody>
+</table>
+<div class="q" style="display: flex; gap: 18px; font-size: 11.5px; margin-top: 6px">
+<span><span style="display: inline-block; width: 14px; height: 4px; background: #d8d8dc; vertical-align: middle"></span> planned</span>
+<span><span style="display: inline-block; width: 14px; height: 5px; background: #1d1d1f; vertical-align: middle"></span> actual</span>
+<span><span style="display: inline-block; width: 14px; border-top: 2px dashed #a14d00; vertical-align: middle"></span> forecast</span>
+<span class="acc">┆ now</span>
+<span class="bad">┆ rollback deadline 04:15</span>
+</div>
+</section>
+
+</main>
+
+<aside style="width: 340px; flex-shrink: 0; border-left: 1px solid #d8d8dc; background: #fbfbfd; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<div>
+<span class="cap">Step · <span class="mono">R-006</span></span>
+<h2 class="serif" style="margin: 2px 0 0; font-size: 21px; font-weight: 600; line-height: 1.2">Deploy Payments API 4.5.0</h2>
+<div class="q">@payments · on call Jo Park</div>
+</div>
+<div style="display: flex; gap: 20px; border-top: 1px solid #d1d1d6; border-bottom: 1px solid #e5e5ea; padding: 8px 0">
+<div><div class="mono acc" style="font-size: 26px; font-weight: 500; line-height: 1.1">13:14</div><div class="q" style="font-size: 12px; white-space: nowrap">running · plan 20:00</div></div>
+<div><div class="mono" style="font-size: 26px; font-weight: 500; line-height: 1.1">6:46</div><div class="q" style="font-size: 12px; white-space: nowrap">left at plan pace</div></div>
+</div>
+<dl style="margin: 0; display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 4px 10px">
+<dt class="q">Started</dt><dd style="margin: 0" class="mono">02:24:00 <span class="q">by Jo Park</span></dd>
+<dt class="q">Depends on</dt><dd style="margin: 0"><span class="mono">R-005</span> <span class="ok">✓ done 02:24</span></dd>
+<dt class="q">Blocks</dt><dd style="margin: 0"><span class="mono">R-007 → R-012</span> <span class="q">· 6 steps</span></dd>
+<dt class="q">Tickets</dt><dd style="margin: 0"><span class="mono">PAY-4512</span> <span class="ok">● in sync</span></dd>
+<dt class="q">Escalated</dt><dd style="margin: 0">Marcus Bell at 02:10 <span class="q">(start 5 min late)</span></dd>
+</dl>
+<div style="border-top: 1px solid #e5e5ea; padding-top: 10px">
+<div class="cap" style="margin-bottom: 4px">Instructions</div>
+<ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px">
+<li>Promote build <span class="mono">4.5.0+b812</span> to prod slot green</li>
+<li>Run health probe until 3 consecutive passes</li>
+<li>Flip 10% then 100% of card-auth traffic</li>
+<li>Confirm error rate under 0.2% for 5 min</li>
+</ol>
+</div>
+<div style="border-top: 1px solid #e5e5ea; padding-top: 10px; font-size: 12.5px">
+<div class="cap" style="margin-bottom: 4px">Notes</div>
+<div><span class="mono q">02:31</span> Jo Park: probe 2 of 3 passed, slot warm-up slow</div>
+<div><span class="mono q">02:35</span> Rae Tanaka: holding R-007 until error rate settles</div>
+<label for="note" class="q" style="display: block; margin-top: 6px; font-size: 12px">Add note</label>
+<input id="note" placeholder="Visible to everyone on the call" style="width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid #8e8e93; background: transparent; font: inherit; padding: 3px 0">
+</div>
+<div style="flex-grow: 1"></div>
+<div style="border-top: 1px solid #d1d1d6; padding-top: 10px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; gap: 20px"><button type="button">Mark done</button><button type="button" style="color: #c4161c">Fail</button><button type="button">Skip…</button></div>
+<div class="q" style="font-size: 12px; white-space: nowrap">Skip needs a note. Fail offers the rollback runbook.</div>
+</div>
+</aside>
+
+</div>
+</div>
+
+</body>
+</html>

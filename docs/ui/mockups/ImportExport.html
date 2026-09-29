@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Imports and exports — mockup</title>
+<!-- Static reference mockup. Data is illustrative. Fonts resolve to the OS (SF on macOS, Segoe UI on Windows). -->
+
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#1d1d1f;background:#ffffff;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;letter-spacing:-0.02em}
+.q{color:#6e6e73}
+.cap{font-size:12px;color:#6e6e73;font-weight:600}
+.ok{color:#1e7b34}.warn{color:#a14d00}.bad{color:#c4161c}.acc{color:#0a64d8}
+table.t{border-collapse:collapse;width:100%}
+table.t th{font-size:11.5px;color:#6e6e73;font-weight:500;text-align:left;padding:5px 12px 5px 0;border-bottom:1px solid #d1d1d6;white-space:nowrap}
+table.t td{padding:5px 12px 5px 0;border-bottom:1px solid #e5e5ea;vertical-align:baseline;white-space:nowrap}
+table.t .n{text-align:right;font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+button{font:inherit;background:none;border:0;padding:0;cursor:pointer;color:#0a64d8;font-weight:600}
+button:hover{text-decoration:underline;text-underline-offset:3px}
+button[disabled]{color:#8e8e93;cursor:not-allowed;text-decoration:none}
+a{color:#0a64d8;text-decoration:none}a:hover{color:#084fad;text-decoration:underline;text-underline-offset:3px}
+.old{color:#8e8e93;text-decoration:line-through}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #ffffff">
+
+<header style="height: 44px; flex-shrink: 0; background: rgba(255,255,255,0.8); backdrop-filter: saturate(180%) blur(20px); display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid #d1d1d6; white-space: nowrap">
+<div class="serif" style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Release Management</div>
+<nav style="display: flex; gap: 20px; font-weight: 500; align-self: stretch; align-items: stretch">
+<a href="Main.html" style="color: #6e6e73; display: flex; align-items: center">Trains</a>
+<a href="#" style="color: #6e6e73; display: flex; align-items: center">Calendar</a>
+<a href="Analytics.html" style="color: #6e6e73; display: flex; align-items: center">Analytics</a>
+<a href="SyncHealth.html" style="color: #6e6e73; display: flex; align-items: center">Sync health</a>
+<a href="ImportExport.html" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; display: flex; align-items: center; text-decoration: none">Imports &amp; exports</a>
+</nav>
+<div style="flex-grow: 1"></div>
+<div class="q" style="font-size: 12px">Wed 28 Oct 10:31 CT · Jira <span class="ok">●</span> ServiceNow <span class="ok">●</span></div>
+<div>Rae Tanaka <span class="q">· RTE</span></div>
+</header>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<main style="flex-grow: 1; min-width: 0; padding: 18px 28px 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<section>
+<div class="cap">Import · runbook steps into <span class="mono">R26.25</span> Merchant Onboarding (Planning)</div>
+<h1 class="serif" style="margin: 2px 0 2px; font-size: 26px; font-weight: 600">r26-25-runbook.csv</h1>
+<div class="q" style="white-space: nowrap">16 rows · 3.1 KB · sha256 <span class="mono">4c1e…9b20</span> · uploaded 10:31 by Rae Tanaka · UTF-8 · 9 columns recognised</div>
+</section>
+
+<section style="display: flex; gap: 32px; align-items: baseline; border-top: 1px solid #d1d1d6; border-bottom: 1px solid #d1d1d6; padding: 8px 0; white-space: nowrap">
+<nav aria-label="Import mode" style="display: flex; gap: 14px; font-weight: 500"><span class="cap" style="padding-top: 1px">Mode</span><a href="#" style="color: #6e6e73">Append</a><a href="#" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; text-decoration: none">Upsert</a></nav>
+<span><span class="mono acc" style="font-size: 18px; font-weight: 600">12</span> new</span>
+<span><span class="mono warn" style="font-size: 18px; font-weight: 600">2</span> updated</span>
+<span><span class="mono q" style="font-size: 18px; font-weight: 600">1</span> unchanged</span>
+<span><span class="mono bad" style="font-size: 18px; font-weight: 600">1</span> error</span>
+<div style="flex-grow: 1"></div>
+<button type="button">Download error report</button>
+<button type="button" disabled>Commit 15 rows</button>
+</section>
+
+<section>
+<div class="cap" style="margin-bottom: 4px">Errors · the whole file is rejected until these are fixed</div>
+<table class="t">
+<thead><tr><th class="n" style="width: 40px">Row</th><th style="width: 110px">Column</th><th>Message</th></tr></thead>
+<tbody><tr class="bad"><td class="n">9</td><td class="mono">DependsOn</td><td><span class="mono">R-013</span> is not a step in this file or in R26.25. Did you mean <span class="mono">R-012</span>?</td></tr></tbody>
+</table>
+</section>
+
+<section style="min-height: 0">
+<div class="cap" style="margin-bottom: 4px">Preview</div>
+<table class="t" style="font-size: 12.5px">
+<thead><tr><th style="width: 22px"></th><th class="n" style="width: 32px">Row</th><th>StepCode</th><th>Title</th><th>Section</th><th>PlannedStart</th><th class="n">Min</th><th>Owner</th><th>DependsOn</th></tr></thead>
+<tbody>
+<tr><td class="acc">+</td><td class="n q">1</td><td class="mono">R-001</td><td>Confirm Go and freeze status</td><td>PreCheck</td><td class="mono">13 Nov 01:00Z</td><td class="n">5</td><td>Rae Tanaka</td><td class="q">—</td></tr>
+<tr><td class="acc">+</td><td class="n q">2</td><td class="mono">R-002</td><td>Pause onboarding queue</td><td>PreCheck</td><td class="mono">13 Nov 01:05Z</td><td class="n">10</td><td class="mono">@onboarding</td><td class="mono">R-001</td></tr>
+<tr><td class="warn">~</td><td class="n q">3</td><td class="mono">R-003</td><td>Snapshot merchant DB</td><td>Deploy</td><td class="mono"><span class="old">01:15Z</span> 01:20Z</td><td class="n"><span class="old">15</span> 20</td><td>Dana Ortiz</td><td class="mono">R-002</td></tr>
+<tr><td class="acc">+</td><td class="n q">4</td><td class="mono">R-004</td><td>Run migration 0051</td><td>Deploy</td><td class="mono">13 Nov 01:40Z</td><td class="n">25</td><td>Dana Ortiz</td><td class="mono">R-003</td></tr>
+<tr><td class="acc">+</td><td class="n q">5</td><td class="mono">R-005</td><td>Deploy Merchant API 2.4.0</td><td>Deploy</td><td class="mono">13 Nov 02:05Z</td><td class="n">15</td><td class="mono">@merchant</td><td class="mono">R-004</td></tr>
+<tr><td class="warn">~</td><td class="n q">6</td><td class="mono">R-006</td><td>Deploy <span class="old">Onboarding UI 3.0</span> Onboarding UI 3.1</td><td>Deploy</td><td class="mono">13 Nov 02:20Z</td><td class="n">15</td><td class="mono">@web</td><td class="mono">R-005</td></tr>
+<tr><td class="q">=</td><td class="n q">7</td><td class="mono q">R-007</td><td class="q">Enable KYC provider webhook</td><td class="q">Deploy</td><td class="mono q">13 Nov 02:35Z</td><td class="n q">10</td><td class="mono q">@integrations</td><td class="mono q">R-006</td></tr>
+<tr><td class="acc">+</td><td class="n q">8</td><td class="mono">R-008</td><td>Smoke test onboarding flow</td><td>Verify</td><td class="mono">13 Nov 02:45Z</td><td class="n">20</td><td>Lee Chen</td><td class="mono">R-007</td></tr>
+<tr class="bad"><td>✗</td><td class="n">9</td><td class="mono">R-009</td><td>Reconcile merchant counts</td><td>Verify</td><td class="mono">13 Nov 03:05Z</td><td class="n">15</td><td>Dana Ortiz</td><td class="mono">R-013 ?</td></tr>
+<tr><td class="acc">+</td><td class="n q">10</td><td class="mono">R-010</td><td>Resume onboarding queue</td><td>Verify</td><td class="mono">13 Nov 03:20Z</td><td class="n">10</td><td class="mono">@onboarding</td><td class="mono">R-009</td></tr>
+<tr><td class="acc">+</td><td class="n q">11</td><td class="mono">R-901</td><td>Roll back migration 0051</td><td>Rollback</td><td class="mono">13 Nov 03:30Z</td><td class="n">20</td><td>Dana Ortiz</td><td class="q">—</td></tr>
+</tbody>
+</table>
+<div class="q" style="font-size: 12px; margin-top: 6px">Showing 11 of 16 rows · <a href="#">Show all</a> · Unknown columns are errors; columns starting with # are skipped · Plan imports are refused once a train is Executing.</div>
+</section>
+</main>
+
+<aside style="width: 480px; flex-shrink: 0; border-left: 1px solid #d8d8dc; background: #fbfbfd; padding: 18px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<div>
+<div class="cap">Export · <span class="mono">R26.24</span> Q4 Payments Consolidated</div>
+<h2 class="serif" style="margin: 2px 0 0; font-size: 22px; font-weight: 600">Reports and files</h2>
+</div>
+<table class="t">
+<tbody>
+<tr><td><div style="font-weight: 600">Release report</div><div class="q" style="font-size: 12px">summary, gates, blockers, comms, scorecard</div></td><td class="q">PDF</td><td><button type="button">Generate</button></td></tr>
+<tr><td><div style="font-weight: 600">Runbook run sheet</div><div class="q" style="font-size: 12px">plan, or actuals and variance after the run</div></td><td class="q">PDF, CSV</td><td><button type="button">Generate</button></td></tr>
+<tr><td><div style="font-weight: 600">Audit evidence pack</div><div class="q" style="font-size: 12px">approvals, SoD, transitions, evidence files</div></td><td class="q">PDF + ZIP</td><td><a href="EvidencePack.html" style="font-weight: 600">Generate</a></td></tr>
+<tr><td><div style="font-weight: 600">Post-release scorecard</div><div class="q" style="font-size: 12px">planned vs actual, churn, variance, PIR</div></td><td class="q">PDF</td><td><button type="button">Generate</button></td></tr>
+<tr><td><div style="font-weight: 600">Audit log</div><div class="q" style="font-size: 12px">every change with before and after</div></td><td class="q">CSV</td><td><button type="button">Download</button></td></tr>
+</tbody>
+</table>
+<div>
+<div class="cap" style="margin-bottom: 4px">Calendar feed</div>
+<div class="mono" style="font-size: 12px; word-break: break-all">https://release.corp/ics/••••••••/trains/R26.24.ics</div>
+<div style="display: flex; gap: 16px; margin-top: 2px"><button type="button">Copy link</button><button type="button">Rotate token</button><span class="q" style="font-size: 12px">titles and times only</span></div>
+</div>
+<div>
+<div class="cap" style="margin-bottom: 4px">Recent exports</div>
+<table class="t" style="font-size: 12px">
+<thead><tr><th>When</th><th>Export</th><th>sha256</th><th></th></tr></thead>
+<tbody>
+<tr><td class="mono q">10:02</td><td>Evidence · R26.22</td><td class="mono q">8e1f…c3a0</td><td class="ok">✓ 2.4 MB</td></tr>
+<tr><td class="mono q">09:40</td><td>Run sheet · R26.24</td><td class="mono q">77a2…10be</td><td class="ok">✓ 188 KB</td></tr>
+<tr><td class="mono q">09:38</td><td>Analytics XLSX</td><td class="mono q">—</td><td class="acc">◐ running</td></tr>
+</tbody>
+</table>
+</div>
+<div style="flex-grow: 1"></div>
+<div class="q" style="font-size: 12px; border-top: 1px solid #d1d1d6; padding-top: 8px">Every grid also has CSV and XLSX in its header. Cells starting with = + − @ are escaped so spreadsheets can't run them.</div>
+</aside>
+</div>
+</div>
+
+</body>
+</html>

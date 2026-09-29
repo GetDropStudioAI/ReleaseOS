@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Audit evidence pack page 1 — mockup</title>
+<!-- Static reference mockup. Data is illustrative. Fonts resolve to the OS (SF on macOS, Segoe UI on Windows). -->
+
+<style>
+body{margin:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#1d1d1f;font-size:12px;line-height:1.4}
+.mono{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.q{color:#5a5a5f}
+h2{margin:0 0 4px;font-size:13.5px;font-weight:600}
+table.t{border-collapse:collapse;width:100%}
+table.t th{font-size:11px;color:#5a5a5f;font-weight:600;text-align:left;padding:3px 8px 3px 0;border-bottom:1px solid #1d1d1f}
+table.t td{padding:3px 8px 3px 0;border-bottom:1px solid #c7c7cc;vertical-align:top}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 816px; height: 1056px; box-sizing: border-box; padding: 52px 56px 40px; display: flex; flex-direction: column; gap: 14px; background: #ffffff">
+
+<div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1d1d1f; padding-bottom: 6px">
+<div style="font-size: 12px; font-weight: 600">Audit evidence pack</div>
+<div class="q mono" style="font-size: 12px">EX-2291 · generated Mon 2 Nov 2026 09:14 CT by Priya Nair</div>
+</div>
+
+<div>
+<h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em">R26.24 Q4 Payments Consolidated</h1>
+<div class="q"><span class="mono">CHG0041872</span> · Risk High · Target Fri 30 Oct 2026 · Close code <b style="color: #1d1d1f">Successful</b> · train version 57 · records are append-only</div>
+</div>
+
+<section>
+<h2>1 · Change record</h2>
+<table class="t">
+<tbody>
+<tr><td class="q" style="width: 150px">Justification</td><td>Regulatory fee-schedule change and card-auth resilience fixes must be live before month-end close.</td></tr>
+<tr><td class="q">Scope</td><td>Payments API 4.5.0 · Card Portal 2.1.0 · Ledger Svc 3.8.2 · Fraud Engine 1.12.0 · 4 affected CIs</td></tr>
+<tr><td class="q">Implementation plan</td><td>Runbook, 12 steps (section 6). Planned window Fri 30 Oct 01:00–05:00 CT.</td></tr>
+<tr><td class="q">Actual</td><td class="mono">01:02–04:24 CT · +14 min vs plan finish 04:10</td></tr>
+<tr><td class="q">Backout plan</td><td>3 steps, 45 min. Rehearsed Wed 28 Oct in 42 min by Rae Tanaka (evidence file 7).</td></tr>
+<tr><td class="q">Test plan</td><td>QA regression RC2, card-auth smoke test R-009, ledger reconciliation R-010.</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>2 · Approvals and certifications</h2>
+<table class="t">
+<thead><tr><th>Gate</th><th>Class</th><th>Certified by</th><th>At</th><th>Due</th><th>Separation of duties</th></tr></thead>
+<tbody>
+<tr><td>Code Freeze</td><td>Standard</td><td>Rae Tanaka</td><td class="mono">Thu 22 Oct 17:05</td><td class="mono">Fri 23</td><td class="q">not required</td></tr>
+<tr><td>QA Sign-off</td><td>Standard</td><td>Lee Chen</td><td class="mono">Mon 26 Oct 15:40</td><td class="mono">Tue 27</td><td class="q">not required</td></tr>
+<tr><td>Compliance Sign-off</td><td>Compliance</td><td>Sam Okafor · Gov. Officer</td><td class="mono">Wed 28 Oct 11:20</td><td class="mono">Wed 28</td><td>✓ completed none of 5 tasks</td></tr>
+<tr><td>CAB Approval</td><td>Compliance</td><td>Priya Nair · Gov. Officer</td><td class="mono">Thu 29 Oct 13:05</td><td class="mono">Thu 29</td><td>✓ completed none of 6 tasks</td></tr>
+</tbody>
+</table>
+<div class="q" style="margin-top: 4px">All four gates certified on or before their due date and before the train entered Executing (Fri 30 Oct 01:00). No gate was waived.</div>
+</section>
+
+<section>
+<h2>3 · Go/No-Go decision</h2>
+<table class="t">
+<tbody>
+<tr><td class="q" style="width: 150px">Decision</td><td><b>Go with conditions</b> · Marcus Bell, Release Manager · <span class="mono">Thu 29 Oct 15:00</span></td></tr>
+<tr><td class="q">Gate states at decision</td><td>4 of 4 certified · 1 open blocker (Medium)</td></tr>
+<tr><td class="q">Condition</td><td>Card Portal pen-test exceptions signed by CISO · owner Priya Nair · due by Fri 00:30 · <b>closed Thu 29 Oct 22:10</b></td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>4 · Exceptions</h2>
+<table class="t">
+<thead><tr><th>Type</th><th>Detail</th><th>Requested</th><th>Approved</th><th>Expiry</th></tr></thead>
+<tbody>
+<tr><td>Freeze override FO-3</td><td>Q4 close freeze. “Regulatory fee-schedule change must be live before month-end close.”</td><td>Marcus Bell</td><td>Priya Nair<br><span class="mono q">Wed 28 10:02</span></td><td class="mono">Fri 30 06:00</td></tr>
+<tr><td>Late start escalation</td><td>R-006 started 19 min late; escalated to Release Manager at 02:10; decision to proceed at R-009 recorded 03:31.</td><td>system</td><td>Marcus Bell<br><span class="mono q">Fri 30 03:31</span></td><td class="q">—</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>5 · Evidence manifest (first 4 of 9)</h2>
+<table class="t">
+<thead><tr><th>#</th><th>File</th><th>Gate</th><th>sha256</th><th>Uploaded</th></tr></thead>
+<tbody>
+<tr><td class="mono">1</td><td>sox-change-evidence-R26.24.pdf</td><td>Compliance</td><td class="mono">9f3c1a…77e1a4</td><td>Priya Nair · Mon 26 Oct</td></tr>
+<tr><td class="mono">2</td><td>pci-scope-memo.docx</td><td>Compliance</td><td class="mono">51b0e2…9d07cd</td><td>Priya Nair · Mon 26 Oct</td></tr>
+<tr><td class="mono">3</td><td>cab-minutes-2026-10-29.pdf</td><td>CAB</td><td class="mono">c4a8f0…31bb02</td><td>Marcus Bell · Thu 29 Oct</td></tr>
+<tr><td class="mono">4</td><td>qa-regression-rc2.xlsx</td><td>QA</td><td class="mono">0d9e44…a2f615</td><td>Lee Chen · Mon 26 Oct</td></tr>
+</tbody>
+</table>
+<div class="q" style="margin-top: 4px">Files are in the accompanying ZIP with manifest.csv. Each file was locked when its gate certified.</div>
+</section>
+
+<div style="flex-grow: 1"></div>
+<div class="q mono" style="display: flex; justify-content: space-between; border-top: 1px solid #c7c7cc; padding-top: 6px; font-size: 12px">
+<span>Sections 6–9: runbook actuals · gate transition log · audit events · metric snapshot</span>
+<span>Page 1 of 9</span>
+</div>
+</div>
+
+</body>
+</html>

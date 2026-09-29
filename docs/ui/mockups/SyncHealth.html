@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sync health — mockup</title>
+<!-- Static reference mockup. Data is illustrative. Fonts resolve to the OS (SF on macOS, Segoe UI on Windows). -->
+
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#1d1d1f;background:#ffffff;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;font-feature-settings:'tnum' 0}
+.mono{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;letter-spacing:-0.02em}
+.q{color:#6e6e73}
+.cap{font-size:12px;color:#6e6e73;font-weight:600}
+.ok{color:#1e7b34}.warn{color:#a14d00}.bad{color:#c4161c}.acc{color:#0a64d8}
+table.t{border-collapse:collapse;width:100%}
+table.t th{font-size:11.5px;color:#6e6e73;font-weight:500;text-align:left;padding:5px 12px 5px 0;border-bottom:1px solid #d1d1d6;white-space:nowrap}
+table.t td{padding:6px 12px 6px 0;border-bottom:1px solid #e5e5ea;vertical-align:baseline;white-space:nowrap}
+table.t .n{text-align:right;font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+button{font:inherit;background:none;border:0;padding:0;cursor:pointer;color:#0a64d8;font-weight:600}
+button:hover{text-decoration:underline;text-underline-offset:3px}
+button[disabled]{color:#8e8e93;cursor:not-allowed;text-decoration:none}
+a{color:#0a64d8;text-decoration:none}a:hover{color:#084fad;text-decoration:underline;text-underline-offset:3px}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #ffffff">
+
+<header style="height: 44px; flex-shrink: 0; background: rgba(255,255,255,0.8); backdrop-filter: saturate(180%) blur(20px); display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid #d1d1d6; white-space: nowrap">
+<div class="serif" style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Release Management</div>
+<nav style="display: flex; gap: 20px; font-weight: 500; align-self: stretch; align-items: stretch">
+<a href="Main.html" style="color: #6e6e73; display: flex; align-items: center">Trains</a>
+<a href="#" style="color: #6e6e73; display: flex; align-items: center">Calendar</a>
+<a href="Analytics.html" style="color: #6e6e73; display: flex; align-items: center">Analytics</a>
+<a href="SyncHealth.html" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; display: flex; align-items: center; text-decoration: none">Sync health</a>
+<a href="ImportExport.html" style="color: #6e6e73; display: flex; align-items: center">Imports &amp; exports</a>
+</nav>
+<div style="flex-grow: 1"></div>
+<div style="font-size: 12px">Wed 4 Nov 14:02 CT · Jira <span class="ok">●</span> ServiceNow <span class="bad">✗ auth failed</span></div>
+<div>Rae Tanaka <span class="q">· RTE</span></div>
+</header>
+
+<div role="alert" style="flex-shrink: 0; display: flex; gap: 20px; align-items: baseline; padding: 8px 20px; border-bottom: 1px solid #c4161c; background: #fdecec; white-space: nowrap">
+<span class="bad" style="font-weight: 600">ServiceNow rejected our credentials (401) at 13:16 and on every cycle since.</span>
+<span>64 change links are stale; nothing from ServiceNow on any screen is current.</span>
+<div style="flex-grow: 1"></div>
+<a href="#" style="font-weight: 600">Re-authenticate</a>
+<button type="button">Run sync now</button>
+</div>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<main style="flex-grow: 1; min-width: 0; padding: 18px 28px 0; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+<section style="display: flex; justify-content: space-between; align-items: baseline">
+<div>
+<h1 class="serif" style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.015em">Sync health</h1>
+<div class="q">Read-only · every 5 min, every 1 min during a window</div>
+</div>
+<div style="text-align: right; font-size: 12.5px">
+<div>Last cycle <span class="mono">14:01:12</span> · 48 s · next <span class="mono">14:06</span></div>
+<div class="ok">Watchdog ● heartbeat ok <span class="q">· raises “sync stalled” after 15 min without a cycle</span></div>
+</div>
+</section>
+
+<section>
+<h2 class="cap" style="margin: 0 0 4px; color: #1d1d1f">Connectors</h2>
+<table class="t">
+<thead><tr><th>Connector</th><th>Last success</th><th class="n">Links</th><th class="n">In sync</th><th class="n">Mismatch</th><th class="n">Broken</th><th class="n">Stale</th><th class="n">Open alerts</th><th>State</th></tr></thead>
+<tbody>
+<tr><td style="font-weight: 600">Jira Cloud <span class="q" style="font-weight: 400">· corp.atlassian.net</span></td><td class="mono">14:01:12</td><td class="n">212</td><td class="n">208</td><td class="n warn">3</td><td class="n bad">1</td><td class="n">0</td><td class="n">1</td><td class="ok">● Healthy</td></tr>
+<tr><td style="font-weight: 600">ServiceNow <span class="q" style="font-weight: 400">· corp.service-now.com</span></td><td class="mono bad">13:12:40 <span class="q">(49 min)</span></td><td class="n">64</td><td class="n q">—</td><td class="n q">—</td><td class="n q">—</td><td class="n bad">64</td><td class="n">1</td><td class="bad" style="font-weight: 600">✗ Auth failed since 13:16</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px">
+<h2 class="cap" style="margin: 0; color: #1d1d1f">Mismatches · this app and the ticket disagree</h2>
+<span class="q" style="font-size: 12px">6 open · <a href="#">CSV</a> · <a href="#">XLSX</a></span>
+</div>
+<table class="t">
+<thead><tr><th>Train</th><th>Node</th><th>Ticket</th><th>This app implies</th><th>Ticket says</th><th>Rule</th><th>Since</th><th></th></tr></thead>
+<tbody>
+<tr><td class="mono">R26.24</td><td>Card Portal</td><td class="mono">CRD 2.1.0</td><td>releases Fri 30 Oct</td><td class="warn">release date Thu 5 Nov</td><td class="q">fix-version date differs</td><td class="mono q">Mon 26 09:12</td><td><button type="button">Open</button></td></tr>
+<tr><td class="mono">R26.24</td><td>Train</td><td class="mono">CHG0041872</td><td>Complete Fri 30</td><td class="warn">Review <span class="q">stale</span></td><td class="q">CHG open 24 h after close</td><td class="mono q">Sat 31 04:30</td><td><button type="button">Open</button></td></tr>
+<tr><td class="mono">R26.25</td><td>Train</td><td class="mono">CHG0041910</td><td>Fri 13 Nov 01:00–04:00</td><td class="warn">Thu 12 Nov 22:00–02:00 <span class="q">stale</span></td><td class="q">CHG window differs</td><td class="mono q">Mon 2 11:40</td><td><button type="button">Open</button></td></tr>
+<tr><td class="mono">R26.24</td><td>Payments API</td><td class="mono">PAY 4.5.0</td><td>Released</td><td class="warn">Unreleased</td><td class="q">fix version unreleased 24 h</td><td class="mono q">Sat 31 04:30</td><td><button type="button">Open</button></td></tr>
+<tr><td class="mono">R26.24</td><td>Ledger Svc</td><td class="mono">LED 3.8.2</td><td>Released</td><td class="warn">Unreleased</td><td class="q">fix version unreleased 24 h</td><td class="mono q">Sat 31 04:30</td><td><button type="button">Open</button></td></tr>
+<tr><td class="mono">R26.26</td><td>Gate · Code Freeze</td><td class="mono">LED-902</td><td>linked to gate</td><td class="bad">404 not found</td><td class="q">deleted or moved</td><td class="mono q">Tue 3 16:05</td><td><button type="button">Relink</button></td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2 class="cap" style="margin: 0 0 4px; color: #1d1d1f">Open alerts · errors, one row per fingerprint, repeats counted</h2>
+<table class="t">
+<thead><tr><th>Kind</th><th>System</th><th>Message</th><th>First</th><th>Last</th><th class="n">Count</th><th>Scope</th><th></th></tr></thead>
+<tbody>
+<tr style="background: #eaf2fd"><td class="bad" style="font-weight: 600">AuthFailed</td><td>ServiceNow</td><td class="mono" style="font-size: 12px">401 on GET /api/now/table/change_request</td><td class="mono q">13:16</td><td class="mono q">14:01</td><td class="n">10</td><td>all trains</td><td><button type="button">Details</button></td></tr>
+<tr><td class="bad">NotFound</td><td>Jira</td><td class="mono" style="font-size: 12px">404 on LED-902</td><td class="mono q">Tue 16:05</td><td class="mono q">14:01</td><td class="n">264</td><td class="mono">R26.26</td><td><button type="button">Relink</button></td></tr>
+
+</tbody>
+</table>
+<div class="q" style="font-size: 12px; margin-top: 6px">Resolved in the last 24 h: RateLimited · Jira · 429 on search, backed off 60 s · 13:40–13:42 · cleared automatically after one good cycle.</div>
+</section>
+</main>
+
+<aside style="width: 380px; flex-shrink: 0; border-left: 1px solid #d8d8dc; background: #fbfbfd; padding: 18px 22px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span class="cap">Inspector · alert</span><button type="button" style="color: #6e6e73; font-weight: 400">Close</button></div>
+<h2 class="serif" style="margin: 2px 0 0; font-size: 22px; font-weight: 600">ServiceNow auth failed</h2>
+<div class="q">Fingerprint <span class="mono">sn·auth·change_request</span> · 10 occurrences</div>
+</div>
+<dl style="margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; border-top: 1px solid #e5e5ea; padding-top: 12px">
+<dt class="q">First</dt><dd style="margin: 0" class="mono">Wed 4 Nov 13:16:12</dd>
+<dt class="q">Last</dt><dd style="margin: 0" class="mono">Wed 4 Nov 14:01:12</dd>
+<dt class="q">Account</dt><dd style="margin: 0" class="mono">svc-release-read</dd>
+<dt class="q">Response</dt><dd style="margin: 0; font-size: 12px" class="mono">401 · “User Not Authenticated”</dd>
+<dt class="q">Likely cause</dt><dd style="margin: 0">Password rotated or OAuth token revoked on the ServiceNow side</dd>
+</dl>
+<div style="border-top: 1px solid #e5e5ea; padding-top: 12px">
+<div class="cap" style="margin-bottom: 4px">What is affected</div>
+<div>64 change links across 7 trains show as stale, with their last known state and time.</div>
+<div style="margin-top: 4px">Lockout does not read ServiceNow, so no train is blocked by this outage.</div>
+<div class="q" style="font-size: 12px; margin-top: 4px">Whether a CHG mismatch should block Executing is open item 9.</div>
+</div>
+<div style="border-top: 1px solid #e5e5ea; padding-top: 12px">
+<div class="cap" style="margin-bottom: 4px">To clear it</div>
+<ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px">
+<li>An admin re-enters the credential in Connectors</li>
+<li>Run sync now, or wait for the next cycle</li>
+<li>The alert resolves itself after one good cycle; history stays</li>
+</ol>
+</div>
+<div style="border-top: 1px solid #e5e5ea; padding-top: 12px">
+<div class="cap" style="margin-bottom: 4px">Who was told</div>
+<div class="mono" style="font-size: 12px; display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 2px 10px">
+<span class="q">13:16</span><span>banner on every open screen</span>
+<span class="q">13:16</span><span>in-app · RTE, Release Managers</span>
+<span class="q">13:26</span><span>#release-ops · after 3 failures</span>
+</div>
+</div>
+<div style="flex-grow: 1"></div>
+<div style="border-top: 1px solid #d1d1d6; padding-top: 10px; display: flex; gap: 20px"><a href="#" style="font-weight: 600">Re-authenticate</a><button type="button">Run sync now</button><button type="button" style="color: #6e6e73">Mute 1 h</button></div>
+</aside>
+
+</div>
+</div>
+
+</body>
+</html>

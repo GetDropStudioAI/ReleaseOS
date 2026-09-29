@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Planning workspace, dark — mockup</title>
+<!-- Static reference mockup. Data is illustrative. Fonts resolve to the OS (SF on macOS, Segoe UI on Windows). -->
+
+<style>
+body{margin:0;color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#f5f5f7;background:#1e1e1e;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;font-feature-settings:'tnum' 0}
+.mono{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;letter-spacing:-0.02em}
+.q{color:#a1a1a6}
+.cap{font-size:12px;color:#a1a1a6;font-weight:600}
+.ok{color:#34c759}.warn{color:#ffa33d}.bad{color:#ff6b62}.acc{color:#4aa3ff}
+table.t{border-collapse:collapse;width:100%}
+table.t th{font-size:11.5px;color:#a1a1a6;font-weight:500;text-align:left;padding:6px 12px 6px 0;border-bottom:1px solid #48484a}
+table.t td{padding:7px 12px 7px 0;border-bottom:1px solid #343436;vertical-align:baseline}
+table.t .n{text-align:right;font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+button{font:inherit;background:none;border:0;padding:0;cursor:pointer;color:#4aa3ff;font-weight:600}
+button:hover{text-decoration:underline;text-underline-offset:3px}
+button[disabled]{color:#7c7c80;cursor:not-allowed;text-decoration:none}
+a{color:#4aa3ff;text-decoration:none}a:hover{color:#7cbcff;text-decoration:underline;text-underline-offset:3px}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #1e1e1e">
+
+<header style="height: 44px; flex-shrink: 0; background: rgba(30,30,30,0.8); backdrop-filter: saturate(180%) blur(20px); display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid #48484a; white-space: nowrap">
+<div class="serif" style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Release Management</div>
+<nav style="display: flex; gap: 20px; font-weight: 500; align-self: stretch; align-items: stretch">
+<a href="Main.html" style="color: #f5f5f7; border-bottom: 2px solid #4aa3ff; display: flex; align-items: center; text-decoration: none">Trains</a>
+<a href="#" style="color: #a1a1a6; display: flex; align-items: center">Calendar</a>
+<a href="Analytics.html" style="color: #a1a1a6; display: flex; align-items: center">Analytics</a>
+<a href="SyncHealth.html" style="color: #a1a1a6; display: flex; align-items: center">Sync health</a>
+<a href="ImportExport.html" style="color: #a1a1a6; display: flex; align-items: center">Imports &amp; exports</a>
+</nav>
+<div style="flex-grow: 1"></div>
+<div class="q" style="font-size: 12px">Tue 27 Oct 10:14 CT · Jira <span class="ok">●</span> ServiceNow <span class="ok">●</span></div>
+<a href="#">My work <span class="mono">6</span></a>
+<div>Rae Tanaka <span class="q">· RTE</span></div>
+</header>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<aside style="width: 272px; flex-shrink: 0; border-right: 1px solid #38383a; background: rgba(44,44,46,0.72); backdrop-filter: saturate(180%) blur(30px); -webkit-backdrop-filter: saturate(180%) blur(30px); display: flex; flex-direction: column">
+<div style="padding: 14px 18px 12px">
+<label for="flt" class="cap">Filter trains</label>
+<input id="flt" placeholder="Title, product or CHG number" style="display: block; width: 100%; box-sizing: border-box; margin-top: 4px; border: 0; border-bottom: 1px solid #7c7c80; background: transparent; font: inherit; padding: 4px 0; color: #f5f5f7">
+</div>
+
+<div class="cap" style="padding: 10px 18px 4px">Executing</div>
+<a href="Runbook.html" style="display: block; padding: 8px 18px 10px; color: inherit; text-decoration: none">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span class="mono q">R26.23</span><span class="mono q">window 22:00 today</span></div>
+<div class="serif" style="font-size: 15px; font-weight: 600">Merchant UI 5.2</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span class="q">Tue 27 Oct · T−0</span><span class="mono ok" style="letter-spacing: 2px">●●●●</span></div>
+</a>
+
+<div class="cap" style="padding: 10px 18px 4px">Gated</div>
+<a href="Main.html" aria-current="page" style="display: block; padding: 8px 18px 10px; color: inherit; text-decoration: none; background: #17355c">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span class="mono q">R26.24</span><span class="mono bad">▲ 2 blockers</span></div>
+<div class="serif acc" style="font-size: 15px; font-weight: 600">Q4 Payments Consolidated</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span class="q">Fri 30 Oct · T−3</span><span class="mono" style="letter-spacing: 2px">●●◐○</span></div>
+</a>
+
+<div class="cap" style="padding: 10px 18px 4px">Planning</div>
+<a href="#" style="display: block; padding: 8px 18px 10px; color: inherit; text-decoration: none">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span class="mono q">R26.25</span><span class="mono q">0 blockers</span></div>
+<div class="serif" style="font-size: 15px; font-weight: 600">Merchant Onboarding</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span class="q">Fri 13 Nov · T−13</span><span class="mono" style="letter-spacing: 2px">◐○○○</span></div>
+</a>
+<a href="#" style="display: block; padding: 8px 18px 10px; color: inherit; text-decoration: none">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span class="mono q">R26.26</span><span class="mono warn">▲ 1 blocker</span></div>
+<div class="serif" style="font-size: 15px; font-weight: 600">Ledger Year-End Close</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span class="q">Fri 4 Dec · T−28</span><span class="mono" style="letter-spacing: 2px">○○○○</span></div>
+</a>
+
+<div class="cap" style="padding: 10px 18px 4px">Complete · last 30 days</div>
+<a href="#" style="display: block; padding: 6px 18px; color: inherit; text-decoration: none">
+<div><span class="mono q" style="font-size: 11px">R26.22 </span>Card Tokenisation</div><div class="ok" style="font-size: 12px">✓ Successful · Fri 16 Oct</div>
+</a>
+<a href="#" style="display: block; padding: 6px 18px; color: inherit; text-decoration: none">
+<div><span class="mono q" style="font-size: 11px">R26.21 </span>Fraud Rules Q4</div><div class="warn" style="font-size: 12px">With issues · PIR open</div>
+</a>
+
+<div style="flex-grow: 1"></div>
+<div style="padding: 12px 18px 14px; border-top: 1px solid #38383a; font-size: 12px">
+<div class="cap">Freeze ahead</div>
+<div><span class="bad">Q4 close</span> · Fri 30 Oct 00:00 – Mon 2 Nov 00:00</div>
+<div class="q">Scope: Payments* · 1 override granted</div>
+</div>
+</aside>
+
+<main style="flex-grow: 1; min-width: 0; padding: 18px 28px 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+
+<section>
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; white-space: nowrap">
+<div class="cap">Release train · <span class="mono">CHG0041872</span> · Risk High · v42</div>
+<div style="display: flex; gap: 14px">
+<button type="button">Record Go/No-Go</button>
+<a href="Comms.html" style="font-weight: 600">Communicate</a>
+<button type="button">Export</button>
+<button type="button" disabled title="5 guards not met">Advance to Executing</button>
+</div>
+</div>
+<h1 class="serif" style="margin: 2px 0 2px; font-size: 28px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; white-space: nowrap">R26.24 Q4 Payments Consolidated</h1>
+<div class="q" style="white-space: nowrap">Gated since Mon 26 Oct · Target <span style="color: #f5f5f7; font-weight: 600">Fri 30 Oct 2026</span> · Window 01:00–05:00 CT · <span class="mono">T−3</span> business days</div>
+</section>
+
+<section style="border-top: 1px solid #48484a; border-bottom: 1px solid #343436; padding: 8px 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px">
+<span class="cap" style="padding-top: 1px">To reach Executing</span>
+<span><span class="ok">✓</span> Code Freeze</span>
+<span><span class="ok">✓</span> QA Sign-off</span>
+<span><span class="bad">✗</span> Compliance Sign-off <span class="q">due Wed 28</span></span>
+<span><span class="bad">✗</span> CAB Approval <span class="q">due Thu 29</span></span>
+<span><span class="bad">✗</span> Go/No-Go not recorded</span>
+<span><span class="bad">✗</span> Rollback not rehearsed <span class="q">(High risk)</span></span>
+<span><span class="ok">✓</span> Baseline <span class="q">Thu 22</span></span>
+<span><span class="ok">✓</span> Freeze override FO-3</span>
+</section>
+
+<section>
+<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px">
+<h2 class="cap" style="margin: 0; color: #f5f5f7">Bundled products</h2>
+<span class="q" style="font-size: 12px"><span class="mono" style="color: #f5f5f7">42 / 49</span> tasks done · <span class="mono" style="color: #f5f5f7">86%</span></span>
+</div>
+<table class="t">
+<thead><tr><th>Product</th><th>Version</th><th>Project</th><th class="n">Tasks</th><th>Blockers</th><th>Health</th><th>Tickets</th></tr></thead>
+<tbody>
+<tr><td style="font-weight: 600">Payments API</td><td class="mono">4.5.0</td><td class="mono q">PAY</td><td class="n">14 / 16</td><td class="q">—</td><td class="ok">On track</td><td><span class="mono">PAY-4512</span> <span class="ok">● in sync</span></td></tr>
+<tr><td style="font-weight: 600">Card Portal</td><td class="mono">2.1.0</td><td class="mono q">CRD</td><td class="n">9 / 13</td><td class="bad">▲ 1 High</td><td class="warn">At risk</td><td><span class="mono">CRD-2291</span> <a href="SyncHealth.html" class="warn">◆ mismatch</a></td></tr>
+<tr><td style="font-weight: 600">Ledger Svc</td><td class="mono">3.8.2</td><td class="mono q">LED</td><td class="n">11 / 12</td><td class="warn">▲ 1 Medium</td><td class="warn">At risk</td><td><span class="mono">LED-877</span> <span class="ok">● in sync</span></td></tr>
+<tr><td style="font-weight: 600">Fraud Engine</td><td class="mono">1.12.0</td><td class="mono q">FRD</td><td class="n">8 / 8</td><td class="q">—</td><td class="ok">Ready</td><td><span class="mono">FRD-150</span> <span class="ok">● in sync</span></td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2 class="cap" style="margin: 0 0 2px; color: #f5f5f7">Gates · business days to target</h2>
+<svg width="730" height="100" viewBox="0 0 730 100" role="img" aria-label="Gate timeline: Code Freeze and QA Sign-off certified, Compliance Sign-off in progress, CAB Approval pending, target Friday 30 October">
+<line x1="40" x2="690" y1="50" y2="50" stroke="#5a5a5e" stroke-width="1"></line>
+<line x1="170" x2="170" y1="46" y2="54" stroke="#7c7c80"></line>
+<line x1="312" x2="312" y1="14" y2="60" stroke="#4aa3ff" stroke-dasharray="3 3"></line>
+<text x="316" y="10" font-size="10.5" fill="#4aa3ff" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace">now</text>
+<text x="40" y="26" font-size="12" font-weight="600" fill="#f5f5f7">Code Freeze</text>
+<circle cx="40" cy="50" r="6" fill="#34c759"></circle>
+<text x="40" y="72" font-size="11" fill="#a1a1a6" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace">Fri 23 · T−5</text>
+<text x="40" y="88" font-size="11.5" fill="#34c759">✓ Thu 22 · Rae T.</text>
+<text x="170" y="72" font-size="11" fill="#a1a1a6" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="middle">Mon 26</text>
+<text x="300" y="26" font-size="12" font-weight="600" fill="#f5f5f7" text-anchor="middle">QA Sign-off</text>
+<circle cx="300" cy="50" r="6" fill="#34c759"></circle>
+<text x="300" y="72" font-size="11" fill="#a1a1a6" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="middle">Tue 27 · T−3</text>
+<text x="300" y="88" font-size="11.5" fill="#34c759" text-anchor="middle">✓ Mon 26 · Lee C.</text>
+<text x="430" y="26" font-size="12" font-weight="600" fill="#4aa3ff" text-anchor="middle">Compliance Sign-off</text>
+<circle cx="430" cy="50" r="7" fill="#1e1e1e" stroke="#4aa3ff" stroke-width="2"></circle>
+<path d="M430 43 A7 7 0 0 1 430 57 Z" fill="#4aa3ff"></path>
+<text x="430" y="72" font-size="11" fill="#a1a1a6" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="middle">Wed 28 · T−2</text>
+<text x="430" y="88" font-size="11.5" fill="#f5f5f7" text-anchor="middle">in progress · Priya N.</text>
+<text x="560" y="26" font-size="12" font-weight="600" fill="#f5f5f7" text-anchor="middle">CAB Approval</text>
+<circle cx="560" cy="50" r="6" fill="#1e1e1e" stroke="#f5f5f7" stroke-width="1.25"></circle>
+<text x="560" y="72" font-size="11" fill="#a1a1a6" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="middle">Thu 29 · T−1</text>
+<text x="560" y="88" font-size="11.5" fill="#a1a1a6" text-anchor="middle">pending · Sam O.</text>
+<text x="690" y="26" font-size="12" font-weight="600" fill="#f5f5f7" text-anchor="end">Target</text>
+<path d="M690 43 L697 50 L690 57 L683 50 Z" fill="#f5f5f7"></path>
+<text x="690" y="72" font-size="11" fill="#a1a1a6" font-family="SF Mono, ui-monospace, Cascadia Mono, Consolas, monospace" text-anchor="end">Fri 30 · T0</text>
+<text x="690" y="88" font-size="11.5" fill="#a1a1a6" text-anchor="end">01:00 CT</text>
+</svg>
+</section>
+
+<section style="min-height: 0">
+<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px">
+<h2 class="cap" style="margin: 0; color: #4aa3ff">Compliance Sign-off · checklist</h2>
+<div style="display: flex; gap: 18px; font-size: 12.5px"><span class="q"><span class="mono" style="color: #f5f5f7">3 / 5</span> done</span><a href="BulkParser.html" style="font-weight: 600">Paste tasks</a><button type="button">Add task</button></div>
+</div>
+<table class="t">
+<thead><tr><th style="width: 64px">State</th><th>Task</th><th>Owner</th><th>Product</th><th>Done</th><th style="width: 90px"></th></tr></thead>
+<tbody>
+<tr><td class="ok" style="white-space: nowrap">✓ done</td><td>SOX change evidence uploaded</td><td>Priya Nair</td><td class="q">—</td><td class="mono q" style="font-size: 12px; white-space: nowrap">Mon 26 16:02</td><td></td></tr>
+<tr><td class="ok" style="white-space: nowrap">✓ done</td><td>PCI DSS scope confirmation memo</td><td>Priya Nair</td><td class="q">—</td><td class="mono q" style="font-size: 12px; white-space: nowrap">Mon 26 16:20</td><td></td></tr>
+<tr><td class="ok" style="white-space: nowrap">✓ done</td><td>Backout plan reviewed for migration 0042</td><td>Dana Ortiz</td><td>Ledger Svc</td><td class="mono q" style="font-size: 12px; white-space: nowrap">Tue 27 09:41</td><td></td></tr>
+<tr><td style="white-space: nowrap">○ open</td><td>Pen-test report reviewed <span class="bad" style="font-size: 12px">▲ High blocker</span></td><td class="mono">@security</td><td>Card Portal</td><td class="q">—</td><td><button type="button">Mark done</button></td></tr>
+<tr><td style="white-space: nowrap">○ open</td><td>Change record risk analysis signed</td><td>Marcus Bell</td><td class="q">—</td><td class="q">—</td><td><button type="button">Mark done</button></td></tr>
+</tbody>
+</table>
+</section>
+
+</main>
+
+<aside style="width: 380px; flex-shrink: 0; border-left: 1px solid #38383a; background: #232325; padding: 20px 22px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span class="cap">Inspector · gate</span><button type="button" aria-label="Close inspector" style="color: #a1a1a6; font-weight: 400">Close</button></div>
+<h2 class="serif" style="margin: 2px 0 0; font-size: 22px; font-weight: 600">Compliance Sign-off</h2>
+<div class="q">Compliance class · <span class="mono">T−2</span> · due Wed 28 Oct</div>
+</div>
+
+<dl style="margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 12px; border-top: 1px solid #343436; padding-top: 12px">
+<dt class="q">Owner</dt><dd style="margin: 0">Priya Nair <span class="q">· Governance Officer</span></dd>
+<dt class="q">Status</dt><dd style="margin: 0"><span class="acc" style="font-weight: 600">◐ In progress</span> <span class="q">since Fri 23 16:40</span></dd>
+<dt class="q">Blocks</dt><dd style="margin: 0">Gated → Executing</dd>
+<dt class="q">Blocker</dt><dd style="margin: 0"><span class="bad">▲ High</span> Card Portal pen-test report late</dd>
+</dl>
+
+<div style="border-top: 1px solid #343436; padding-top: 12px">
+<div class="cap" style="margin-bottom: 4px">Certify requires</div>
+<div><span class="ok">✓</span> Earlier gates passed</div>
+<div><span class="bad">✗</span> All tasks done <span class="q">· 2 open</span></div>
+<div><span class="ok">✓</span> Certifier is a Governance Officer who did none of this gate's tasks</div>
+<div class="q" style="font-size: 12px; margin-top: 4px">Eligible to certify: <span style="color: #f5f5f7">Sam Okafor</span>. Priya Nair completed 2 tasks here.</div>
+</div>
+
+<div style="border-top: 1px solid #343436; padding-top: 12px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span class="cap">Evidence</span><button type="button">Attach</button></div>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; margin-top: 4px; font-size: 12.5px">
+<a href="#">sox-change-evidence-R26.24.pdf</a><span class="mono q">412 KB</span>
+<span class="mono q" style="font-size: 11px">sha256 9f3c…e1a4 · Priya N. · Mon 26</span><span></span>
+<a href="#" style="margin-top: 4px">pci-scope-memo.docx</a><span class="mono q" style="margin-top: 4px">88 KB</span>
+<span class="mono q" style="font-size: 11px">sha256 51b0…07cd · Priya N. · Mon 26</span><span></span>
+</div>
+<div class="q" style="font-size: 12px; margin-top: 4px">Locked when the gate certifies.</div>
+</div>
+
+<div style="border-top: 1px solid #343436; padding-top: 12px">
+<div class="cap" style="margin-bottom: 4px">History</div>
+<div class="mono" style="font-size: 12px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 10px">
+<span class="q">Fri 23 16:40</span><span>Pending → In progress · Priya N.</span>
+<span class="q">Mon 26 16:20</span><span>Task done · Priya N.</span>
+<span class="q">Tue 27 09:41</span><span>Task done · Dana O.</span>
+</div>
+</div>
+
+<div style="flex-grow: 1"></div>
+<div style="border-top: 1px solid #48484a; padding-top: 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; gap: 20px"><button type="button" disabled>Certify</button><button type="button">Request waiver</button><button type="button" style="color: #ff6b62">Mark failed</button></div>
+<div class="q" style="font-size: 12px">Certify is unavailable: 2 tasks open, and you are not a Governance Officer.</div>
+</div>
+</aside>
+
+</div>
+</div>
+
+</body>
+</html>

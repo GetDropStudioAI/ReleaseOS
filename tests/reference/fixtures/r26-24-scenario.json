@@ -1,0 +1,186 @@
+{
+ "description": "M3 acceptance scenario: the live runbook in docs/ui/mockups/Runbook.html. Build it through the API except where noted.",
+ "displayTimeZone": "America/Chicago",
+ "clockNow": "2026-10-30T07:37:14Z",
+ "setup": {
+  "users": [
+   {
+    "email": "dana.ortiz@corp.example",
+    "displayName": "Dana Ortiz",
+    "role": "RTE"
+   },
+   {
+    "email": "lee.chen@corp.example",
+    "displayName": "Lee Chen",
+    "role": "RTE"
+   },
+   {
+    "email": "marcus.bell@corp.example",
+    "displayName": "Marcus Bell",
+    "role": "ReleaseManager"
+   },
+   {
+    "email": "rae.tanaka@corp.example",
+    "displayName": "Rae Tanaka",
+    "role": "RTE"
+   }
+  ],
+  "teams": [
+   {
+    "handle": "cards",
+    "name": "cards"
+   },
+   {
+    "handle": "fraud",
+    "name": "fraud"
+   },
+   {
+    "handle": "ledger",
+    "name": "ledger"
+   },
+   {
+    "handle": "netops",
+    "name": "netops"
+   },
+   {
+    "handle": "payments",
+    "name": "payments"
+   }
+  ],
+  "train": {
+   "title": "R26.24",
+   "targetReleaseDate": "2026-10-30",
+   "riskTier": "High",
+   "note": "Insert directly into the test DB with CurrentStatus='Executing' and a deployment window (INSERT is not guarded; only UPDATE transitions are). This scenario tests the runbook, not the lifecycle."
+  },
+  "deploymentWindow": {
+   "startsAt": "2026-10-30T06:00:00Z",
+   "endsAt": "2026-10-30T10:00:00Z"
+  },
+  "products": [
+   {
+    "productName": "Payments API",
+    "versionTag": "4.5.0",
+    "projectCode": "PAY"
+   },
+   {
+    "productName": "Card Portal",
+    "versionTag": "2.1.0",
+    "projectCode": "CRD"
+   },
+   {
+    "productName": "Ledger Svc",
+    "versionTag": "3.8.2",
+    "projectCode": "LED"
+   },
+   {
+    "productName": "Fraud Engine",
+    "versionTag": "1.12.0",
+    "projectCode": "FRD"
+   }
+  ],
+  "planImport": "Insert RunbookSteps and StepDependencies directly from tests/reference/fixtures/r26-24-runbook.csv with a test helper (owners resolved by email/@handle). Do NOT use the import endpoint here: plan imports are refused once a train is Executing (PROJECT_SCOPE \u00a79). The same CSV is imported through the API, while the train is Planning, in M7's import tests. The #ActualStart/#ActualEnd columns are applied in 'actuals'.",
+  "run": {
+   "mode": "Live",
+   "startedAt": "2026-10-30T06:02:00Z"
+  },
+  "actuals": "For each CSV row with #ActualStart: set the FakeTimeProvider to that time and call :start; with #ActualEnd: set it and call :done. Then set the clock to clockNow and read GET /runs/{id}/forecast."
+ },
+ "expected": {
+  "forecastFinish": "2026-10-30T09:29:00Z",
+  "forecastFinishLocal": "04:29",
+  "plannedFinish": "2026-10-30T09:10:00Z",
+  "rollbackPlannedMin": 45,
+  "rollbackDeadline": "2026-10-30T09:15:00Z",
+  "rollbackDeadlineLocal": "04:15",
+  "crossesDeadlineByMin": 14,
+  "alertRaised": true,
+  "windowClosesInSec": 8566,
+  "steps": [
+   {
+    "step": "R-001",
+    "state": "Done",
+    "start": "2026-10-30T06:02:00Z",
+    "end": "2026-10-30T06:06:00Z",
+    "endVarianceMin": 1
+   },
+   {
+    "step": "R-002",
+    "state": "Done",
+    "start": "2026-10-30T06:06:00Z",
+    "end": "2026-10-30T06:18:00Z",
+    "endVarianceMin": 3
+   },
+   {
+    "step": "R-003",
+    "state": "Done",
+    "start": "2026-10-30T06:18:00Z",
+    "end": "2026-10-30T06:35:00Z",
+    "endVarianceMin": 5
+   },
+   {
+    "step": "R-004",
+    "state": "Done",
+    "start": "2026-10-30T06:35:00Z",
+    "end": "2026-10-30T07:06:00Z",
+    "endVarianceMin": 16
+   },
+   {
+    "step": "R-005",
+    "state": "Done",
+    "start": "2026-10-30T07:06:00Z",
+    "end": "2026-10-30T07:24:00Z",
+    "endVarianceMin": 19
+   },
+   {
+    "step": "R-006",
+    "state": "Running",
+    "start": "2026-10-30T07:24:00Z",
+    "end": "2026-10-30T07:44:00Z",
+    "endVarianceMin": 19
+   },
+   {
+    "step": "R-007",
+    "state": "Scheduled",
+    "start": "2026-10-30T07:44:00Z",
+    "end": "2026-10-30T07:59:00Z",
+    "endVarianceMin": 19
+   },
+   {
+    "step": "R-008",
+    "state": "Scheduled",
+    "start": "2026-10-30T07:59:00Z",
+    "end": "2026-10-30T08:14:00Z",
+    "endVarianceMin": 19
+   },
+   {
+    "step": "R-009",
+    "state": "Scheduled",
+    "start": "2026-10-30T08:14:00Z",
+    "end": "2026-10-30T08:34:00Z",
+    "endVarianceMin": 19
+   },
+   {
+    "step": "R-010",
+    "state": "Scheduled",
+    "start": "2026-10-30T08:34:00Z",
+    "end": "2026-10-30T08:59:00Z",
+    "endVarianceMin": 19
+   },
+   {
+    "step": "R-011",
+    "state": "Scheduled",
+    "start": "2026-10-30T08:59:00Z",
+    "end": "2026-10-30T09:14:00Z",
+    "endVarianceMin": 19
+   },
+   {
+    "step": "R-012",
+    "state": "Scheduled",
+    "start": "2026-10-30T09:14:00Z",
+    "end": "2026-10-30T09:29:00Z",
+    "endVarianceMin": 19
+   }
+  ]
+ }
+}

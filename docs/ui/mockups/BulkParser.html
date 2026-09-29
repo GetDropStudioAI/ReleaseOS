@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bulk checklist parser — mockup</title>
+<!-- Static reference mockup. Data is illustrative. Fonts resolve to the OS (SF on macOS, Segoe UI on Windows). -->
+
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:#1d1d1f;background:#ffffff;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;font-feature-settings:'tnum' 0}
+.mono{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;letter-spacing:-0.02em}
+.q{color:#6e6e73}
+.cap{font-size:12px;color:#6e6e73;font-weight:600}
+.ok{color:#1e7b34}.warn{color:#a14d00}.bad{color:#c4161c}.acc{color:#0a64d8}
+table.t{border-collapse:collapse;width:100%}
+table.t th{font-size:11.5px;color:#6e6e73;font-weight:500;text-align:left;padding:5px 10px 5px 0;border-bottom:1px solid #d1d1d6}
+table.t td{padding:4px 10px 4px 0;border-bottom:1px solid #e5e5ea;vertical-align:baseline;white-space:nowrap}
+table.t .n{text-align:right;font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.ed{font-family:'SF Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:12.5px;line-height:21px}
+.ln{display:grid;grid-template-columns:22px 34px minmax(0,1fr)}
+.ln .g{text-align:center}
+.ln .no{color:#8e8e93;text-align:right;padding-right:12px}
+.tok{color:#0a64d8}.hdr{color:#1d1d1f;font-weight:600}.cm{color:#8e8e93}
+button{font:inherit;background:none;border:0;padding:0;cursor:pointer;color:#0a64d8;font-weight:600}
+button:hover{text-decoration:underline;text-underline-offset:3px}
+button[disabled]{color:#8e8e93;cursor:not-allowed;text-decoration:none}
+a{color:#0a64d8;text-decoration:none}a:hover{color:#084fad;text-decoration:underline;text-underline-offset:3px}
+</style>
+
+</head>
+<body>
+
+
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #ffffff">
+
+<header style="height: 44px; flex-shrink: 0; background: rgba(255,255,255,0.8); backdrop-filter: saturate(180%) blur(20px); display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid #d1d1d6; white-space: nowrap">
+<div class="serif" style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Release Management</div>
+<nav style="display: flex; gap: 20px; font-weight: 500; align-self: stretch; align-items: stretch">
+<a href="Main.html" style="color: #1d1d1f; border-bottom: 2px solid #0a64d8; display: flex; align-items: center; text-decoration: none">Trains</a>
+<a href="#" style="color: #6e6e73; display: flex; align-items: center">Calendar</a>
+<a href="Analytics.html" style="color: #6e6e73; display: flex; align-items: center">Analytics</a>
+<a href="SyncHealth.html" style="color: #6e6e73; display: flex; align-items: center">Sync health</a>
+<a href="ImportExport.html" style="color: #6e6e73; display: flex; align-items: center">Imports &amp; exports</a>
+</nav>
+<div style="flex-grow: 1"></div>
+<div class="q" style="font-size: 12px">Tue 27 Oct 10:22 CT · Jira <span class="ok">●</span> ServiceNow <span class="ok">●</span></div>
+<div>Rae Tanaka <span class="q">· RTE</span></div>
+</header>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<aside style="width: 272px; flex-shrink: 0; border-right: 1px solid #d8d8dc; background: rgba(245,245,247,0.72); backdrop-filter: saturate(180%) blur(30px); -webkit-backdrop-filter: saturate(180%) blur(30px); display: flex; flex-direction: column">
+<div class="cap" style="padding: 16px 18px 4px">Executing</div>
+<a href="Runbook.html" style="display: block; padding: 8px 18px 10px; color: inherit; text-decoration: none">
+<div style="font-size: 11px"><span class="mono q">R26.23</span></div>
+<div class="serif" style="font-size: 15px; font-weight: 600">Merchant UI 5.2</div>
+<div class="q" style="font-size: 12px">Tue 27 Oct · window 22:00</div>
+</a>
+<div class="cap" style="padding: 10px 18px 4px">Gated</div>
+<a href="Main.html" aria-current="page" style="display: block; padding: 8px 18px 10px; color: inherit; text-decoration: none; background: #e6effc">
+<div style="display: flex; justify-content: space-between; font-size: 11px"><span class="mono q">R26.24</span><span class="mono bad">▲ 2 blockers</span></div>
+<div class="serif acc" style="font-size: 15px; font-weight: 600">Q4 Payments Consolidated</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span class="q">Fri 30 Oct · T−3</span><span class="mono" style="letter-spacing: 2px">●●◐○</span></div>
+</a>
+<div class="cap" style="padding: 10px 18px 4px">Planning</div>
+<a href="#" style="display: block; padding: 6px 18px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.25 </span>Merchant Onboarding<div class="q" style="font-size: 12px">Fri 13 Nov · T−13</div></a>
+<a href="#" style="display: block; padding: 6px 18px; color: inherit; text-decoration: none"><span class="mono q" style="font-size: 11px">R26.26 </span>Ledger Year-End Close<div class="q" style="font-size: 12px">Fri 4 Dec · T−28</div></a>
+</aside>
+
+<main style="flex-grow: 1; min-width: 0; padding: 18px 24px 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<section>
+<div class="cap">Release train · <span class="mono">CHG0041872</span> · Risk High</div>
+<h1 class="serif" style="margin: 2px 0 2px; font-size: 24px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; white-space: nowrap">R26.24 Q4 Payments Consolidated</h1>
+<div class="q" style="white-space: nowrap">Gated · Target Fri 30 Oct 2026 · <span class="mono">T−3</span></div>
+</section>
+
+<section>
+<h2 class="cap" style="margin: 0 0 4px; color: #1d1d1f">Gates</h2>
+<table class="t">
+<thead><tr><th>Gate</th><th>Due</th><th>Owner</th><th class="n">Tasks</th><th>State</th></tr></thead>
+<tbody>
+<tr><td>Code Freeze</td><td class="mono">Fri 23</td><td>Rae Tanaka</td><td class="n">6 / 6</td><td class="ok">✓ Certified</td></tr>
+<tr><td>QA Sign-off</td><td class="mono">Tue 27</td><td>Lee Chen</td><td class="n">9 / 9</td><td class="ok">✓ Certified</td></tr>
+<tr><td>Compliance Sign-off</td><td class="mono">Wed 28</td><td>Priya Nair</td><td class="n">3 / 5</td><td class="acc">◐ In progress</td></tr>
+<tr style="background: #e6effc"><td style="font-weight: 600">CAB Approval</td><td class="mono">Thu 29</td><td>Sam Okafor</td><td class="n">0 / 0</td><td class="q">○ Pending</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2 class="cap" style="margin: 0 0 4px; color: #0a64d8">CAB Approval · checklist</h2>
+<div style="border-top: 1px solid #d1d1d6; padding: 14px 0; border-bottom: 1px solid #e5e5ea">
+<div style="font-weight: 600">No tasks yet.</div>
+<div class="q">A gate with no tasks can still be certified, so the CAB checklist should exist before Thu 29. Paste one in the drawer, or add tasks one at a time.</div>
+</div>
+<div class="cap" style="margin: 14px 0 4px">Will be added on commit</div>
+<div class="q" style="font-size: 12.5px; display: grid; grid-template-columns: 22px minmax(0, 1fr) 150px; gap: 3px 8px">
+<span class="acc">+</span><span>CAB minutes attached to CHG0041872</span><span>Marcus Bell</span>
+<span class="acc">+</span><span>Rollback rehearsal evidence</span><span>Rae Tanaka</span>
+<span class="acc">+</span><span>Client comms approved</span><span class="mono">@client-svc</span>
+<span class="acc">+</span><span>Support desk briefed on known issues</span><span class="mono">@desk</span>
+<span class="bad">✗</span><span class="bad">DR contact list confirmed for window</span><span class="mono bad">@ops-db ?</span>
+</div>
+</section>
+</main>
+
+<aside aria-label="Paste tasks drawer" style="width: 560px; flex-shrink: 0; border-left: 1px solid #d1d1d6; background: #fbfbfd; padding: 18px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span class="cap">Drawer · paste tasks</span><button type="button" style="color: #6e6e73; font-weight: 400">Close</button></div>
+<h2 class="serif" style="margin: 2px 0 0; font-size: 22px; font-weight: 600">Paste a checklist</h2>
+<div class="q">Into R26.24. Lines before any <span class="mono">#</span> header go to the selected gate, <span style="color: #1d1d1f">CAB Approval</span>.</div>
+</div>
+
+<div class="q" style="font-size: 12px; display: flex; gap: 12px; white-space: nowrap">
+<span><span class="mono hdr"># Gate name</span> switch gate</span>
+<span><span class="mono">- task</span> add task</span>
+<span><span class="mono tok">@handle</span> owner</span>
+<span><span class="mono tok">[Product]</span> link</span>
+</div>
+
+<div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><label for="paste" class="cap">Checklist text</label><span class="q" style="font-size: 12px">Draft saved 10:22 · kept if you refresh</span></div>
+<div id="paste" role="textbox" aria-multiline="true" tabindex="0" class="ed" style="border-top: 1px solid #d1d1d6; border-bottom: 1px solid #d1d1d6; padding: 6px 0; margin-top: 4px">
+<div class="ln"><span class="g"></span><span class="no">1</span><span class="hdr"># CAB Approval</span></div>
+<div class="ln"><span class="g"></span><span class="no">2</span><span>- CAB minutes attached to CHG0041872 <span class="tok">@mbell</span></span></div>
+<div class="ln"><span class="g"></span><span class="no">3</span><span>- Rollback rehearsal evidence <span class="tok">@rtanaka</span> <span class="tok">[Ledger Svc]</span></span></div>
+<div class="ln"><span class="g"></span><span class="no">4</span><span>- Client comms approved <span class="tok">@client-svc</span></span></div>
+<div class="ln"><span class="g"></span><span class="no">5</span><span>- Support desk briefed on known issues <span class="tok">@desk</span></span></div>
+<div class="ln" style="background: #fdecec"><span class="g bad">✗</span><span class="no">6</span><span>- DR contact list confirmed for window <span class="bad" style="text-decoration: underline wavy #c4161c; text-underline-offset: 3px">@ops-db</span></span></div>
+<div class="ln"><span class="g"></span><span class="no">7</span><span></span></div>
+<div class="ln"><span class="g"></span><span class="no">8</span><span class="hdr"># Compliance Sign-off</span></div>
+<div class="ln" style="background: #fdf2e3"><span class="g warn">!</span><span class="no">9</span><span>- Card Portal pen-test exceptions logged <span class="tok">[Card Portal]</span></span></div>
+<div class="ln"><span class="g"></span><span class="no">10</span><span class="cm">// no owner on line 9: gate owner applies</span></div>
+<div class="ln"><span class="g"></span><span class="no">11</span><span>- Firewall CHG0041901 linked <span class="tok">@netops</span> <span class="tok">[Payments API]</span></span></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div><span style="font-weight: 600">7 tasks parsed</span> · <span class="bad">1 error</span> · <span class="warn">1 warning</span> · 2 gates</div>
+<div class="bad">Line 6: no user or team <span class="mono">@ops-db</span>. Closest: <button type="button" class="mono">@db-ops</button> <button type="button" class="mono">@ops-dba</button></div>
+<div class="warn">Line 9: no owner; Priya Nair (gate owner) will be used.</div>
+</div>
+
+<table class="t" style="font-size: 12.5px">
+<thead><tr><th class="n" style="width: 26px">Ln</th><th>Gate</th><th>Task</th><th>Owner</th><th>Product</th></tr></thead>
+<tbody>
+<tr><td class="n q">2</td><td>CAB</td><td>CAB minutes attached</td><td>Marcus Bell</td><td class="q">—</td></tr>
+<tr><td class="n q">3</td><td>CAB</td><td>Rollback rehearsal evidence</td><td>Rae Tanaka</td><td>Ledger Svc</td></tr>
+<tr><td class="n q">4</td><td>CAB</td><td>Client comms approved</td><td class="mono">@client-svc</td><td class="q">—</td></tr>
+<tr><td class="n q">5</td><td>CAB</td><td>Support desk briefed</td><td class="mono">@desk</td><td class="q">—</td></tr>
+<tr class="bad"><td class="n">6</td><td>CAB</td><td>DR contact list confirmed</td><td class="mono">✗ @ops-db</td><td>—</td></tr>
+<tr><td class="n q">9</td><td>Compliance</td><td>Pen-test exceptions logged</td><td class="warn">Priya Nair !</td><td>Card Portal</td></tr>
+<tr><td class="n q">11</td><td>Compliance</td><td>Firewall CHG0041901 linked</td><td class="mono">@netops</td><td>Payments API</td></tr>
+</tbody>
+</table>
+
+<div style="flex-grow: 1"></div>
+<div style="border-top: 1px solid #d1d1d6; padding-top: 10px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; gap: 20px"><button type="button" disabled>Add 7 tasks</button><button type="button" style="color: #6e6e73">Discard draft</button></div>
+<div class="q" style="font-size: 12px">All or nothing: fix line 6 to add. Compliance Sign-off stays In progress; adding to a certified gate would decertify it.</div>
+</div>
+</aside>
+
+</div>
+</div>
+
+</body>
+</html>

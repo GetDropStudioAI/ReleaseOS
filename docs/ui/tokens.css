@@ -1,0 +1,117 @@
+/* Release Management App — design tokens (D23).
+   macOS look, works identically on Windows. Fonts come from the OS; never bundle SF Pro.
+   Rule: no checkboxes, toggles, pills, badges or bordered boxes. */
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --bg: #ffffff;
+  --toolbar: rgba(255, 255, 255, 0.8);
+  --sidebar: rgba(245, 245, 247, 0.72);
+  --sidebar-fallback: #f5f5f7;
+  --panel: #fbfbfd;
+  --label: #1d1d1f;
+  --secondary: #6e6e73;
+  --tertiary: #8e8e93;          /* disabled, neutral chart marks */
+  --separator-strong: #d1d1d6;  /* pane edges, table header rule */
+  --separator: #e5e5ea;         /* row rules */
+  --grid: #ececf0;              /* chart gridlines */
+  --accent: #0a64d8;
+  --accent-hover: #084fad;
+  --selection: #e6effc;         /* full-width selected-row tint */
+  --running: #eaf2fd;           /* running step row */
+  --ok: #1e7b34;
+  --warn: #a14d00;
+  --bad: #c4161c;
+  --bad-tint: #fdecec;          /* error banner / error line */
+  --warn-tint: #fdf2e3;
+
+  --blur-sidebar: saturate(180%) blur(30px);
+  --blur-toolbar: saturate(180%) blur(20px);
+
+  --text-body: 13px;
+  --text-caption: 12px;
+  --text-title: 28px;
+  --text-drawer-title: 22px;
+  --tracking-title: -0.02em;
+  --line: 1.45;
+
+  --toolbar-height: 44px;
+  --stream-width: 272px;
+  --inspector-width: 380px;
+  --drawer-width: 560px;        /* bulk parser; comms drawer 620px */
+  --pad-x: 28px;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1e1e1e;
+    --toolbar: rgba(30, 30, 30, 0.8);
+    --sidebar: rgba(44, 44, 46, 0.72);
+    --sidebar-fallback: #2c2c2e;
+    --panel: #232325;
+    --label: #f5f5f7;
+    --secondary: #a1a1a6;
+    --tertiary: #7c7c80;
+    --separator-strong: #48484a;
+    --separator: #343436;
+    --grid: #2c2c2e;
+    --accent: #4aa3ff;
+    --accent-hover: #7cbcff;
+    --selection: #17355c;
+    --running: #1b2a40;
+    --ok: #34c759;
+    --warn: #ffa33d;
+    --bad: #ff6b62;
+    --bad-tint: #3a1d1c;
+    --warn-tint: #3a2a14;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e; --toolbar: rgba(30,30,30,.8); --sidebar: rgba(44,44,46,.72); --sidebar-fallback: #2c2c2e;
+  --panel: #232325; --label: #f5f5f7; --secondary: #a1a1a6; --tertiary: #7c7c80;
+  --separator-strong: #48484a; --separator: #343436; --grid: #2c2c2e;
+  --accent: #4aa3ff; --accent-hover: #7cbcff; --selection: #17355c; --running: #1b2a40;
+  --ok: #34c759; --warn: #ffa33d; --bad: #ff6b62; --bad-tint: #3a1d1c; --warn-tint: #3a2a14;
+}
+
+body { margin: 0; background: var(--bg); color: var(--label); font: var(--text-body)/var(--line) var(--font-sans); -webkit-font-smoothing: antialiased; }
+.mono, time, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.stream { background: var(--sidebar-fallback); }
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .stream  { background: var(--sidebar); backdrop-filter: var(--blur-sidebar); -webkit-backdrop-filter: var(--blur-sidebar); }
+  .toolbar { background: var(--toolbar); backdrop-filter: var(--blur-toolbar); -webkit-backdrop-filter: var(--blur-toolbar); }
+}
+
+/* Group headers: sentence case, never uppercase */
+.group-label { font-size: var(--text-caption); font-weight: 600; color: var(--secondary); }
+
+/* Tables: the primary layout primitive */
+table.grid { border-collapse: collapse; width: 100%; }
+table.grid th { font-size: 11.5px; font-weight: 500; color: var(--secondary); text-align: left; padding: 5px 12px 5px 0; border-bottom: 1px solid var(--separator-strong); }
+table.grid td { padding: 6px 12px 6px 0; border-bottom: 1px solid var(--separator); vertical-align: baseline; }
+table.grid tr[aria-selected="true"] { background: var(--selection); }
+
+/* Actions are text buttons */
+button.text { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font-weight: 600; }
+button.text:hover { text-decoration: underline; text-underline-offset: 3px; }
+button.text:disabled { color: var(--tertiary); cursor: not-allowed; text-decoration: none; }
+button.text.destructive { color: var(--bad); }
+
+/* Tabs and segmented choices: underline, never a capsule */
+.tabs a { color: var(--secondary); padding-bottom: 4px; text-decoration: none; }
+.tabs a[aria-current="page"] { color: var(--label); border-bottom: 2px solid var(--accent); }
+
+/* Status: words + glyphs + colour, never a pill */
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .accent { color: var(--accent); } .muted { color: var(--secondary); }
+
+/* Inputs: bottom rule only */
+input.line, textarea.line { border: 0; border-bottom: 1px solid var(--tertiary); background: transparent; font: inherit; color: inherit; padding: 4px 0; }
+input.line:focus-visible, textarea.line:focus-visible { outline: none; border-bottom: 2px solid var(--accent); }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

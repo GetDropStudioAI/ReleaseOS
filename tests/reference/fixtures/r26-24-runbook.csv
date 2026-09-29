@@ -1,0 +1,16 @@
+Train,StepCode,Title,Section,PlannedStart,DurationMin,Owner,Product,DependsOn,#ActualStart,#ActualEnd
+R26.24,R-001,Confirm Go and freeze override,PreCheck,2026-10-30T06:00:00Z,5,rae.tanaka@corp.example,,,2026-10-30T06:02:00Z,2026-10-30T06:06:00Z
+R26.24,R-002,Drain traffic from blue pool,PreCheck,2026-10-30T06:05:00Z,10,@netops,,R-001,2026-10-30T06:06:00Z,2026-10-30T06:18:00Z
+R26.24,R-003,Snapshot ledger database,Deploy,2026-10-30T06:15:00Z,15,dana.ortiz@corp.example,Ledger Svc,R-002,2026-10-30T06:18:00Z,2026-10-30T06:35:00Z
+R26.24,R-004,Run migration 0042,Deploy,2026-10-30T06:30:00Z,20,dana.ortiz@corp.example,Ledger Svc,R-003,2026-10-30T06:35:00Z,2026-10-30T07:06:00Z
+R26.24,R-005,Deploy Ledger Svc 3.8.2,Deploy,2026-10-30T06:50:00Z,15,@ledger,Ledger Svc,R-004,2026-10-30T07:06:00Z,2026-10-30T07:24:00Z
+R26.24,R-006,Deploy Payments API 4.5.0,Deploy,2026-10-30T07:05:00Z,20,@payments,Payments API,R-005,2026-10-30T07:24:00Z,
+R26.24,R-007,Deploy Fraud Engine 1.12.0,Deploy,2026-10-30T07:25:00Z,15,@fraud,Fraud Engine,R-006,,
+R26.24,R-008,Deploy Card Portal 2.1.0,Deploy,2026-10-30T07:40:00Z,15,@cards,Card Portal,R-007,,
+R26.24,R-009,Smoke test card authorisation,Verify,2026-10-30T07:55:00Z,20,lee.chen@corp.example,Payments API,R-008,,
+R26.24,R-010,Reconcile ledger totals,Verify,2026-10-30T08:15:00Z,25,dana.ortiz@corp.example,Ledger Svc,R-009,,
+R26.24,R-011,Restore traffic to blue pool,Verify,2026-10-30T08:40:00Z,15,@netops,,R-010,,
+R26.24,R-012,Business verification sign-off,Verify,2026-10-30T08:55:00Z,15,marcus.bell@corp.example,,R-011,,
+R26.24,R-901,Roll back migration 0042,Rollback,2026-10-30T09:15:00Z,20,dana.ortiz@corp.example,Ledger Svc,,,
+R26.24,R-902,Redeploy Ledger Svc 3.8.1,Rollback,2026-10-30T09:35:00Z,15,@ledger,Ledger Svc,R-901,,
+R26.24,R-903,Repoint Payments API to 4.4.x,Rollback,2026-10-30T09:50:00Z,10,@payments,Payments API,R-902,,

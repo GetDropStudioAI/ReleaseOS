@@ -1,0 +1,15 @@
+// CAB checklist pasted from the meeting notes
+# CAB Approval
+- CAB minutes attached to CHG0041872 @alice
+- Rollback rehearsal evidence @bob@corp.com [Payments API]
+- Client comms approved @client-svc
+
+# compliance sign-off
+- PCI DSS scope confirmation memo @ops [card portal]
+- Support desk briefed on known issues @DESK
+- Evidence attached
+- Change record risk analysis signed @alice
+- Change record risk analysis signed @alice
+
+# Code Freeze
+- Tag repositories   with   extra    spaces

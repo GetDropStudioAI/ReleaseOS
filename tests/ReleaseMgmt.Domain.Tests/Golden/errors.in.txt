@@ -1,0 +1,16 @@
+- A task before any gate heading
+# Nowhere Gate
+- Task under a gate that does not exist
+# CAB Approval
+- Task with an unknown owner @ghost-team
+- Task with an unknown email @nobody@corp.com
+- Task with an unknown product [Payments Ap]
+- Two owners @alice @bob@corp.com
+- Two products [Payments API] [Card Portal]
+-
+- @alice
+Just some prose that is not a task
+* bullet in the wrong style
+#
+# Orphan Gate
+- Task with nobody to own it

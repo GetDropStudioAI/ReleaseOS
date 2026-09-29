@@ -8,6 +8,7 @@ import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
 import type { ApiError } from './api'
 import { StepInspector } from './Runbook'
+import { bulkKey, type BulkDraft } from './Bulk'
 
 export type Selection = { kind: 'gate'; id: string } | { kind: 'task'; gateId: string; id: string } | { kind: 'product'; id: string } | { kind: 'step'; id: string } | null
 
@@ -141,7 +142,7 @@ export function Timeline({ gates, todayT, targetDate, selectedId, onSelect }: { 
 }
 
 // ---- Checklist of the selected gate ----------------------------------------------------------------------------------------------------------
-export function Checklist({ gateId, refreshKey, selection, onSelect, onChanged }: { gateId: string; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void }) {
+export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, onChanged }: { gateId: string; trainId: string; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void }) {
   const [gate, setGate] = useState<GateDetail | null>(null)
   const [draft, setDraft] = useDraft<{ text: string; ownerId: string }>(`addTask:${gateId}`)   // survives a closed tab (session engine)
   const adding = draft !== undefined
@@ -150,6 +151,8 @@ export function Checklist({ gateId, refreshKey, selection, onSelect, onChanged }
   const ownerId = draft?.ownerId || owners[0]?.id || ''
   const [err, setErr] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ApiError | null>(null)
+  const [bulk, setBulk] = useDraft<BulkDraft>(bulkKey(trainId))
+  const openBulk = () => setBulk({ text: bulk?.text ?? '', gateId: bulk?.gateId || gateId, open: true })
   useEffect(() => { getGate(gateId).then(setGate).catch(e => setErr(errMsg(e))) }, [gateId, refreshKey])
   useEffect(() => { if (adding && owners.length === 0) getOwners().then(setOwners).catch(e => setErr(errMsg(e))) }, [adding, owners.length])
   if (!gate) return err ? <p className="bad" role="alert">✗ {err}</p> : null
@@ -167,7 +170,7 @@ export function Checklist({ gateId, refreshKey, selection, onSelect, onChanged }
   return (
     <section aria-label="Checklist">
       <div className="section-head"><h2 className="cap accent">{gate.name} · checklist</h2>
-        <span className="muted"><span className="mono label">{done} / {gate.tasks.length}</span> done · <button type="button" className="text" onClick={() => setDraft(adding ? undefined : { text: '', ownerId: '' })}>Add task</button></span></div>
+        <span className="muted"><span className="mono label">{done} / {gate.tasks.length}</span> done · <button type="button" className="text" onClick={openBulk}>Paste tasks</button> · <button type="button" className="text" onClick={() => setDraft(adding ? undefined : { text: '', ownerId: '' })}>Add task</button></span></div>
       {adding && (
         <p className="inline-form">
           <label>Task <input className="line wide" value={text} onChange={e => setDraft({ text: e.target.value, ownerId })} placeholder="What has to happen" /></label>{' '}

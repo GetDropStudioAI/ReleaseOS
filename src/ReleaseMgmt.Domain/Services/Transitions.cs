@@ -54,6 +54,10 @@ public static class Guards
     public const string DuplicateStepCode = "DuplicateStepCode";
     public const string TrainClosed = "TrainClosed";
     public const string RunInProgress = "RunInProgress";
+    public const string PreviewExpired = "PreviewExpired";
+    public const string PreviewHasErrors = "PreviewHasErrors";
+    public const string PreviewCommitted = "PreviewCommitted";
+    public const string DecertifyNotAcknowledged = "DecertifyNotAcknowledged";
     public const string InvalidRun = "InvalidRun";
     public const string LiveRunOpen = "LiveRunOpen";
     public const string LiveRequiresExecuting = "LiveRequiresExecuting";

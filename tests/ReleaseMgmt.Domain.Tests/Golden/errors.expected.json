@@ -1,0 +1,113 @@
+{
+  "errorCount": 14,
+  "warningCount": 0,
+  "tasks": [],
+  "issues": [
+    {
+      "line": 1,
+      "severity": "Error",
+      "code": "NoTargetGate",
+      "message": "No gate for this task: put a `# Gate name` line before it, or pick a gate in the drawer",
+      "suggestions": [
+        "Code Freeze",
+        "Compliance Sign-off",
+        "CAB Approval"
+      ]
+    },
+    {
+      "line": 2,
+      "severity": "Error",
+      "code": "UnknownGate",
+      "message": "There is no gate called \"Nowhere Gate\" on this train",
+      "suggestions": []
+    },
+    {
+      "line": 3,
+      "severity": "Error",
+      "code": "NoTargetGate",
+      "message": "No valid gate for this task (the last `#` line was not a known gate)",
+      "suggestions": []
+    },
+    {
+      "line": 5,
+      "severity": "Error",
+      "code": "UnknownOwner",
+      "message": "No team or user matches @ghost-team",
+      "suggestions": []
+    },
+    {
+      "line": 6,
+      "severity": "Error",
+      "code": "UnknownOwner",
+      "message": "No team or user matches @nobody@corp.com",
+      "suggestions": [
+        "bob@corp.com"
+      ]
+    },
+    {
+      "line": 7,
+      "severity": "Error",
+      "code": "UnknownProduct",
+      "message": "No bundled product called \"Payments Ap\" on this train",
+      "suggestions": [
+        "Payments API"
+      ]
+    },
+    {
+      "line": 8,
+      "severity": "Error",
+      "code": "MultipleOwners",
+      "message": "A task has one owner; found more than one @..",
+      "suggestions": []
+    },
+    {
+      "line": 9,
+      "severity": "Error",
+      "code": "MultipleProducts",
+      "message": "A task can link to one product; found more than one [..]",
+      "suggestions": []
+    },
+    {
+      "line": 10,
+      "severity": "Error",
+      "code": "EmptyTask",
+      "message": "This task has no description",
+      "suggestions": []
+    },
+    {
+      "line": 11,
+      "severity": "Error",
+      "code": "EmptyTask",
+      "message": "This task has no description",
+      "suggestions": []
+    },
+    {
+      "line": 12,
+      "severity": "Error",
+      "code": "BadLine",
+      "message": "Cannot read this line. Expected `# Gate name`, `- task text @owner [Product]`, `// comment` or a blank line",
+      "suggestions": []
+    },
+    {
+      "line": 13,
+      "severity": "Error",
+      "code": "BadLine",
+      "message": "Cannot read this line. Expected `# Gate name`, `- task text @owner [Product]`, `// comment` or a blank line",
+      "suggestions": []
+    },
+    {
+      "line": 14,
+      "severity": "Error",
+      "code": "BadLine",
+      "message": "A `#` line needs a gate name after it",
+      "suggestions": []
+    },
+    {
+      "line": 16,
+      "severity": "Error",
+      "code": "NoOwner",
+      "message": "This task has no @owner and gate \"Orphan Gate\" has no owner to fall back to",
+      "suggestions": []
+    }
+  ]
+}

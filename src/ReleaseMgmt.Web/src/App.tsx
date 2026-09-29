@@ -4,6 +4,9 @@ import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
 import { Stream, TrainHeader, useStream } from './Trains'
 import { Inspector } from './Planning'
+import { BulkDrawer, bulkKey, type BulkDraft } from './Bulk'
+import { getTrain, type TrainDetail } from './api'
+import { useDraft } from './session'
 import { parsePath, ROOT, useRoute, type Route } from './route'
 import { SessionProvider, useSession } from './session'
 import { useLive, type LiveState } from './live'
@@ -136,6 +139,9 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const refetch = () => { setRev(n => n + 1); reload() }
   const live = useLive(true, { onTrainChanged: refetch, onResync: refetch })
   const { view, trainId: selected, selection } = route
+  const [bulk, setBulk] = useDraft<BulkDraft>(bulkKey(selected ?? ''))
+  const [gates, setGates] = useState<TrainDetail['gates']>([])
+  useEffect(() => { if (selected && bulk?.open) getTrain(selected).then(t => setGates(t.gates)).catch(() => setGates([])) }, [selected, bulk?.open, rev])
 
   // A URL that names nothing (opening the app fresh) restores where this or the most recent tab was; a deep link always wins.
   const restored = useRef(false)
@@ -174,7 +180,9 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">
-          <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />
+          {selected && bulk?.open && canAdmin
+            ? <BulkDrawer trainId={selected} gates={gates} onClose={() => setBulk(bulk && bulk.text ? { ...bulk, open: false } : undefined)} onChanged={refetch} />
+            : <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />}
         </aside>
       )}
     </div>

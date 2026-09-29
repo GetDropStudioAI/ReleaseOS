@@ -88,3 +88,9 @@ export interface NewStepBody { title: string; section: string; ownerUserId?: str
 export const createStep = (trainId: string, b: NewStepBody) => post<StepRow>(`/api/v1/trains/${trainId}/steps`, b)
 export const patchStep = (id: string, b: Partial<NewStepBody> & { instructions?: string }, version: number) => patch<StepRow>(`/api/v1/steps/${id}`, b, version)
 export const setStepDependencies = (id: string, dependsOn: string[], version: number) => call<StepRow>('PUT', `/api/v1/steps/${id}/dependencies`, { dependsOn }, version)
+
+export interface ParsedTask { line: number; gateId: string; gateName: string; description: string; ownerKind: string; ownerId: string | null; ownerName: string | null; productId: string | null; productName: string | null; warnings: string[] }
+export interface ParseIssue { line: number; severity: string; code: string; message: string; suggestions: string[] }
+export interface ParsePreview { previewId: string; trainVersion: number; expiresAt: string; errorCount: number; warningCount: number; tasks: ParsedTask[]; issues: ParseIssue[]; decertifiesGates: string[] }
+export const parseTasks = (trainId: string, text: string, defaultGateId: string | null) => post<ParsePreview>(`/api/v1/trains/${trainId}/tasks:parse`, { text, defaultGateId })
+export const commitTasks = (trainId: string, previewId: string, acknowledgeDecertify: boolean) => post<{ inserted: number; decertifiedGates: string[] }>(`/api/v1/trains/${trainId}/tasks:commit`, { previewId, acknowledgeDecertify })

@@ -1,0 +1,122 @@
+{
+  "errorCount": 0,
+  "warningCount": 4,
+  "tasks": [
+    {
+      "line": 3,
+      "gateId": "g-cab",
+      "gateName": "CAB Approval",
+      "description": "CAB minutes attached to CHG0041872",
+      "ownerKind": "User",
+      "ownerId": "u-alice",
+      "ownerName": "Alice Adler",
+      "productId": null,
+      "productName": null,
+      "warnings": []
+    },
+    {
+      "line": 4,
+      "gateId": "g-cab",
+      "gateName": "CAB Approval",
+      "description": "Rollback rehearsal evidence",
+      "ownerKind": "User",
+      "ownerId": "u-bob",
+      "ownerName": "Bob Brandt",
+      "productId": "p-pay",
+      "productName": "Payments API",
+      "warnings": []
+    },
+    {
+      "line": 5,
+      "gateId": "g-cab",
+      "gateName": "CAB Approval",
+      "description": "Client comms approved",
+      "ownerKind": "Team",
+      "ownerId": "t-client",
+      "ownerName": "@client-svc",
+      "productId": null,
+      "productName": null,
+      "warnings": []
+    },
+    {
+      "line": 8,
+      "gateId": "g-comp",
+      "gateName": "Compliance Sign-off",
+      "description": "PCI DSS scope confirmation memo",
+      "ownerKind": "Team",
+      "ownerId": "t-ops",
+      "ownerName": "@ops",
+      "productId": "p-card",
+      "productName": "Card Portal",
+      "warnings": []
+    },
+    {
+      "line": 9,
+      "gateId": "g-comp",
+      "gateName": "Compliance Sign-off",
+      "description": "Support desk briefed on known issues",
+      "ownerKind": "Team",
+      "ownerId": "t-desk",
+      "ownerName": "@desk",
+      "productId": null,
+      "productName": null,
+      "warnings": []
+    },
+    {
+      "line": 10,
+      "gateId": "g-comp",
+      "gateName": "Compliance Sign-off",
+      "description": "Evidence attached",
+      "ownerKind": "Gate",
+      "ownerId": null,
+      "ownerName": "Priya Nair",
+      "productId": null,
+      "productName": null,
+      "warnings": [
+        "No @owner: the gate owner (Priya Nair) will own this task",
+        "This gate already has a task with this description"
+      ]
+    },
+    {
+      "line": 11,
+      "gateId": "g-comp",
+      "gateName": "Compliance Sign-off",
+      "description": "Change record risk analysis signed",
+      "ownerKind": "User",
+      "ownerId": "u-alice",
+      "ownerName": "Alice Adler",
+      "productId": null,
+      "productName": null,
+      "warnings": []
+    },
+    {
+      "line": 12,
+      "gateId": "g-comp",
+      "gateName": "Compliance Sign-off",
+      "description": "Change record risk analysis signed",
+      "ownerKind": "User",
+      "ownerId": "u-alice",
+      "ownerName": "Alice Adler",
+      "productId": null,
+      "productName": null,
+      "warnings": [
+        "Same task as line 11 in this gate"
+      ]
+    },
+    {
+      "line": 15,
+      "gateId": "g-freeze",
+      "gateName": "Code Freeze",
+      "description": "Tag repositories with extra spaces",
+      "ownerKind": "Gate",
+      "ownerId": null,
+      "ownerName": "Rae Tran",
+      "productId": null,
+      "productName": null,
+      "warnings": [
+        "No @owner: the gate owner (Rae Tran) will own this task"
+      ]
+    }
+  ],
+  "issues": []
+}

@@ -120,7 +120,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       )}
       <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} />
       <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} />
-      {checklistGate && <Checklist gateId={checklistGate.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
+      {checklistGate && <Checklist gateId={checklistGate.id} trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
       <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
     </>
   )

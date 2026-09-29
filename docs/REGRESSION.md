@@ -24,7 +24,7 @@ A story moves to In Review when its own acceptance criteria pass. It stays there
 | 3 oracle | 82/82 | |
 | 4 metrics | ran clean | |
 | 5 web build | ok | |
-| 6 CI | green on Windows and macOS on `d8a79db` (rerun pending for the fix commit) | |
+| 6 CI | green on Windows and macOS on `3361369` (the head after the warning fixes) | `3361369` |
 | 7 UI | shell and admin screens checked in light and dark | |
 | 8 human items | **open: REOS-14 backup restore verified on a second machine** | |
 

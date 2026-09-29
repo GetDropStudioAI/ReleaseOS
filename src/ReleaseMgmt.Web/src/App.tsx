@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
+import { Stream, TrainHeader, useStream } from './Trains'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
-const GROUPS = ['Executing', 'Gated', 'Planning', 'Complete (30 days)']
 const NAV = ['Trains', 'Calendar', 'Analytics', 'Sync health', 'Imports & exports']
 type View = 'trains' | 'admin'
 
@@ -105,6 +105,8 @@ export default function App() {
   const [failed, setFailed] = useState(false)
   const [view, setView] = useState<View>('trains')
   const [stopped, setStopped] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const { rows } = useStream(!!me)
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
   useEffect(() => { refresh() }, [])
 
@@ -129,15 +131,10 @@ export default function App() {
         <SessionControls onSignedOut={() => setMe(null)} onStopped={() => setStopped(true)} />
       </header>
       <aside className="stream" aria-label="Stream">
-        {GROUPS.map(g => (
-          <section key={g}>
-            <h2 className="group-label">{g}</h2>
-            <p className="muted empty">No trains</p>
-          </section>
-        ))}
+        <Stream rows={rows} selected={selected} onSelect={id => { setSelected(id); setView('trains') }} />
       </aside>
       <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (<><h1>Trains</h1><p className="muted">No trains yet. Create one to start planning.</p></>)}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={0} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">

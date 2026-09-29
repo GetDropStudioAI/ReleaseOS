@@ -26,3 +26,11 @@ a { color: var(--accent); }
 table.grid tbody tr { cursor: default; }
 table.grid td { white-space: nowrap; }
 .session-controls { display: inline-flex; gap: 12px; align-items: baseline; }
+
+.stream-row { display: grid; width: 100%; text-align: left; font: inherit; color: var(--label); background: none; border: 0; border-bottom: 1px solid var(--separator); padding: 8px 4px; cursor: pointer; gap: 2px; }
+.stream-row:hover, .stream-row[aria-current="true"] { background: var(--selection); }
+.stream-title { font-weight: 600; }
+.stream-meta { font-size: var(--text-caption); }
+.stream-gates { letter-spacing: 0.2em; }
+.plain { list-style: none; padding: 0; margin: 4px 0 16px; }
+.gate-row { padding: 6px 0; border-bottom: 1px solid var(--separator); }

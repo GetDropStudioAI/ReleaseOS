@@ -36,3 +36,12 @@ Stop when M0's "Done when" test passes and summarise what you built and anything
 For later milestones, replace "M0" with the next one. After M2 merges, M3, M4 and M5 can run as parallel subagent streams on separate branches.
 
 Visual mockups are also on the claude.ai canvas "Release Management App — Screen Mockups"; the full scope with diagrams is the "Release Management App — Project Scope" doc.
+
+## Run locally
+```
+python start.py            # starts the API (:5080) and the frontend (:5173), opens the browser
+python start.py status     # what is the running instance doing?
+python start.py reset      # pull the latest from origin/Team, restart both, the browser tab reloads
+python start.py stop       # stop both and exit
+```
+Needs Python 3.9+, the .NET 10 SDK and Node 22. In the app, **Reset** and **Sign out and exit** appear in the toolbar while it runs under `start.py`.

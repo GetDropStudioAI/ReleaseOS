@@ -26,6 +26,6 @@ A story moves to In Review when its own acceptance criteria pass. It stays there
 | 5 web build | ok | |
 | 6 CI | green on Windows and macOS on `3361369` (the head after the warning fixes) | `3361369` |
 | 7 UI | shell and admin screens checked in light and dark | |
-| 8 human items | **open: REOS-14 backup restore verified on a second machine** | |
+| 8 human items | REOS-14 second-machine restore **waived by john.selph 2026-09-29**: the automated restore tests (`BackupTests`, green in CI on both OSes) count as acceptance. The timed DR drill stays in REOS-52. | |
 
-Sprint 1 cannot close until item 8 clears.
+**Closed 2026-09-29:** all 12 stories (REOS-10 to 21) moved In Review → Done together. Epics REOS-1 (M0) and REOS-2 (M1) closed with them.

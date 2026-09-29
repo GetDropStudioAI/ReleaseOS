@@ -9,6 +9,7 @@
 
 The same actions are available in the app toolbar (Reset, Exit) while it runs under this script.
 Requires Python 3.9+, the .NET 10 SDK and Node 22 on PATH.
+If a Reset pulls a new start.py, it relaunches itself so the new supervisor logic takes effect.
 Backend: http://localhost:5080 (dotnet run, Development). Frontend: http://localhost:5173 (Vite, proxies /api, /hub, /auth).
 A small control channel listens on 127.0.0.1:5099 only; every state-changing call needs a per-run token.
 """

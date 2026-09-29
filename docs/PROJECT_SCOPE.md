@@ -247,5 +247,5 @@ Mechanics: PDFs are `ExportJobs` background jobs; footer = generated-at, generat
 | Accessibility | keyboard reachable, real `<button>`/`<a>`, WCAG AA contrast (tokens already comply), `prefers-reduced-motion` |
 | Platforms | server on Windows Server or Linux; client in current Edge, Chrome, Safari on macOS and Windows |
 | Observability | structured logs (Serilog to file), health endpoint `/healthz` reporting DB, poller, watchdog |
-| Dev ports | API `http://localhost:6080`, Vite `6273` proxying `/api` and `/hub` |
+| Dev ports | API `http://127.0.0.1:6080`, Vite `http://127.0.0.1:6273` (IPv4 loopback: `localhost` binds IPv6 only on Windows) proxying `/api` and `/hub` |
 | Time | server stores and returns UTC; UI formats in `Display:TimeZone` (default America/Chicago, D24); all server time from an injected `TimeProvider` |

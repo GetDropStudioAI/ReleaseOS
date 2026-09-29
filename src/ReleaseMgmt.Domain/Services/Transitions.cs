@@ -54,6 +54,15 @@ public static class Guards
     public const string DuplicateStepCode = "DuplicateStepCode";
     public const string TrainClosed = "TrainClosed";
     public const string RunInProgress = "RunInProgress";
+    public const string InvalidRun = "InvalidRun";
+    public const string LiveRunOpen = "LiveRunOpen";
+    public const string LiveRequiresExecuting = "LiveRequiresExecuting";
+    public const string RunEnded = "RunEnded";
+    public const string DependencyNotDone = "DependencyNotDone";
+    public const string IllegalStepTransition = "IllegalStepTransition";
+    public const string SkipNeedsNote = "SkipNeedsNote";
+    public const string StepsStillRunning = "StepsStillRunning";
+    public const string StepsIncomplete = "StepsIncomplete";
     public const string InvalidSessionState = "InvalidSessionState";
     public const string SessionStateTooLarge = "SessionStateTooLarge";
 }

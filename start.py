@@ -10,7 +10,7 @@
 The same actions are available in the app toolbar (Reset, Exit) while it runs under this script.
 Requires Python 3.9+, the .NET 10 SDK and Node 22 on PATH.
 If a Reset pulls a new start.py, it relaunches itself so the new supervisor logic takes effect.
-Backend: http://localhost:6080 (dotnet run, Development). Frontend: http://localhost:6273 (Vite, proxies /api, /hub, /auth).
+Backend: http://127.0.0.1:6080 (dotnet run, Development). Frontend: http://127.0.0.1:6273 (Vite, proxies /api, /hub, /auth).
 A small control channel listens on 127.0.0.1:5099 only; every state-changing call needs a per-run token.
 """
 from __future__ import annotations
@@ -40,7 +40,7 @@ LOG_DIR = ROOT / "logs"
 STATE_FILE = ROOT / ".start-control.json"   # port + token of the running instance (gitignored)
 BRANCH = "main"
 API_PORT, WEB_PORT, CONTROL_PORT = 6080, 6273, 5099
-API_URL, WEB_URL = f"http://localhost:{API_PORT}", f"http://localhost:{WEB_PORT}"
+API_URL, WEB_URL = f"http://127.0.0.1:{API_PORT}", f"http://127.0.0.1:{WEB_PORT}"   # IPv4 loopback everywhere: same address the dev server binds, the tests poll and the proxy targets
 IS_WINDOWS = os.name == "nt"
 
 
@@ -112,6 +112,7 @@ class Child:
         assert self.proc and self.proc.stdout
         with open(LOG_DIR / f"{self.name}.log", "a", encoding="utf-8") as log:
             log.write(f"\n=== started {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            log.flush()
             for line in self.proc.stdout:
                 log.write(line)
                 log.flush()

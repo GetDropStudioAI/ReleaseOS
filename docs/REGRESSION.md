@@ -30,3 +30,24 @@ A story moves to In Review when its own acceptance criteria pass. It stays there
 | 8 human items | REOS-14 second-machine restore **waived by john.selph 2026-09-29**: the automated restore tests (`BackupTests`, green in CI on both OSes) count as acceptance. The timed DR drill stays in REOS-52. | |
 
 **Closed 2026-09-29:** all 12 stories (REOS-10 to 21) moved In Review → Done together. Epics REOS-1 (M0) and REOS-2 (M1) closed with them.
+
+### AMO Sprint 2 (REOS-22 to 30, plus REOS-56 to 59): started 2026-09-29
+Full regression run on head `baa4e29` (the sprint's last story commit; later commits are REOS-31, Sprint 3 work).
+
+| Check | Result | Head |
+|---|---|---|
+| 1 build | `dotnet build -c Release --no-incremental`: 0 errors, 0 warnings | `baa4e29` |
+| 2 tests | 39 Domain + 43 Infrastructure + 80 API passed, 0 failed | |
+| 3 oracle | 82/82 | |
+| 3b tooling | `tests/tools/test_start.py` OK | |
+| 4 metrics | `seed_and_query.py` ran clean | |
+| 5 web build | `npm ci && npm run build`: builds, 0 TypeScript errors | |
+| 6 CI | green on `windows-latest` and `macos-latest` for `baa4e29`, including the new Playwright job (16 browser tests, app started through `start.py`) | `baa4e29` |
+| 7 UI, both themes | Playwright + axe (wcag2a/aa, 2.1 a/aa, best-practice) on sign-in, workspace with Inspector, Admin, in light and dark: no serious/critical violations; screenshots of Stream, header, products, timeline, checklist, runbook, Inspector, drawer reviewed in both themes | |
+| 8 human items | **open**, see below | |
+
+Defects the regression itself found and fixed this sprint: axe contrast (selected Stream row 4.37:1) and nested-interactive timeline; the 409 notice vanishing on refetch; Windows `localhost` resolving to IPv6 only so the e2e job timed out (Vite, API and `start.py` now use `127.0.0.1`).
+
+**Open human items (sprint stays in In Review until these clear):**
+- REOS-56, 57, 58: run `python start.py` once on Windows and once on a Mac (toolbar Reset and Exit, `reset` pulling `origin/main`, browser opens). CI now exercises start and stop on both OSes; the manual pass covers what CI cannot.
+- Optional confirmations recorded in `docs/QUESTIONS.md`: Q-007 (product Health), Q-008 (window time zone), Q-010 (plan lock while a Live run is open). Built to provisional defaults; not blockers.

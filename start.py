@@ -204,13 +204,13 @@ class Supervisor:
             return
         try:
             self.set("resetting", "Pulling the latest code from origin/Team")
+            script_before = hashlib.sha256((ROOT / "start.py").read_bytes()).hexdigest()   # must be taken before the pull rewrites the file
             try:
                 result = pull_latest()
             except RuntimeError as e:
                 self.set("error", str(e))   # nothing was stopped: the app keeps running on the old code
                 return
             self.detail = {**self.detail, "pull": result}
-            script_before = hashlib.sha256((ROOT / "start.py").read_bytes()).hexdigest()
             self.set("resetting", f"Pulled {result['before']} → {result['after']}: restarting")
             self.halt()
             deps = {"src/ReleaseMgmt.Web/package.json", "src/ReleaseMgmt.Web/package-lock.json"} & set(result["changed"])

@@ -1,0 +1,12 @@
+bin/
+obj/
+node_modules/
+src/ReleaseMgmt.Api/wwwroot/
+src/ReleaseMgmt.Api/data/
+src/ReleaseMgmt.Api/logs/
+*.log
+.vs/
+test-results/
+playwright-report/
+tests/reference/**/__pycache__/
+__pycache__/

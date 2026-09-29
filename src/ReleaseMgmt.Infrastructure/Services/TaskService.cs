@@ -8,7 +8,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Checklist tasks. Reopening or adding a task decertifies a Certified gate via trigger (which writes its own audit row);
 /// the service sets LastChangedByUserId/LastChangedAt so that row carries the right actor and time (D27).</summary>
-public sealed class TaskService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time) : ServiceBase(dbf, time)
+public sealed class TaskService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     public Task<ServiceResult<ChecklistTasks>> AddAsync(string gateId, string description, string? ownerUserId, string? ownerTeamId, Actor actor, CancellationToken ct = default) =>
         RunAsync(async db =>

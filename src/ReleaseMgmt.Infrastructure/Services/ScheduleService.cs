@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Changing TargetReleaseDate recomputes every gate's DueOn in business days (D9) and audits the change.</summary>
-public sealed class ScheduleService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time) : ServiceBase(dbf, time)
+public sealed class ScheduleService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     public Task<ServiceResult<ReleaseTrains>> ChangeTargetDateAsync(string trainId, DateOnly newTarget, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
         RunAsync(async db =>

@@ -25,3 +25,4 @@ a { color: var(--accent); }
 .inline-form { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
 table.grid tbody tr { cursor: default; }
 table.grid td { white-space: nowrap; }
+.session-controls { display: inline-flex; gap: 12px; align-items: baseline; }

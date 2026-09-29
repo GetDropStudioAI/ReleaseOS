@@ -7,7 +7,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Waiver request and approval (D10): written reason of at least 20 characters, approved by a different Governance Officer.</summary>
-public sealed class WaiverService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time) : ServiceBase(dbf, time)
+public sealed class WaiverService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     public const int MinReasonLength = 20;
 

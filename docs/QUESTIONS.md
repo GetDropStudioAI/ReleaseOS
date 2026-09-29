@@ -37,3 +37,12 @@ Blocked: nothing. Built: header optional; when present and stale -> 409 with the
 Context: PROJECT_SCOPE §6 lists `POST /waivers/{id}:reject`, but GateWaivers has no rejected/decided-by fields.
 Question: add columns (schema change, D-level decision) or drop the endpoint?
 Blocked: rejection is not built; only request and approve are.
+
+## Q-006 · Password reset with MFA (REOS-59)
+Context: requested 2026-09-29: "a way for a user to reset their password via MFA code or app". Sign-in today is OIDC (D12, OI-5), so the identity provider owns passwords and MFA. `Auth:Oidc:*` plus a dev-only fake login are all that exist.
+Question: where should password reset live?
+Options considered:
+- (a) **Use the IdP's self-service reset** (Entra ID SSPR or equivalent): a "Forgot password" link to the IdP; MFA comes with it; near-zero code, no new secrets to protect, consistent with D12. Depends on your IdP offering it.
+- (b) **Local accounts in this app**: password hashing (Argon2/PBKDF2), authenticator-app TOTP (RFC 6238) with recovery codes, rate limiting, audit rows, reset flow. Real scope: new tables (schema change), a security review, and it duplicates the IdP.
+- (c) (b) plus emailed or texted codes: needs SMTP, which is off in v1 (OI-7), and an SMS provider.
+Blocked: REOS-59 only. Nothing else waits on it.

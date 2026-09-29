@@ -9,7 +9,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Manual "capture baseline" (D15) for trains without a *Freeze* gate. Baselines are immutable and one per train (D25).
 /// The snapshot has the same shape the auto-capture trigger writes: products, gates + DueOn, steps + planned times.</summary>
-public sealed class BaselineService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time) : ServiceBase(dbf, time)
+public sealed class BaselineService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     public Task<ServiceResult<Baselines>> CaptureAsync(string trainId, Actor actor, CancellationToken ct = default) =>
         RunAsync(async db =>

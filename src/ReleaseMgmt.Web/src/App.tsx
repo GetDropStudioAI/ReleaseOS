@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { devLogin, getMe, logout, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
+import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
 const GROUPS = ['Executing', 'Gated', 'Planning', 'Complete (30 days)']
@@ -18,6 +19,57 @@ function ThemeChoices() {
           {c[0].toUpperCase() + c.slice(1)}
         </button>
       ))}
+    </span>
+  )
+}
+
+/** Reset and Exit, shown only when start.py is supervising the app. Confirmation is inline (no modals). */
+function SessionControls({ onSignedOut }: { onSignedOut: () => void }) {
+  const [status, setStatus] = useState<ControlStatus | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [confirmExit, setConfirmExit] = useState(false)
+  const [stopped, setStopped] = useState(false)
+
+  useEffect(() => { controlStatus().then(setStatus) }, [])
+  if (stopped) return <p className="bad" role="status">The app has stopped. You can close this tab.</p>
+  if (!status) return null
+
+  const reset = async () => {
+    setError(null); setBusy('Pulling the latest code…')
+    const r = await requestReset()
+    if (!r.ok) { setBusy(null); setError(r.message); return }
+    const result = await waitUntilReady(s => setBusy(s?.message ?? 'Restarting…'))
+    if (result === 'ready') { location.reload(); return }
+    setBusy(null)
+    setError(result === 'error' ? ((await controlStatus())?.message ?? 'Reset failed') : 'Reset is taking too long; check the terminal running start.py')
+  }
+  const exit = async () => {
+    setError(null); setBusy('Signing out and stopping…')
+    await logout()
+    onSignedOut()
+    const r = await requestExit()
+    if (!r.ok) { setBusy(null); setError(r.message); return }
+    setStopped(true)
+  }
+
+  return (
+    <span className="session-controls">
+      {busy && <span className="muted" role="status">{busy}</span>}
+      {error && <span className="bad" role="alert">✗ {error}</span>}
+      {!busy && !confirmExit && (
+        <>
+          <button type="button" className="text" onClick={reset}>Reset</button>
+          <button type="button" className="text" onClick={() => setConfirmExit(true)}>Exit</button>
+        </>
+      )}
+      {!busy && confirmExit && (
+        <span>
+          Sign out and stop the app?{' '}
+          <button type="button" className="text destructive" onClick={exit}>Sign out and exit</button>{' '}
+          <button type="button" className="text" onClick={() => setConfirmExit(false)}>Cancel</button>
+        </span>
+      )}
     </span>
   )
 }
@@ -71,6 +123,7 @@ export default function App() {
         <ThemeChoices />
         <span className="muted">{me.name} · {me.roles.join(', ')}</span>
         <button type="button" className="text" onClick={async () => { await logout(); setMe(null) }}>Sign out</button>
+        <SessionControls onSignedOut={() => setMe(null)} />
       </header>
       <aside className="stream" aria-label="Stream">
         {GROUPS.map(g => (

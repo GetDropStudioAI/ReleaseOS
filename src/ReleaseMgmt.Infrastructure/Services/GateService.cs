@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Gate transitions (D26). Certified/Waived stamp the certifier; cascades (evidence lock, baseline, transition log) are trigger-written.</summary>
-public sealed class GateService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time) : ServiceBase(dbf, time)
+public sealed class GateService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     /// <summary>Why <paramref name="actor"/> cannot certify the gate right now (empty = eligible). Drives the Inspector's disabled-with-reason line in M2.</summary>
     public async Task<List<GuardFailure>> EvaluateCertifyAsync(ReleaseDbContext db, StageGates g, string actorUserId)

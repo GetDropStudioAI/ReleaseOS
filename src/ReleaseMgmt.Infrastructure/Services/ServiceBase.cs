@@ -11,7 +11,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 /// optimistic concurrency (If-Match -> Conflict with the current row), one service audit row in the same
 /// transaction, clock from TimeProvider, trigger failures mapped to a DbRule guard failure.
 /// </summary>
-public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time)
+public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null)
 {
     protected static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
@@ -21,14 +21,23 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         get { var t = time.GetUtcNow().UtcDateTime; return new DateTime(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc); }
     }
 
+    // Trains audited during the current call; published to live clients after the commit (never before: clients refetch and must see the change).
+    private static readonly AsyncLocal<HashSet<string>?> Touched = new();
+
     protected async Task<ServiceResult<T>> RunAsync<T>(Func<ReleaseDbContext, Task<ServiceResult<T>>> body, CancellationToken ct)
     {
+        var touched = new HashSet<string>();
+        Touched.Value = touched;
         await using var db = await dbf.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         try
         {
             var result = await body(db);
-            if (result.IsOk) await tx.CommitAsync(ct);
+            if (result.IsOk)
+            {
+                await tx.CommitAsync(ct);
+                await PublishAsync(touched, ct);
+            }
             return result;
         }
         catch (DbUpdateException ex) when (DbRules.TryGetMessage(ex, out _))
@@ -38,16 +47,30 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         }
     }
 
+    private async Task PublishAsync(HashSet<string> trainIds, CancellationToken ct)
+    {
+        if (realtime is null || trainIds.Count == 0) return;
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        foreach (var id in trainIds)
+        {
+            var version = await db.Set<ReleaseTrains>().Where(t => t.Id == id).Select(t => (int?)t.Version).SingleOrDefaultAsync(ct);
+            if (version is int v) await realtime.TrainChangedAsync(id, v, ct);
+        }
+    }
+
     protected static bool VersionMismatch(int? expected, int current) => expected is int v && v != current;
 
     /// <summary>One AuditEvents row per service write (D27).</summary>
-    protected void Audit(ReleaseDbContext db, Actor actor, string? trainId, string entityType, string entityId, string action, object? before = null, object? after = null) =>
+    protected void Audit(ReleaseDbContext db, Actor actor, string? trainId, string entityType, string entityId, string action, object? before = null, object? after = null)
+    {
+        if (trainId is not null) Touched.Value?.Add(trainId);
         db.Set<AuditEvents>().Add(new AuditEvents
         {
             OccurredAt = Now, ActorUserId = actor.UserId, ReleaseTrainId = trainId, EntityType = entityType, EntityId = entityId, Action = action,
             BeforeJson = before is null ? null : JsonSerializer.Serialize(before, Json),
             AfterJson = after is null ? null : JsonSerializer.Serialize(after, Json),
         });
+    }
 
     protected static async Task<string?> RoleOf(ReleaseDbContext db, string? userId) =>
         userId is null ? null : await db.Set<Users>().Where(u => u.Id == userId).Select(u => u.Role).SingleOrDefaultAsync();

@@ -7,7 +7,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Users, teams and holidays admin (RTE/RM in v1, D14/D32). Roles come from sign-in (Q-003), so users are edited for handle and active state only.</summary>
-public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time) : ServiceBase(dbf, time)
+public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     private readonly IDbContextFactory<ReleaseDbContext> _dbf = dbf;
     public const string InvalidInput = "InvalidInput";

@@ -10,3 +10,5 @@ test-results/
 playwright-report/
 tests/reference/**/__pycache__/
 __pycache__/
+.start-control.json
+logs/

@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Train status changes (PROJECT_SCOPE §3). Every guard mirrors a trigger so callers get a readable 422 first.</summary>
-public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time) : ServiceBase(dbf, time)
+public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     public static readonly string[] CloseCodes = ["Successful", "SuccessfulWithIssues", "Unsuccessful"];
 

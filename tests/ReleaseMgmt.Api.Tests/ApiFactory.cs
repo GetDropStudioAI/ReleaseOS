@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace ReleaseMgmt.Api.Tests;
 
-public sealed class ApiFactory(string environment = "Development", bool demoData = false) : WebApplicationFactory<Program>
+public sealed class ApiFactory(string environment = "Development", bool demoData = false, string? passwordResetUrl = null) : WebApplicationFactory<Program>
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("reos-api-").FullName;
     public string DbPath => Path.Combine(_dir, "app.db");
@@ -19,6 +19,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         // UseSetting, not ConfigureAppConfiguration: Program reads these while building, before late config sources apply.
         builder.UseSetting("Db:Path", DbPath);
         builder.UseSetting("Seed:Demo", demoData ? "true" : "false");
+        if (passwordResetUrl is not null) builder.UseSetting("Auth:PasswordResetUrl", passwordResetUrl);
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
         builder.UseSetting("Logging:File", Path.Combine(_dir, "log-.txt"));
     }

@@ -46,3 +46,4 @@ Options considered:
 - (b) **Local accounts in this app**: password hashing (Argon2/PBKDF2), authenticator-app TOTP (RFC 6238) with recovery codes, rate limiting, audit rows, reset flow. Real scope: new tables (schema change), a security review, and it duplicates the IdP.
 - (c) (b) plus emailed or texted codes: needs SMTP, which is off in v1 (OI-7), and an SMS provider.
 Blocked: REOS-59 only. Nothing else waits on it.
+**Answered 2026-09-29: option (a).** Built as config `Auth:PasswordResetUrl` (absolute https only, else ignored with a logged warning), exposed via anonymous `GET /auth/config`, shown as a link on the sign-in page. Reset and MFA are the identity provider's (e.g. Entra SSPR); the app stores no passwords or MFA secrets.

@@ -100,4 +100,21 @@ public class HostTests
     }
 
     private record Me(string Email, string Name, string[] Roles);
+
+    // REOS-59 / Q-006 option a: password reset is the IdP's; the app only exposes the link, anonymously, https only.
+    [Theory]
+    [InlineData("https://login.example.com/reset", "https://login.example.com/reset")]
+    [InlineData("http://login.example.com/reset", null)]
+    [InlineData("javascript:alert(1)", null)]
+    [InlineData(null, null)]
+    public async Task Auth_config_exposes_only_an_https_reset_link(string? configured, string? expected)
+    {
+        using var f = new ApiFactory(passwordResetUrl: configured);
+        var r = await f.CreateClient().GetAsync("/auth/config");   // no sign-in: the sign-in page needs it
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var body = await r.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var got = body.GetProperty("passwordResetUrl");
+        if (expected is null) Assert.Equal(System.Text.Json.JsonValueKind.Null, got.ValueKind);
+        else Assert.Equal(expected, got.GetString());
+    }
 }

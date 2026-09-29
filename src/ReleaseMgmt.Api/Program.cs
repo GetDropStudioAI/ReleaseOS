@@ -144,6 +144,15 @@ if (app.Environment.IsDevelopment())
         return Results.Ok();
     });
 }
+// Password reset lives at the identity provider (Q-006 option a, D12): the app only links to it. MFA comes with the IdP's reset flow.
+// Auth:PasswordResetUrl must be absolute https; anything else is ignored and logged so a bad value is visible, never silent.
+var resetUrl = config["Auth:PasswordResetUrl"];
+if (!string.IsNullOrWhiteSpace(resetUrl) && !(Uri.TryCreate(resetUrl, UriKind.Absolute, out var ru) && ru.Scheme == Uri.UriSchemeHttps))
+{
+    Log.Warning("Auth:PasswordResetUrl must be an absolute https URL; ignoring it");
+    resetUrl = null;
+}
+app.MapGet("/auth/config", [AllowAnonymous] () => Results.Ok(new { organisationSignIn = authority is not null, passwordResetUrl = string.IsNullOrWhiteSpace(resetUrl) ? null : resetUrl }));
 app.MapPost("/auth/logout", [AllowAnonymous] async (HttpContext http) =>
 {
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);

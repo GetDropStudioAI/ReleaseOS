@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { devLogin, getMe, logout, type Me } from './api'
+import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
@@ -76,6 +76,8 @@ function SignIn({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState('dev@example.com')
   const [role, setRole] = useState('RTE')
   const [error, setError] = useState<string | null>(null)
+  const [cfg, setCfg] = useState<AuthConfig | null>(null)
+  useEffect(() => { getAuthConfig().then(setCfg) }, [])
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -90,6 +92,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
         <p><label>Role <select className="line" value={role} onChange={e => setRole(e.target.value)}>
           {ROLES.map(r => <option key={r}>{r}</option>)}</select></label></p>
         <p><button className="text" type="submit">Sign in (development)</button> <a href="/auth/login">Organisation sign-in</a></p>
+        {cfg?.passwordResetUrl && <p><a href={cfg.passwordResetUrl} rel="noreferrer">Forgot your password? Reset it with your authenticator app or MFA code</a></p>}
         {error && <p className="bad" role="alert">{error}</p>}
       </form>
       <p><ThemeChoices /></p>

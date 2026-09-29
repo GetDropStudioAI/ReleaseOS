@@ -46,3 +46,8 @@ export async function devLogin(email: string, name: string, role: string): Promi
 export async function logout() {
   await fetch('/auth/logout', { method: 'POST' })
 }
+
+export interface AuthConfig { organisationSignIn: boolean; passwordResetUrl: string | null }
+export async function getAuthConfig(): Promise<AuthConfig> {
+  try { return await get<AuthConfig>('/auth/config') } catch { return { organisationSignIn: true, passwordResetUrl: null } }
+}

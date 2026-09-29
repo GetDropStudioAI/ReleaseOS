@@ -11,14 +11,14 @@ namespace ReleaseMgmt.Api.Tests;
 /// <summary>HTTP contract for state changes: 422 names the guard, 409 returns the current row, roles are enforced (M1).</summary>
 public class LifecycleContractTests
 {
-    private static async Task<HttpClient> As(ApiFactory f, string role, string email)
+    internal static async Task<HttpClient> As(ApiFactory f, string role, string email)
     {
         var c = f.CreateClient();
         (await c.PostAsJsonAsync("/auth/dev-login", new { email, name = email.Split('@')[0], role })).EnsureSuccessStatusCode();
         return c;
     }
 
-    private static string UserId(ApiFactory f, string email)
+    internal static string UserId(ApiFactory f, string email)
     {
         using var c = new SqliteConnection($"Data Source={f.DbPath};Pooling=False");
         c.Open();
@@ -28,7 +28,7 @@ public class LifecycleContractTests
         return (string)cmd.ExecuteScalar()!;
     }
 
-    private static void Sql(ApiFactory f, string sql)
+    internal static void Sql(ApiFactory f, string sql)
     {
         using var c = new SqliteConnection($"Data Source={f.DbPath};Pooling=False");
         c.Open();
@@ -38,7 +38,16 @@ public class LifecycleContractTests
     }
 
     /// <summary>Train t1 (High risk, target 2026-10-30) with g1 Code Freeze (Standard, owned by rteId) and g2 Compliance Sign-off (owned by govId), one open task each.</summary>
-    private static void SeedTrain(ApiFactory f, string rteId, string govId) => Sql(f, $@"
+    internal static string Scalar(ApiFactory f, string sql)
+    {
+        using var c = new SqliteConnection($"Data Source={f.DbPath};Pooling=False");
+        c.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = sql;
+        return Convert.ToString(cmd.ExecuteScalar())!;
+    }
+
+    internal static void SeedTrain(ApiFactory f, string rteId, string govId) => Sql(f, $@"
         INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('t1','R26.10','2026-10-30','High','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z');
         INSERT INTO StageGates(Id,ReleaseTrainId,GateName,GateClass,SequenceOrder,OffsetDays,DueOn,RequiredBeforeStatus,OwnerUserId,Status,LastChangedByUserId) VALUES
           ('g1','t1','Code Freeze','Standard',1,5,'2026-10-23','Gated','{rteId}','Pending','{rteId}'),

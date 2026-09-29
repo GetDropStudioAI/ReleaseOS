@@ -3,6 +3,7 @@ import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
 import { Stream, TrainHeader, useStream } from './Trains'
+import { useLive, type LiveState } from './live'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
@@ -72,6 +73,17 @@ function SessionControls({ onSignedOut, onStopped }: { onSignedOut: () => void; 
   )
 }
 
+const LIVE: Record<LiveState, { g: string; cls: string; word: string }> = {
+  connecting: { g: '◐', cls: 'muted', word: 'Connecting…' }, live: { g: '●', cls: 'ok', word: 'Live' },
+  reconnecting: { g: '◐', cls: 'warn', word: 'Reconnecting…' }, offline: { g: '○', cls: 'bad', word: 'Offline: reload to reconnect' },
+}
+// Server clock pushed every 10 s, so every tab shows the same time; the state is words + glyph, never a badge.
+function LiveStatus({ state, time }: { state: LiveState; time: string | null }) {
+  const x = LIVE[state]
+  const when = time ? new Date(time).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null
+  return <span className="muted live" role="status">{when && <>{when} · </>}<span className={x.cls}>{x.g} {x.word}</span></span>
+}
+
 function SignIn({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState('dev@example.com')
   const [role, setRole] = useState('RTE')
@@ -108,6 +120,8 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null)
   const { rows, reload } = useStream(!!me)
   const [rev, setRev] = useState(0)
+  const refetch = () => { setRev(n => n + 1); reload() }
+  const live = useLive(!!me, { onTrainChanged: refetch, onResync: refetch })
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
   useEffect(() => { refresh() }, [])
 
@@ -126,6 +140,7 @@ export default function App() {
           {canAdmin && <a href="#admin" onClick={e => { e.preventDefault(); setView('admin') }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
         </nav>
         <span className="spacer" />
+        <LiveStatus state={live.state} time={live.serverTime} />
         <ThemeChoices />
         <span className="muted">{me.name} · {me.roles.join(', ')}</span>
         <button type="button" className="text" onClick={async () => { await logout(); setMe(null) }}>Sign out</button>

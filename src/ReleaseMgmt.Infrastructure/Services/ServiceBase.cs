@@ -60,13 +60,13 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
 
     protected static bool VersionMismatch(int? expected, int current) => expected is int v && v != current;
 
-    /// <summary>One AuditEvents row per service write (D27).</summary>
-    protected void Audit(ReleaseDbContext db, Actor actor, string? trainId, string entityType, string entityId, string action, object? before = null, object? after = null)
+    /// <summary>One AuditEvents row per service write (D27). A null actor is the system (scheduler, notifier, sync).</summary>
+    protected void Audit(ReleaseDbContext db, Actor? actor, string? trainId, string entityType, string entityId, string action, object? before = null, object? after = null)
     {
         if (trainId is not null) Touched.Value?.Add(trainId);
         db.Set<AuditEvents>().Add(new AuditEvents
         {
-            OccurredAt = Now, ActorUserId = actor.UserId, ReleaseTrainId = trainId, EntityType = entityType, EntityId = entityId, Action = action,
+            OccurredAt = Now, ActorUserId = actor?.UserId, ReleaseTrainId = trainId, EntityType = entityType, EntityId = entityId, Action = action,
             BeforeJson = before is null ? null : JsonSerializer.Serialize(before, Json),
             AfterJson = after is null ? null : JsonSerializer.Serialize(after, Json),
         });

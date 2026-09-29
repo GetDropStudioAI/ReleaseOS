@@ -35,6 +35,11 @@ var connectionString = $"Data Source={dbPath}";
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddReleaseMgmtDb(connectionString);
 builder.Services.AddSingleton<IAlertSink, LoggingAlertSink>();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, ReleaseMgmt.Api.Realtime.UidUserIdProvider>();
+builder.Services.AddSingleton<IRealtimePublisher, ReleaseMgmt.Api.Realtime.SignalRPublisher>();   // services take it as an optional ctor argument
+builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.ServerTimeBroadcaster>();
+builder.Services.AddSingleton<INotifier, Notifier>();
 builder.Services.AddSingleton<UserProvisioner>();
 builder.Services.AddSingleton<TrainLifecycleService>();
 builder.Services.AddSingleton<GateService>();
@@ -120,6 +125,7 @@ app.MapGet("/healthz", [AllowAnonymous] async (IDbContextFactory<ReleaseDbContex
     return db == "ok" ? Results.Ok(body) : Results.Json(body, statusCode: 503);
 });
 
+app.MapHub<ReleaseMgmt.Api.Realtime.TrainsHub>(ReleaseMgmt.Api.Realtime.TrainsHub.Path);
 var api = app.MapGroup("/api/v1");
 api.MapGet("/me", (ClaimsPrincipal u) => new
 {

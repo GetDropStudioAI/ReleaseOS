@@ -39,7 +39,7 @@ Visual mockups are also on the claude.ai canvas "Release Management App — Scre
 
 ## Run locally
 ```
-python start.py            # starts the API (:5080) and the frontend (:5173), opens the browser
+python start.py            # starts the API (:6080) and the frontend (:6273), opens the browser
 python start.py status     # what is the running instance doing?
 python start.py reset      # pull the latest from origin/Team, restart both, the browser tab reloads
 python start.py stop       # stop both and exit

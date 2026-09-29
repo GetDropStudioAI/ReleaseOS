@@ -10,7 +10,7 @@
 The same actions are available in the app toolbar (Reset, Exit) while it runs under this script.
 Requires Python 3.9+, the .NET 10 SDK and Node 22 on PATH.
 If a Reset pulls a new start.py, it relaunches itself so the new supervisor logic takes effect.
-Backend: http://localhost:5080 (dotnet run, Development). Frontend: http://localhost:5173 (Vite, proxies /api, /hub, /auth).
+Backend: http://localhost:6080 (dotnet run, Development). Frontend: http://localhost:6273 (Vite, proxies /api, /hub, /auth).
 A small control channel listens on 127.0.0.1:5099 only; every state-changing call needs a per-run token.
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ WEB_DIR = ROOT / "src" / "ReleaseMgmt.Web"
 LOG_DIR = ROOT / "logs"
 STATE_FILE = ROOT / ".start-control.json"   # port + token of the running instance (gitignored)
 BRANCH = "Team"
-API_PORT, WEB_PORT, CONTROL_PORT = 5080, 5173, 5099
+API_PORT, WEB_PORT, CONTROL_PORT = 6080, 6273, 5099
 API_URL, WEB_URL = f"http://localhost:{API_PORT}", f"http://localhost:{WEB_PORT}"
 IS_WINDOWS = os.name == "nt"
 

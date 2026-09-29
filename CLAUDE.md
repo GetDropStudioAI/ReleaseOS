@@ -59,7 +59,7 @@ python3 tests/reference/seed_and_query.py --write   # regenerates fixtures/seed.
 python3 tools/gen_entities.py                   # regenerate Domain entities + EF model map after any db/schema.sql change
 # then re-scaffold + patch the two migrations (they execute schema.sql verbatim, see docs/QUESTIONS.md Q-001):
 #   cd src/ReleaseMgmt.Infrastructure && dotnet ef migrations add Schema -o Migrations && dotnet ef migrations add Triggers -o Migrations && python3 ../../tools/patch_migrations.py
-cd src/ReleaseMgmt.Web && npm run dev            # Vite dev server, proxies /api to :5080
+cd src/ReleaseMgmt.Web && npm run dev            # Vite dev server, proxies /api to :6080
 npx playwright test                              # from tests/e2e
 ```
 

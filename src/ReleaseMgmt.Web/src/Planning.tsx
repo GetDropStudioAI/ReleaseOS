@@ -4,6 +4,9 @@ import {
   type GateDetail, type GateRow, type Owner, type ProductsResponse, type WindowRow,
 } from './api'
 import { day, errMsg, tMinus } from './format'
+import { useDraft } from './session'
+import { Conflict, isConflict } from './Conflict'
+import type { ApiError } from './api'
 
 export type Selection = { kind: 'gate'; id: string } | { kind: 'task'; gateId: string; id: string } | { kind: 'product'; id: string } | null
 
@@ -26,17 +29,19 @@ export function windowText(w: WindowRow) {
 
 export function WindowLine({ trainId, canEdit, refreshKey, onChanged }: { trainId: string; canEdit: boolean; refreshKey: number; onChanged: () => void }) {
   const [win, setWin] = useState<WindowRow | null | undefined>(undefined)
-  const [editing, setEditing] = useState(false)
-  const [start, setStart] = useState(''); const [end, setEnd] = useState('')
+  const [draft, setDraft] = useDraft<{ start: string; end: string }>(`window:${trainId}`)   // survives a closed tab (session engine)
   const [err, setErr] = useState<string | null>(null)
+  const [conflict, setConflict] = useState<ApiError | null>(null)
+  const editing = draft !== undefined
+  const start = draft?.start ?? '', end = draft?.end ?? ''
   useEffect(() => { getWindow(trainId).then(setWin).catch(e => setErr(errMsg(e))) }, [trainId, refreshKey])
   if (win === undefined) return null
-  const open = () => { setStart(win ? localInput(win.startsAt) : ''); setEnd(win ? localInput(win.endsAt) : ''); setErr(null); setEditing(true) }
-  const save = async () => {
-    setErr(null)
+  const open = () => { setErr(null); setConflict(null); setDraft({ start: win ? localInput(win.startsAt) : '', end: win ? localInput(win.endsAt) : '' }) }
+  const save = async (version = win?.version) => {
+    setErr(null); setConflict(null)
     if (!start || !end) { setErr('Enter both a start and an end.'); return }
-    try { await putWindow(trainId, toUtc(start), toUtc(end), win?.version); setEditing(false); onChanged() }
-    catch (e) { setErr(errMsg(e)); onChanged() }   // on a 409 the refetch shows the current window
+    try { await putWindow(trainId, toUtc(start), toUtc(end), version); setDraft(undefined); onChanged() }
+    catch (e) { if (isConflict(e)) setConflict(e); else setErr(errMsg(e)); onChanged() }   // a 409 keeps the draft; the user chooses below
   }
   if (!editing) return (
     <span>Window {win ? <span className="mono">{windowText(win)}</span> : <span className="muted">not set</span>}
@@ -45,11 +50,16 @@ export function WindowLine({ trainId, canEdit, refreshKey, onChanged }: { trainI
   )
   return (
     <span className="inline-form">
-      <label>Starts <input className="line" type="datetime-local" value={start} onChange={e => setStart(e.target.value)} /></label>{' '}
-      <label>Ends <input className="line" type="datetime-local" value={end} onChange={e => setEnd(e.target.value)} /></label>{' '}
-      <button type="button" className="text" onClick={save}>Save window</button>{' '}
-      <button type="button" className="text" onClick={() => setEditing(false)}>Cancel</button>
+      <label>Starts <input className="line" type="datetime-local" value={start} onChange={e => setDraft({ start: e.target.value, end })} /></label>{' '}
+      <label>Ends <input className="line" type="datetime-local" value={end} onChange={e => setDraft({ start, end: e.target.value })} /></label>{' '}
+      <button type="button" className="text" onClick={() => save()}>Save window</button>{' '}
+      <button type="button" className="text" onClick={() => setDraft(undefined)}>Cancel</button>
       {err && <span className="bad" role="alert"> ✗ {err}</span>}
+      {conflict && (
+        <Conflict error={conflict} what="window">
+          <button type="button" className="text" onClick={() => save((conflict.body?.current as { version?: number } | undefined)?.version)}>Overwrite with mine</button>{' '}
+          <button type="button" className="text" onClick={() => { setDraft(undefined); setConflict(null) }}>Use theirs</button>
+        </Conflict>)}
     </span>
   )
 }
@@ -101,7 +111,7 @@ export function Timeline({ gates, todayT, targetDate, selectedId, onSelect }: { 
   return (
     <section aria-label="Gate timeline">
       <h2 className="cap dark">Gates · business days to target</h2>
-      <svg className="timeline" width="100%" viewBox={`0 0 ${W} 104`} role="img"
+      <svg className="timeline" width="100%" viewBox={`0 0 ${W} 104`} role="group"
            aria-label={`Gate timeline to ${day(targetDate)}: ` + gates.map(g => `${g.name} ${STATUS[g.status]?.word ?? g.status}`).join(', ')}>
         <line className="tl-axis" x1={L} x2={R} y1="52" y2="52" />
         <line className="tl-now" x1={nowX} x2={nowX} y1="16" y2="62" strokeDasharray="3 3" />
@@ -132,36 +142,39 @@ export function Timeline({ gates, todayT, targetDate, selectedId, onSelect }: { 
 // ---- Checklist of the selected gate ----------------------------------------------------------------------------------------------------------
 export function Checklist({ gateId, refreshKey, selection, onSelect, onChanged }: { gateId: string; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void }) {
   const [gate, setGate] = useState<GateDetail | null>(null)
-  const [adding, setAdding] = useState(false)
-  const [text, setText] = useState('')
+  const [draft, setDraft] = useDraft<{ text: string; ownerId: string }>(`addTask:${gateId}`)   // survives a closed tab (session engine)
+  const adding = draft !== undefined
+  const text = draft?.text ?? ''
   const [owners, setOwners] = useState<Owner[]>([])
-  const [ownerId, setOwnerId] = useState('')
+  const ownerId = draft?.ownerId || owners[0]?.id || ''
   const [err, setErr] = useState<string | null>(null)
+  const [conflict, setConflict] = useState<ApiError | null>(null)
   useEffect(() => { getGate(gateId).then(setGate).catch(e => setErr(errMsg(e))) }, [gateId, refreshKey])
-  useEffect(() => { if (adding && owners.length === 0) getOwners().then(o => { setOwners(o); setOwnerId(o[0]?.id ?? '') }).catch(e => setErr(errMsg(e))) }, [adding, owners.length])
+  useEffect(() => { if (adding && owners.length === 0) getOwners().then(setOwners).catch(e => setErr(errMsg(e))) }, [adding, owners.length])
   if (!gate) return err ? <p className="bad" role="alert">✗ {err}</p> : null
   const done = gate.tasks.filter(t => t.done).length
   const toggle = async (t: GateDetail['tasks'][number]) => {
-    setErr(null)
-    try { await taskAction(t.id, t.done ? 'reopen' : 'complete', t.version); onChanged() } catch (e) { setErr(errMsg(e)); onChanged() }
+    setErr(null); setConflict(null)
+    try { await taskAction(t.id, t.done ? 'reopen' : 'complete', t.version); onChanged() } catch (e) { if (isConflict(e)) setConflict(e); else setErr(errMsg(e)); onChanged() }
   }
   const add = async () => {
     const owner = owners.find(o => o.id === ownerId)
     if (!text.trim() || !owner) { setErr('A task needs a description and an owner.'); return }
     setErr(null)
-    try { await addTask(gate.id, text.trim(), owner); setText(''); setAdding(false); onChanged() } catch (e) { setErr(errMsg(e)) }
+    try { await addTask(gate.id, text.trim(), owner); setDraft(undefined); onChanged() } catch (e) { setErr(errMsg(e)) }
   }
   return (
     <section aria-label="Checklist">
       <div className="section-head"><h2 className="cap accent">{gate.name} · checklist</h2>
-        <span className="muted"><span className="mono label">{done} / {gate.tasks.length}</span> done · <button type="button" className="text" onClick={() => setAdding(a => !a)}>Add task</button></span></div>
+        <span className="muted"><span className="mono label">{done} / {gate.tasks.length}</span> done · <button type="button" className="text" onClick={() => setDraft(adding ? undefined : { text: '', ownerId: '' })}>Add task</button></span></div>
       {adding && (
         <p className="inline-form">
-          <label>Task <input className="line wide" value={text} onChange={e => setText(e.target.value)} placeholder="What has to happen" /></label>{' '}
-          <label>Owner <select className="line" value={ownerId} onChange={e => setOwnerId(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>{' '}
-          <button type="button" className="text" onClick={add}>Add</button> <button type="button" className="text" onClick={() => setAdding(false)}>Cancel</button>
+          <label>Task <input className="line wide" value={text} onChange={e => setDraft({ text: e.target.value, ownerId })} placeholder="What has to happen" /></label>{' '}
+          <label>Owner <select className="line" value={ownerId} onChange={e => setDraft({ text, ownerId: e.target.value })}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>{' '}
+          <button type="button" className="text" onClick={add}>Add</button> <button type="button" className="text" onClick={() => setDraft(undefined)}>Cancel</button>
         </p>)}
       {err && <p className="bad" role="alert">✗ {err}</p>}
+      {conflict && <Conflict error={conflict} what="task" />}
       {gate.tasks.length === 0 ? <p className="muted">No tasks on this gate.</p> : (
         <table className="grid">
           <thead><tr><th>State</th><th>Task</th><th>Owner</th><th>Product</th><th>Done</th><th /></tr></thead>
@@ -191,11 +204,14 @@ export function Inspector({ selection, trainId, refreshKey, onClose, onChanged }
   const [gate, setGate] = useState<GateDetail | null>(null)
   const [products, setProducts] = useState<ProductsResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  useEffect(() => { setErr(null); if (gateId) getGate(gateId).then(setGate).catch(e => setErr(errMsg(e))); else setGate(null) }, [gateId, refreshKey])
+  const [conflict, setConflict] = useState<ApiError | null>(null)
+  // Messages belong to what is selected, so they reset only when the selection changes. Refetching after a 409 must not wipe the conflict notice.
+  useEffect(() => { setErr(null); setConflict(null) }, [selection?.kind, gateId, selection && selection.kind !== 'gate' ? selection.id : null])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (gateId) getGate(gateId).then(setGate).catch(e => setErr(errMsg(e))); else setGate(null) }, [gateId, refreshKey])
   useEffect(() => { if (selection?.kind === 'product' && trainId) getProducts(trainId).then(setProducts).catch(() => setProducts(null)) }, [selection, trainId, refreshKey])
 
   if (!selection) return <p className="muted">Select a train, gate or task to see its detail here.</p>
-  const act = async (fn: () => Promise<unknown>) => { setErr(null); try { await fn(); onChanged() } catch (e) { setErr(errMsg(e)); onChanged() } }
+  const act = async (fn: () => Promise<unknown>) => { setErr(null); setConflict(null); try { await fn(); onChanged() } catch (e) { if (isConflict(e)) setConflict(e); else setErr(errMsg(e)); onChanged() } }
   const head = (kind: string) => <div className="section-head"><span className="cap">Inspector · {kind}</span><button type="button" className="text quiet" aria-label="Close inspector" onClick={onClose}>Close</button></div>
 
   if (selection.kind === 'product') {
@@ -217,7 +233,8 @@ export function Inspector({ selection, trainId, refreshKey, onClose, onChanged }
       <dl className="facts"><dt>State</dt><dd className={t.done ? 'ok' : undefined}>{t.done ? '✓ done' : '○ open'}</dd><dt>Owner</dt><dd>{t.owner ?? '—'}</dd><dt>Product</dt><dd>{t.product ?? '—'}</dd>
         <dt>Gate</dt><dd>{gate.name}</dd>{t.done && <><dt>Completed</dt><dd>{t.completedBy ?? ''} {t.completedAt ? new Date(t.completedAt).toLocaleString('en-GB') : ''}</dd></>}</dl>
       <p><button type="button" className="text" onClick={() => act(() => taskAction(t.id, t.done ? 'reopen' : 'complete', t.version))}>{t.done ? 'Reopen task' : 'Mark done'}</button></p>
-      {err && <p className="bad" role="alert">✗ {err}</p>}</>)
+      {err && <p className="bad" role="alert">✗ {err}</p>}
+      {conflict && <Conflict error={conflict} what="task" />}</>)
   }
 
   const canStart = gate.status === 'Pending', canFail = gate.status === 'InProgress', canReopen = gate.status === 'Failed' || gate.status === 'Certified'
@@ -238,5 +255,6 @@ export function Inspector({ selection, trainId, refreshKey, onClose, onChanged }
       : <div role="status" aria-label="Why Certify is unavailable"><p className="cap">Certify unavailable</p>
           <ul className="plain">{gate.certify.reasons.map((r, i) => <li key={i} className="bad">✗ {r}</li>)}</ul></div>)}
     {gate.status === 'Pending' && <p className="muted">Start the gate first, then work its checklist.</p>}
-    {err && <p className="bad" role="alert">✗ {err}</p>}</>)
+    {err && <p className="bad" role="alert">✗ {err}</p>}
+    {conflict && <Conflict error={conflict} what="gate" />}</>)
 }

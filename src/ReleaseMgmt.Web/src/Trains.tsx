@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSession } from './session'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { advanceTrain, getReadiness, getStream, getTrain, type Readiness, type StreamRow, type TrainDetail } from './api'
@@ -21,7 +22,7 @@ export function Glyph({ status }: { status: string }) {
 }
 
 export function Stream({ rows, selected, onSelect }: { rows: StreamRow[] | null; selected: string | null; onSelect: (id: string) => void }) {
-  const [q, setQ] = useState('')
+  const { filter: q, setFilter: setQ } = useSession()   // the filter is saved with the tab's UI state
   const shown = (rows ?? []).filter(r => r.title.toLowerCase().includes(q.trim().toLowerCase()))
   return (
     <>

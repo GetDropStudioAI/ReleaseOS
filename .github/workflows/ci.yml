@@ -39,3 +39,21 @@ jobs:
         run: python tests/reference/test_schema.py
       - name: Tooling tests (start.py reset git logic)
         run: python tests/tools/test_start.py
+      - name: Install e2e dependencies
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install chromium
+      - name: E2E (Playwright drives the real app, started through start.py)
+        working-directory: tests/e2e
+        run: npx playwright test
+      - name: Keep the Playwright report when E2E fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.os }}
+          path: |
+            tests/e2e/playwright-report
+            tests/e2e/test-results
+            logs
+          if-no-files-found: ignore

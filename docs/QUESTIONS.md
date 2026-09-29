@@ -64,3 +64,9 @@ Context: the mockup shows "Window 01:00–05:00 CT". `DeploymentWindows` stores 
 Question: which zone does the UI use to show and edit the window?
 Options considered: (a) the viewer's browser zone / (b) one organisation zone from config (e.g. `Display:TimeZone = America/Chicago`) / (c) per-train zone (schema change).
 Blocked: nothing. API is UTC only (`PUT /trains/{id}/window` takes UTC instants). Building (a) for the UI provisionally, with the zone abbreviation shown next to the times so nobody misreads them; (b) is a small change once you name the zone.
+
+## Q-009 · M2 · Do UI-state autosaves get an audit row and a Version? (REOS-26)
+Context: CLAUDE.md rule 3 says every service write stamps `Version` and writes one `AuditEvents` row. `UserSessionState` (per-tab UI state, saved every second while typing) has no `Version` column in schema.sql.
+Question: does rule 3 apply to it?
+Options considered: (a) exempt it: it is a private UI scratchpad, not a domain record; auditing would bury the real audit log in autosaves / (b) audit each save / (c) audit only draft commits (those already are audited by the domain write they produce).
+Blocked: nothing. Built (a): `SessionService` writes no audit rows and no Version; a save only ever touches the caller's own (user, clientId) row. Domain writes made from a draft (add task, set window) are audited as before.

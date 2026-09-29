@@ -1,0 +1,46 @@
+import { useCallback, useEffect, useState } from 'react'
+import type { Selection } from './Planning'
+
+/** The URL carries the train and the selected node, so a deep link or a refresh reopens the same Inspector (PROJECT_SCOPE 5.4). */
+export interface Route { view: 'trains' | 'admin'; trainId: string | null; selection: Selection }
+
+export const ROOT: Route = { view: 'trains', trainId: null, selection: null }
+
+export function parsePath(path: string): Route {
+  const seg = path.split('/').filter(Boolean).map(decodeURIComponent)
+  if (seg[0] === 'admin') return { view: 'admin', trainId: null, selection: null }
+  if (seg[0] !== 'trains' || !seg[1]) return ROOT
+  const trainId = seg[1]
+  if (seg[2] === 'gates' && seg[3]) {
+    if (seg[4] === 'tasks' && seg[5]) return { view: 'trains', trainId, selection: { kind: 'task', gateId: seg[3], id: seg[5] } }
+    return { view: 'trains', trainId, selection: { kind: 'gate', id: seg[3] } }
+  }
+  if (seg[2] === 'products' && seg[3]) return { view: 'trains', trainId, selection: { kind: 'product', id: seg[3] } }
+  return { view: 'trains', trainId, selection: null }
+}
+
+export function buildPath(r: Route): string {
+  if (r.view === 'admin') return '/admin'
+  if (!r.trainId) return '/'
+  const e = encodeURIComponent, base = `/trains/${e(r.trainId)}`
+  const s = r.selection
+  if (!s) return base
+  if (s.kind === 'gate') return `${base}/gates/${e(s.id)}`
+  if (s.kind === 'task') return `${base}/gates/${e(s.gateId)}/tasks/${e(s.id)}`
+  return `${base}/products/${e(s.id)}`
+}
+
+export function useRoute() {
+  const [route, setRoute] = useState<Route>(() => parsePath(window.location.pathname))
+  useEffect(() => {
+    const onPop = () => setRoute(parsePath(window.location.pathname))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const go = useCallback((r: Route, replace = false) => {
+    const path = buildPath(r)
+    if (path !== window.location.pathname) window.history[replace ? 'replaceState' : 'pushState'](null, '', path)
+    setRoute(r)
+  }, [])
+  return { route, go }
+}

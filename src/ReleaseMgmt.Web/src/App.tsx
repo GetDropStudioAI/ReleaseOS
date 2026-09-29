@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
 import { Stream, TrainHeader, useStream } from './Trains'
-import { Inspector, type Selection } from './Planning'
+import { Inspector } from './Planning'
+import { parsePath, ROOT, useRoute, type Route } from './route'
+import { SessionProvider, useSession } from './session'
 import { useLive, type LiveState } from './live'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
 const NAV = ['Trains', 'Calendar', 'Analytics', 'Sync health', 'Imports & exports']
-type View = 'trains' | 'admin'
 
 function ThemeChoices() {
   const [choice, setChoice] = useState<ThemeChoice>(loadTheme())
@@ -116,14 +117,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined)
   const [failed, setFailed] = useState(false)
-  const [view, setView] = useState<View>('trains')
   const [stopped, setStopped] = useState(false)
-  const [selected, setSelected] = useState<string | null>(null)
-  const { rows, reload } = useStream(!!me)
-  const [rev, setRev] = useState(0)
-  const [selection, setSelection] = useState<Selection>(null)
-  const refetch = () => { setRev(n => n + 1); reload() }
-  const live = useLive(!!me, { onTrainChanged: refetch, onResync: refetch })
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
   useEffect(() => { refresh() }, [])
 
@@ -131,32 +125,56 @@ export default function App() {
   if (failed) return <main className="signin"><p className="bad" role="alert">✗ Cannot reach the server.</p></main>
   if (me === undefined) return <main className="signin"><p className="muted">Loading…</p></main>
   if (me === null) return <SignIn onDone={refresh} />
+  return <SessionProvider enabled><Signed me={me} onSignedOut={() => setMe(null)} onStopped={() => setStopped(true)} /></SessionProvider>
+}
+
+function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => void; onStopped: () => void }) {
+  const { route, go } = useRoute()
+  const session = useSession()
+  const { rows, reload } = useStream(true)
+  const [rev, setRev] = useState(0)
+  const refetch = () => { setRev(n => n + 1); reload() }
+  const live = useLive(true, { onTrainChanged: refetch, onResync: refetch })
+  const { view, trainId: selected, selection } = route
+
+  // A URL that names nothing (opening the app fresh) restores where this or the most recent tab was; a deep link always wins.
+  const restored = useRef(false)
+  useEffect(() => {
+    if (!session.ready || restored.current) return
+    restored.current = true
+    if (parsePath(window.location.pathname) === ROOT && session.restoredRoute && (session.restoredRoute.trainId || session.restoredRoute.view === 'admin')) go(session.restoredRoute, true)
+  }, [session.ready, session.restoredRoute, go])
+  useEffect(() => { if (session.ready && restored.current) session.saveRoute(route) }, [route, session.ready])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!session.ready) return <main className="signin"><p className="muted">Loading…</p></main>
 
   const canAdmin = me.roles.includes('RTE') || me.roles.includes('ReleaseManager')
+  const to = (r: Partial<Route>) => go({ ...route, ...r })
   return (
     <div className="shell">
       <header className="toolbar">
         <strong>Release Management</strong>
         <nav aria-label="Primary" className="tabs">
-          {NAV.map((n, i) => <a key={n} href="#" onClick={e => { e.preventDefault(); setView('trains') }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
-          {canAdmin && <a href="#admin" onClick={e => { e.preventDefault(); setView('admin') }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
+          {NAV.map((n, i) => <a key={n} href="/" onClick={e => { e.preventDefault(); to({ view: 'trains' }) }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
+          {canAdmin && <a href="/admin" onClick={e => { e.preventDefault(); to({ view: 'admin' }) }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
         </nav>
         <span className="spacer" />
         <LiveStatus state={live.state} time={live.serverTime} />
         <ThemeChoices />
         <span className="muted">{me.name} · {me.roles.join(', ')}</span>
-        <button type="button" className="text" onClick={async () => { await logout(); setMe(null) }}>Sign out</button>
-        <SessionControls onSignedOut={() => setMe(null)} onStopped={() => setStopped(true)} />
+        <button type="button" className="text" onClick={async () => { await logout(); onSignedOut() }}>Sign out</button>
+        <SessionControls onSignedOut={onSignedOut} onStopped={onStopped} />
       </header>
       <aside className="stream" aria-label="Stream">
-        <Stream rows={rows} selected={selected} onSelect={id => { setSelected(id); setSelection(null); setView('trains') }} />
+        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null })} />
       </aside>
       <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={setSelection} canPlan={canAdmin} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">
-          <Inspector selection={selection} trainId={selected} refreshKey={rev} onClose={() => setSelection(null)} onChanged={refetch} />
+          <Inspector selection={selection} trainId={selected} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />
         </aside>
       )}
     </div>

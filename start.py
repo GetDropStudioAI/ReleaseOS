@@ -4,7 +4,7 @@
     python start.py                 start backend + frontend, open the browser, keep running (Ctrl+C stops both)
     python start.py --no-browser    same, without opening a browser tab
     python start.py status          ask the running instance what it is doing
-    python start.py reset           pull the latest code from origin/Team, restart both, the browser tab reloads itself
+    python start.py reset           pull the latest code from origin/main, restart both, the browser tab reloads itself
     python start.py stop            stop backend + frontend and exit the running instance
 
 The same actions are available in the app toolbar (Reset, Exit) while it runs under this script.
@@ -38,7 +38,7 @@ API_DIR = ROOT / "src" / "ReleaseMgmt.Api"
 WEB_DIR = ROOT / "src" / "ReleaseMgmt.Web"
 LOG_DIR = ROOT / "logs"
 STATE_FILE = ROOT / ".start-control.json"   # port + token of the running instance (gitignored)
-BRANCH = "Team"
+BRANCH = "main"
 API_PORT, WEB_PORT, CONTROL_PORT = 6080, 6273, 5099
 API_URL, WEB_URL = f"http://localhost:{API_PORT}", f"http://localhost:{WEB_PORT}"
 IS_WINDOWS = os.name == "nt"
@@ -200,11 +200,11 @@ class Supervisor:
         self.children = []
 
     def reset(self) -> None:
-        """Pull origin/Team, restart both processes. The page reloads itself once state is 'ready' again."""
+        """Pull origin/main, restart both processes. The page reloads itself once state is 'ready' again."""
         if not self.lock.acquire(blocking=False):
             return
         try:
-            self.set("resetting", "Pulling the latest code from origin/Team")
+            self.set("resetting", "Pulling the latest code from origin/main")
             script_before = hashlib.sha256((ROOT / "start.py").read_bytes()).hexdigest()   # must be taken before the pull rewrites the file
             try:
                 result = pull_latest()

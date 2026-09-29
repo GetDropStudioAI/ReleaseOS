@@ -28,4 +28,4 @@ M3, M4 and M5 run as parallel streams on separate branches once M2 merges, talki
 - Anything not covered goes to `docs/QUESTIONS.md`.
 
 ## Working rules
-Branch `Team`; one story at a time; each story's acceptance criteria is its test. Commit per story referencing the REOS key.
+Branch `main` (the `Team` branch is retired, 2026-09-29); one story at a time; each story's acceptance criteria is its test. Commit per story referencing the REOS key.

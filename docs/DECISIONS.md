@@ -38,6 +38,7 @@ Status as of 2026-09-28. **Confirmed** decisions are not to be revisited in buil
 | D30 | `SyncAlerts` is the alert table for **every** background failure: sources Jira, ServiceNow, SyncEngine (stall), Backup, Export, Webhook, Notifications | Name kept for continuity |
 | D31 | CI runs on `windows-latest` and `macos-latest` (build, test, `test_schema.py`; use `python` on Windows). Light and dark mode are required on every screen from M0, with a user override (`data-theme`) | Linux not in CI; server still documented for Windows Server and Linux |
 | D32 | Release Manager can do everything an RTE can (including v1 admin, audit and evidence reads); RTE or Release Manager may request a freeze override; approval stays with a different Release Manager or Governance Officer | Role separation between RTE and RM is weaker; SoD is unaffected |
+| D33 | The `Team` branch is retired (2026-09-29, John: its branch protection blocked pushes). Work happens on `main`; `start.py reset` pulls `origin/main`; CI runs on pushes to `main` and on pull requests | `main` has no PR gate unless a rule is added later |
 
 ## Rejected alternatives (do not reintroduce)
 

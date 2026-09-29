@@ -17,20 +17,20 @@ class PullLatest(unittest.TestCase):
         self.origin = self.tmp / "origin.git"
         self.work = self.tmp / "work"
         self.other = self.tmp / "other"
-        run("git", "init", "--bare", "-b", "Team", str(self.origin), cwd=self.tmp)
+        run("git", "init", "--bare", "-b", "main", str(self.origin), cwd=self.tmp)
         run("git", "clone", str(self.origin), str(self.work), cwd=self.tmp)
         for repo in (self.work,):
             run("git", "config", "user.email", "t@t", cwd=repo); run("git", "config", "user.name", "t", cwd=repo)
         (self.work / "a.txt").write_text("1")
         run("git", "add", "-A", cwd=self.work); run("git", "commit", "-m", "one", cwd=self.work)
-        run("git", "push", "-u", "origin", "Team", cwd=self.work)
+        run("git", "push", "-u", "origin", "main", cwd=self.work)
         run("git", "clone", str(self.origin), str(self.other), cwd=self.tmp)
         run("git", "config", "user.email", "t@t", cwd=self.other); run("git", "config", "user.name", "t", cwd=self.other)
 
     def push_from_other(self, name="b.txt", content="2"):
         (self.other / name).write_text(content)
         run("git", "add", "-A", cwd=self.other); run("git", "commit", "-m", f"add {name}", cwd=self.other)
-        run("git", "push", "origin", "Team", cwd=self.other)
+        run("git", "push", "origin", "main", cwd=self.other)
 
     def test_fast_forwards_and_reports_changed_files(self):
         self.push_from_other()
@@ -60,12 +60,12 @@ class PullLatest(unittest.TestCase):
             start.pull_latest(self.work)
         self.assertTrue((self.work / "c.txt").exists())   # local work untouched
 
-    def test_switches_to_Team_when_on_another_branch(self):
+    def test_switches_to_main_when_on_another_branch(self):
         run("git", "checkout", "-b", "scratch", cwd=self.work)
         self.push_from_other()
         r = start.pull_latest(self.work)
         self.assertEqual(r["switchedFrom"], "scratch")
-        self.assertEqual(start.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.work), "Team")
+        self.assertEqual(start.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.work), "main")
 
 
 class Helpers(unittest.TestCase):

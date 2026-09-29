@@ -41,7 +41,7 @@ Visual mockups are also on the claude.ai canvas "Release Management App — Scre
 ```
 python start.py            # starts the API (:6080) and the frontend (:6273), opens the browser
 python start.py status     # what is the running instance doing?
-python start.py reset      # pull the latest from origin/Team, restart both, the browser tab reloads
+python start.py reset      # pull the latest from origin/main, restart both, the browser tab reloads
 python start.py stop       # stop both and exit
 ```
 Needs Python 3.9+, the .NET 10 SDK and Node 22. In the app, **Reset** and **Sign out and exit** appear in the toolbar while it runs under `start.py`.

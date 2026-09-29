@@ -69,6 +69,11 @@ if (authority is not null)
 builder.Services.AddAuthorization(Policies.Configure);
 
 var app = builder.Build();
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    await using var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<ReleaseDbContext>>().CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA
 // assets must be served before the authorization middleware or the sign-in page itself would 401.
 app.UseDefaultFiles();
@@ -76,7 +81,7 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/healthz", [AllowAnonymous] async (IDbContextFactory<AppDbContext> dbf, BackupService backup, CancellationToken ct) =>
+app.MapGet("/healthz", [AllowAnonymous] async (IDbContextFactory<ReleaseDbContext> dbf, BackupService backup, CancellationToken ct) =>
 {
     string db;
     try

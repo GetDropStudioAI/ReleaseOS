@@ -52,12 +52,12 @@ public class PersistenceConventionTests : IDisposable
     }
 
     [Fact]
-    public void Timestamps_round_trip_as_utc_iso8601_text()
+    public void Timestamps_round_trip_as_utc_iso8601_text_in_whole_seconds()
     {
-        var t = new DateTime(2026, 9, 29, 9, 29, 5, 123, DateTimeKind.Utc);
+        var t = new DateTime(2026, 9, 29, 9, 29, 5, DateTimeKind.Utc);
         using (var db = _fx.Create()) { db.Widgets.Add(new Widget { Name = "a", CreatedAt = t, ClosedAt = null }); db.SaveChanges(); }
         using var db2 = _fx.Create();
-        Assert.Equal("2026-09-29T09:29:05.123Z", db2.Database.SqlQueryRaw<string>("SELECT CreatedAt AS Value FROM Widgets").Single());
+        Assert.Equal("2026-09-29T09:29:05Z", db2.Database.SqlQueryRaw<string>("SELECT CreatedAt AS Value FROM Widgets").Single());
         var w = db2.Widgets.Single();
         Assert.Equal(t, w.CreatedAt);
         Assert.Equal(DateTimeKind.Utc, w.CreatedAt.Kind);

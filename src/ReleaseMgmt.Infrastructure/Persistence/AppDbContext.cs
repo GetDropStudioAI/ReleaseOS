@@ -8,6 +8,8 @@ public class AppDbContext(DbContextOptions options) : DbContext(options)
     {
         configurationBuilder.Properties<DateTime>().HaveConversion<UtcTextConverter>();
         configurationBuilder.Properties<DateTime?>().HaveConversion<UtcTextConverter>();
+        configurationBuilder.Properties<DateOnly>().HaveConversion<DateTextConverter>();
+        configurationBuilder.Properties<DateOnly?>().HaveConversion<DateTextConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

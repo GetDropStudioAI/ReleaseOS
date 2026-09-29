@@ -8,7 +8,7 @@ public static class DbRegistration
     public static IServiceCollection AddReleaseMgmtDb(this IServiceCollection services, string connectionString) =>
         services
             .AddSingleton<SqliteConnectionInterceptor>()
-            .AddDbContextFactory<AppDbContext>((sp, o) => o
+            .AddDbContextFactory<ReleaseDbContext>((sp, o) => o
                 .UseSqlite(connectionString)
                 .AddInterceptors(sp.GetRequiredService<SqliteConnectionInterceptor>()));
 }

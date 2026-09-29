@@ -11,13 +11,20 @@ namespace ReleaseMgmt.Api.Realtime;
 /// ServerTime(iso) every 10 s. Payloads are hints: clients refetch through the normal, authorised API.
 /// </summary>
 [Authorize(Policy = Policies.Read)]
-public sealed class TrainsHub : Hub
+public sealed class TrainsHub(TimeProvider time) : Hub
 {
     public const string Path = "/hub/trains";
     public const string TrainChanged = "TrainChanged";
     public const string NotificationCreated = "NotificationCreated";
     public const string ServerTime = "ServerTime";
     public const string ForecastChanged = "ForecastChanged";
+
+    /// <summary>A new connection gets the server clock straight away, so countdowns are right from the first second (the 10 s timer keeps them honest).</summary>
+    public override async Task OnConnectedAsync()
+    {
+        await Clients.Caller.SendAsync(ServerTime, time.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
+        await base.OnConnectedAsync();
+    }
 }
 
 /// <summary>Routes Clients.User(id) by the Users.Id in the "uid" claim (set at sign-in by UserProvisioner).</summary>
@@ -52,7 +59,7 @@ public sealed class ServerTimeBroadcaster(IHubContext<TrainsHub> hub, TimeProvid
         {
             while (await timer.WaitForNextTickAsync(stop))
             {
-                try { await hub.Clients.All.SendAsync(TrainsHub.ServerTime, time.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"), stop); }
+                try { await hub.Clients.All.SendAsync(TrainsHub.ServerTime, time.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"), stop); }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     log.LogError(ex, "ServerTime broadcast failed");

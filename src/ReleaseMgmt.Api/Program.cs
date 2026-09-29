@@ -143,6 +143,8 @@ api.MapGet("/me", (ClaimsPrincipal u) => new
 }).RequireAuthorization(Policies.Read);
 api.MapLifecycle();
 api.MapTrainQueries();
+api.MapGet("/config", (IConfiguration c) => Results.Ok(new { displayTimeZone = c["Display:TimeZone"] ?? "America/Chicago" })).RequireAuthorization(Policies.Read);
+if (app.Environment.IsDevelopment()) api.MapDev();
 api.MapSession();
 api.MapRunbook();
 api.MapRuns();

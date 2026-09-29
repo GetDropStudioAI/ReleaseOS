@@ -95,7 +95,7 @@ public class RealtimeTests
         await using (hub)
         {
             var e = await Next(events, "ServerTime");
-            Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", (string)e[1]);
+            Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", (string)e[1]);
         }
     }
 

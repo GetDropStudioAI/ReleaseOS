@@ -24,15 +24,13 @@ function ThemeChoices() {
 }
 
 /** Reset and Exit, shown only when start.py is supervising the app. Confirmation is inline (no modals). */
-function SessionControls({ onSignedOut }: { onSignedOut: () => void }) {
+function SessionControls({ onSignedOut, onStopped }: { onSignedOut: () => void; onStopped: () => void }) {
   const [status, setStatus] = useState<ControlStatus | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmExit, setConfirmExit] = useState(false)
-  const [stopped, setStopped] = useState(false)
 
   useEffect(() => { controlStatus().then(setStatus) }, [])
-  if (stopped) return <p className="bad" role="status">The app has stopped. You can close this tab.</p>
   if (!status) return null
 
   const reset = async () => {
@@ -50,7 +48,7 @@ function SessionControls({ onSignedOut }: { onSignedOut: () => void }) {
     onSignedOut()
     const r = await requestExit()
     if (!r.ok) { setBusy(null); setError(r.message); return }
-    setStopped(true)
+    onStopped() // App shows the stopped page; this component is gone after sign-out, so the notice must live above it
   }
 
   return (
@@ -103,9 +101,11 @@ export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined)
   const [failed, setFailed] = useState(false)
   const [view, setView] = useState<View>('trains')
+  const [stopped, setStopped] = useState(false)
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
   useEffect(() => { refresh() }, [])
 
+  if (stopped) return <main className="signin"><h1>Release Management</h1><p role="status">The app has stopped. You can close this tab.</p></main>
   if (failed) return <main className="signin"><p className="bad" role="alert">✗ Cannot reach the server.</p></main>
   if (me === undefined) return <main className="signin"><p className="muted">Loading…</p></main>
   if (me === null) return <SignIn onDone={refresh} />
@@ -123,7 +123,7 @@ export default function App() {
         <ThemeChoices />
         <span className="muted">{me.name} · {me.roles.join(', ')}</span>
         <button type="button" className="text" onClick={async () => { await logout(); setMe(null) }}>Sign out</button>
-        <SessionControls onSignedOut={() => setMe(null)} />
+        <SessionControls onSignedOut={() => setMe(null)} onStopped={() => setStopped(true)} />
       </header>
       <aside className="stream" aria-label="Stream">
         {GROUPS.map(g => (

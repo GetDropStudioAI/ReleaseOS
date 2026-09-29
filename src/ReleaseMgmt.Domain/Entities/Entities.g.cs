@@ -11,7 +11,7 @@ public class Users
     public string DisplayName { get; set; } = "";
     public string Role { get; set; } = "";
     public string? Handle { get; set; }
-    public bool IsActive { get; set; }
+    public bool IsActive { get; set; } = true;
     public int Version { get; set; } = 1;
 }
 
@@ -41,8 +41,8 @@ public class TrainTemplates
 {
     public string Id { get; set; } = Ids.New();
     public string Name { get; set; } = "";
-    public string Status { get; set; } = "";
-    public string DefaultRiskTier { get; set; } = "";
+    public string Status { get; set; } = "Draft";
+    public string DefaultRiskTier { get; set; } = "Moderate";
     public string? ApprovedByUserId { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public DateOnly? ReviewDueOn { get; set; }
@@ -54,7 +54,7 @@ public class TemplateGates
     public string Id { get; set; } = Ids.New();
     public string TemplateId { get; set; } = "";
     public string GateName { get; set; } = "";
-    public string GateClass { get; set; } = "";
+    public string GateClass { get; set; } = "Standard";
     public int SequenceOrder { get; set; }
     public int OffsetDays { get; set; }
     public string RequiredBeforeStatus { get; set; } = "";
@@ -102,8 +102,8 @@ public class ReleaseTrains
     public string? TemplateId { get; set; }
     public string? ClonedFromTrainId { get; set; }
     public DateOnly TargetReleaseDate { get; set; }
-    public string RiskTier { get; set; } = "";
-    public string CurrentStatus { get; set; } = "";
+    public string RiskTier { get; set; } = "Moderate";
+    public string CurrentStatus { get; set; } = "Planning";
     public string? ChangeTicketNumber { get; set; }
     public DateTime? ActualStartAt { get; set; }
     public DateTime? ActualEndAt { get; set; }
@@ -167,14 +167,14 @@ public class StageGates
     public string Id { get; set; } = Ids.New();
     public string ReleaseTrainId { get; set; } = "";
     public string GateName { get; set; } = "";
-    public string GateClass { get; set; } = "";
+    public string GateClass { get; set; } = "Standard";
     public int SequenceOrder { get; set; }
     public int OffsetDays { get; set; }
     public DateOnly DueOn { get; set; }
-    public string RequiredBeforeStatus { get; set; } = "";
+    public string RequiredBeforeStatus { get; set; } = "Gated";
     public string? OwnerUserId { get; set; }
     public string? OwnerTeamId { get; set; }
-    public string Status { get; set; } = "";
+    public string Status { get; set; } = "Pending";
     public string? CertifiedByUserId { get; set; }
     public DateTime? CertifiedAt { get; set; }
     public string? LastChangedByUserId { get; set; }
@@ -212,7 +212,7 @@ public class ChecklistTasks
     public string TaskDescription { get; set; } = "";
     public string? OwnerUserId { get; set; }
     public string? OwnerTeamId { get; set; }
-    public bool IsCompleted { get; set; }
+    public bool IsCompleted { get; set; } = false;
     public int SequenceOrder { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? CompletedByUserId { get; set; }
@@ -234,7 +234,7 @@ public class Attachments
     public string StoragePath { get; set; } = "";
     public string UploadedByUserId { get; set; } = "";
     public DateTime UploadedAt { get; set; }
-    public bool IsLocked { get; set; }
+    public bool IsLocked { get; set; } = false;
 }
 
 public class RunbookSteps
@@ -243,7 +243,7 @@ public class RunbookSteps
     public string ReleaseTrainId { get; set; } = "";
     public string? BundledProductId { get; set; }
     public string StepCode { get; set; } = "";
-    public string Section { get; set; } = "";
+    public string Section { get; set; } = "Deploy";
     public string Title { get; set; } = "";
     public string? Instructions { get; set; }
     public string? OwnerUserId { get; set; }
@@ -276,7 +276,7 @@ public class StepExecutions
     public string Id { get; set; } = Ids.New();
     public string RunId { get; set; } = "";
     public string StepId { get; set; } = "";
-    public string Status { get; set; } = "";
+    public string Status { get; set; } = "Scheduled";
     public DateTime? ActualStartAt { get; set; }
     public DateTime? ActualEndAt { get; set; }
     public string? ActorUserId { get; set; }
@@ -305,7 +305,7 @@ public class KnownIssues
     public string Title { get; set; } = "";
     public string Severity { get; set; } = "";
     public string? Workaround { get; set; }
-    public string Status { get; set; } = "";
+    public string Status { get; set; } = "Open";
     public string? ExternalKey { get; set; }
     public DateTime RaisedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
@@ -341,7 +341,7 @@ public class PostImplementationReviews
     public string Id { get; set; } = Ids.New();
     public string ReleaseTrainId { get; set; } = "";
     public string RequiredReason { get; set; } = "";
-    public string Status { get; set; } = "";
+    public string Status { get; set; } = "Required";
     public DateTime? HeldAt { get; set; }
     public string? Summary { get; set; }
     public int Version { get; set; } = 1;
@@ -362,7 +362,7 @@ public class FreezeWindows
 {
     public string Id { get; set; } = Ids.New();
     public string Name { get; set; } = "";
-    public string Kind { get; set; } = "";
+    public string Kind { get; set; } = "Freeze";
     public DateTime StartsAt { get; set; }
     public DateTime EndsAt { get; set; }
     public string? ProductPattern { get; set; }
@@ -404,7 +404,7 @@ public class ExternalLinks
     public string? ExpectedStatus { get; set; }
     public string? LastSyncedStatus { get; set; }
     public DateTime? LastSyncedAt { get; set; }
-    public string SyncState { get; set; } = "";
+    public string SyncState { get; set; } = "Unsynced";
     public int Version { get; set; } = 1;
 }
 
@@ -416,10 +416,10 @@ public class SyncAlerts
     public string Kind { get; set; } = "";
     public string Fingerprint { get; set; } = "";
     public string ErrorMessage { get; set; } = "";
-    public int OccurrenceCount { get; set; }
+    public int OccurrenceCount { get; set; } = 1;
     public DateTime FirstOccurredAt { get; set; }
     public DateTime LastOccurredAt { get; set; }
-    public bool IsResolved { get; set; }
+    public bool IsResolved { get; set; } = false;
     public DateTime? ResolvedAt { get; set; }
     public string? ResolvedByUserId { get; set; }
     public int Version { get; set; } = 1;
@@ -468,7 +468,7 @@ public class CommDispatches
     public string HydratedBody { get; set; } = "";
     public string DispatchedByUserId { get; set; } = "";
     public DateTime DispatchedAt { get; set; }
-    public bool IsRehearsal { get; set; }
+    public bool IsRehearsal { get; set; } = false;
     public string Outcome { get; set; } = "";
 }
 
@@ -479,7 +479,7 @@ public class Notifications
     public string Kind { get; set; } = "";
     public string EntityType { get; set; } = "";
     public string EntityId { get; set; } = "";
-    public int EscalationLevel { get; set; }
+    public int EscalationLevel { get; set; } = 0;
     public string Message { get; set; } = "";
     public DateTime CreatedAt { get; set; }
     public DateTime? ReadAt { get; set; }
@@ -504,8 +504,8 @@ public class ImportJobs
     public string FileName { get; set; } = "";
     public string Sha256 { get; set; } = "";
     public int RowCount { get; set; }
-    public int ErrorCount { get; set; }
-    public string ErrorsJson { get; set; } = "";
+    public int ErrorCount { get; set; } = 0;
+    public string ErrorsJson { get; set; } = "[]";
     public string Status { get; set; } = "";
     public string UploadedByUserId { get; set; } = "";
     public DateTime CreatedAt { get; set; }
@@ -518,14 +518,14 @@ public class ExportJobs
     public string Id { get; set; } = Ids.New();
     public string Kind { get; set; } = "";
     public string? ReleaseTrainId { get; set; }
-    public string Parameters { get; set; } = "";
+    public string Parameters { get; set; } = "{}";
     public string FileName { get; set; } = "";
     public string? Sha256 { get; set; }
     public string? StoragePath { get; set; }
     public string RequestedByUserId { get; set; } = "";
     public DateTime CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
-    public string Status { get; set; } = "";
+    public string Status { get; set; } = "Queued";
     public int Version { get; set; } = 1;
 }
 
@@ -567,11 +567,11 @@ public class ConnectorState
 {
     public string SourceSystem { get; set; } = "";
     public string BaseUrl { get; set; } = "";
-    public bool IsEnabled { get; set; }
+    public bool IsEnabled { get; set; } = true;
     public DateTime? LastCycleStartedAt { get; set; }
     public DateTime? LastCycleCompletedAt { get; set; }
     public DateTime? LastSuccessAt { get; set; }
-    public int ConsecutiveFailures { get; set; }
+    public int ConsecutiveFailures { get; set; } = 0;
     public int Version { get; set; } = 1;
 }
 

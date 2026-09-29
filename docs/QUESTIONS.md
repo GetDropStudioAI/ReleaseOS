@@ -21,3 +21,19 @@ Context: CLAUDE.md puts "domain services (no EF, no ASP.NET)" in ReleaseMgmt.Dom
 Question: are services allowed to depend on the DbContext?
 Options considered: (a) Domain holds pure guard logic over plain snapshot records; orchestration classes (TrainLifecycleService, GateService, …) live in Infrastructure/Services / (b) repository interfaces in Domain with EF implementations.
 Blocked: nothing. Building (a) (fewer abstractions, guards stay unit-testable without a database).
+
+## Q-003 · M1 · Two sources of truth for a user's role
+Context: authorization uses the role claim (IdP group map, `Auth:RoleMap`), but the separation-of-duties triggers read `Users.Role`.
+Question: which wins?
+Options considered: (a) just-in-time provisioning: on every sign-in upsert the `Users` row (email, display name, role from the claim), so both always agree / (b) admins maintain `Users.Role` and the claim is ignored / (c) both, with a mismatch refused.
+Blocked: nothing. Built (a): `UserProvisioner` runs at sign-in (dev login and OIDC) and puts the `Users.Id` in a `uid` claim. Admin-edited roles are overwritten at the next sign-in; say if you want (b).
+
+## Q-004 · M1 · Is If-Match required?
+Context: PROJECT_SCOPE §6 says "Mutations take If-Match: <Version>"; D8 says stale writes get 409.
+Question: reject a mutation that has no If-Match header (428), or accept it and skip the check?
+Blocked: nothing. Built: header optional; when present and stale -> 409 with the current row. Making it mandatory is a one-line change once the UI always sends it (M2).
+
+## Q-005 · M1 · Waiver rejection has no column
+Context: PROJECT_SCOPE §6 lists `POST /waivers/{id}:reject`, but GateWaivers has no rejected/decided-by fields.
+Question: add columns (schema change, D-level decision) or drop the endpoint?
+Blocked: rejection is not built; only request and approve are.

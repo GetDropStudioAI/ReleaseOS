@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { devLogin, getMe, logout, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
+import Admin from './Admin'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
 const GROUPS = ['Executing', 'Gated', 'Planning', 'Complete (30 days)']
 const NAV = ['Trains', 'Calendar', 'Analytics', 'Sync health', 'Imports & exports']
+type View = 'trains' | 'admin'
 
 function ThemeChoices() {
   const [choice, setChoice] = useState<ThemeChoice>(loadTheme())
@@ -48,6 +50,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined)
   const [failed, setFailed] = useState(false)
+  const [view, setView] = useState<View>('trains')
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
   useEffect(() => { refresh() }, [])
 
@@ -55,12 +58,14 @@ export default function App() {
   if (me === undefined) return <main className="signin"><p className="muted">Loading…</p></main>
   if (me === null) return <SignIn onDone={refresh} />
 
+  const canAdmin = me.roles.includes('RTE') || me.roles.includes('ReleaseManager')
   return (
     <div className="shell">
       <header className="toolbar">
         <strong>Release Management</strong>
         <nav aria-label="Primary" className="tabs">
-          {NAV.map((n, i) => <a key={n} href="#" aria-current={i === 0 ? 'page' : undefined}>{n}</a>)}
+          {NAV.map((n, i) => <a key={n} href="#" onClick={e => { e.preventDefault(); setView('trains') }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
+          {canAdmin && <a href="#admin" onClick={e => { e.preventDefault(); setView('admin') }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
         </nav>
         <span className="spacer" />
         <ThemeChoices />
@@ -75,13 +80,14 @@ export default function App() {
           </section>
         ))}
       </aside>
-      <main className="workspace">
-        <h1>Trains</h1>
-        <p className="muted">No trains yet. Create one to start planning.</p>
+      <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (<><h1>Trains</h1><p className="muted">No trains yet. Create one to start planning.</p></>)}
       </main>
-      <aside className="inspector" aria-label="Inspector">
-        <p className="muted">Select a train, gate or task to see its detail here.</p>
-      </aside>
+      {view === 'trains' && (
+        <aside className="inspector" aria-label="Inspector">
+          <p className="muted">Select a train, gate or task to see its detail here.</p>
+        </aside>
+      )}
     </div>
   )
 }

@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Api;
 using ReleaseMgmt.Api.Auth;
+using ReleaseMgmt.Api.Endpoints;
+using ReleaseMgmt.Infrastructure.Services;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Infrastructure.Backup;
 using ReleaseMgmt.Infrastructure.Persistence;
@@ -32,6 +34,17 @@ var connectionString = $"Data Source={dbPath}";
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddReleaseMgmtDb(connectionString);
 builder.Services.AddSingleton<IAlertSink, LoggingAlertSink>();
+builder.Services.AddSingleton<UserProvisioner>();
+builder.Services.AddSingleton<TrainLifecycleService>();
+builder.Services.AddSingleton<GateService>();
+builder.Services.AddSingleton<WaiverService>();
+builder.Services.AddSingleton<TaskService>();
+builder.Services.AddSingleton<BaselineService>();
+builder.Services.AddSingleton<ScheduleService>();
+builder.Services.AddSingleton<AdminService>();
+builder.Services.AddSingleton<SeedService>();
+builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
+builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
@@ -59,10 +72,16 @@ if (authority is not null)
         o.SaveTokens = false;
         o.GetClaimsFromUserInfoEndpoint = true;
         o.Scope.Add("profile"); o.Scope.Add("email");
-        o.Events.OnTokenValidated = ctx =>
+        o.Events.OnTokenValidated = async ctx =>
         {
-            if (ctx.Principal?.Identity is ClaimsIdentity id) RoleMapper.AddRoles(id, roleMap);
-            return Task.CompletedTask;
+            if (ctx.Principal?.Identity is not ClaimsIdentity id) return;
+            RoleMapper.AddRoles(id, roleMap);
+            var email = id.FindFirst(ClaimTypes.Email)?.Value ?? id.FindFirst("email")?.Value ?? id.FindFirst("preferred_username")?.Value;
+            if (email is null) { ctx.Fail("The identity provider returned no email claim"); return; }
+            var role = id.FindAll(ClaimTypes.Role).Select(c => c.Value).OrderBy(r => Array.IndexOf(Roles.All, r)).First();
+            var uid = await ctx.HttpContext.RequestServices.GetRequiredService<UserProvisioner>()
+                .UpsertAsync(email, id.FindFirst("name")?.Value ?? email, role);
+            id.AddClaim(new Claim("uid", uid));
         };
     });
 }
@@ -73,9 +92,13 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     await using var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<ReleaseDbContext>>().CreateDbContextAsync();
     await db.Database.MigrateAsync();
+    var seed = scope.ServiceProvider.GetRequiredService<SeedService>();
+    await seed.SeedReferenceDataAsync();
+    if (config.GetValue("Seed:Demo", app.Environment.IsDevelopment())) await seed.SeedDemoDataAsync(); // demo trains only when asked (default: Development)
 }
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA
 // assets must be served before the authorization middleware or the sign-in page itself would 401.
+app.UseExceptionHandler();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
@@ -102,6 +125,8 @@ api.MapGet("/me", (ClaimsPrincipal u) => new
     name = u.Identity?.Name,
     roles = u.FindAll(ClaimTypes.Role).Select(c => c.Value)
 }).RequireAuthorization(Policies.Read);
+api.MapLifecycle();
+api.MapAdmin();
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())
@@ -109,8 +134,9 @@ if (app.Environment.IsDevelopment())
     app.MapPost("/auth/dev-login", [AllowAnonymous] async (DevLogin req, HttpContext http) =>
     {
         if (!Roles.All.Contains(req.Role)) return Results.BadRequest(new { message = $"Role must be one of {string.Join(", ", Roles.All)}" });
+        var uid = await http.RequestServices.GetRequiredService<UserProvisioner>().UpsertAsync(req.Email, req.Name, req.Role);
         var id = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Email, req.Email), new Claim(ClaimTypes.Name, req.Name), new Claim(ClaimTypes.Role, req.Role)],
+            [new Claim(ClaimTypes.Email, req.Email), new Claim(ClaimTypes.Name, req.Name), new Claim(ClaimTypes.Role, req.Role), new Claim("uid", uid)],
             CookieAuthenticationDefaults.AuthenticationScheme);
         await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(id));
         return Results.Ok();

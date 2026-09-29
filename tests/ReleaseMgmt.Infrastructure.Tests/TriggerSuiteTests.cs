@@ -69,11 +69,13 @@ public sealed class TriggerSuiteFixture : IDisposable
         for (var k = 0; k < p.Length; k++) cmd.Parameters.AddWithValue($"$p{k}", p[k] ?? DBNull.Value);
     }
 
-    public SqliteConnection Fresh()
+    public SqliteConnection Fresh() => Open(FreshPath());
+
+    public string FreshPath()
     {
         var path = Path.Combine(Dir, $"case{Interlocked.Increment(ref _n)}.db");
         File.Copy(Template, path);
-        return Open(path);
+        return path;
     }
 
     public void Dispose() { SqliteConnection.ClearAllPools(); try { Directory.Delete(Dir, true); } catch (IOException) { } }

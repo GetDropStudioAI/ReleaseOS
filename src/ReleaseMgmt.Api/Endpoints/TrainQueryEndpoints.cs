@@ -59,6 +59,15 @@ public static class TrainQueryEndpoints
             return Results.Ok(rows);
         }).RequireAuthorization(Policies.Read);
 
+        // Who a task can be assigned to: active users and teams (user xor team, D-level rule in the schema).
+        api.MapGet("/owners", async (IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
+        {
+            await using var db = await dbf.CreateDbContextAsync(ct);
+            var users = await db.Set<Users>().AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.DisplayName).Select(u => new { id = u.Id, name = u.DisplayName, kind = "user" }).ToListAsync(ct);
+            var teams = await db.Set<Teams>().AsNoTracking().OrderBy(t => t.Handle).Select(t => new { id = t.Id, name = "@" + t.Handle, kind = "team" }).ToListAsync(ct);
+            return Results.Ok(users.Concat(teams));
+        }).RequireAuthorization(Policies.Read);
+
         // Product health (docs/QUESTIONS.md Q-007, provisional): Ready = every task done and no open blocker; At risk = any open blocker; otherwise On track.
         api.MapGet("/trains/{id}/products", async (string id, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
         {
@@ -95,7 +104,8 @@ public static class TrainQueryEndpoints
 
             var reasons = new List<string>();
             var (allowed, denial) = await LifecycleEndpoints.GateAccessAsync(db, g, u, complianceRestricted: true, ct);
-            if (!allowed && denial is not null) reasons.Add(denial);
+            // A Compliance gate's role rule is already one of the certify guards below, so only the ownership denial is added here (no duplicate line).
+            if (!allowed && denial is not null && g.GateClass != "Compliance") reasons.Add(denial);
             var uid = u.FindFirstValue("uid") ?? "";
             reasons.AddRange((await gates.EvaluateCertifyAsync(db, g, uid)).Select(f => f.Items is { Count: > 0 } ? $"{f.Message}: {string.Join(", ", f.Items)}" : f.Message));
             reasons = [.. reasons.Distinct()];

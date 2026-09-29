@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { advanceTrain, ApiError, getReadiness, getStream, getTrain, type Readiness, type StreamRow, type TrainDetail } from './api'
+import { day, errMsg, plural, splitId, tMinus } from './format'
+import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
+import { advanceTrain, getReadiness, getStream, getTrain, type Readiness, type StreamRow, type TrainDetail } from './api'
 
 const GROUPS: { label: string; status: string }[] = [
   { label: 'Executing', status: 'Executing' }, { label: 'Gated', status: 'Gated' },
@@ -17,10 +19,6 @@ export function Glyph({ status }: { status: string }) {
   const x = GLYPH[status] ?? GLYPH.Pending
   return <span className={x.cls} role="img" aria-label={x.word} title={x.word}>{x.g}</span>
 }
-const tMinus = (d: number) => d > 0 ? `T−${d}` : d === 0 ? 'T−0' : `T+${-d}`
-const day = (iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
-const splitId = (title: string) => { const m = /^(R\d+\.\d+)\s+(.*)$/.exec(title); return m ? { id: m[1], name: m[2] } : { id: '', name: title } }
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
 export function Stream({ rows, selected, onSelect }: { rows: StreamRow[] | null; selected: string | null; onSelect: (id: string) => void }) {
   const [q, setQ] = useState('')
@@ -57,11 +55,12 @@ export function Stream({ rows, selected, onSelect }: { rows: StreamRow[] | null;
   )
 }
 
-export function TrainHeader({ id, refreshKey, onChanged }: { id: string; refreshKey: number; onChanged: () => void }) {
+export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, canPlan }: { id: string; refreshKey: number; onChanged: () => void; selection: Selection; onSelect: (s: Selection) => void; canPlan: boolean }) {
   const [t, setT] = useState<TrainDetail | null>(null)
   const [r, setR] = useState<Readiness | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [chosenGate, setChosenGate] = useState<string | null>(null)
   useEffect(() => {
     let live = true
     setErr(null)
@@ -80,7 +79,7 @@ export function TrainHeader({ id, refreshKey, onChanged }: { id: string; refresh
     if (!t.nextStatus) return
     setBusy(true); setErr(null)
     try { await advanceTrain(t.id, t.nextStatus, t.version); onChanged() }
-    catch (e) { setErr(e instanceof ApiError ? (e.body?.message ?? e.message) : 'Could not advance the train.'); onChanged() }
+    catch (e) { setErr(errMsg(e, 'Could not advance the train.')); onChanged() }
     finally { setBusy(false) }
   }
   const { id: relId, name } = splitId(t.title)
@@ -88,6 +87,9 @@ export function TrainHeader({ id, refreshKey, onChanged }: { id: string; refresh
   const gatesBefore = t.nextStatus ? t.gates.filter(g => ORDER.indexOf(g.requiredBeforeStatus) <= ORDER.indexOf(t.nextStatus!)) : []
   const others = (r?.blockers ?? []).filter(b => b.failure.guard !== 'GateLockout')
   const soon = 'Available in a later milestone'
+  // Checklist shows the gate the user picked, else the first gate still open, else the last.
+  const checklistGate = t.gates.find(g => g.id === chosenGate) ?? t.gates.find(g => g.status !== 'Certified' && g.status !== 'Waived') ?? t.gates[t.gates.length - 1]
+  const pickGate = (gid: string) => { setChosenGate(gid); onSelect({ kind: 'gate', id: gid }) }
 
   return (
     <>
@@ -101,7 +103,7 @@ export function TrainHeader({ id, refreshKey, onChanged }: { id: string; refresh
         </span>
       </div>
       <h1>{relId ? `${relId} ${name}` : name}</h1>
-      <p className="muted">{t.status} · Target <strong className="label">{day(t.targetReleaseDate)} {t.targetReleaseDate.slice(0, 4)}</strong> · <span className="mono">{tMinus(t.daysToTarget)}</span> business days</p>
+      <p className="muted">{t.status} · Target <strong className="label">{day(t.targetReleaseDate)} {t.targetReleaseDate.slice(0, 4)}</strong> · <span className="mono">{tMinus(t.daysToTarget)}</span> business days · <WindowLine trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} /></p>
       {err && <p className="bad" role="alert">✗ {err}</p>}
       {t.nextStatus && r && (
         <section className="readiness" aria-label="Readiness">
@@ -114,14 +116,9 @@ export function TrainHeader({ id, refreshKey, onChanged }: { id: string; refresh
           {r.ready && <span className="ok">✓ Ready for {t.nextStatus}</span>}
         </section>
       )}
-      <h2 className="group-label">Gates</h2>
-      <ul className="plain">
-        {t.gates.map(g => (
-          <li key={g.id} className="gate-row">
-            <Glyph status={g.status} /> <strong>{g.name}</strong> <span className="muted">{g.class} · due {day(g.dueOn)} · {g.tasksDone}/{g.tasksTotal} tasks · {g.status}</span>
-          </li>
-        ))}
-      </ul>
+      <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} />
+      <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} />
+      {checklistGate && <Checklist gateId={checklistGate.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
     </>
   )
 }

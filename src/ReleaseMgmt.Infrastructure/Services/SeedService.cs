@@ -70,6 +70,15 @@ public sealed class SeedService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
             var t = new ReleaseTrains { Id = Ids.New(), Title = title, TargetReleaseDate = target, RiskTier = risk, CreatedAt = stamp, UpdatedAt = stamp, LastChangedByUserId = rte.Id, LastChangedAt = stamp };
             db.Set<ReleaseTrains>().Add(t);
             ids.Add(t.Id);
+            db.Set<DeploymentWindows>().Add(new DeploymentWindows { Id = Ids.New(), ReleaseTrainId = t.Id, StartsAt = new DateTime(target.Year, target.Month, target.Day, 6, 0, 0, DateTimeKind.Utc), EndsAt = new DateTime(target.Year, target.Month, target.Day, 10, 0, 0, DateTimeKind.Utc) });
+            var products = new[] { ("Payments API", "4.5.0", "PAY"), ("Card Portal", "2.1.0", "CRD"), ("Ledger Svc", "3.8.2", "LED") }
+                .Select(p => new BundledProducts { Id = Ids.New(), ReleaseTrainId = t.Id, ProductName = p.Item1, VersionTag = p.Item2, ProjectCode = p.Item3 }).ToList();
+            db.Set<BundledProducts>().AddRange(products);
+            if (title.StartsWith("R26.12"))   // one open High and one Medium blocker so the products table shows "At risk"
+            {
+                db.Set<Blockers>().Add(new Blockers { Id = Ids.New(), ReleaseTrainId = t.Id, BundledProductId = products[1].Id, Title = "Pen-test finding open", Severity = "High", OwnerUserId = rte.Id, RaisedAt = stamp });
+                db.Set<Blockers>().Add(new Blockers { Id = Ids.New(), ReleaseTrainId = t.Id, BundledProductId = products[2].Id, Title = "Migration 0042 needs a backout review", Severity = "Medium", OwnerUserId = rte.Id, RaisedAt = stamp });
+            }
             var order = 0;
             foreach (var g in DefaultGates)
             {
@@ -80,7 +89,7 @@ public sealed class SeedService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
                     OwnerUserId = g.Class == "Compliance" ? gov1.Id : rte.Id, LastChangedByUserId = rte.Id,
                 };
                 db.Set<StageGates>().Add(gate);
-                db.Set<ChecklistTasks>().Add(new ChecklistTasks { Id = Ids.New(), StageGateId = gate.Id, TaskDescription = g.Class == "Compliance" ? "Evidence attached and reviewed" : $"{g.Name}: all items complete", OwnerUserId = gate.OwnerUserId, SequenceOrder = 1 });
+                db.Set<ChecklistTasks>().Add(new ChecklistTasks { Id = Ids.New(), StageGateId = gate.Id, TaskDescription = g.Class == "Compliance" ? "Evidence attached and reviewed" : $"{g.Name}: all items complete", OwnerUserId = gate.OwnerUserId, SequenceOrder = 1, BundledProductId = products[(order - 1) % products.Count].Id });
             }
         }
         await db.SaveChangesAsync(ct);

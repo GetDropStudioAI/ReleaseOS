@@ -3,6 +3,7 @@ import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
 import { Stream, TrainHeader, useStream } from './Trains'
+import { Inspector, type Selection } from './Planning'
 import { useLive, type LiveState } from './live'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
@@ -120,6 +121,7 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null)
   const { rows, reload } = useStream(!!me)
   const [rev, setRev] = useState(0)
+  const [selection, setSelection] = useState<Selection>(null)
   const refetch = () => { setRev(n => n + 1); reload() }
   const live = useLive(!!me, { onTrainChanged: refetch, onResync: refetch })
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
@@ -147,14 +149,14 @@ export default function App() {
         <SessionControls onSignedOut={() => setMe(null)} onStopped={() => setStopped(true)} />
       </header>
       <aside className="stream" aria-label="Stream">
-        <Stream rows={rows} selected={selected} onSelect={id => { setSelected(id); setView('trains') }} />
+        <Stream rows={rows} selected={selected} onSelect={id => { setSelected(id); setSelection(null); setView('trains') }} />
       </aside>
       <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={() => { setRev(n => n + 1); reload() }} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={setSelection} canPlan={canAdmin} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">
-          <p className="muted">Select a train, gate or task to see its detail here.</p>
+          <Inspector selection={selection} trainId={selected} refreshKey={rev} onClose={() => setSelection(null)} onChanged={refetch} />
         </aside>
       )}
     </div>

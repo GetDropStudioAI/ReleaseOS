@@ -130,6 +130,7 @@ app.MapHub<ReleaseMgmt.Api.Realtime.TrainsHub>(ReleaseMgmt.Api.Realtime.TrainsHu
 var api = app.MapGroup("/api/v1");
 api.MapGet("/me", (ClaimsPrincipal u) => new
 {
+    id = u.FindFirstValue("uid"),
     email = u.FindFirstValue(ClaimTypes.Email),
     name = u.Identity?.Name,
     roles = u.FindAll(ClaimTypes.Role).Select(c => c.Value)

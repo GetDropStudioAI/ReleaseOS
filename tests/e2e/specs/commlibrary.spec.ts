@@ -22,7 +22,7 @@ test('a Release Manager writes a template: an unknown token is flagged and block
 
   // a seeded template previews for the chosen train with its "data as of"
   await pickTrain(page, 'R26.13')
-  await page.locator('table.grid tr', { hasText: 'T-1 Go/No-Go outcome' }).click()
+  await page.locator('table.grid tr', { hasText: 'T-1 Go/No-Go outcome' }).locator('td:first-child button').click()   // the name is the row's button
   await expect(page.locator('.token-summary', { hasText: 'Template' })).toContainText('all known ✓')
   const preview = page.locator('[aria-label="Hydrated message"]')
   await expect(preview).toContainText('R26.13 Reporting')
@@ -64,7 +64,7 @@ test('a Release Manager writes a template: an unknown token is flagged and block
   await expect(page.locator('h2.cap', { hasText: 'R26.13 Reporting' }).first()).toBeVisible()
   await page.locator('textarea.bulk-text').fill('Tailored for this train: {Status}')
   await page.locator('button:text-is("Save changes")').click()
-  await page.locator('table.grid tr', { hasText: name }).first().click()                          // the library row: its text is unchanged
+  await page.locator('table.grid tr', { hasText: name }).first().locator('td:first-child button').click()   // the library row: its text is unchanged
   await expect(page.locator('textarea.bulk-text')).toHaveValue('Changed {Status}')
 
   const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']).analyze()
@@ -103,7 +103,7 @@ test('a Viewer reads the library and previews but has no editing or sending acti
   await openLibrary(page)
   await expect(page.locator('button:text-is("New template")')).toHaveCount(0)
   await pickTrain(page, 'R26.13')
-  await page.locator('table.grid tr', { hasText: 'T-1 Go/No-Go outcome' }).first().click()
+  await page.locator('table.grid tr', { hasText: 'T-1 Go/No-Go outcome' }).first().locator('td:first-child button').click()
   await expect(page.locator('textarea.bulk-text')).toHaveAttribute('readonly', '')
   await expect(page.locator('button:text-is("Save changes")')).toHaveCount(0)
   await expect(page.locator('button:text-is("Add to R26.13 Reporting")')).toHaveCount(0)

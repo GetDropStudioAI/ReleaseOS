@@ -30,8 +30,8 @@ for (const scheme of ['light', 'dark'] as const) {
       const stamp = `${scheme}-${Date.now()}`
 
       // choose the kind, then a file whose second row is not a date
-      await page.locator('nav[aria-label="Import kind"] button', { hasText: /^Holidays$/ }).click()
-      await expect(page.locator('nav[aria-label="Import kind"] button', { hasText: /^Holidays$/ })).toHaveAttribute('aria-pressed', 'true')
+      await page.locator('[role=group][aria-label="Import kind"] button', { hasText: /^Holidays$/ }).click()
+      await expect(page.locator('[role=group][aria-label="Import kind"] button', { hasText: /^Holidays$/ })).toHaveAttribute('aria-pressed', 'true')
       await page.locator('input[type=file]').setInputFiles({ name: 'holidays-bad.csv', mimeType: 'text/csv', buffer: csv([['Day', 'Name'], [day(1), `Good ${stamp}`], ['not-a-date', 'Bad row']]) })
 
       const errors = page.locator('section[aria-label=Errors]')
@@ -52,7 +52,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
       // no checkboxes, switches, or modals; mode is a pair of text buttons with aria-pressed
       await expect(page.locator('input[type=checkbox], [role=switch], [role=dialog]')).toHaveCount(0)
-      const mode = page.locator('nav[aria-label="Import mode"]')
+      const mode = page.locator('[role=group][aria-label="Import mode"]')
       await expect(mode.locator('button', { hasText: 'Upsert' })).toHaveAttribute('aria-pressed', 'true')
       await mode.locator('button', { hasText: 'Append' }).click()
       await expect(mode.locator('button', { hasText: 'Append' })).toHaveAttribute('aria-pressed', 'true')
@@ -71,7 +71,8 @@ for (const scheme of ['light', 'dark'] as const) {
       const go = page.getByRole('button', { name: 'Commit 2 rows' })
       await expect(go).toBeEnabled()
       await go.click()
-      await expect(page.getByRole('status').filter({ hasText: 'Committed Holidays: 2 new' })).toBeVisible()
+      await expect(page.locator('p.ok', { hasText: 'Committed Holidays: 2 new' })).toBeVisible()
+      await expect(page.getByTestId('announcer')).toContainText('Committed Holidays: 2 new')   // spoken through the app's one live region
 
       const names = await page.evaluate(async () => (await (await fetch('/api/v1/holidays')).json() as { day: string; name: string }[]).map(h => `${h.day} ${h.name}`))
       expect(names).toContain(`${day(1)} Good ${stamp}`)
@@ -106,7 +107,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await signIn(page, `importexport-viewer-${scheme}@example.com`, 'Viewer')
       await page.locator('nav[aria-label=Primary] a', { hasText: 'Imports & exports' }).click()
       await expect(page.locator('h1')).toHaveText('Imports & exports')
-      await expect(page.locator('nav[aria-label="Import kind"]')).toHaveCount(0)
+      await expect(page.locator('[role=group][aria-label="Import kind"]')).toHaveCount(0)
       await expect(page.locator('aside[aria-label=Exports] a[aria-label="Trains as CSV"]')).toBeVisible()
       await expect(page.locator('aside[aria-label=Exports] a[aria-label="Audit log as CSV"]')).toHaveCount(0)   // AuditRead only
       await scan(page, `imports and exports as a viewer (${scheme})`)

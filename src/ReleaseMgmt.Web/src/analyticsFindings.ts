@@ -205,7 +205,24 @@ export function headlines(m: Partial<Record<'M1' | 'M2' | 'M10' | 'M12' | 'M13',
 
 // ---- the "View data" table behind each chart -----------------------------------------------------------------------------------------
 export interface DataTable { headers: string[]; rows: string[][]; numeric: boolean[] }
-const cell = (v: unknown, d = 1) => (v == null ? '·' : typeof v === 'number' ? fmt(v, d) : String(v))
+/** What an empty cell shows; the table renders it with a spoken "none". */
+export const NONE_CELL = '—'
+const cell = (v: unknown, d = 1) => (v == null ? NONE_CELL : typeof v === 'number' ? fmt(v, d) : String(v))
+/** Readable names for the SQL columns in the on-screen table; the CSV and XLSX keep the raw names (columnHeader). */
+const LABELS: Record<string, string> = {
+  completed: 'Completed', on_time: 'On time', on_time_pct: 'On time', Title: 'Train', PlannedReleaseDate: 'Planned release', actual: 'Actual release', slip_days: 'Slip',
+  GateName: 'Gate', samples: 'Gates timed', median_h: 'Median', p90_h: 'p90', gates: 'Gates', first_pass_pct: 'First pass', waived: 'Waived', late: 'Certified late',
+  avg_days_late: 'Average lateness', at_freeze: 'At freeze', added: 'Added', removed: 'Removed', StepCode: 'Step', Section: 'Section', start_late_min: 'Start late',
+  overrun_min: 'Overrun', steps: 'Steps', total_overrun_min: 'Total overrun', worst_step: 'Worst step', worst_overrun_min: 'Worst overrun', Severity: 'Severity',
+  lt_1d: 'Open under 1 day', d1_3: 'Open 1–3 days', d3_7: 'Open 3–7 days', ge_7d: 'Open 7 days or more', oldest_days: 'Oldest', successful: 'Successful',
+  with_issues: 'With issues', unsuccessful: 'Unsuccessful', rollback_pct: 'Rollback', change_fail_pct: 'Change fail', Name: 'Freeze window', overrides: 'Overrides',
+  avg_ttl_h: 'Average override length', scheduled: 'Scheduled', missed: 'Missed', month: 'Month', compliance_gates: 'Compliance gates', waived_pct: 'Waived',
+  SourceSystem: 'Source system', links: 'Links', in_sync: 'In sync', mismatch: 'Mismatch', broken: 'Broken', stalest_min: 'Stalest', open_alerts: 'Open alerts',
+  median_lead_days: 'Median lead time',
+}
+const MEASURES = new Set(['hours', 'days', 'minutes', '%'])
+/** "Median (hours)", "Gates timed": a readable name, with the unit only where it is a measure (a count's unit is already in its name). */
+export const humanHeader = (c: MetricColumn) => { const l = LABELS[c.name] ?? c.name.replace(/_/g, ' '); return MEASURES.has(c.unit) ? `${l} (${c.unit})` : l }
 /** The numbers the chart draws, formatted the same as its labels; M7 is aggregated per step (the raw 176-row table is what the CSV/XLSX carries). */
 export function chartTable(id: string, recs: Rec[], columns: MetricColumn[]): DataTable {
   if (id === 'M7') {
@@ -213,5 +230,5 @@ export function chartTable(id: string, recs: Rec[], columns: MetricColumn[]): Da
     return { headers: ['Step', 'Section', 'Runs', 'Average overrun (min)', 'Worst overrun (min)'], numeric: [false, false, true, true, true],
       rows: agg.map(a => [a.step, a.section, String(a.runs), fmt(a.avg), fmt(a.worst)]) }
   }
-  return { headers: columns.map(columnHeader), numeric: columns.map(c => c.unit !== '' && c.unit !== 'date'), rows: recs.map(r => columns.map(c => (id === 'M9' && r[c.name] === 0 && c.unit === 'blockers' ? '·' : cell(r[c.name])))) }
+  return { headers: columns.map(humanHeader), numeric: columns.map(c => c.unit !== '' && c.unit !== 'date' && c.unit !== 'month'), rows: recs.map(r => columns.map(c => (id === 'M9' && r[c.name] === 0 && c.unit === 'blockers' ? NONE_CELL : cell(r[c.name])))) }
 }

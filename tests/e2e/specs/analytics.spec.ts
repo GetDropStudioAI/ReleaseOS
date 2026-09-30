@@ -18,10 +18,10 @@ async function openAnalytics(page: Page, email: string) {
   await signIn(page, email)
   await page.click('nav[aria-label=Primary] a[href="/analytics"]')
   await expect(page.getByRole('heading', { level: 1, name: 'Analytics' })).toBeVisible()
-  // loaded = no chart still says "Loading…" and the six headline figures have left their placeholder
-  await expect(page.locator('[data-testid=chart-title]').first()).not.toHaveText('Loading…')
+  // loaded = the chart cards are drawn and none is still busy (while loading each titles itself with its subtitle), and the six headline figures have left their placeholder
+  await expect(page.locator('[data-testid=chart]').first()).toBeVisible()
+  await expect(page.locator('[data-testid=chart][aria-busy=true]')).toHaveCount(0)
   await expect(page.locator('[data-testid=kpi] .an-kpi-value').first()).not.toHaveText('…')
-  await expect(page.locator('[data-testid=chart-title]', { hasText: 'Loading…' })).toHaveCount(0)
 }
 
 /** First chart card that has an export line (a chart with no data has none). */
@@ -146,4 +146,6 @@ test('applying a period with from after to is refused inline; a valid period rel
   // a window with no history: every chart says so honestly, and the headline figures show a dash with the reason
   await expect(page.locator('[data-testid=chart-title]', { hasText: 'No data in this window' }).first()).toBeVisible()
   await expect(page.locator('[data-testid=kpi] .an-kpi-value').first()).toHaveText('—')
+  // the reload is spoken once through the app's live region (WCAG 4.1.3)
+  await expect(page.getByTestId('announcer')).toHaveText(/^Loaded \d+ charts for 2030-01-01 to 2030-01-31/)
 })

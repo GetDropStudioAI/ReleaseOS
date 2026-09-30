@@ -1,9 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ApiError, get, type Me } from './api'
-import { NO_DATA, chartTable, columnHeader, findingM2, findingM3, findingM4, findingM5, findingM6, findingM7, findingM8, findingM9, findingM10, findingM11, findingM13, findingM14, findingM15, headlines, normalize,
+import { NONE_CELL, NO_DATA, chartTable, columnHeader, findingM2, findingM3, findingM4, findingM5, findingM6, findingM7, findingM8, findingM9, findingM10, findingM11, findingM13, findingM14, findingM15, headlines, normalize,
   type Metric, type MetricResponse, type Rec } from './analyticsFindings.ts'
 import { download, exportName, svgWithTitle, toCsv } from './analyticsExport.ts'
 import { fmtDayTime, zoneAbbr } from './time'
+import { announce } from './announce'
+import { useAction } from './useAction'
 
 // The chart module carries ECharts: it is fetched only when the first chart is about to draw.
 const AnalyticsChart = lazy(() => import('./AnalyticsChart'))
@@ -34,6 +36,9 @@ const SPECS: Spec[] = [
   { id: 'M14', find: findingM14, sub: 'External links by state, as of now · M14', table: true },
 ]
 
+/** The headline tone as glyph + word, so colour is never the only cue (WCAG 1.4.1). */
+const TONE = { ok: '✓ on track', warn: '▲ needs attention', bad: '✗ off track' } as const
+
 interface Entry { metric?: Metric; error?: string }
 type Loaded = Record<string, Entry>
 
@@ -52,7 +57,8 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   const [fatal, setFatal] = useState<string | null>(null)
   const seq = useRef(0)
 
-  const run = useCallback(async (f: string, t: string) => {
+  // `say`: after Apply or Retry the new figures replace the old ones, so the result is spoken once (WCAG 4.1.3); the first load is not announced.
+  const run = useCallback(async (f: string, t: string, say = true) => {
     const my = ++seq.current
     setBusy(true); setFatal(null)
     try {
@@ -62,12 +68,18 @@ export default function AnalyticsScreen(_props: { me: Me }) {
       const any = Object.values(d).find(e => e.metric)?.metric
       if (any) { setFrom(any.from); setTo(any.to) }
       else setFatal(Object.values(d)[0]?.error ?? 'Analytics could not be loaded')
+      if (say && any) {
+        const failed = SPECS.filter(x => d[x.id]?.error).length
+        const range = `${any.from} to ${any.to}`
+        announce(`Loaded ${SPECS.length - failed} charts for ${range}${failed ? `; ${failed} could not load` : ''}.`)
+      }
     } finally { if (my === seq.current) setBusy(false) }
   }, [])
-  useEffect(() => { void run('', '') }, [run])
+  useEffect(() => { void run('', '', false) }, [run])
 
   const bad = !!from && !!to && from > to
   const apply = (e: FormEvent) => { e.preventDefault(); if (!bad) void run(from, to) }
+  const failed = data && !fatal ? SPECS.filter(x => data[x.id]?.error).length : 0
 
   const rec = (id: string) => data?.[id]?.metric?.recs
   const kpis = headlines({ M1: rec('M1'), M2: rec('M2'), M10: rec('M10'), M12: rec('M12'), M13: rec('M13') })
@@ -89,25 +101,27 @@ export default function AnalyticsScreen(_props: { me: Me }) {
       <div className="an-side muted">{asOf ? <>Data as of <span className="mono">{fmtDayTime(asOf)} {zoneAbbr(asOf)}</span></> : ' '}<br />Blockers, scope churn and sync health are as of now and ignore the period.</div>
     </section>
 
-    {fatal && <p className="bad" role="alert">✗ {fatal} <button type="button" className="text" onClick={() => void run(from, to)}>Retry</button></p>}
+    {fatal && <p className="bad" role="alert">✗ {fatal} <button type="button" className="text" disabled={busy} onClick={() => void run(from, to)}>{busy ? 'Retrying…' : 'Retry'}</button></p>}
+    {failed > 0 && <p className="bad" role="alert">✗ {failed} {failed === 1 ? 'chart' : 'charts'} could not load. <button type="button" className="text" disabled={busy} onClick={() => void run(from, to)}>{busy ? 'Retrying…' : 'Retry'}</button></p>}
 
     <section className="an-kpis" aria-label="Headline figures">
       {kpis.map(k => <div key={k.key} className="an-kpi" data-testid="kpi" data-kpi={k.key}>
         <div className="group-label">{k.label}</div>
         <div className={`mono an-kpi-value ${k.tone === 'none' ? '' : k.tone}`}>{data ? k.value : '…'}</div>
-        <div className="muted an-kpi-sub">{data ? k.sub : 'Loading'}</div>
+        <div className="muted an-kpi-sub">{data && k.tone !== 'none' && <span className={k.tone}>{TONE[k.tone]} · </span>}{data ? k.sub : 'Loading'}</div>
       </div>)}
     </section>
 
     <section className="an-charts" aria-label="Charts">
-      {SPECS.map(s => <ChartCard key={s.id} spec={s} entry={data?.[s.id]} loading={!data} onRetry={() => void run(from, to)} />)}
+      {SPECS.map(s => <ChartCard key={s.id} spec={s} entry={data?.[s.id]} loading={!data} />)}
     </section>
   </>
 }
 
-function ChartCard({ spec, entry, loading, onRetry }: { spec: Spec; entry?: Entry; loading: boolean; onRetry: () => void }) {
+function ChartCard({ spec, entry, loading }: { spec: Spec; entry?: Entry; loading: boolean }) {
   const m = entry?.metric
-  const finding = m ? spec.find(m.recs) : loading ? 'Loading…' : 'Could not load this chart'
+  // while loading the heading names the chart (its subtitle) instead of thirteen identical "Loading…" headings (WCAG 2.4.6)
+  const finding = m ? spec.find(m.recs) : loading ? spec.sub : 'Could not load this chart'
   const empty = !!m && (m.recs.length === 0 || finding === NO_DATA)
   const [showData, setShowData] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -122,14 +136,15 @@ function ChartCard({ spec, entry, loading, onRetry }: { spec: Spec; entry?: Entr
     try { download(name('csv'), new Blob([toCsv(m!.cells, m!.columns.map(columnHeader), { bom: true })], { type: 'text/csv;charset=utf-8' })) }
     catch (e) { setErr(`CSV export failed: ${(e as Error).message}`) }
   }
-  const exportXlsx = async () => {
+  const { run: act, pending } = useAction()
+  const exportXlsx = () => act('xlsx', async () => {
     setErr(null)
     try {
       const r = await fetch(`/api/v1/analytics/${spec.id}/xlsx?from=${encodeURIComponent(m!.from)}&to=${encodeURIComponent(m!.to)}&now=${encodeURIComponent(m!.asOf)}`)
       if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null))
       download(name('xlsx'), await r.blob())
     } catch (e) { setErr(`XLSX export failed: ${(e as Error).message}`) }
-  }
+  })
   const exportSvg = () => {
     setErr(null)
     try {
@@ -140,24 +155,24 @@ function ChartCard({ spec, entry, loading, onRetry }: { spec: Spec; entry?: Entr
   }
 
   const table = m && !empty ? chartTable(spec.id, m.recs, m.columns) : null
-  return <div className="an-chart" data-testid="chart" data-metric={spec.id}>
+  return <div className="an-chart" data-testid="chart" data-metric={spec.id} aria-busy={loading || undefined}>
     <div className="an-chart-head">
       <h2 className="an-title" data-testid="chart-title">{finding}</h2>
       {m && !empty && <span className="an-export" role="group" aria-label={`Export ${headline}`}>
         <button type="button" className="text" onClick={exportCsv} aria-label={`Export ${headline} as CSV`}>CSV</button>
         {' · '}
-        <button type="button" className="text" onClick={() => void exportXlsx()} aria-label={`Export ${headline} as XLSX`}>XLSX</button>
+        <button type="button" className="text" disabled={!!pending} onClick={() => void exportXlsx()} aria-label={`Export ${headline} as XLSX`}>{pending ? 'XLSX…' : 'XLSX'}</button>
         {!spec.table && <>{' · '}<button type="button" className="text" onClick={exportSvg} aria-label={`Export ${headline} as SVG`}>SVG</button></>}
       </span>}
     </div>
-    <div className="muted an-sub">{spec.sub}</div>
-    {entry?.error && <p className="bad" role="alert">✗ {entry.error} <button type="button" className="text" onClick={onRetry}>Retry</button></p>}
+    <div className="muted an-sub">{loading ? 'Loading…' : spec.sub}</div>
+    {entry?.error && <p className="bad">✗ {entry.error}</p>}
     {empty && <p className="muted an-empty" data-testid="chart-empty">{NO_DATA}</p>}
     {m && !empty && !spec.table && <Suspense fallback={<div className="an-canvas muted" style={{ height: spec.height }}>Loading chart…</div>}>
       <AnalyticsChart id={spec.id} recs={m.recs} finding={finding} height={spec.height ?? 220} svgRef={svgRef} />
     </Suspense>}
+    {m && !empty && !spec.table && <div className="an-viewdata"><button type="button" className="text" aria-expanded={showData} aria-controls={showData ? tid : undefined} onClick={() => setShowData(v => !v)}>{showData ? 'Hide data' : 'View data'}</button></div>}
     {table && (spec.table || showData) && <DataTable id={tid} spec={spec} table={table} label={finding} />}
-    {m && !empty && !spec.table && <div className="an-viewdata"><button type="button" className="text" aria-expanded={showData} aria-controls={tid} onClick={() => setShowData(v => !v)}>{showData ? 'Hide data' : 'View data'}</button></div>}
     {err && <div className="bad an-note" role="alert">✗ {err}</div>}
   </div>
 }
@@ -166,7 +181,7 @@ function DataTable({ id, spec, table, label }: { id: string; spec: Spec; table: 
   return <div className="an-table" id={id} tabIndex={0} role="region" aria-label={`${label}: data`}>
     <table className="grid" data-testid="chart-data">
       <thead><tr>{table.headers.map((h, i) => <th key={h} scope="col" className={table.numeric[i] ? 'n' : undefined}>{h}</th>)}</tr></thead>
-      <tbody>{table.rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => <td key={ci} className={table.numeric[ci] ? 'n mono' : undefined}>{c}</td>)}</tr>)}</tbody>
+      <tbody>{table.rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => <td key={ci} className={table.numeric[ci] ? 'n mono' : undefined}>{c === NONE_CELL ? <><span aria-hidden="true">{c}</span><span className="sr-only">none</span></> : c}</td>)}</tr>)}</tbody>
     </table>
     {spec.id === 'M7' && <div className="muted an-note">Average and worst per step code across live runs; the CSV and XLSX carry every step of every run.</div>}
   </div>

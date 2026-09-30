@@ -164,3 +164,22 @@ export const addKnownIssue = (id: string, b: { title: string; severity: string; 
 export const patchKnownIssue = (id: string, issueId: string, b: { title?: string; severity?: string; workaround?: string; externalKey?: string }, version: number) => patch<KnownIssue>(`/api/v1/trains/${id}/known-issues/${issueId}`, b, version)
 export const knownIssueAction = (id: string, issueId: string, action: 'accept' | 'resolve' | 'reopen', version: number) => post<KnownIssue>(`/api/v1/trains/${id}/known-issues/${issueId}:${action}`, {}, version)
 export const exitHypercare = (id: string, version: number) => post<unknown>(`/api/v1/trains/${id}:exit-hypercare`, {}, version)
+
+// ---- REOS-38: inbox and My work (own rows only) ----
+export interface InboxItem { id: string; kind: string; entityType: string; entityId: string; escalationLevel: number; message: string; createdAt: string; readAt: string | null; version: number; trainId: string | null; trainTitle: string | null }
+export interface InboxPage { items: InboxItem[]; total: number; unread: number; limit: number; offset: number }
+export const getInbox = (unreadOnly: boolean, limit: number, offset: number) => get<InboxPage>(`/api/v1/me/notifications?unread=${unreadOnly}&limit=${limit}&offset=${offset}`)
+export const getUnreadCount = () => get<{ unread: number; total: number }>('/api/v1/me/notifications/count')
+export const markNotificationRead = (id: string) => post<{ id: string; readAt: string; version: number }>(`/api/v1/notifications/${id}:read`)
+export const markAllNotificationsRead = () => post<{ marked: number }>('/api/v1/me/notifications:read-all')
+
+export interface WorkVia { kind: 'me' | 'team'; teamId: string | null; teamName: string | null }
+export interface MyWorkData {
+  counts: { tasks: number; gates: number; steps: number; conditions: number; pirActions: number; total: number; overdue: number }
+  tasks: { id: string; description: string; gateId: string; gateName: string; trainId: string; trainTitle: string; dueOn: string; overdue: boolean; via: WorkVia }[]
+  gates: { id: string; name: string; status: string; dueOn: string; overdue: boolean; openTasks: number; trainId: string; trainTitle: string; via: WorkVia }[]
+  steps: { executionId: string; runId: string; runMode: string; stepId: string; stepCode: string; title: string; section: string; status: string; plannedStartAt: string; late: boolean; trainId: string; trainTitle: string; via: WorkVia }[]
+  conditions: { id: string; text: string; expiresAt: string; expired: boolean; decisionId: string; trainId: string; trainTitle: string }[]
+  pirActions: { id: string; text: string; dueOn: string; overdue: boolean; pirId: string; trainId: string; trainTitle: string }[]
+}
+export const getMyWork = () => get<MyWorkData>('/api/v1/me/work')

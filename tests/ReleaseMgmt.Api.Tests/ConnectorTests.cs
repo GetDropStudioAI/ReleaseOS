@@ -18,6 +18,16 @@ namespace ReleaseMgmt.Api.Tests;
 /// </summary>
 public class ConnectorTests
 {
+
+    /// <summary>Reads a file another process (the running app: SQLite, Serilog) still has open. Windows refuses File.ReadAllBytes then; Linux and macOS do not.</summary>
+    private static byte[] ReadShared(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var ms = new MemoryStream();
+        fs.CopyTo(ms);
+        return ms.ToArray();
+    }
+
     private const string Secret = "Api-Secret-Token-77aa", SnUrl = "https://acme.service-now.com";
 
     private sealed class Fake : HttpMessageHandler
@@ -174,11 +184,11 @@ public class ConnectorTests
         var dir = Path.GetDirectoryName(c.F.DbPath)!;
         var cred = Path.Combine(dir, "secrets", "ServiceNow.cred");
         Assert.True(File.Exists(cred));
-        Assert.False(Contains(File.ReadAllBytes(cred), Secret));
+        Assert.False(Contains(ReadShared(cred), Secret));
         Assert.True(Directory.GetFiles(Path.Combine(dir, "keys")).Length > 0);   // the key ring is on disk beside the database, and is what has to be backed up
         foreach (var f in Directory.GetFiles(dir, "app.db*"))
         {
-            var bytes = File.ReadAllBytes(f);
+            var bytes = ReadShared(f);
             Assert.False(Contains(bytes, Secret), $"{Path.GetFileName(f)} holds the secret");
             Assert.False(Contains(bytes, "svc-release"), $"{Path.GetFileName(f)} holds the user name");
         }

@@ -13,6 +13,16 @@ namespace ReleaseMgmt.Infrastructure.Tests;
 /// <summary>REOS-39: Connectors admin, ExternalLinks management, credentials only via Data Protection, keys/states/dates only. REOS-41: stale links.</summary>
 public sealed class SyncServiceTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSuiteFixture>
 {
+
+    /// <summary>Reads a file another process (the running app: SQLite, Serilog) still has open. Windows refuses File.ReadAllBytes then; Linux and macOS do not.</summary>
+    private static byte[] ReadShared(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var ms = new MemoryStream();
+        fs.CopyTo(ms);
+        return ms.ToArray();
+    }
+
     private static readonly Actor Rte = new("rte");
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
 
@@ -101,7 +111,7 @@ public sealed class SyncServiceTests(TriggerSuiteFixture fx) : IClassFixture<Tri
     }
 
     // ---- Data Protection: credentials never in SQLite -------------------------------------------------------------------------------------
-    private static string Scan(string path) => Convert.ToHexStringLower(File.ReadAllBytes(path));
+    private static string Scan(string path) => Convert.ToHexStringLower(ReadShared(path));
     private static bool Contains(byte[] haystack, string needle) => haystack.AsSpan().IndexOf(Encoding.UTF8.GetBytes(needle)) >= 0;
 
     [Fact]
@@ -130,7 +140,7 @@ public sealed class SyncServiceTests(TriggerSuiteFixture fx) : IClassFixture<Tri
         // ... and no byte of the database (main, WAL, SHM) holds the secret, the user name, or the Basic header form
         foreach (var f in Directory.GetFiles(Path.GetDirectoryName(e.Path)!, Path.GetFileName(e.Path) + "*"))
         {
-            var bytes = File.ReadAllBytes(f);
+            var bytes = ReadShared(f);
             Assert.False(Contains(bytes, Secret), $"{Path.GetFileName(f)} holds the secret");
             Assert.False(Contains(bytes, basic), $"{Path.GetFileName(f)} holds the Basic header");
             Assert.False(Contains(bytes, "svc-release"), $"{Path.GetFileName(f)} holds the user name");
@@ -139,9 +149,9 @@ public sealed class SyncServiceTests(TriggerSuiteFixture fx) : IClassFixture<Tri
         // the credential file is opaque, the key ring does not contain the secret, and the file is the only place it lives
         var cred = Path.Combine(dir, "secrets", "ServiceNow.cred");
         Assert.True(File.Exists(cred));
-        var raw = File.ReadAllBytes(cred);
+        var raw = ReadShared(cred);
         Assert.False(Contains(raw, Secret)); Assert.False(Contains(raw, "svc-release"));
-        Assert.All(Directory.GetFiles(Path.Combine(dir, "keys")), k => Assert.False(Contains(File.ReadAllBytes(k), Secret)));
+        Assert.All(Directory.GetFiles(Path.Combine(dir, "keys")), k => Assert.False(Contains(ReadShared(k), Secret)));
         var back = await store.GetAsync("ServiceNow");
         Assert.Equal(("Basic", "svc-release", Secret), (back!.Kind, back.Username, back.Secret));
         Assert.Equal("Basic", await store.KindAsync("ServiceNow"));

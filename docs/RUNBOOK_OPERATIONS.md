@@ -125,7 +125,7 @@ Assume the machine is lost. On a replacement host with the app installed and con
 4. Start the service. Check `GET /healthz`, sign in, open Sync health and confirm no authentication alert appears for the connectors (proof the key ring and credentials restored together).
 5. Spot-check: the newest audit entry is close to the time of the backup; an evidence attachment downloads and its SHA-256 (shown on the gate) matches.
 
-Recovery point: at most 15 minutes of changes are lost (the backup interval). Recovery time: measured by the timed drill in [DR_DRILL.md](DR_DRILL.md) (target: under 30 minutes for the whole procedure).
+Recovery point: at most 15 minutes of changes are lost (the backup interval). Recovery time: measured by the timed drill in [DR_DRILL.md](DR_DRILL.md) (target: under 30 minutes for the whole procedure). Measured on a 4-core shared container: 3.6 s at 200 trains / 100k audit rows, 13.5 s for a 360 MB database plus 1 GB of attachments. Not measured on the pilot host: repeat it there. The drill also showed that nothing in the app backs up `keys/`, `secrets/` or `attachments/`; copy the database first, then attachments, and re-copy keys and secrets after any rotation or credential change.
 
 ## 8. Upgrading
 

@@ -85,7 +85,7 @@ Full regression on the merged head (REOS-53 merge on top of 733b3b2).
 | 4 metrics | `seed_and_query.py` ran clean |
 | 5 web | build ok, 13 web unit tests pass |
 | 6 UI, both themes | Playwright 77/77 on a freshly started host (`Pdf__QuestPdfLicense=Evaluation`); axe plus keyboard-only walkthrough of all 12 views, both themes |
-| 7 CI | see the closing note below |
+| 7 CI | run 70 on head `12e8f25`: `build-test` green on `windows-latest` and `macos-latest` (build, .NET tests, oracle, tooling, Playwright on both). Runs 64 to 69 were red on test-only defects, all fixed at root: Windows CRLF in a fixture, a fixed-window write-count assertion, the PDF trailer /ID mask, a sign-out navigation race |
 | 8 human items | REOS-54: pilot run and evidence-pack acceptance by a Governance Officer is human-led and not done |
 
 Notes:
@@ -93,3 +93,5 @@ Notes:
 - REOS-52 found and fixed three product defects (train-list readiness lookups, audit entity filter, API start on a restored database). REOS-53 found and fixed a Viewer able to complete or reopen tasks (Q-053a), sessions surviving user deactivation (Q-053c), four 500s on bad input, and missing keyboard focus on bottom-rule inputs.
 - Not fixed, needs owner decision: webhook URLs stored in clear (Q-053e), key ring plain XML (Q-052e), QuestPDF licence tier (OI-2), NBomber licence (Q-052a).
 - Load and DR numbers are from a 4-core shared container, not the pilot host.
+
+**Closed 2026-09-30:** REOS-39 to 53 moved In Review to Done together. REOS-54 stays In Review: the pilot run and Governance Officer acceptance of its evidence pack are human-led.

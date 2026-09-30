@@ -267,3 +267,14 @@ table.cal td.cal-sel { box-shadow: inset 0 0 0 2px var(--accent); }
 .confirm-inline { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .confirm-inline input.line { min-width: 14em; }
 .pending { color: var(--secondary); }
+
+/* Design direction D (Command): Fiserv Orange carries the main wording in both themes; blue stays the colour of everything clickable.
+   Tokens: --brand-title (22px+ and indicators), --brand-text (smaller headings). Contrast is AA in light and dark (docs/review/ACCESSIBILITY_AUDIT.md). */
+h1 { color: var(--brand-title); }
+.detail h2, h2.file-name, h2.aside-title, .drawer-title, .inspector h2:not(.cap) { color: var(--brand-title); }
+h2.cap, h3.cap, .section-head h2, .stream h2, .an-title, .cal-caption, .runtable tr.sec td { color: var(--brand-text); }
+.toolbar .app-name { color: var(--brand-text); font-weight: 700; letter-spacing: 0.01em; }
+.tabs a[aria-current="page"], .tabs .choice[aria-pressed="true"], .sync-window button[aria-pressed="true"] { border-bottom-color: var(--brand-title); }
+.jump { display: inline-flex; align-items: baseline; gap: 6px; color: var(--secondary); }
+.jump input.line { width: 16em; color: var(--label); }
+.jump kbd { font-family: var(--font-mono); font-size: 11px; color: var(--secondary); }

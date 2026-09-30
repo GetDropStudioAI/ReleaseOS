@@ -27,6 +27,7 @@ import { fmtDayTime, setDisplayZone, zoneAbbr } from './time'
 import { getConfig } from './api'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 import { Announcer } from './announce'
+import { JumpTo } from './JumpTo'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
 const NAV = ['Trains']
@@ -184,7 +185,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   useEffect(() => {
     const names: Record<Route['view'], string> = { trains: 'Trains', admin: 'Admin', work: 'My work', inbox: 'Inbox', audit: 'Audit', templates: 'Templates', sync: 'Sync health', connectors: 'Connectors', library: 'Comm library', analytics: 'Analytics', calendar: 'Calendar', importexport: 'Imports & exports' }
     const page = view === 'trains' && trainTitle ? `${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live runbook' : 'Rehearsal'}` : ''}` : names[view]
-    document.title = `${page} · Release Management`
+    document.title = `${page} · ReleaseOS`
   }, [view, trainTitle, mode])
   const mainRef = useRef<HTMLElement>(null)
   const lastPage = useRef<string | null>(null)
@@ -215,7 +216,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       <a className="skip-link" href="#workspace" onClick={e => { e.preventDefault(); const m = document.getElementById('workspace'); m?.focus() }}>Skip to workspace</a>
       <Announcer />
       <header className="toolbar">
-        <strong>Release Management</strong>
+        <strong className="app-name">ReleaseOS</strong>
         <nav aria-label="Primary" className="tabs">
           {NAV.map((n, i) => <a key={n} href="/" onClick={e => { e.preventDefault(); to({ view: 'trains' }) }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
           <a href="/work" onClick={e => { e.preventDefault(); to({ view: 'work' }) }} aria-current={view === 'work' ? 'page' : undefined}>My work</a>
@@ -231,6 +232,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
           {canAdmin && <a href="/admin" onClick={e => { e.preventDefault(); to({ view: 'admin' }) }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
         </nav>
         <span className="spacer" />
+        <JumpTo rows={rows} onTrain={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} onView={v => to({ view: v })} />
         <LiveStatus state={live.state} time={live.serverTime} />
         <ThemeChoices />
         <span className="muted">{me.name} · {me.roles.join(', ')}</span>

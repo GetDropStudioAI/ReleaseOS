@@ -9,14 +9,16 @@ test('runbook steps, dependencies and cycle refusal work from the UI', async ({ 
   const rb = page.locator('section[aria-label=Runbook]')
   await expect(rb).toContainText('No runbook steps yet')
 
+  // The Add step form stays open after each Add (Enter submits), so it is opened once for the three steps.
+  await rb.locator('.section-head button:has-text("Add step")').click()
   async function addStep(title: string, section: string, start: string, minutes: string) {
-    await rb.locator('.section-head button:has-text("Add step")').click()
     await rb.locator('label:has-text("Step") input').fill(title)
     await rb.locator('label:has-text("Section") select').selectOption(section)
     await rb.locator('label:has-text("Starts") input').fill(start)
     await rb.locator('label:has-text("Minutes") input').fill(minutes)
     await rb.locator('button:text-is("Add")').click()
     await expect(rb.locator('button', { hasText: title })).toBeVisible()
+    await expect(rb.locator('label:has-text("Step") input')).toHaveValue('')                   // cleared and ready for the next step
   }
   await addStep('Stop traffic', 'PreCheck', '2026-11-06T21:00', '10')
   await addStep('Deploy API', 'Deploy', '2026-11-06T21:15', '30')

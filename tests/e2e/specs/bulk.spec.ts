@@ -18,6 +18,7 @@ test('bulk paste: errors block commit, a fixed paste commits, tasks appear in th
   await expect(preview).toContainText('line 3')
   await expect(preview).toContainText('line 4')
   await expect(preview).toContainText('Did you mean: Payments API')                              // closest match
+  await expect(preview.getByRole('button', { name: 'Use Payments API on line 3' })).toBeVisible()  // and it is a one-click fix
   await expect(drawer.locator('button:has-text("Commit")')).toBeDisabled()                        // any error blocks commit
   await expect(checklist).not.toContainText('Announce the freeze')                                 // and nothing was added
 

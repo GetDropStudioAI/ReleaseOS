@@ -190,6 +190,17 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
     const page = view === 'trains' && trainTitle ? `${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live runbook' : 'Rehearsal'}` : ''}` : names[view]
     document.title = `${page} · ReleaseOS`
   }, [view, trainTitle, mode])
+  // docs/UI.md: Esc closes the Inspector or step drawer. Keys typed into a field, or already handled (the Comms drawer, confirms), are left alone.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (e.key !== 'Escape' || e.defaultPrevented || !t || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return
+      if (view !== 'trains' || !selection || comms?.open || bulk?.open) return
+      e.preventDefault(); go({ ...route, selection: null })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [view, selection, comms?.open, bulk?.open, route, go])
   const mainRef = useRef<HTMLElement>(null)
   const lastPage = useRef<string | null>(null)
   // Only a navigation the user made moves focus: restoring the last route when the app opens must not.

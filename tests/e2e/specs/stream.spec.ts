@@ -8,7 +8,7 @@ test('the Stream shows groups, blockers, gate glyphs and the freeze footer', asy
   await expect(stream.locator('h2', { hasText: 'Gated' })).toBeVisible()
   await expect(stream.locator('h2', { hasText: 'Planning' })).toBeVisible()
   await expect(stream.locator('.stream-row', { hasText: 'Card portal' })).toContainText('▲ 2 blockers')
-  await expect(stream.locator('.stream-row', { hasText: 'Card portal' }).locator('[aria-label=Gates]')).toBeVisible()
+  await expect(stream.locator('.stream-row', { hasText: 'Card portal' }).locator('.stream-gates')).toBeVisible()
 
   const footer = stream.locator('[aria-label="Freeze ahead"], .freeze-footer')
   await expect(footer).toContainText('Freeze ahead')

@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { ApiError, commitTasks, parseTasks, type GateRow, type ParsePreview } from './api'
+import { ApiError, commitTasks, parseTasks, type GateRow, type ParseIssue, type ParsePreview } from './api'
 import { errMsg, plural } from './format'
 import { Conflict, isConflict } from './Conflict'
 import { useDraft } from './session'
+import { announce } from './announce'
+import { useFocusWhen, useRestoreFocus } from './focus'
 
 export interface BulkDraft { text: string; gateId: string; open: boolean }
 export const bulkKey = (trainId: string) => `bulk:${trainId}`
@@ -10,6 +12,23 @@ export const bulkKey = (trainId: string) => `bulk:${trainId}`
 const GRAMMAR = `# Gate name
 - task text @owner [Product]
 // comment`
+
+/**
+ * One-click fix for a parser error (UX review, BulkParser mockup: closest-match suggestions are buttons). Rewrites the named part of that
+ * line: the `# gate` name, the `@owner` token or the `[Product]` tag. Returns null when the suggestion cannot be placed on the line.
+ */
+export function applySuggestion(text: string, issue: Pick<ParseIssue, 'line' | 'code'>, pick: string): string | null {
+  const lines = text.split('\n'), i = issue.line - 1
+  if (i < 0 || i >= lines.length) return null
+  const line = lines[i]
+  let next: string | null = null
+  if (issue.code === 'UnknownGate') next = line.replace(/^(\s*#\s*).*?(\r?)$/, (_m, pre: string, cr: string) => `${pre}${pick}${cr}`)
+  else if (issue.code === 'UnknownOwner') next = line.replace(/(^|\s)@\S*/, (_m, pre: string) => `${pre}${pick.startsWith('@') ? pick : '@' + pick}`)
+  else if (issue.code === 'UnknownProduct') next = line.replace(/\[[^[\]]*\]/, () => `[${pick}]`)
+  if (next === null || next === line) return null
+  lines[i] = next
+  return lines.join('\n')
+}
 
 /** The "Paste tasks" drawer (PROJECT_SCOPE 5.1, mockups/BulkParser.html). The pasted text is a session draft: it survives a closed tab until it is committed or discarded. */
 export function BulkDrawer({ trainId, gates, onClose, onChanged }: { trainId: string; gates: GateRow[]; onClose: () => void; onChanged: () => void }) {
@@ -19,18 +38,38 @@ export function BulkDrawer({ trainId, gates, onClose, onChanged }: { trainId: st
   const [conflict, setConflict] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
   const [needAck, setNeedAck] = useState<string[] | null>(null)
+  const headRef = useFocusWhen<HTMLHeadingElement>(true)   // the drawer opens with focus on its title (WCAG 2.4.3)
+  useRestoreFocus()                                             // and gives it back to "Paste tasks" when it closes
   const d: BulkDraft = draft ?? { text: '', gateId: '', open: true }
   const set = (patch: Partial<BulkDraft>) => { setDraft({ ...d, ...patch }); setPreview(null); setNeedAck(null); setConflict(null) }   // any edit makes the old preview stale
 
-  const parse = async () => {
+  const parse = async (text = d.text, gateId = d.gateId) => {
+    if (busy) return
     setErr(null); setConflict(null); setNeedAck(null); setBusy(true)
-    try { setPreview(await parseTasks(trainId, d.text, d.gateId || null)) } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+    try {
+      const p = await parseTasks(trainId, text, gateId || null)
+      setPreview(p)
+      announce(`${plural(p.tasks.length, 'task')} ready, ${plural(p.warningCount, 'warning')}, ${plural(p.errorCount, 'error')}.`)
+    } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
   }
+  // A suggestion fixes its line (or picks the default gate) and parses again, so fixing a typo is one click.
+  const fix = (i: ParseIssue, pick: string) => {
+    if (i.code === 'NoTargetGate') {
+      const g = gates.find(x => x.name.toLowerCase() === pick.toLowerCase())
+      if (!g) return
+      set({ gateId: g.id }); void parse(d.text, g.id); return
+    }
+    const text = applySuggestion(d.text, i, pick)
+    if (text === null) return
+    set({ text }); void parse(text, d.gateId)
+  }
+  const fixable = (i: ParseIssue) => i.code === 'UnknownGate' || i.code === 'UnknownOwner' || i.code === 'UnknownProduct' || i.code === 'NoTargetGate'
   const commit = async (ack: boolean) => {
     if (!preview) return
     setErr(null); setConflict(null); setBusy(true)
     try {
       await commitTasks(trainId, preview.previewId, ack)
+      announce(`${plural(preview.tasks.length, 'task')} added.`)
       setDraft(undefined); setPreview(null); onChanged(); onClose()          // committed: the draft is done with
     } catch (e) {
       if (isConflict(e)) setConflict(e)
@@ -43,7 +82,7 @@ export function BulkDrawer({ trainId, gates, onClose, onChanged }: { trainId: st
     <>
       <div className="section-head"><span className="cap">Drawer · paste tasks</span>
         <span><button type="button" className="text quiet" onClick={() => { setDraft({ ...d, open: false }); onClose() }}>Close</button></span></div>
-      <h2>Paste tasks</h2>
+      <h2 ref={headRef} tabIndex={-1}>Paste tasks</h2>
       <p className="muted">One task per line. The text you type here is kept until you commit or discard it.</p>
       <pre className="grammar">{GRAMMAR}</pre>
       <p className="inline-form"><label>Lines before any # go to <select className="line" value={d.gateId} onChange={e => set({ gateId: e.target.value })}>
@@ -51,22 +90,24 @@ export function BulkDrawer({ trainId, gates, onClose, onChanged }: { trainId: st
       <p><label className="cap" htmlFor="bulk-text">Tasks</label>
         <textarea id="bulk-text" className="bulk-text" rows={12} spellCheck={false} value={d.text} onChange={e => set({ text: e.target.value })} placeholder={'# CAB Approval\n- CAB minutes attached @marcus [Payments API]'} /></p>
       <p className="actions-col">
-        <button type="button" className="text" disabled={busy || d.text.trim() === ''} onClick={parse}>Parse</button>
+        <button type="button" className="text" disabled={busy || d.text.trim() === ''} onClick={() => void parse()}>{busy && !preview ? 'Parsing…' : 'Parse'}</button>
         <button type="button" className="text quiet" onClick={() => { setDraft(undefined); setPreview(null); setErr(null); onClose() }}>Discard</button>
       </p>
       {err && <p className="bad" role="alert">✗ {err}</p>}
       {conflict && <Conflict error={conflict} what="train">
-        <button type="button" className="text" onClick={parse}>Parse again</button></Conflict>}
+        <button type="button" className="text" disabled={busy} onClick={() => void parse()}>Parse again</button></Conflict>}
 
       {preview && (
         <section aria-label="Preview">
-          <p role="status"><strong>{plural(preview.tasks.length, 'task')}</strong> ready · <span className={preview.warningCount ? 'warn' : 'muted'}>{plural(preview.warningCount, 'warning')}</span> · <span className={preview.errorCount ? 'bad' : 'muted'}>{plural(preview.errorCount, 'error')}</span></p>
+          <p><strong>{plural(preview.tasks.length, 'task')}</strong> ready · <span className={preview.warningCount ? 'warn' : 'muted'}>{plural(preview.warningCount, 'warning')}</span> · <span className={preview.errorCount ? 'bad' : 'muted'}>{plural(preview.errorCount, 'error')}</span></p>
           {preview.issues.length > 0 && (<>
-            <p className="cap">Fix these first</p>
+            <h3 className="cap">Fix these first</h3>
             <ul className="plain">{preview.issues.map((i, k) => (
-              <li key={k} className="bad">✗ <span className="mono">line {i.line}</span> {i.message}{i.suggestions.length > 0 && <span className="muted"> Did you mean: {i.suggestions.join(', ')}?</span>}</li>))}</ul></>)}
+              <li key={k} className="bad">✗ <span className="mono">line {i.line}</span> {i.message}{i.suggestions.length > 0 && (fixable(i)
+                ? <span className="muted"> Did you mean: {i.suggestions.map((sg, n) => <span key={sg}>{n > 0 ? ', ' : ''}<button type="button" className="text" disabled={busy} aria-label={`Use ${sg} on line ${i.line}`} onClick={() => fix(i, sg)}>{sg}</button></span>)}?</span>
+                : <span className="muted"> Did you mean: {i.suggestions.join(', ')}?</span>)}</li>))}</ul></>)}
           {preview.tasks.length > 0 && (<>
-            <p className="cap">Will be added on commit</p>
+            <h3 className="cap">Will be added on commit</h3>
             <ul className="plain">{preview.tasks.map(t => (
               <li key={t.line}><span className="accent">+</span> {t.description} <span className="muted">· {t.gateName} · {t.ownerName ?? '—'}{t.productName ? ` · ${t.productName}` : ''}</span>
                 {t.warnings.map((w, k) => <div key={k} className="warn">▲ {w}</div>)}</li>))}</ul></>)}
@@ -74,8 +115,8 @@ export function BulkDrawer({ trainId, gates, onClose, onChanged }: { trainId: st
           {needAck && <p className="warn" role="alert">▲ This decertifies {needAck.join(', ')}. Its certification is removed and the gate goes back to In progress.</p>}
           <p className="actions-col">
             {needAck || preview.decertifiesGates.length > 0
-              ? <button type="button" className="text" disabled={busy || preview.errorCount > 0 || preview.tasks.length === 0} onClick={() => commit(true)}>Commit and decertify</button>
-              : <button type="button" className="text" disabled={busy || preview.errorCount > 0 || preview.tasks.length === 0} onClick={() => commit(false)}>Commit {plural(preview.tasks.length, 'task')}</button>}
+              ? <button type="button" className="text" disabled={busy || preview.errorCount > 0 || preview.tasks.length === 0} onClick={() => commit(true)}>{busy ? 'Committing…' : 'Commit and decertify'}</button>
+              : <button type="button" className="text" disabled={busy || preview.errorCount > 0 || preview.tasks.length === 0} onClick={() => commit(false)}>{busy ? 'Committing…' : `Commit ${plural(preview.tasks.length, 'task')}`}</button>}
           </p>
           {preview.errorCount > 0 && <p className="muted">Commit is off while there are errors: nothing is added until every line is valid.</p>}
         </section>)}

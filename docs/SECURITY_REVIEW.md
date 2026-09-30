@@ -1,5 +1,7 @@
 # Security and accessibility review (REOS-53, M8)
 
+> **Superseded in part (2026-09-30):** the security scan in [SECURITY_SCAN.md](SECURITY_SCAN.md) changed cookie handling (always `Secure` and `__Host-` outside Development, SEC-B3), session lifetimes and sign-out (SEC-B4/B5) and added forwarded-header support (SEC-E5). Where this document says otherwise, the scan is current.
+
 Scope of the story: the endpoint-to-role matrix as an automated test, antiforgery, attachment serving headers, secrets, and an accessibility pass (axe plus keyboard-only) over every screen. Decisions and judgement calls are Q-053a to Q-053h in `QUESTIONS.md`. Reviewed at commit 733b3b2 plus this change. Everything below was run on Linux with the in-process test host and Chromium only.
 
 ## 1. Summary

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useDraft, useSession } from './session'
 import { ChangeRecordPanel, GoNoGo, emptyGoNoGo, goNoGoKey, type GoNoGoDraft } from './Governance'
+import { FreezesPanel } from './Freezes'
 import { fmtDayTime } from './time'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
@@ -128,6 +129,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       {checklistGate && <Checklist gateId={checklistGate.id} trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
       <GoNoGo trainId={t.id} trainVersion={t.version} canDecide={canDecide} refreshKey={refreshKey} onChanged={onChanged} />
       <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
+      <FreezesPanel trainId={t.id} refreshKey={refreshKey} onChanged={onChanged} />
       <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
     </>
   )

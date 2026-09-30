@@ -11,6 +11,12 @@ public sealed class WaiverService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
 {
     public const int MinReasonLength = 20;
 
+    public async Task<List<GateWaivers>> ListAsync(string gateId, CancellationToken ct = default)
+    {
+        await using var db = await OpenAsync(ct);
+        return await db.Set<GateWaivers>().AsNoTracking().Where(w => w.StageGateId == gateId).OrderByDescending(w => w.RequestedAt).ToListAsync(ct);
+    }
+
     public Task<ServiceResult<GateWaivers>> RequestAsync(string gateId, string reason, Actor actor, CancellationToken ct = default) =>
         RunAsync(async db =>
         {

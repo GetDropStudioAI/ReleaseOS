@@ -217,7 +217,7 @@ public class RunTests
     }
 
     [Fact]
-    public async Task The_freeze_trigger_backstop_surfaces_as_a_readable_422_not_a_500()
+    public async Task A_freeze_blocks_a_deploy_step_with_a_readable_422_before_the_trigger_fires()
     {
         var (f, c, o) = await Setup(); using var _ = f;
         var (a, b, _) = await Plan(c, "t3", o);
@@ -228,8 +228,8 @@ public class RunTests
         var r = await Act(c, run, b, "start");                                                                    // Deploy step, Live run, active freeze, no override
         Assert.Equal(HttpStatusCode.UnprocessableEntity, r.StatusCode);
         var body = await Json(r);
-        Assert.Equal("DbRule", Guard(body));
-        Assert.Contains("Freeze window", body.GetProperty("message").GetString());
+        Assert.Equal("FreezeLockout", Guard(body));   // REOS-34: the service guard answers first; the trigger backstop is covered in FreezeTests
+        Assert.Contains("freeze window", body.GetProperty("message").GetString());
         Assert.Equal("Scheduled", Scalar(f, $"SELECT Status FROM StepExecutions WHERE StepId='{b}'"));
     }
 

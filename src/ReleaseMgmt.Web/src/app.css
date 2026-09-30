@@ -108,3 +108,7 @@ table.grid tr.selected .accent { color: color-mix(in srgb, var(--accent) 65%, va
 textarea.line { border: 0; border-bottom: 1px solid var(--tertiary); background: transparent; font: inherit; color: inherit; padding: 4px 0; resize: vertical; }
 button.text.strong { font-weight: 600; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* REOS-35: Download is a real link that looks like a text button */
+a.text { font-weight: 600; text-decoration: none; }
+a.text:hover { text-decoration: underline; text-underline-offset: 3px; }

@@ -22,6 +22,11 @@ async function openAnalytics(page: Page, email: string) {
   await expect(page.locator('[data-testid=chart-title]').first()).not.toHaveText('Loading…')
   await expect(page.locator('[data-testid=kpi] .an-kpi-value').first()).not.toHaveText('…')
   await expect(page.locator('[data-testid=chart-title]', { hasText: 'Loading…' })).toHaveCount(0)
+  // Charts are lazy: the renderer loads after the data ("Loading chart…"), then draws. Wait for that too, or a "no data" skip below
+  // can fire before the first SVG exists and silently turn a real check into a skip.
+  await expect(page.getByText('Loading chart…')).toHaveCount(0)
+  const drawable = page.locator('[data-testid=chart]:not(:has([data-testid=chart-empty])) .an-canvas')
+  if (await drawable.count() > 0) await expect(page.locator('[data-testid=chart] [role=img] svg').first()).toBeAttached()
 }
 
 /** First chart card that has an export line (a chart with no data has none). */

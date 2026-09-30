@@ -283,9 +283,14 @@ public sealed class PdfExportWorkerTests(TriggerSuiteFixture fx) : IClassFixture
             var a = QuestPDF.Fluent.GenerateExtensions.GeneratePdf(Doc(kind, m1, e.Options));
             var b = QuestPDF.Fluent.GenerateExtensions.GeneratePdf(Doc(kind, m2, e.Options));
             // PDF/A writes random xmpMM DocumentID/InstanceID uuids and derives the trailer /ID from them (see docs/PDFA_SPIKE.md): everything else must match byte for byte.
-            static string Mask(byte[] x) => System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace(System.Text.Encoding.Latin1.GetString(x), "uuid:[0-9a-fA-F-]{36}", "uuid:X"), @"/ID \[<[0-9A-F]+> <[0-9A-F]+>\]", "/ID [X]");
+            static string Mask(byte[] x) => System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace(System.Text.Encoding.Latin1.GetString(x), "uuid:[0-9a-fA-F-]{36}", "uuid:X"), @"/ID \[.*?\]>>", "/ID [X]>>", System.Text.RegularExpressions.RegexOptions.Singleline);   // the two random ids are written as hex <..> or as a binary literal (..), depending on the bytes
             if (pdfA is null) Assert.True(a.AsSpan().SequenceEqual(b), $"{kind} is not deterministic");
-            else Assert.True(Mask(a) == Mask(b), $"{kind} (PDF/A {pdfA}) differs by more than the XMP uuids and the trailer /ID");
+            else
+            {
+                string ma = Mask(a), mb = Mask(b);
+                var at = ma == mb ? -1 : Enumerable.Range(0, Math.Min(ma.Length, mb.Length)).FirstOrDefault(i => ma[i] != mb[i], Math.Min(ma.Length, mb.Length));
+                Assert.True(at < 0, $"{kind} (PDF/A {pdfA}) differs by more than the XMP uuids and the trailer /ID; lengths {ma.Length}/{mb.Length}, first difference at {at}: [{(at < 0 ? "" : ma.Substring(Math.Max(0, at - 60), Math.Min(140, ma.Length - Math.Max(0, at - 60))).Replace("\n", "\\n"))}] vs [{(at < 0 ? "" : mb.Substring(Math.Max(0, at - 60), Math.Min(140, mb.Length - Math.Max(0, at - 60))).Replace("\n", "\\n"))}]");
+            }
         }
     }
 

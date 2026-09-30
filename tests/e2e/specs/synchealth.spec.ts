@@ -63,7 +63,7 @@ for (const scheme of ['light', 'dark'] as const) {
         // BANNER: the other person, on the inbox screen, sees the connector-wide failure without doing anything, with a text link to Sync health
         const banner = b.getByTestId('sync-banner')
         await expect(banner).toContainText('ServiceNow rejected our credentials')
-        await expect(banner).toContainText('not current')
+        await expect(banner).toContainText('on any screen is current')
         await expect(page.getByTestId('sync-banner')).toContainText('ServiceNow rejected our credentials')       // and on the Sync health screen itself
         await expect(b.locator('.stream-row').first()).toBeVisible()                                              // the regions below the banner are still laid out
         await b.goto('/')

@@ -60,17 +60,18 @@ function effect(e: FailingEntry): string {
 export function SyncBanner({ sync, onOpen }: { sync: { state: SyncStateDto | null; error: string | null }; onOpen: () => void }) {
   const { state, error } = sync
   const failing = state?.connectorWide ? state.failing : []
-  // The row is always in the DOM (the shell grid places the other regions around it); it has no height while there is nothing to say.
+  // The row is always in the DOM (the shell grid places the other regions around it) and has no height while there is nothing to say;
+  // only the messages are alerts, so a page with nothing wrong has no empty alert region.
   return (
-    <div className="sync-banner-row" role="alert" aria-live="assertive" data-testid="sync-banner">
+    <div className="sync-banner-row" data-testid="sync-banner">
       {failing.map(e => (
-        <p key={`${e.source}-${e.kind}`} className="sync-banner bad">
+        <p key={`${e.source}-${e.kind}`} className="sync-banner bad" role="alert">
           <strong>{e.scope === 'engine' ? '▲' : '✗'} {headline(e, state?.connectors.find(c => c.source === e.source))}{e.since ? ` since ${fmtDayTime(e.since)}` : ''}.</strong>
           <span className="sync-banner-effect">{effect(e)}</span>
           <a href="/sync" onClick={ev => { ev.preventDefault(); onOpen() }}>Sync health</a>
         </p>
       ))}
-      {error && <p className="sync-banner warn">▲ The sync status could not be read ({error}). A connector failure would not show here until it can.</p>}
+      {error && <p className="sync-banner warn" role="alert">▲ The sync status could not be read ({error}). A connector failure would not show here until it can.</p>}
     </div>
   )
 }

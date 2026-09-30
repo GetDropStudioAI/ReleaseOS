@@ -49,6 +49,58 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
         return failures;
     }
 
+    private static readonly string[] HopPath = ["Planning", "Gated", "Executing", "Complete"];
+
+    /// <summary>
+    /// How many guards block each train's next hop (Planning to Gated, Gated to Executing, Executing to Complete): the same count as
+    /// <c>EvaluateAsync(t, next).Count</c> per train, computed with five set-based queries for all trains instead of about six queries per train
+    /// (the Stream lists every train, and the per-train form took ~230 ms for 200 trains on its own; REOS-52). The equivalence with EvaluateAsync is
+    /// asserted by a test, so a guard added to EvaluateAsync must be added here too. Trains that are Complete, Aborted or unknown count 0.
+    /// </summary>
+    public async Task<Dictionary<string, int>> NextHopBlockerCountsAsync(ReleaseDbContext db, IReadOnlyCollection<ReleaseTrains> trains, CancellationToken ct = default)
+    {
+        var counts = trains.ToDictionary(t => t.Id, _ => 0);
+        var hop = trains.Select(t => (Train: t, From: Array.IndexOf(HopPath, t.CurrentStatus))).Where(x => x.From is >= 0 and < 3).ToList();
+        if (hop.Count == 0) return counts;
+        var ids = hop.Select(x => x.Train.Id).ToList();
+        var gatedIds = hop.Where(x => x.Train.CurrentStatus == "Gated").Select(x => x.Train.Id).ToList();
+
+        var open = (await db.Set<StageGates>().AsNoTracking().Where(g => ids.Contains(g.ReleaseTrainId) && g.Status != "Certified" && g.Status != "Waived")
+            .Select(g => new { g.ReleaseTrainId, g.RequiredBeforeStatus }).ToListAsync(ct)).ToLookup(g => g.ReleaseTrainId, g => g.RequiredBeforeStatus);
+        var latest = new Dictionary<string, string>();
+        var expired = new HashSet<string>();
+        var baselined = new HashSet<string>();
+        if (gatedIds.Count > 0)
+        {
+            foreach (var d in (await db.Set<GoNoGoDecisions>().AsNoTracking().Where(d => gatedIds.Contains(d.ReleaseTrainId)).Select(d => new { d.ReleaseTrainId, d.Decision, d.DecidedAt }).ToListAsync(ct))
+                .OrderByDescending(d => d.DecidedAt))
+                latest.TryAdd(d.ReleaseTrainId, d.Decision);   // newest first: the first per train is the latest decision
+            var now = Now;
+            expired = [.. await (from c in db.Set<GoNoGoConditions>().AsNoTracking()
+                                 join d in db.Set<GoNoGoDecisions>().AsNoTracking() on c.DecisionId equals d.Id
+                                 where gatedIds.Contains(d.ReleaseTrainId) && c.ClosedAt == null && c.ExpiresAt <= now
+                                 select d.ReleaseTrainId).Distinct().ToListAsync(ct)];
+            baselined = [.. await db.Set<Baselines>().AsNoTracking().Where(b => gatedIds.Contains(b.ReleaseTrainId)).Select(b => b.ReleaseTrainId).ToListAsync(ct)];
+        }
+
+        foreach (var (t, from) in hop)
+        {
+            var to = HopPath[from + 1];
+            var n = 0;
+            if (!Transitions.TrainLegal(t.CurrentStatus, to)) { counts[t.Id] = 1; continue; }
+            if (open[t.Id].Any(req => Transitions.Rank(req) <= Transitions.Rank(to))) n++;                       // gate lockout
+            if (t.CurrentStatus == "Gated" && to == "Executing")
+            {
+                if (!latest.TryGetValue(t.Id, out var decision) || decision == "NoGo") n++;                        // needs a recorded Go
+                if (expired.Contains(t.Id)) n++;                                                                    // a Go/No-Go condition expired
+                if (!baselined.Contains(t.Id)) n++;                                                                 // needs a captured baseline
+                if (t.RiskTier is "High" or "VeryHigh" && t.RollbackRehearsedAt is null) n++;                       // needs a rehearsed rollback
+            }
+            counts[t.Id] = n;
+        }
+        return counts;
+    }
+
     public Task<ServiceResult<ReleaseTrains>> AdvanceAsync(string trainId, string to, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
         ChangeStatusAsync(trainId, to, actor, expectedVersion, closeCode: null, notes: null, "Advance", ct);
 

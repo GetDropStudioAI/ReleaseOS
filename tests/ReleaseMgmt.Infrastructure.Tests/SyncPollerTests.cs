@@ -423,30 +423,37 @@ public sealed class SyncPollerTests(TriggerSuiteFixture fx) : IClassFixture<Trig
     private static async Task Until(Func<bool> cond, string what)
     {
         var t = Environment.TickCount64;
-        while (!cond()) { if (Environment.TickCount64 - t > 10_000) Assert.Fail("Timed out waiting for " + what); await Task.Delay(10); }
+        while (!cond()) { if (Environment.TickCount64 - t > 30_000) Assert.Fail("Timed out waiting for " + what); await Task.Delay(10); }
     }
 
     [Fact]
     public async Task The_timer_polls_every_five_minutes_and_every_minute_while_a_deployment_window_is_open()
     {
         var e = Sn(cfg: new() { ["Sync:StartDelaySeconds"] = "0" }); e.SnAnswers();
-        // The loop registers its next wait on the fake clock only after a cycle and a database read; give it a moment before each advance.
-        async Task Advance(TimeSpan by) { await Task.Delay(600); e.Time.Advance(by); }
+        // The loop registers its next wait on the fake clock only after a cycle and a database read, and that takes an unpredictable time on a busy
+        // machine. So the test never sleeps and hopes: it waits until the loop has armed a NEW timer, then advances the clock.
+        var armed = 0;
+        async Task Armed() { await Until(() => e.Time.Timers > armed, "the loop to wait on the clock"); armed = e.Time.Timers; }
         await e.Poller.StartAsync(default);
         try
         {
             await Until(() => e.Http.Count == 1, "the first cycle");
-            await Advance(TimeSpan.FromMinutes(1)); await Task.Delay(600);
+            await Armed();
+            e.Time.Advance(TimeSpan.FromMinutes(1));                      // the same five-minute wait is still pending
+            await Task.Delay(200);
             Assert.Equal(1, e.Http.Count);                                // no window: one minute later nothing has happened
-            await Advance(TimeSpan.FromMinutes(4));
+            e.Time.Advance(TimeSpan.FromMinutes(4));
             await Until(() => e.Http.Count == 2, "the cycle after five minutes");
+            await Armed();
 
             e.Sql("INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('w','t1','2026-10-30T02:00:00Z','2026-10-30T09:00:00Z')");   // window open now
-            await Advance(TimeSpan.FromMinutes(5));                       // the slow wait in progress ends; the loop then sees the open window
+            e.Time.Advance(TimeSpan.FromMinutes(5));                      // the slow wait in progress ends; the loop then sees the open window
             await Until(() => e.Http.Count == 3, "the cycle that notices the window");
-            await Advance(TimeSpan.FromMinutes(1));
+            await Armed();
+            e.Time.Advance(TimeSpan.FromMinutes(1));
             await Until(() => e.Http.Count == 4, "a one-minute cycle");
-            await Advance(TimeSpan.FromMinutes(1));
+            await Armed();
+            e.Time.Advance(TimeSpan.FromMinutes(1));
             await Until(() => e.Http.Count == 5, "another one-minute cycle");
         }
         finally { await e.Poller.StopAsync(default); }

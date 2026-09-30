@@ -104,7 +104,7 @@ internal static class SyncTestKit
     public sealed class Env
     {
         public required string Path { get; init; }
-        public required FakeTimeProvider Time { get; init; }
+        public required TimerCountingTimeProvider Time { get; init; }
         public required DbFactory Db { get; init; }
         public required FakeHttp Http { get; init; }
         public required MemCreds Creds { get; init; }
@@ -146,7 +146,7 @@ internal static class SyncTestKit
     public static Env NewEnv(TriggerSuiteFixture fx, string now = "2026-10-30T02:30:00Z", Dictionary<string, string?>? cfg = null, bool serviceNow = true, bool jira = false)
     {
         var path = fx.FreshPath();
-        var time = new FakeTimeProvider();
+        var time = new TimerCountingTimeProvider();
         time.SetUtcNow(DateTimeOffset.Parse(now, null, System.Globalization.DateTimeStyles.AssumeUniversal));
         var values = new Dictionary<string, string?> { ["Sync:PollSeconds"] = "300", ["Sync:WindowPollSeconds"] = "60", ["Sync:TimeoutSeconds"] = "0.3", ["Sync:BackoffBaseSeconds"] = "30" };
         if (cfg is not null) foreach (var (k, v) in cfg) values[k] = v;
@@ -174,5 +174,21 @@ internal static class SyncTestKit
             e.Sql("INSERT INTO ConnectorState(SourceSystem,BaseUrl) VALUES('Jira',?)", JiraUrl);
         }
         return e;
+    }
+}
+
+/// <summary>
+/// A fake clock that counts the timers created on it. A background loop registers its next wait only after it has finished a cycle and read the database,
+/// which takes an unpredictable time on a busy machine; advancing the clock before that registration is lost and the loop then waits forever.
+/// Tests therefore wait for <see cref="Timers"/> to grow instead of sleeping for a fixed time.
+/// </summary>
+public sealed class TimerCountingTimeProvider : Microsoft.Extensions.Time.Testing.FakeTimeProvider
+{
+    private int _timers;
+    public int Timers => Volatile.Read(ref _timers);
+    public override System.Threading.ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        Interlocked.Increment(ref _timers);
+        return base.CreateTimer(callback, state, dueTime, period);
     }
 }

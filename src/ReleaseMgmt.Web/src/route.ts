@@ -3,13 +3,13 @@ import type { Selection } from './Planning'
 
 /** The URL carries the train and the selected node, so a deep link or a refresh reopens the same Inspector (PROJECT_SCOPE 5.4). */
 export type Mode = 'plan' | 'rehearsal' | 'live'
-export interface Route { view: 'trains' | 'admin'; trainId: string | null; selection: Selection; mode: Mode }
+export interface Route { view: 'trains' | 'admin' | 'work' | 'inbox' | 'audit' | 'templates'; trainId: string | null; selection: Selection; mode: Mode }
 
 export const ROOT: Route = { view: 'trains', trainId: null, selection: null, mode: 'plan' }
 
 export function parsePath(path: string): Route {
   const seg = path.split('/').filter(Boolean).map(decodeURIComponent)
-  if (seg[0] === 'admin') return { view: 'admin', trainId: null, selection: null, mode: 'plan' }
+  if (seg[0] === 'admin' || seg[0] === 'work' || seg[0] === 'inbox' || seg[0] === 'audit' || seg[0] === 'templates') return { view: seg[0], trainId: null, selection: null, mode: 'plan' }
   if (seg[0] !== 'trains' || !seg[1]) return ROOT
   const trainId = seg[1]
   let mode: Mode = 'plan'
@@ -24,7 +24,7 @@ export function parsePath(path: string): Route {
 }
 
 export function buildPath(r: Route): string {
-  if (r.view === 'admin') return '/admin'
+  if (r.view !== 'trains') return `/${r.view}`
   if (!r.trainId) return '/'
   const e = encodeURIComponent, base = `/trains/${e(r.trainId)}${!r.mode || r.mode === 'plan' ? '' : '/' + r.mode}`
   const s = r.selection

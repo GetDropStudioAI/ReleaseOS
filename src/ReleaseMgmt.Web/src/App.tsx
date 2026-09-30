@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
+import { MyWork } from './MyWork'
+import { Inbox } from './Inbox'
+import { AuditViewer } from './AuditViewer'
+import { Templates } from './Templates'
 import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
 import { Inspector } from './Planning'
 import { LiveRun, RunStepDrawer, useRun } from './LiveRun'
@@ -169,6 +173,10 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
         <strong>Release Management</strong>
         <nav aria-label="Primary" className="tabs">
           {NAV.map((n, i) => <a key={n} href="/" onClick={e => { e.preventDefault(); to({ view: 'trains' }) }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
+          <a href="/work" onClick={e => { e.preventDefault(); to({ view: 'work' }) }} aria-current={view === 'work' ? 'page' : undefined}>My work</a>
+          <a href="/inbox" onClick={e => { e.preventDefault(); to({ view: 'inbox' }) }} aria-current={view === 'inbox' ? 'page' : undefined}>Inbox</a>
+          <a href="/templates" onClick={e => { e.preventDefault(); to({ view: 'templates' }) }} aria-current={view === 'templates' ? 'page' : undefined}>Templates</a>
+          {me.roles.some(r => r === 'RTE' || r === 'ReleaseManager' || r === 'GovernanceOfficer') && <a href="/audit" onClick={e => { e.preventDefault(); to({ view: 'audit' }) }} aria-current={view === 'audit' ? 'page' : undefined}>Audit</a>}
           {canAdmin && <a href="/admin" onClick={e => { e.preventDefault(); to({ view: 'admin' }) }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
         </nav>
         <span className="spacer" />
@@ -182,9 +190,9 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
         <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} />
         <FreezeFooter refreshKey={rev} />
       </aside>
-      <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
+      <main className={view !== 'trains' ? 'workspace wide' : 'workspace'}>
         {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} /> : view === 'inbox' ? <Inbox me={me} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">

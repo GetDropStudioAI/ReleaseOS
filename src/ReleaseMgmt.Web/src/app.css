@@ -68,7 +68,10 @@ button.quiet { color: var(--secondary); font-weight: 400; }
 .timeline .tl-dot.ok { fill: var(--ok); stroke: var(--ok); } .timeline .tl-dot.warn { fill: var(--warn); stroke: var(--warn); }
 .timeline .tl-dot.bad { fill: var(--bad); stroke: var(--bad); } .timeline .tl-dot.accent { fill: var(--bg); stroke: var(--accent); stroke-width: 2.5; }
 .timeline text.ok { fill: var(--ok); } .timeline text.warn { fill: var(--warn); } .timeline text.bad { fill: var(--bad); } .timeline text.accent { fill: var(--accent); } .timeline text.muted { fill: var(--secondary); }
-.timeline .tl-gate { cursor: pointer; outline: none; } .timeline .tl-gate:focus-visible .tl-dot, .timeline .tl-gate.sel .tl-name { text-decoration: underline; text-underline-offset: 3px; }
+.timeline .tl-gate { cursor: pointer; outline: none; } .timeline .tl-gate.sel .tl-name { text-decoration: underline; text-underline-offset: 3px; }
+/* WCAG 2.4.7: an SVG group cannot show the outline, so the focused gate gets a 2px accent ring on its dot and an underlined name */
+.timeline .tl-gate:focus-visible .tl-dot { stroke: var(--accent); stroke-width: 3; } .timeline .tl-gate:focus-visible .tl-name { text-decoration: underline; text-underline-offset: 3px; fill: var(--accent); }
+.timeline .tl-gate:focus-visible .tl-hit { stroke: var(--accent); stroke-width: 2; }
 section > h2.cap { margin: 22px 0 6px; }
 .timeline .tl-hit { fill: transparent; }
 .conflict { margin: 8px 0; } .conflict p { margin: 4px 0; } .conflict-actions { display: flex; gap: 16px; }
@@ -89,10 +92,10 @@ section > h2.cap { margin: 22px 0 6px; }
 .runtable th.axis { display: flex; justify-content: space-between; width: 200px; font-weight: 400; color: var(--secondary); }
 .small { font-size: 12px; }
 .gantt { display: block; overflow: visible; }
-.gantt .g-plan { fill: var(--separator-strong); } .gantt .g-actual { fill: var(--label); } .gantt .g-running { fill: var(--accent); }
+.gantt .g-plan { fill: var(--tertiary); } .gantt .g-actual { fill: var(--label); } .gantt .g-running { fill: var(--accent); }
 .gantt .g-now { stroke: var(--accent); } .gantt .g-deadline { stroke: var(--bad); } .gantt .g-fc { stroke: var(--accent); } .gantt .g-fc.late { stroke: var(--warn); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 12px; }
-.legend .lg { display: inline-block; width: 14px; height: 6px; margin-right: 2px; } .lg.plan { background: var(--separator-strong); } .lg.actual { background: var(--label); } .lg.fc { border-top: 2px dashed var(--warn); height: 0; }
+.legend .lg { display: inline-block; width: 14px; height: 6px; margin-right: 2px; } .lg.plan { background: var(--tertiary); } .lg.actual { background: var(--label); } .lg.fc { border-top: 2px dashed var(--warn); height: 0; }
 .instr { padding-left: 18px; margin: 4px 0 12px; }
 /* muted text on the selection tint is under 4.5:1; selected rows use the label colour (axe) */
 table.grid tr.selected .muted, table.grid tr.selected td.muted { color: var(--label); }
@@ -140,7 +143,7 @@ table.grid td.wrap { white-space: normal; word-break: break-word; }
 .sync-note { font-size: var(--text-caption); }
 .sync-add { margin: 10px 0 4px; }
 .sync-add label { display: inline-flex; gap: 6px; align-items: baseline; color: var(--secondary); }
-.sync-add input.line.url { width: 26em; }
+.sync-add input.line.url { width: 26em; max-width: 100%; }
 .sync-window { display: inline-flex; gap: 12px; margin-left: 12px; }
 .sync-window button { font: inherit; color: var(--secondary); background: none; border: 0; padding: 0 0 2px; cursor: pointer; border-bottom: 2px solid transparent; }
 .sync-window button[aria-pressed="true"] { color: var(--label); border-bottom-color: var(--accent); }
@@ -243,3 +246,24 @@ h2.aside-title { font-size: var(--text-drawer-title); letter-spacing: var(--trac
    same specificity and come later, which removed the accent rule (outline is none there), so a keyboard user saw no focus at all; and a date input did not
    match :focus-visible while one of its inner segments had focus (measured in Chromium), hence :focus-within. Restated last, with the same look. */
 input.line:focus, input.line:focus-within, textarea.line:focus, .inline-form input.line:focus, .inline-form textarea.line:focus, table.grid td input.line:focus, .an-filter input.line:focus { outline: none; border-bottom: 2px solid var(--accent); }
+
+/* Accessibility and workflow review (docs/review): shared fixes */
+/* 2.4.1: skip link, visible only while focused */
+.skip-link { position: absolute; left: 8px; top: -40px; z-index: 10; padding: 6px 10px; background: var(--bg); color: var(--accent); font-weight: 600; }
+.skip-link:focus { top: 6px; }
+.workspace:focus { outline: none; } .workspace h1[tabindex="-1"]:focus { outline: none; }
+/* 1.4.10: the toolbar wraps instead of pushing the page sideways at narrow widths and high zoom */
+.shell { grid-template-rows: minmax(var(--toolbar-height), auto) auto 1fr; }
+.toolbar { flex-wrap: wrap; row-gap: 6px; padding-top: 6px; padding-bottom: 6px; min-height: var(--toolbar-height); height: auto; }
+.toolbar .tabs { flex-wrap: wrap; row-gap: 4px; }
+@media (max-width: 900px) { .shell { grid-template-rows: minmax(var(--toolbar-height), auto) auto auto 1fr auto; } .toolbar > *, .toolbar a, .toolbar button, .toolbar .muted, .toolbar strong { white-space: normal; } }
+/* 1.4.11: selection is more than a 1.16:1 tint: a 3px accent edge on the selected row, day or train */
+table.grid tr.selected td:first-child, table.grid tr[aria-selected="true"] td:first-child, table.grid tr[aria-current="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 6px; }
+.stream-row[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); }
+table.cal td.cal-sel { box-shadow: inset 0 0 0 2px var(--accent); }
+/* 1.4.3: muted text on the hover tint is 4.38:1; use the label colour there as on the selected row */
+.stream-row:hover .muted { color: var(--label); }
+/* inline confirm (ConfirmInline.tsx) */
+.confirm-inline { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.confirm-inline input.line { min-width: 14em; }
+.pending { color: var(--secondary); }

@@ -26,6 +26,7 @@ import { useLive, type LiveState } from './live'
 import { fmtDayTime, setDisplayZone, zoneAbbr } from './time'
 import { getConfig } from './api'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
+import { Announcer } from './announce'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
 const NAV = ['Trains']
@@ -101,7 +102,8 @@ const LIVE: Record<LiveState, { g: string; cls: string; word: string }> = {
 function LiveStatus({ state, time }: { state: LiveState; time: string | null }) {
   const x = LIVE[state]
   const when = time ? `${fmtDayTime(time)} ${zoneAbbr(time)}` : null
-  return <span className="muted live" role="status">{when && <>{when} · </>}<span className={x.cls}>{x.g} {x.word}</span></span>
+  // Only the connection state is a live region; the clock ticks every 10 s and must not be read out on every screen (WCAG 4.1.3).
+  return <span className="muted live">{when && <>{when} · </>}<span className={x.cls} role="status"><span aria-hidden="true">{x.g}</span> {x.word}</span></span>
 }
 
 function SignIn({ onDone }: { onDone: () => void }) {
@@ -120,7 +122,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
     <main className="signin">
       <h1>Release Management</h1>
       <form onSubmit={submit}>
-        <p><label>Email <input className="line" type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label></p>
+        <p><label>Email <input className="line" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required /></label></p>
         <p><label>Role <select className="line" value={role} onChange={e => setRole(e.target.value)}>
           {ROLES.map(r => <option key={r}>{r}</option>)}</select></label></p>
         <p><button className="text" type="submit">Sign in (development)</button> <a href="/auth/login">Organisation sign-in</a></p>
@@ -177,6 +179,32 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   }, [session.ready, session.restoredRoute, go])
   useEffect(() => { if (session.ready && restored.current) session.saveRoute(route) }, [route, session.ready])   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // WCAG 2.4.2 / 2.4.3: every view has its own document title, and a navigation the user made moves focus to the new page.
+  const trainTitle = rows?.find(r => r.id === selected)?.title
+  useEffect(() => {
+    const names: Record<Route['view'], string> = { trains: 'Trains', admin: 'Admin', work: 'My work', inbox: 'Inbox', audit: 'Audit', templates: 'Templates', sync: 'Sync health', connectors: 'Connectors', library: 'Comm library', analytics: 'Analytics', calendar: 'Calendar', importexport: 'Imports & exports' }
+    const page = view === 'trains' && trainTitle ? `${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live runbook' : 'Rehearsal'}` : ''}` : names[view]
+    document.title = `${page} · Release Management`
+  }, [view, trainTitle, mode])
+  const mainRef = useRef<HTMLElement>(null)
+  const lastPage = useRef<string | null>(null)
+  // Only a navigation the user made moves focus: restoring the last route when the app opens must not.
+  const interacted = useRef(false)
+  useEffect(() => {
+    const mark = () => { interacted.current = true }
+    window.addEventListener('pointerdown', mark, true); window.addEventListener('keydown', mark, true)
+    return () => { window.removeEventListener('pointerdown', mark, true); window.removeEventListener('keydown', mark, true) }
+  }, [])
+  useEffect(() => {
+    const key = `${view}|${selected ?? ''}|${mode}`
+    if (lastPage.current !== null && lastPage.current !== key && interacted.current) {
+      const h1 = mainRef.current?.querySelector('h1') as HTMLElement | null
+      const target = h1 ?? mainRef.current
+      if (target) { if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1'); target.focus({ preventScroll: true }) }
+    }
+    lastPage.current = key
+  }, [view, selected, mode])
+
   if (!session.ready || !zoneReady) return <main className="signin"><p className="muted">Loading…</p></main>
 
   const canAdmin = me.roles.includes('RTE') || me.roles.includes('ReleaseManager')
@@ -184,6 +212,8 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const open = (r: Partial<Route>) => go({ ...ROOT, ...r })   // from My work / Inbox: open a train (view resets to trains)
   return (
     <div className="shell">
+      <a className="skip-link" href="#workspace" onClick={e => { e.preventDefault(); const m = document.getElementById('workspace'); m?.focus() }}>Skip to workspace</a>
+      <Announcer />
       <header className="toolbar">
         <strong>Release Management</strong>
         <nav aria-label="Primary" className="tabs">
@@ -209,12 +239,12 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </header>
       <SyncBanner sync={sync} onOpen={() => to({ view: 'sync' })} />
       <aside className="stream" aria-label="Stream">
-        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} />
+        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: rows?.find(r => r.id === id)?.status === 'Executing' ? mode : 'plan' })} />
         <FreezeFooter refreshKey={rev} />
       </aside>
-      <main className={view !== 'trains' ? 'workspace wide' : 'workspace'}>
+      <main id="workspace" ref={mainRef} tabIndex={-1} className={view !== 'trains' ? 'workspace wide' : 'workspace'}>
         {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">

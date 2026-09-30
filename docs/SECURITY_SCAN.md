@@ -155,6 +155,8 @@ connectors to the real Atlassian and ServiceNow hosts).
 On `main` after all fixes: `dotnet build` 0 warnings; Domain 307, Infrastructure 228, Api 619 (1 skipped: the SEC-D10 reproduction), DR drill 2;
 schema oracle 82/82; tooling tests OK; web build and unit tests; Playwright 78/78, including the new CSP walk of the built app.
 
+CI: run 86 on head `891ccbc` green on `windows-latest` and `macos-latest` (build, all tests, oracle, tooling, Playwright on both), as were runs 83 to 85.
+
 ## 7. Not verified
 
 - A real identity provider end to end (OIDC flows are tested with the handler events, not a live IdP).

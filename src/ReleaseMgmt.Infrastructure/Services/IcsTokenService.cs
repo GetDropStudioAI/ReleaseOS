@@ -115,7 +115,7 @@ public sealed class IcsTokenService(IDbContextFactory<ReleaseDbContext> dbf, Tim
     }
 
     /// <summary>
-    /// The user a feed token belongs to, or null (unknown, revoked or malformed: indistinguishable to the caller). The lookup is by the SHA-256 of the presented
+    /// The user a feed token belongs to, or null (unknown, revoked, malformed, or its user deactivated: indistinguishable to the caller). The lookup is by the SHA-256 of the presented
     /// value, so the database compares hashes the caller cannot steer byte by byte, and the hash is compared again in constant time. Best-effort last-used stamp.
     /// </summary>
     public async Task<string?> ResolveAsync(string token, CancellationToken ct = default)
@@ -130,7 +130,7 @@ public sealed class IcsTokenService(IDbContextFactory<ReleaseDbContext> dbf, Tim
                          select new { t.Id, t.UserId, t.TokenSha256, t.RevokedAt, u.IsActive }).SingleOrDefaultAsync(ct);
         var stored = Encoding.ASCII.GetBytes(row?.TokenSha256 ?? new string('0', 64));
         var same = CryptographicOperations.FixedTimeEquals(stored, Encoding.ASCII.GetBytes(hash));
-        if (row is null || !same || row.RevokedAt is not null || !row.IsActive) return null;
+        if (row is null || !same || row.RevokedAt is not null || !row.IsActive) return null;   // SEC-A3 / SEC-B6: a deactivated user's link stops working (not revoked: it works again if they are reactivated)
         LastUsed[row.Id] = Now;
         return row.UserId;
     }

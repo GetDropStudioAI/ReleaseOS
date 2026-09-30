@@ -73,6 +73,7 @@ builder.Services.AddSingleton<IAnalyticsConnectionFactory>(new SqliteAnalyticsCo
 builder.Services.AddSingleton<ReleaseMgmt.Api.Sync.SyncHealthService>();   // REOS-42 sync health, connector-wide banner state, webhook allowlist
 builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration
 builder.Services.AddSyncEngine(config);   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
+builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -183,6 +184,7 @@ api.MapSync();   // REOS-42
 if (app.Environment.IsDevelopment()) api.MapSyncDev();   // REOS-42 dev-only seeding
 api.MapComms();   // REOS-43/44
 api.MapCommDispatch();   // REOS-45
+api.MapCalendar();   // REOS-51
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

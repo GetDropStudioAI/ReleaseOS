@@ -123,10 +123,14 @@ public sealed class IcsTokenService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         if (token.Length is < 20 or > 100) return null;
         var hash = Hash(token);
         await using var db = await OpenAsync(ct);
-        var row = await db.Set<IcsTokens>().AsNoTracking().Where(t => t.TokenSha256 == hash).Select(t => new { t.Id, t.UserId, t.TokenSha256, t.RevokedAt }).SingleOrDefaultAsync(ct);
+        // SEC-A3: the token's user must still be active. A deactivated user's session stops working (Q-053c); their feed, an anonymous bearer URL, stops too.
+        var row = await (from t in db.Set<IcsTokens>().AsNoTracking()
+                         join u in db.Set<Users>().AsNoTracking() on t.UserId equals u.Id
+                         where t.TokenSha256 == hash
+                         select new { t.Id, t.UserId, t.TokenSha256, t.RevokedAt, u.IsActive }).SingleOrDefaultAsync(ct);
         var stored = Encoding.ASCII.GetBytes(row?.TokenSha256 ?? new string('0', 64));
         var same = CryptographicOperations.FixedTimeEquals(stored, Encoding.ASCII.GetBytes(hash));
-        if (row is null || !same || row.RevokedAt is not null) return null;
+        if (row is null || !same || row.RevokedAt is not null || !row.IsActive) return null;
         LastUsed[row.Id] = Now;
         return row.UserId;
     }

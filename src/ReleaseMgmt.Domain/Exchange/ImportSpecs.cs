@@ -21,6 +21,9 @@ public static class ImportLimits
 {
     public const int MaxRows = 10_000;
     public const int MaxBytes = 5 * 1024 * 1024;
+    /// <summary>Default for config <c>Imports:MaxColumns</c> (Q-SEC-D2): the widest import grid has 10 columns plus its <c>#</c> columns, so 200 leaves room for
+    /// a person's own <c>#</c> notes. A wider file is refused unread; unbounded, a 5 MB header of commas became millions of errors (SEC-D3).</summary>
+    public const int DefaultMaxColumns = 200;
     public static readonly TimeSpan PreviewLifetime = TimeSpan.FromMinutes(30);
 }
 

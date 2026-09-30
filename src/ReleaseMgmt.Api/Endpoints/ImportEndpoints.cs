@@ -21,7 +21,9 @@ public static class ImportEndpoints
     /// <summary>Registers the import and export services. Preview files live in <c>Imports:Directory</c> (default: <c>imports</c> beside the database).</summary>
     public static IServiceCollection AddExchange(this IServiceCollection services, IConfiguration config, string dbPath)
     {
-        services.AddSingleton(new ImportOptions(config["Imports:Directory"] ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dbPath))!, "imports")));
+        services.AddSingleton(new ImportOptions(config["Imports:Directory"] ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dbPath))!, "imports"),
+            Math.Max(1, config.GetValue("Imports:MaxColumns", ImportLimits.DefaultMaxColumns)),                                  // Q-SEC-D2
+            Math.Max(1, config.GetValue("Imports:MaxOpenPreviewsPerUser", ImportOptions.DefaultMaxOpenPreviewsPerUser))));   // Q-SEC-D4
         services.AddSingleton<CsvImportService>();
         services.AddSingleton<GridExportService>();
         return services;
@@ -52,7 +54,7 @@ public static class ImportEndpoints
             var r = await s.PreviewAsync(kind, mode, name, bytes, ActorOf(u), ct);
             if (!r.IsOk && r.Failures.Any(f => f.Guard == ExchangeGuards.ImportTooLarge)) return TooLarge();
             return r.ToHttp();
-        }).RequireAuthorization(Policies.Plan);
+        }).RequireAuthorization(Policies.Plan).WithMetadata(new BodySizeLimit(null));   // enforces its own 5 MB cap (ReadUploadAsync), not the global request limit
 
         api.MapPost("/imports/{jobId}:commit", async (string jobId, HttpRequest req, ClaimsPrincipal u, IAuthorizationService authz, CsvImportService s, CancellationToken ct) =>
         {
@@ -80,6 +82,8 @@ public static class ImportEndpoints
         const int overhead = 1024 * 1024;   // multipart boundaries and headers
         var max = ImportLimits.MaxBytes;
         if (req.ContentLength > max + overhead) return (null, null, true);
+        var kestrel = req.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+        if (kestrel is { IsReadOnly: false }) kestrel.MaxRequestBodySize = max + overhead;   // this route is outside the global limit (BodySizeLimit(null)); a chunked body stops here too
         if (req.ContentType?.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase) == true)
         {
             var boundary = HeaderUtilities.RemoveQuotes(MediaTypeHeaderValue.Parse(req.ContentType).Boundary).Value;

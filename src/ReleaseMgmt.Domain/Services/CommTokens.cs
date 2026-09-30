@@ -45,6 +45,8 @@ public static class TokenErrorKinds
     public const string MalformedToken = "MalformedToken";
     public const string UnclosedBrace = "UnclosedBrace";
     public const string StrayBrace = "StrayBrace";
+    /// <summary>Closes a list cut at <see cref="TokenParser.MaxErrors"/>: says how many more problems there were.</summary>
+    public const string TooManyErrors = "TooManyErrors";
 }
 
 /// <summary>One template problem. <see cref="Part"/> is "subject" or "body"; line and column are 1-based positions in that part.</summary>
@@ -107,6 +109,7 @@ public static class CommTokens
     /// <summary>The closest allowlisted token to a typo (case differences, or an edit distance of at most 2), else null.</summary>
     public static string? Suggest(string name)
     {
+        if (name.Length > 40) return null;   // no token is near a name this long; the edit distance would only cost time (SEC-D1)
         string? best = null; var bestD = 3;
         foreach (var t in Allowlist)
         {
@@ -135,18 +138,30 @@ public static class CommTokens
 /// Any other brace is an error: an identifier that is not on the allowlist (a wrong case included), anything else between braces, an unclosed
 /// <c>{</c> or a stray <c>}</c>. There is no escape for a literal brace; the messages say so. Errored text stays in the output as literal
 /// text so a preview shows it, but dispatch is refused while any error exists.
+/// <para>Cost is linear in the text (security review SEC-D1): the next <c>}</c> and <c>{</c> are found once and reused, never re-scanned per brace, and at most
+/// <see cref="MaxErrors"/> errors are kept, followed by one that says how many more there were.</para>
 /// </summary>
 public static class TokenParser
 {
+    /// <summary>Errors listed per part; the rest are counted in one closing <see cref="TokenErrorKinds.TooManyErrors"/> entry (the template is invalid either way).</summary>
+    public const int MaxErrors = 100;
+
     public static ParsedTemplate Parse(string? text, string part = "body")
     {
         text ??= "";
         var segments = new List<TemplateSegment>(); var errors = new List<TokenError>();
         var lit = new StringBuilder();
         var line = 1; var col = 1;
+        var dropped = 0;
         void Flush() { if (lit.Length > 0) { segments.Add(new TemplateSegment.Literal(lit.ToString())); lit.Clear(); } }
         void Advance(char c) { if (c == '\n') { line++; col = 1; } else col++; }
         void Emit(string raw) { lit.Append(raw); foreach (var ch in raw) Advance(ch); }
+        void Error(Func<TokenError> make) { if (errors.Count < MaxErrors) errors.Add(make()); else dropped++; }
+
+        // Positions of the next '}' and '{' at or after a point. Positions only move forward, so each is searched for at most once per character: linear.
+        int nextClose = -2, nextOpen = -2;   // -2: not searched yet; -1: none left
+        int NextClose(int from) { if (nextClose == -2 || (nextClose >= 0 && nextClose < from)) nextClose = text.IndexOf('}', from); return nextClose; }
+        int NextOpen(int from) { if (nextOpen == -2 || (nextOpen >= 0 && nextOpen < from)) nextOpen = text.IndexOf('{', from); return nextOpen; }
 
         var i = 0;
         while (i < text.Length)
@@ -154,20 +169,21 @@ public static class TokenParser
             var c = text[i];
             if (c == '{')
             {
-                var close = text.IndexOf('}', i + 1); var open = text.IndexOf('{', i + 1);
+                var close = NextClose(i + 1); var open = NextOpen(i + 1);
                 if (close < 0 || (open >= 0 && open < close))
                 {
-                    var raw = Clip(text.Substring(i, Math.Min(text.Length - i, 24)).Split('\n')[0]);
-                    errors.Add(new(TokenErrorKinds.UnclosedBrace, raw, part, line, col,
-                        $"'{{' at line {line}, column {col} has no closing '}}'. Braces are only for tokens; there is no way to print a literal brace"));
+                    var (l0, c0) = (line, col);
+                    Error(() => new(TokenErrorKinds.UnclosedBrace, Clip(text.Substring(i, Math.Min(text.Length - i, 24)).Split('\n')[0]), part, l0, c0,
+                        $"'{{' at line {l0}, column {c0} has no closing '}}'. Braces are only for tokens; there is no way to print a literal brace"));
                     Emit("{"); i++; continue;
                 }
                 var name = text.Substring(i + 1, close - i - 1);
                 var rawToken = text.Substring(i, close - i + 1);
                 if (!IsIdentifier(name))
                 {
-                    errors.Add(new(TokenErrorKinds.MalformedToken, Clip(rawToken), part, line, col,
-                        $"{Clip(rawToken)} at line {line}, column {col} is not a token. A token is a name in braces with no spaces, for example {{Status}}"));
+                    var (l0, c0) = (line, col);
+                    Error(() => new(TokenErrorKinds.MalformedToken, Clip(rawToken), part, l0, c0,
+                        $"{Clip(rawToken)} at line {l0}, column {c0} is not a token. A token is a name in braces with no spaces, for example {{Status}}"));
                     Emit(rawToken);
                 }
                 else if (CommTokens.IsAllowed(name))
@@ -177,20 +193,29 @@ public static class TokenParser
                 }
                 else
                 {
-                    var s = CommTokens.Suggest(name);
-                    errors.Add(new(TokenErrorKinds.UnknownToken, rawToken, part, line, col,
-                        $"Unknown token {rawToken} at line {line}, column {col}" + (s is null ? "" : $". Did you mean {{{s}}}?"), s is null ? null : $"{{{s}}}"));
+                    var (l0, c0) = (line, col);
+                    Error(() =>
+                    {
+                        var s = CommTokens.Suggest(name);
+                        return new(TokenErrorKinds.UnknownToken, Clip(rawToken), part, l0, c0,
+                            $"Unknown token {Clip(rawToken)} at line {l0}, column {c0}" + (s is null ? "" : $". Did you mean {{{s}}}?"), s is null ? null : $"{{{s}}}");
+                    });
                     Emit(rawToken);
                 }
                 i = close + 1;
                 continue;
             }
             if (c == '}')
-                errors.Add(new(TokenErrorKinds.StrayBrace, "}", part, line, col,
-                    $"'}}' at line {line}, column {col} closes nothing. Braces are only for tokens; there is no way to print a literal brace"));
+            {
+                var (l0, c0) = (line, col);
+                Error(() => new(TokenErrorKinds.StrayBrace, "}", part, l0, c0,
+                    $"'}}' at line {l0}, column {c0} closes nothing. Braces are only for tokens; there is no way to print a literal brace"));
+            }
             Emit(c.ToString()); i++;
         }
         Flush();
+        if (dropped > 0)
+            errors.Add(new(TokenErrorKinds.TooManyErrors, "", part, line, col, $"{dropped:N0} more problems in the {part} are not listed; fix the ones above first"));
         return new ParsedTemplate(segments, errors);
     }
 

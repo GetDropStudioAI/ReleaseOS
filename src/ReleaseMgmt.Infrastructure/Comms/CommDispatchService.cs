@@ -114,8 +114,9 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
         string subject = subj.Text, stored = body.Text;
         if (req.Channel == Webhook)
         {
-            if (!TryUnescapeJson(subj.Text, out subject)) return Fail(CommGuards.RenderInvalid, "The rendered subject is not valid for a JSON webhook (a value was not escaped)");
-            stored = BuildWebhookPayload(dest!.Kind, subj.Text, body.Text, trainId, template.Id, Now);
+            var (subjectJson, bodyJson) = dest!.Kind == "Slack" ? (SlackSafe(subj.Text), SlackSafe(body.Text)) : (subj.Text, body.Text);
+            if (!TryUnescapeJson(subjectJson, out subject)) return Fail(CommGuards.RenderInvalid, "The rendered subject is not valid for a JSON webhook (a value was not escaped)");
+            stored = BuildWebhookPayload(dest.Kind, subjectJson, bodyJson, trainId, template.Id, Now);
             try { using var _ = JsonDocument.Parse(stored); }
             catch (JsonException) { return Fail(CommGuards.RenderInvalid, "The rendered message is not valid for a JSON webhook (a value was not escaped)"); }
         }
@@ -218,6 +219,14 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
             return (null, new GuardFailure(CommGuards.WebhookNotAllowed, $"Destination '{d.Name}' carries credentials in its URL and cannot be used"));
         return (d, null);
     }
+
+    /// <summary>
+    /// Slack does not honour Markdown's backslash escapes: its only escape is the HTML entity, and <c>&lt;...&gt;</c> is a control sequence (a link
+    /// <c>&lt;https://x|label&gt;</c>, <c>&lt;!channel&gt;</c>, <c>&lt;@U123&gt;</c>). The JsonString target marks every '&lt;' and '&gt;' that came from a VALUE as
+    /// <c>\&lt;</c> / <c>\&gt;</c> (JSON: a doubled backslash), and template text is left as the author wrote it; for a Slack destination those marked characters become
+    /// <c>&amp;lt;</c> and <c>&amp;gt;</c>, so a train title or blocker cannot post a link or ping a channel (security review SEC-D6). Input and output are JSON string content.
+    /// </summary>
+    internal static string SlackSafe(string jsonContent) => jsonContent.Replace(@"\\<", "&lt;").Replace(@"\\>", "&gt;");
 
     /// <summary>Teams and Slack incoming webhooks take {"text": ...}; Generic gets the parts separately. Inputs are already escaped for a JSON string.</summary>
     internal static string BuildWebhookPayload(string kind, string subjectJson, string bodyJson, string trainId, string templateId, DateTime at) =>

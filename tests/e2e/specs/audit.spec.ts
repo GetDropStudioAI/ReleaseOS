@@ -57,7 +57,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
       // selecting a row tints the whole row and shows After (an Add has no Before)
       await rows.first().locator('button').click()
-      await expect(rows.first()).toHaveAttribute('aria-selected', 'true')
+      await expect(rows.first().locator('button')).toHaveAttribute('aria-current', 'true')
       const detail = page.locator('aside[aria-label="Event detail"]')
       await expect(detail.locator('h2')).toHaveText('Add')
       await expect(detail).toContainText(name)
@@ -65,13 +65,22 @@ for (const scheme of ['light', 'dark'] as const) {
 
       await scan(page, `audit viewer with a selected event (${scheme})`)
 
-      // keyboard: j moves down, k back up, Escape closes
-      await page.locator('body').press('j')
-      await expect(rows.nth(1)).toHaveAttribute('aria-selected', 'true')
-      await page.locator('body').press('k')
-      await expect(rows.first()).toHaveAttribute('aria-selected', 'true')
-      await page.locator('body').press('Escape')
+      // keyboard, with focus in the table (the clicked time button; j / k are not global, WCAG 2.1.4): j moves down and focus follows, k back up,
+      // Enter moves focus into the detail, Escape closes it and gives focus back to the row
+      await page.keyboard.press('j')
+      await expect(rows.nth(1).locator('button')).toHaveAttribute('aria-current', 'true')
+      await expect(rows.nth(1).locator('button')).toBeFocused()
+      await page.keyboard.press('k')
+      await expect(rows.first().locator('button')).toHaveAttribute('aria-current', 'true')
+      await expect(rows.first().locator('button')).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(detail.locator('button:text-is("Close (Esc)")')).toBeFocused()
+      await page.keyboard.press('Escape')
       await expect(detail).toContainText('Select an event')
+      await expect(rows.first().locator('button')).toBeFocused()
+      await page.locator('h1').click()
+      await page.keyboard.press('j')                                                       // outside the table j does nothing
+      await expect(page.locator('table.audit-table [aria-current="true"]')).toHaveCount(0)
 
       // the Remove event shows a Before
       await filters.locator('label:has-text("Action") input').fill('remove')

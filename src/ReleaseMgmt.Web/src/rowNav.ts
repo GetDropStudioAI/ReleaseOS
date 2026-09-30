@@ -1,28 +1,43 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-/** True when the key press belongs to something the user is typing into or pressing (an input, a button, a link): the grid must not swallow it. */
-const typingOrActing = (t: EventTarget | null) => {
+/** Keys typed into a field belong to the field: j and k are letters there. */
+const typing = (t: EventTarget | null) => {
   const el = t as HTMLElement | null
-  return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(el.tagName))
+  return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
 }
 
+/** The row's primary control: the one marked `data-rownav`, else its first button or link. */
+export const primaryOf = (row: Element | null | undefined) =>
+  row?.querySelector<HTMLElement>('[data-rownav]') ?? row?.querySelector<HTMLElement>('button, a[href]') ?? null
+
 /**
- * Grid keyboard (docs/UI.md, Accessibility): j/k move the selected row, Enter opens it.
- * Ignored while focus is in an input, select, textarea, button or link, and with any modifier held.
+ * Grid keyboard (docs/UI.md, Accessibility; WCAG 2.1.4 and 4.1.2): j / k move the selected row and Enter opens it, but only while focus is inside
+ * the container the returned props are spread on (a table, or a wrapper around several tables whose body rows form one list). Moving also moves DOM
+ * focus to the row's primary control, so a screen reader follows; callers mark that control `data-rownav` and expose the selection with aria-current.
+ * Enter is taken only on the primary control (or the row itself): any other button in the row keeps its own Enter. Ignored in fields and with modifiers.
+ * `onMove` lets a screen that selects by id follow the keyboard.
  */
-export function useRowNav(count: number, onOpen: (index: number) => void) {
+export function useRowNav<T extends HTMLElement = HTMLTableElement>(count: number, onOpen: (index: number) => void, onMove?: (index: number) => void) {
   const [index, setIndex] = useState<number | null>(null)
-  const open = useRef(onOpen); open.current = onOpen
+  const ref = useRef<T>(null)
+  const cb = useRef({ onOpen, onMove }); cb.current = { onOpen, onMove }
   useEffect(() => { setIndex(i => (i !== null && i >= count ? (count ? count - 1 : null) : i)) }, [count])
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || typingOrActing(e.target) || count === 0) return
-      if (e.key === 'j') { e.preventDefault(); setIndex(i => (i === null ? 0 : Math.min(i + 1, count - 1))) }
-      else if (e.key === 'k') { e.preventDefault(); setIndex(i => (i === null ? 0 : Math.max(i - 1, 0))) }
-      else if (e.key === 'Enter' && index !== null) { e.preventDefault(); open.current(index) }
+  const onKeyDown = useCallback((e: React.KeyboardEvent<T>) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || typing(e.target) || count === 0 || !ref.current) return
+    const rows = Array.from(ref.current.querySelectorAll('tbody tr'))
+    if (rows.length === 0) return
+    const tr = (e.target as HTMLElement).closest('tr')
+    const at = tr ? rows.indexOf(tr) : -1
+    const cur = at >= 0 ? at : index
+    if (e.key === 'j' || e.key === 'k') {
+      e.preventDefault()
+      const j = cur === null ? 0 : Math.min(Math.max(cur + (e.key === 'j' ? 1 : -1), 0), rows.length - 1)
+      setIndex(j); cb.current.onMove?.(j)
+      const target = primaryOf(rows[j])
+      target?.focus(); target?.scrollIntoView?.({ block: 'nearest' })
+    } else if (e.key === 'Enter' && at >= 0 && (e.target === tr || e.target === primaryOf(tr))) {
+      e.preventDefault(); setIndex(at); cb.current.onOpen(at)
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [count, index])
-  return [index, setIndex] as const
+  return [index, setIndex, { ref, onKeyDown }] as const
 }

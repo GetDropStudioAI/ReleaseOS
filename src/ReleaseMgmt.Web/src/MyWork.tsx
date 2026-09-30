@@ -57,7 +57,7 @@ export function MyWork({ onOpen, refreshKey = 0 }: { me: Me; onOpen?: (r: Partia
   const [error, setError] = useState<string | null>(null)
   useEffect(() => { getMyWork().then(d => { setData(d); setError(null) }).catch(e => setError((e as Error).message)) }, [refreshKey])
   const items = useMemo(() => (data ? buildItems(data) : []), [data])
-  const [sel, setSel] = useRowNav(items.length, i => { const it = items[i]; if (it) onOpen?.(it.target) })
+  const [sel, setSel, nav] = useRowNav(items.length, i => { const it = items[i]; if (it) onOpen?.(it.target) })
   const c = data?.counts
 
   return (
@@ -73,14 +73,14 @@ export function MyWork({ onOpen, refreshKey = 0 }: { me: Me; onOpen?: (r: Partia
       )}
       {data && items.length === 0 && <p className="muted">No open tasks, gates, steps, conditions or PIR actions are assigned to you or your teams. Items appear here as trains move.</p>}
       {items.length > 0 && (
-        <table className="grid" aria-label="Items assigned to me, by due date">
+        <table className="grid" aria-label="Items assigned to me, by due date" {...nav}>
           <thead><tr><th>Due</th><th>Kind</th><th>Item</th><th>Train</th><th>Status</th><th>Assigned via</th></tr></thead>
           <tbody>
             {items.map((it, i) => (
-              <tr key={it.key} className={sel === i ? 'selected' : undefined} aria-selected={sel === i} onClick={() => { setSel(i); onOpen?.(it.target) }}>
+              <tr key={it.key} className={sel === i ? 'selected' : undefined} onClick={() => { setSel(i); onOpen?.(it.target) }}>
                 <td className="nowrap">{it.dueIsDate ? fmtDay(`${it.due}T12:00:00Z`) : `${fmtDayTime(it.due)} ${zoneAbbr(it.due)}`}</td>
                 <td>{it.kind}</td>
-                <td><button type="button" className="text plainlink">{it.title}</button>{it.detail && <span className="muted"> · {it.detail}</span>}</td>
+                <td><button type="button" className="text plainlink" data-rownav aria-current={sel === i ? 'true' : undefined}>{it.title}</button>{it.detail && <span className="muted"> · {it.detail}</span>}</td>
                 <td>{it.trainTitle}</td>
                 <td>{it.status.map((p, k) => <span key={k} className={p.cls}>{k > 0 && ' '}{p.text}</span>)}</td>
                 <td className="muted">{it.via?.kind === 'team' ? `team ${it.via.teamName ?? ''}` : 'me'}</td>
@@ -89,7 +89,7 @@ export function MyWork({ onOpen, refreshKey = 0 }: { me: Me; onOpen?: (r: Partia
           </tbody>
         </table>
       )}
-      {items.length > 0 && <p className="muted">j / k moves the selection, Enter opens the item in its train.</p>}
+      {items.length > 0 && <p className="muted">In the table, j / k moves the selection and Enter opens the item in its train.</p>}
     </section>
   )
 }

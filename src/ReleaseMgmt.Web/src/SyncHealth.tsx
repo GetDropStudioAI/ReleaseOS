@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, delIfMatch, get, getStream, post, type Me, type StreamRow } from './api'
 import { notifySyncChanged, onSyncChanged, SYSTEM_NAMES, type ConnectorView, type FailingEntry, type SyncStateDto } from './SyncBanner'
+import { announce } from './announce'
+import { ConfirmInline } from './ConfirmInline'
+import { useFocusWhen } from './focus'
+import { primaryOf, useRowNav } from './rowNav'
 import { fmtDay, fmtHM, fmtHMS, serverNow, zoneAbbr } from './time'
+import { useAction } from './useAction'
 
 /**
  * Screen 5, Sync health (REOS-42, mockups/SyncHealth.html): connector table, mismatches, open alerts with counts, resolved history, the alert detail
  * in the right-hand column (same split layout as Admin and Audit), and the webhook allowlist. It refetches when a SyncAlertRaised push arrives (App
- * forwards it through notifySyncChanged), so a new alert appears without a reload. Keyboard: j / k move the selection, Enter moves focus into the detail,
- * Esc closes it. Status is words and glyphs; actions are text buttons; the destructive confirms are inline. See Q-042a..f.
+ * forwards it through notifySyncChanged), so a new alert appears without a reload. Keyboard, while focus is in the alert tables: j / k move the selection
+ * (and focus), Enter moves focus into the detail, Esc closes it. Status is words and glyphs; actions are text buttons; the destructive confirms are inline. See Q-042a..f.
  */
 interface AlertItem {
   id: string; trainId: string | null; trainTitle: string | null; source: string; kind: string; fingerprint: string; message: string; occurrenceCount: number
@@ -83,7 +88,7 @@ function ConnectorRow({ c, failing }: { c: ConnectorView; failing: FailingEntry 
   return (
     <tr>
       <td><strong>{SYSTEM_NAMES[c.source] ?? c.source}</strong> <span className="muted">· {hostOf(c.baseUrl)}</span></td>
-      <td className={`mono${stale ? ' bad' : ''}`}>{lastOk ? <>{fmtHMS(lastOk)}{minutesSince(lastOk) > 5 && <span className={stale ? '' : 'muted'}> ({ago(lastOk)})</span>}</> : <span className="muted">never</span>}</td>
+      <td className={`mono${stale ? ' bad' : ''}`}>{lastOk ? <>{fmtHMS(lastOk)}{minutesSince(lastOk) > 5 && <span className={stale ? '' : 'muted'}> ({ago(lastOk)})</span>}{stale && <> <span aria-hidden="true">▲</span> stale</>}</> : <span className="muted">never</span>}</td>
       <td className="n">{l.total}</td>
       {n(l.inSync)}{n(l.mismatch, 'warn')}{n(l.broken, 'bad')}{n(l.stale, 'bad')}
       <td className="n">{c.openAlerts}</td>
@@ -100,20 +105,35 @@ function ConnectorRow({ c, failing }: { c: ConnectorView; failing: FailingEntry 
 
 function navigate(path: string) { window.history.pushState(null, '', path); window.dispatchEvent(new PopStateEvent('popstate')) }
 
-function Detail({ a, canAdmin, busy, confirming, setConfirming, onResolve, onClose, closeRef }: {
-  a: AlertItem; canAdmin: boolean; busy: boolean; confirming: boolean; setConfirming: (v: boolean) => void; onResolve: () => void; onClose: () => void; closeRef: React.RefObject<HTMLButtonElement | null>
+const trainPath = (id: string) => `/trains/${encodeURIComponent(id)}`
+/** A real link to the train (href for new tab / copy link), opened in place like every other in-app link. */
+function TrainLink({ id, title }: { id: string; title: string }) {
+  return <a className="mono" href={trainPath(id)} onClick={e => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(trainPath(id)) } }}>{title}</a>
+}
+
+function Detail({ a, canAdmin, busy, confirming, setConfirming, onResolve, onClose, onCopyError, closeRef }: {
+  a: AlertItem; canAdmin: boolean; busy: boolean; confirming: boolean; setConfirming: (v: boolean) => void; onResolve: () => void; onClose: () => void; onCopyError: (m: string) => void
+  closeRef: React.RefObject<HTMLButtonElement | null>
 }) {
   const info = kindInfo(a.kind)
   const connector = a.source === 'Jira' || a.source === 'ServiceNow'
+  const resolveRef = useRef<HTMLButtonElement>(null)
+  const confirmRef = useFocusWhen<HTMLButtonElement>(confirming)
+  const cancel = () => { setConfirming(false); requestAnimationFrame(() => resolveRef.current?.focus()) }
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(a.fingerprint); announce('Fingerprint copied.') }
+    catch { onCopyError('The browser did not allow copying. Select the fingerprint and copy it by hand.') }
+  }
   return (
     <>
       <h2>{SYSTEM_NAMES[a.source] ?? a.source} {a.kind}</h2>
-      <p className="muted">Fingerprint <span className="mono" title={a.fingerprint}>{a.fingerprint.slice(0, 12)}…</span> · {a.occurrenceCount} occurrence{a.occurrenceCount === 1 ? '' : 's'}</p>
+      <p className="muted">{a.occurrenceCount} occurrence{a.occurrenceCount === 1 ? '' : 's'}</p>
       <dl className="facts">
+        <dt>Fingerprint</dt><dd><span className="mono sync-note" style={{ overflowWrap: 'anywhere' }}>{a.fingerprint}</span> <button type="button" className="text" onClick={() => void copy()}>Copy</button></dd>
         <dt>State</dt><dd>{a.isResolved ? <span className="ok">✓ Resolved {short(a.resolvedAt)} · {a.resolvedByName ?? 'cleared automatically after a clean cycle'}</span> : <span className={info.cls}>{info.glyph} Open</span>}</dd>
         <dt>First</dt><dd className="mono">{fmtDay(a.firstOccurredAt)} {fmtHMS(a.firstOccurredAt)} {zoneAbbr(a.firstOccurredAt)}</dd>
         <dt>Last</dt><dd className="mono">{fmtDay(a.lastOccurredAt)} {fmtHMS(a.lastOccurredAt)} {zoneAbbr(a.lastOccurredAt)}</dd>
-        <dt>Scope</dt><dd>{a.trainTitle ? <span className="mono">{a.trainTitle}</span> : 'all trains'}</dd>
+        <dt>Scope</dt><dd>{a.trainId ? <TrainLink id={a.trainId} title={a.trainTitle ?? a.trainId} /> : 'all trains'}</dd>
         <dt>Message</dt><dd className="mono sync-note">{a.message}</dd>
         <dt>Likely cause</dt><dd>{info.cause}</dd>
       </dl>
@@ -125,14 +145,14 @@ function Detail({ a, canAdmin, busy, confirming, setConfirming, onResolve, onClo
       <p className="sync-note">The banner on every open screen while a whole connector is failing; an in-app notice to RTEs and Release Managers when the alert was first raised; the team webhook after 3 consecutive failures (PROJECT_SCOPE 5.3).</p>
       <div className="actions-col">
         {connector && canAdmin && <button type="button" className="text" onClick={() => navigate('/connectors')}>Open Connectors</button>}
-        {!a.isResolved && canAdmin && !confirming && <button type="button" className="text" onClick={() => setConfirming(true)}>Resolve now</button>}
+        {!a.isResolved && canAdmin && !confirming && <button type="button" className="text" ref={resolveRef} onClick={() => setConfirming(true)}>Resolve now</button>}
         <button type="button" className="text" ref={closeRef} onClick={onClose}>Close (Esc)</button>
       </div>
       {!a.isResolved && canAdmin && confirming && (
         <p role="group" aria-label="Confirm resolve">
           Mark this alert resolved? The row stays in the history. If the fault is still there, the next failed cycle raises it again.{' '}
-          <button type="button" className="text" disabled={busy} onClick={onResolve}>{busy ? 'Resolving…' : 'Confirm'}</button>{' '}
-          <button type="button" className="text" onClick={() => setConfirming(false)}>Cancel</button>
+          <button type="button" className="text" ref={confirmRef} disabled={busy} onClick={onResolve}>{busy ? 'Resolving…' : 'Confirm'}</button>{' '}
+          <button type="button" className="text" disabled={busy} onClick={cancel}>Cancel</button>
         </p>
       )}
       {!a.isResolved && !canAdmin && <p className="muted sync-note">Only RTEs and Release Managers resolve alerts by hand.</p>}
@@ -149,7 +169,7 @@ function AlertTable({ label, rows, selected, onSelect, resolved }: { label: stri
           {rows.map(a => {
             const info = kindInfo(a.kind)
             return (
-              <tr key={a.id} id={`alert-${a.id}`} className={a.id === selected ? 'selected' : undefined} aria-selected={a.id === selected} onClick={() => onSelect(a.id)}>
+              <tr key={a.id} id={`alert-${a.id}`} className={a.id === selected ? 'selected' : undefined} onClick={() => onSelect(a.id)}>
                 <td className={resolved ? 'ok' : info.cls} style={{ fontWeight: 600 }}>{resolved ? '✓' : info.glyph} {a.kind}</td>
                 <td>{SYSTEM_NAMES[a.source] ?? a.source}</td>
                 <td className="mono wrap" style={{ fontSize: 12 }}>{a.message}</td>
@@ -157,9 +177,9 @@ function AlertTable({ label, rows, selected, onSelect, resolved }: { label: stri
                 <td className="mono muted">{short(a.lastOccurredAt)}</td>
                 <td className="n">{a.occurrenceCount}</td>
                 <td>{a.trainTitle ? <span className="mono">{a.trainTitle}</span> : 'all trains'}</td>
-                <td>{resolved
-                  ? <span className="mono muted">{short(a.resolvedAt)} <span className="muted">{a.resolvedByName ? `· ${a.resolvedByName}` : '· auto'}</span></span>
-                  : <button type="button" className="text" onClick={e => { e.stopPropagation(); onSelect(a.id) }} aria-label={`Details of ${a.source} ${a.kind}`}>Details</button>}</td>
+                <td>{resolved && <><span className="mono muted">{short(a.resolvedAt)} <span className="muted">{a.resolvedByName ? `· ${a.resolvedByName}` : '· auto'}</span></span>{' '}</>}
+                  <button type="button" className="text" data-rownav aria-current={a.id === selected ? 'true' : undefined} onClick={e => { e.stopPropagation(); onSelect(a.id) }}
+                    aria-label={`Details of ${a.source} ${a.kind}${resolved ? ', resolved' : ''}`}>Details</button></td>
               </tr>
             )
           })}
@@ -181,7 +201,8 @@ export function SyncHealth({ me }: { me: Me }) {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const { run, pending } = useAction()
+  const busy = pending !== null
   const [actionError, setActionError] = useState<string | null>(null)
   const seq = useRef(0)
   const closeRef = useRef<HTMLButtonElement | null>(null)
@@ -217,40 +238,35 @@ export function SyncHealth({ me }: { me: Me }) {
   useEffect(() => { setConfirming(false); setActionError(null) }, [selected])
 
   const select = useCallback((id: string | null) => setSelected(id), [])
-  const move = useCallback((delta: number) => {
-    if (ordered.length === 0) return
-    const i = ordered.findIndex(a => a.id === selected)
-    const j = i < 0 ? (delta > 0 ? 0 : ordered.length - 1) : Math.min(ordered.length - 1, Math.max(0, i + delta))
-    setSelected(ordered[j].id)
-    document.getElementById(`alert-${ordered[j].id}`)?.scrollIntoView?.({ block: 'nearest' })
-  }, [ordered, selected])
+  // j / k / Enter only while focus is in the two alert tables (WCAG 2.1.4); the open and resolved rows are one list, in that order.
+  const [, , nav] = useRowNav<HTMLDivElement>(ordered.length,
+    i => { if (ordered[i]) { setSelected(ordered[i].id); requestAnimationFrame(() => closeRef.current?.focus()) } },
+    i => { if (ordered[i]) setSelected(ordered[i].id) })
+  /** Close the detail and give focus back to the alert's row, so it does not fall to <body> with the Close button. */
+  const close = () => {
+    const id = selected
+    setSelected(null)
+    requestAnimationFrame(() => primaryOf(document.getElementById(`alert-${id}`))?.focus())
+  }
+  const onEsc = (e: React.KeyboardEvent) => {
+    const t = e.target as HTMLElement
+    if (e.key === 'Escape' && selected !== null && !['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName)) { e.preventDefault(); close() }
+  }
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      if (t && (['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName) || t.isContentEditable)) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (e.key === 'j') { e.preventDefault(); move(1) }
-      else if (e.key === 'k') { e.preventDefault(); move(-1) }
-      else if (e.key === 'Escape' && selected !== null) setSelected(null)
-      else if (e.key === 'Enter' && sel && t?.tagName !== 'BUTTON' && t?.tagName !== 'A') { e.preventDefault(); closeRef.current?.focus() }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [move, selected, sel])
-
-  const resolve = async () => {
+  const resolve = () => run('Resolving…', async () => {
     if (!sel) return
-    setBusy(true); setActionError(null)
+    setActionError(null)
     try {
       await post(`/api/v1/sync/alerts/${sel.id}:resolve`, undefined, sel.version)
       setConfirming(false)
+      announce('Alert resolved. It stays in the resolved history.')
+      requestAnimationFrame(() => closeRef.current?.focus())   // Resolve now and Confirm are gone; focus stays in the detail
       notifySyncChanged()   // this screen, the banner, and every other subscriber refetch
     } catch (e) {
       setActionError(e instanceof ApiError && e.status === 409 ? 'This alert changed since you loaded it. The list has been refreshed; check it and try again.' : errText(e))
       void load()
-    } finally { setBusy(false) }
-  }
+    }
+  })
 
   const failingFor = (source: string) => state?.failing.find(f => f.source === source && f.scope === 'connector')
   const last = state?.watchdog.lastCycleCompletedAt ?? null
@@ -294,7 +310,7 @@ export function SyncHealth({ me }: { me: Me }) {
               <thead><tr><th>Train</th><th>Node</th><th>Ticket</th><th>This app implies</th><th>Ticket says</th><th>Last synced</th></tr></thead>
               <tbody>{links.map(l => (
                 <tr key={l.id}>
-                  <td className="mono">{l.trainTitle ?? l.trainId}</td><td>{l.entityType}</td><td className="mono">{l.externalKey}</td>
+                  <td><TrainLink id={l.trainId} title={l.trainTitle ?? l.trainId} /></td><td>{l.entityType}</td><td className="mono">{l.externalKey}</td>
                   <td>{l.expected ?? <span className="muted">—</span>}</td>
                   <td className={l.syncState === 'Mismatch' ? 'warn' : 'bad'}>{l.syncState === 'Mismatch' ? `◆ ${l.reported ?? 'differs'}` : l.syncState === 'NotFound' ? '✗ not found' : '✗ auth failed'}</td>
                   <td className="mono muted">{short(l.lastSyncedAt)}</td>
@@ -313,13 +329,13 @@ export function SyncHealth({ me }: { me: Me }) {
         {(filters.source || filters.kind || filters.train) && <button type="button" className="text" onClick={() => setFilters({ source: '', kind: '', train: '' })}>Clear</button>}
       </form>
 
-      <div className="split">
+      <div className="split" onKeyDown={onEsc}>
         <div>
           {alerts && (
-            <>
+            <div {...nav}>
               <section aria-label="Open alerts">
                 <div className="section-head"><h2 className="cap dark">Open alerts · errors, one row per fingerprint, repeats counted</h2><span className="muted sync-note">{alerts.openCount} open</span></div>
-                {open.length === 0 ? <p className="ok" role="status">✓ No open alerts{filters.source || filters.kind || filters.train ? ' match these filters' : ''}.</p>
+                {open.length === 0 ? <p className="ok">✓ No open alerts{filters.source || filters.kind || filters.train ? ' match these filters' : ''}.</p>
                   : <AlertTable label="Open alerts" rows={open} selected={selected} onSelect={select} resolved={false} />}
               </section>
               <section aria-label="Resolved alerts">
@@ -332,19 +348,19 @@ export function SyncHealth({ me }: { me: Me }) {
                   : <AlertTable label="Resolved alerts" rows={done} selected={selected} onSelect={select} resolved />}
                 {alerts.items.length >= alerts.limit && <p className="warn sync-note">▲ Showing the newest {alerts.limit} alerts; narrow the filters to see the rest.</p>}
               </section>
-            </>
+            </div>
           )}
 
           <section aria-label="Webhook allowlist">
             <WebhookAllowlist rows={hooks} canAdmin={canAdmin} onChanged={() => void load()} />
           </section>
         </div>
-        <aside className="detail" aria-label="Alert detail">
+        <div className="detail" data-testid="alert-detail">   {/* a div, not an aside: a complementary landmark may not sit inside main (axe landmark-complementary-is-top-level) */}
           {sel
-            ? <Detail a={sel} canAdmin={canAdmin} busy={busy} confirming={confirming} setConfirming={setConfirming} onResolve={resolve} onClose={() => setSelected(null)} closeRef={closeRef} />
-            : <p className="muted">Select an alert to see its cause, what it affects and how to clear it. j / k move, Enter opens the detail, Esc closes it.</p>}
+            ? <Detail a={sel} canAdmin={canAdmin} busy={busy} confirming={confirming} setConfirming={setConfirming} onResolve={() => void resolve()} onClose={close} onCopyError={setActionError} closeRef={closeRef} />
+            : <><h2 className="sr-only">Alert detail</h2><p className="muted">Select an alert to see its cause, what it affects and how to clear it. In the alert tables, j / k move, Enter opens the detail, Esc closes it.</p></>}
           {actionError && <p className="bad" role="alert">✗ {actionError}</p>}
-        </aside>
+        </div>
       </div>
     </>
   )
@@ -356,7 +372,7 @@ function WebhookAllowlist({ rows, canAdmin, onChanged }: { rows: WebhookRow[] | 
   const [kind, setKind] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [removing, setRemoving] = useState<string | null>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
   const problem = urlProblem(url)
   const ready = name.trim() !== '' && url.trim() !== '' && !problem
 
@@ -372,7 +388,7 @@ function WebhookAllowlist({ rows, canAdmin, onChanged }: { rows: WebhookRow[] | 
   }
   const remove = async (w: WebhookRow) => {
     setBusy(true); setError(null)
-    try { await delIfMatch(`/api/v1/sync/webhook-allowlist/${w.id}`, w.version); setRemoving(null); onChanged() }
+    try { await delIfMatch(`/api/v1/sync/webhook-allowlist/${w.id}`, w.version); announce(`${w.name} removed from the allowlist.`); onChanged(); requestAnimationFrame(() => nameRef.current?.focus()) }
     catch (err) { setError(errText(err)); onChanged() } finally { setBusy(false) }
   }
 
@@ -388,15 +404,13 @@ function WebhookAllowlist({ rows, canAdmin, onChanged }: { rows: WebhookRow[] | 
               <td>{w.name}</td><td>{w.kind}</td>
               <td><span className="mono">{w.displayUrl}</span> <span className="muted sync-note">path hidden: it is a secret</span></td>
               <td>{w.usedByTeams + w.usedByDispatches === 0 ? <span className="muted">not used</span> : `${w.usedByTeams} team${w.usedByTeams === 1 ? '' : 's'} · ${w.usedByDispatches} dispatch${w.usedByDispatches === 1 ? '' : 'es'}`}</td>
-              <td>{canAdmin && (removing === w.id
-                ? <span>Remove {w.name}? <button type="button" className="text destructive" disabled={busy} onClick={() => void remove(w)}>Confirm</button>{' '}<button type="button" className="text" onClick={() => setRemoving(null)}>Cancel</button></span>
-                : <button type="button" className="text" onClick={() => { setRemoving(w.id); setError(null) }} aria-label={`Remove ${w.name}`}>Remove</button>)}</td>
+              <td>{canAdmin && <ConfirmInline label="Remove" triggerLabel={`Remove ${w.name}`} question={`Remove ${w.name}?`} confirmLabel="Confirm" pendingLabel="Removing…" disabled={busy} onConfirm={() => remove(w)} />}</td>
             </tr>))}</tbody>
         </table></div>
       )}
       {canAdmin ? (
         <form className="inline-form sync-add" onSubmit={add} aria-label="Add a webhook">
-          <label>Name <input className="line" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="#release-ops" maxLength={80} /></label>
+          <label>Name <input ref={nameRef} className="line" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="#release-ops" maxLength={80} /></label>
           <label>Address <input className="line url" type="text" inputMode="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…" autoComplete="off" spellCheck={false} aria-invalid={problem ? true : undefined} aria-describedby="wh-hint" /></label>
           <label>Kind <select className="line" value={kind} onChange={e => setKind(e.target.value)}><option value="">Detect from address</option><option>Teams</option><option>Slack</option><option>Generic</option></select></label>
           <button type="submit" className="text" disabled={!ready || busy}>{busy ? 'Adding…' : 'Add'}</button>

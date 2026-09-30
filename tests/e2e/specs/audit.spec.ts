@@ -29,6 +29,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await signIn(page, `audit-${scheme}@example.com`, 'RTE')
       const name = `Audit e2e ${scheme} ${Date.now()}`
       await makeEvents(page, name)
+      await makeEvents(page, `${name} (2)`)     // two Add rows, so j/k have somewhere to go on a fresh database
 
       await page.locator('nav[aria-label=Primary] a', { hasText: 'Audit' }).click()
       await expect(page).toHaveURL(/\/audit$/)

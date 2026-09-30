@@ -51,6 +51,7 @@ test('an RTE can draft but not approve; a Viewer has no actions', async ({ page 
 
   await page.goto('/')
   await page.click('button:text-is("Sign out")')
+  await expect(page.locator('input[type=email]')).toBeVisible()   // the logout request has finished; navigating earlier can abort it and keep the session
   await signIn(page, 'templates-viewer@example.com', 'Viewer')
   await page.click('nav[aria-label=Primary] a:has-text("Templates")')
   await expect(page.locator('button:text-is("New template")')).toHaveCount(0)

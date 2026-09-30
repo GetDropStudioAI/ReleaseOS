@@ -29,6 +29,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.With<IcsTokenRedactor>()   // SEC-B10: feed tokens never reach a sink, whatever the levels or the format
+    .Enrich.With<LogSanitizer>()   // security review SEC-D5: one event is one line, whatever a logged value holds
     .WriteTo.File(ctx.Configuration["Logging:File"] ?? "logs/releasemgmt-.log", rollingInterval: RollingInterval.Day));
 
 var config = builder.Configuration;
@@ -147,6 +148,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 // assets must be served before the authorization middleware or the sign-in page itself would 401.
 app.UseExceptionHandler();
 app.UseMiddleware<SecurityHeaders>();          // REOS-53
+app.UseMiddleware<RequestBodyLimit>();         // security review SEC-D7: Limits:MaxRequestBodyBytes (Q-SEC-D1)
 app.UseMiddleware<CrossSiteRequestGuard>();    // REOS-53: before authentication, so a cross-site write never reaches a handler
 app.UseDefaultFiles();
 app.UseStaticFiles();

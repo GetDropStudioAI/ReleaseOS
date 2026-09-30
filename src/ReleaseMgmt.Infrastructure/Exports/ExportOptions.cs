@@ -6,12 +6,15 @@ namespace ReleaseMgmt.Infrastructure.Exports;
 /// <summary>
 /// REOS-50 settings. Config keys: <c>Exports:Directory</c> (default: <c>exports</c> beside the database, i.e. data/exports; never under wwwroot),
 /// <c>Exports:PollSeconds</c> (5), <c>Exports:StaleRunningSeconds</c> (300: a job left Running longer than this is retried), <c>Exports:MaxAttempts</c> (2),
-/// <c>Exports:AuditRowLimit</c> (5000 audit events in the pack's extract), <c>Pdf:QuestPdfLicense</c> (OI-2: Community | Professional | Enterprise; never committed, never defaulted),
+/// <c>Exports:AuditRowLimit</c> (5000 audit events in the pack's extract), <c>Exports:MaxOpenJobsPerUser</c> (10), <c>Pdf:QuestPdfLicense</c> (OI-2: Community | Professional | Enterprise; never committed, never defaulted),
 /// <c>Pdf:PdfA</c> (OI-8 spike: unset/false = off (default); true or 2b = PDF/A-2b; 3b = PDF/A-3b; see docs/PDFA_SPIKE.md).
 /// </summary>
-public sealed record ExportOptions(string Directory, string? License, bool AllowEvaluationLicense, int PollSeconds, TimeSpan StaleAfter, int MaxAttempts, int AuditRowLimit, string? PdfA, bool UseSystemFonts = true)
+public sealed record ExportOptions(string Directory, string? License, bool AllowEvaluationLicense, int PollSeconds, TimeSpan StaleAfter, int MaxAttempts, int AuditRowLimit, string? PdfA, bool UseSystemFonts = true,
+    int MaxOpenJobsPerUser = ExportOptions.DefaultMaxOpenJobsPerUser)
 {
     public const string DefaultLicenseKey = "Pdf:QuestPdfLicense";
+    /// <summary>Default for <c>Exports:MaxOpenJobsPerUser</c> (security review SEC-D8, Q-SEC-D3): Queued plus Running jobs one requester may have at a time.</summary>
+    public const int DefaultMaxOpenJobsPerUser = 10;
 
     public static ExportOptions From(IConfiguration config, string databaseDirectory, bool isDevelopment)
     {
@@ -23,7 +26,8 @@ public sealed record ExportOptions(string Directory, string? License, bool Allow
             Int(config["Exports:PollSeconds"], 5, 1), TimeSpan.FromSeconds(Int(config["Exports:StaleRunningSeconds"], 300, 1)),
             Int(config["Exports:MaxAttempts"], 2, 1), Int(config["Exports:AuditRowLimit"], 5000, 1),
             config["Pdf:PdfA"],
-            !bool.TryParse(config["Pdf:UseSystemFonts"], out var usf) || usf);
+            !bool.TryParse(config["Pdf:UseSystemFonts"], out var usf) || usf,
+            Int(config["Exports:MaxOpenJobsPerUser"], DefaultMaxOpenJobsPerUser, 1));
     }
 
     /// <summary>The licence problem in words, or null when a valid tier is configured. Evaluation is refused outside Development ("not permitted in production").</summary>

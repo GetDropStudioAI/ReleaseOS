@@ -73,7 +73,7 @@ public static class AttachmentEndpoints
                 return Refuse(AttachmentGuards.TooLarge, $"The file is larger than the {max / 1048576} MB limit for evidence attachments", StatusCodes.Status413PayloadTooLarge);
             }
             return Refuse("InvalidUpload", "The upload has no file part");
-        }).RequireAuthorization(Uploaders).DisableAntiforgery();
+        }).RequireAuthorization(Uploaders).DisableAntiforgery().WithMetadata(new BodySizeLimit(null));   // enforces Attachments:MaxBytes itself, not the global request limit
 
         api.MapGet("/attachments", async (string trainId, string? entityType, string? entityId, AttachmentService s, CancellationToken ct) =>
             Results.Ok(await s.ManifestAsync(trainId, entityType, entityId, ct))).RequireAuthorization(Policies.Read);

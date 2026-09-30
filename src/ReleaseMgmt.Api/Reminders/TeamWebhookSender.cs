@@ -134,7 +134,7 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
         var delay = TimeSpan.FromMilliseconds(Math.Clamp(config.GetValue("Notifications:Webhooks:RetryDelayMs", 500), 0, 30_000));
         var body = JsonSerializer.Serialize(kind == "Generic"
             ? new { kind = n.Kind, entityType = n.EntityType, entityId = n.EntityId, escalationLevel = n.EscalationLevel, message = n.Message, trainId = n.TrainId, at = time.GetUtcNow().UtcDateTime }
-            : (object)new { text = n.Message });   // Teams and Slack incoming webhooks both take {"text": ...}
+            : (object)new { text = ChatText(kind, n.Message) });   // Teams and Slack incoming webhooks both take {"text": ...}
 
         var last = "no attempt was made";
         for (var attempt = 1; attempt <= attempts; attempt++)
@@ -157,6 +157,15 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
         }
         return $"{last} after {attempts} attempt{(attempts == 1 ? "" : "s")}";
     }
+
+    /// <summary>
+    /// A notice is plain text built from names people typed (gate, step, train, a freeze reason). Teams renders <c>text</c> as Markdown and Slack as mrkdwn, so
+    /// unescaped, a gate called <c>[Sign in again](https://…)</c> posted a link under the bot's name and <c>&lt;!channel&gt;</c> pinged a whole Slack channel
+    /// (security review SEC-D6). Slack's only escape is the HTML entity for &amp;, &lt; and &gt;; Teams gets the same Markdown escaping as comm dispatch.
+    /// </summary>
+    internal static string ChatText(string kind, string message) => kind == "Slack"
+        ? message.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
+        : ReleaseMgmt.Domain.Services.CommEscaper.Markdown(message);
 
     private async Task FailAsync(string destinationId, string message, string? trainId, CancellationToken ct)
     {

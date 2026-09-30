@@ -12,6 +12,19 @@ public sealed record HeaderResult(IReadOnlyDictionary<string, int> Columns, IRea
 /// <summary>One data row after cell validation. <see cref="Cells"/> holds the canonical text of every column that is in the file (raw text where the cell failed).</summary>
 public sealed record ParsedRow(int Row, IReadOnlyDictionary<string, string> Cells, IReadOnlyList<ImportError> Errors);
 
+/// <summary>
+/// How much "did you mean" work one import plan may do, in edit-distance cells (input length x candidate length). One plan shares one budget, so a file of
+/// ten thousand near-miss names cannot make a preview run for minutes (SEC-D2); once it is spent the remaining errors simply carry no suggestion.
+/// The default (50 million cells, well under a second) covers far more suggestions than the 1,000 errors a preview keeps.
+/// </summary>
+public sealed class SuggestBudget(long cells = SuggestBudget.DefaultCells)
+{
+    public const long DefaultCells = 50_000_000;
+    public long Remaining { get; private set; } = cells;
+    public bool Exhausted => Remaining <= 0;
+    public bool Spend(long cost) { if (cost > Remaining) { Remaining = 0; return false; } Remaining -= cost; return true; }
+}
+
 /// <summary>Header handling and typed cell validation (PROJECT_SCOPE 9). Pure: no I/O, no database. Rows are numbered from 1 (header excluded); row 0 is the header.</summary>
 public static partial class RowParser
 {
@@ -73,6 +86,8 @@ public static partial class RowParser
             return c.Required && !c.AllowEmpty ? ("", $"{c.Name} is required") : ("", null);
         if (!c.Multiline && text.AsSpan().IndexOfAny('\r', '\n') >= 0) return (text, $"{c.Name} must be on one line");
         if (c.Max > 0 && c.Type is ColumnType.Text or ColumnType.Email && text.Length > c.Max) return (text, $"{c.Name} is longer than {c.Max} characters");
+        // An owner is an email or an @handle: nothing longer can resolve, and an unbounded cell was edit-distanced against every user (SEC-D2).
+        if (c.Type is ColumnType.Owner && text.Length > MaxEmailLength) return (text, $"{c.Name} is longer than {MaxEmailLength} characters");
         switch (c.Type)
         {
             case ColumnType.Text:
@@ -103,6 +118,8 @@ public static partial class RowParser
             case ColumnType.EmailList:
             {
                 var parts = Split(text);
+                var tooLong = parts.FirstOrDefault(p => p.Length > MaxEmailLength);
+                if (tooLong is not null) return (text, $"{c.Name} is a list of emails separated by ';', and one of them is longer than {MaxEmailLength} characters");
                 var bad = parts.FirstOrDefault(p => !EmailShape().IsMatch(p));
                 if (bad is not null) return (text, $"{c.Name} is a list of emails separated by ';', and \"{bad}\" is not an email");
                 return (string.Join(';', parts.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ThenBy(x => x, StringComparer.Ordinal)), null);
@@ -120,13 +137,30 @@ public static partial class RowParser
 
     public static string[] Split(string list) => list.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-    /// <summary>The closest candidates to <paramref name="input"/> by edit distance (case-insensitive), best first; empty when nothing is near.</summary>
-    public static IReadOnlyList<string> Suggest(string input, IEnumerable<string> pool, int max = 1)
+    /// <summary>The closest candidates to <paramref name="input"/> by edit distance (case-insensitive), best first; empty when nothing is near.
+    /// Bounded (SEC-D2): an input longer than <see cref="MaxSuggestLength"/> is not a typo and gets no suggestion, and a candidate whose length differs by more
+    /// than the allowed distance is skipped without computing it (the length difference is a lower bound of the edit distance), so the cost per call is small.</summary>
+    public static IReadOnlyList<string> Suggest(string input, IEnumerable<string> pool, int max = 1, SuggestBudget? budget = null)
     {
+        if (input.Length > MaxSuggestLength || budget is { Exhausted: true }) return [];
         var limit = Math.Max(2, input.Length / 3);
-        return [.. pool.Distinct().Select(p => (p, d: Distance(input.ToLowerInvariant(), p.ToLowerInvariant()))).Where(x => x.d > 0 && x.d <= limit)
-            .OrderBy(x => x.d).ThenBy(x => x.p, StringComparer.Ordinal).Take(max).Select(x => x.p)];
+        var lower = input.ToLowerInvariant();
+        var scored = new List<(string p, int d)>();
+        foreach (var p in pool.Distinct())
+        {
+            if (Math.Abs(p.Length - input.Length) > limit) continue;
+            if (budget is not null && !budget.Spend((long)input.Length * p.Length)) break;   // out of budget: suggest from what was scored
+            var d = Distance(lower, p.ToLowerInvariant());
+            if (d > 0 && d <= limit) scored.Add((p, d));
+        }
+        return [.. scored.OrderBy(x => x.d).ThenBy(x => x.p, StringComparer.Ordinal).Take(max).Select(x => x.p)];
     }
+
+    /// <summary>RFC 5321 path limit: no email address (and so no owner cell) is longer.</summary>
+    public const int MaxEmailLength = 254;
+
+    /// <summary>Inputs longer than this get no "did you mean" (titles are at most 300 characters; a typo is short).</summary>
+    public const int MaxSuggestLength = 300;
 
     private static int Distance(string a, string b)
     {

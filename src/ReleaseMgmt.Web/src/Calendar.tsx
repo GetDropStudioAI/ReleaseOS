@@ -69,7 +69,7 @@ function openRoute(r: Partial<Route>, onOpen?: (r: Partial<Route>) => void) {
   window.dispatchEvent(new PopStateEvent('popstate'))
 }
 
-export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => void }) {
+export function Calendar({ onOpen, trainId: current }: { me: Me; onOpen?: (r: Partial<Route>) => void; trainId?: string | null }) {
   const [mode, setMode] = useState<Mode>('month')
   const [focus, setFocus] = useState<string>(() => todayIso())
   const [data, setData] = useState<CalendarPayload | null>(null)
@@ -214,13 +214,13 @@ export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => v
         <span className="bad">▲ Freeze</span> and <span className="warn">◐ Chill</span> days are shaded. Arrow keys move by day, Page Up and Page Down by {mode}, Home and End to the week edges; Enter opens the first item on the day and each item is also a button.
       </p>
 
-      <Subscribe />
+      <Subscribe current={current} />
     </section>
   )
 }
 
 /** The ICS feed link: created, rotated and revoked here; the secret is shown once, straight after it is issued, and is not recoverable (only its hash is stored). */
-function Subscribe() {
+function Subscribe({ current }: { current?: string | null }) {
   const [rows, setRows] = useState<IcsTokenRow[] | null>(null)
   const [issued, setIssued] = useState<IcsIssued | null>(null)
   const [confirm, setConfirm] = useState<{ id: string; action: 'rotate' | 'revoke' } | null>(null)
@@ -237,7 +237,8 @@ function Subscribe() {
   const [trainId, setTrainId] = useState('')
   const load = useCallback(() => get<IcsTokenRow[]>('/api/v1/me/ics-tokens').then(r => { setRows(r); setError(null) }).catch(e => setError(errText(e))), [])
   useEffect(() => { load() }, [load])
-  useEffect(() => { getStream().then(t => { setTrains(t); setTrainId(id => id || t[0]?.id || '') }).catch(() => setTrains([])) }, [])
+  // One-train subscriptions default to the train last opened in the Stream, else the first.
+  useEffect(() => { getStream().then(t => { setTrains(t); setTrainId(id => id || (current && t.some(x => x.id === current) ? current : t[0]?.id) || '') }).catch(() => setTrains([])) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const active = rows?.find(r => r.active) ?? null
   // One request at a time: a double click on Create or Confirm is ignored. After each, focus goes where the next step is, never to <body>.

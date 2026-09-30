@@ -22,5 +22,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\db\schema.sql" LogicalName="schema.sql" />
+    <EmbeddedResource Include="..\..\db\analytics.sql" LogicalName="analytics.sql" />
   </ItemGroup>
 </Project>

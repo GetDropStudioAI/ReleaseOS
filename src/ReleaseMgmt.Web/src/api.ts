@@ -142,3 +142,25 @@ export const getWaivers = (gateId: string) => get<Waiver[]>(`/api/v1/gates/${gat
 export const requestWaiver = (gateId: string, reason: string) => post<Waiver>(`/api/v1/gates/${gateId}/waivers`, { reason })
 export const waiveGate = (gateId: string, version: number) => post<unknown>(`/api/v1/gates/${gateId}:waive`, {}, version)
 export const approveWaiver =(id: string, version: number) => post<Waiver>(`/api/v1/waivers/${id}:approve`, {}, version)
+// REOS-36: rollback attestation, PIR, PIR actions, known issues, hypercare (Closeout.tsx)
+export interface RehearsalRun { id: string; startedAt: string; endedAt: string | null; outcome: string | null }
+export interface RollbackAttestation { required: boolean; rehearsedAt: string | null; rehearsedByUserId: string | null; rehearsedByName: string | null; rehearsalRuns: RehearsalRun[] }
+export interface Pir { id: string; releaseTrainId: string; requiredReason: string; status: 'Required' | 'Scheduled' | 'Held' | 'Closed'; heldAt: string | null; summary: string | null; version: number }
+export interface PirAction { id: string; pirId: string; text: string; ownerUserId: string; dueOn: string; doneAt: string | null; version: number }
+export interface PirViewData { pir: Pir | null; actions: PirAction[] }
+export interface KnownIssue { id: string; title: string; severity: 'Critical' | 'High' | 'Medium' | 'Low'; workaround: string | null; status: 'Open' | 'Accepted' | 'Resolved'; externalKey: string | null; raisedAt: string; resolvedAt: string | null; version: number }
+export interface KnownIssuesData { hypercareExitAt: string | null; hypercareExitByUserId: string | null; issues: KnownIssue[] }
+export const getAttestation = (id: string) => get<RollbackAttestation>(`/api/v1/trains/${id}/rollback-attestation`)
+export const attestRollback = (id: string, runId: string | null, note: string | null, version: number) => post<unknown>(`/api/v1/trains/${id}:rehearsed-rollback`, { runId, note }, version)
+export const getPir = (id: string) => get<PirViewData>(`/api/v1/trains/${id}/pir`)
+export const createPir = (id: string) => post<Pir>(`/api/v1/trains/${id}/pir`)
+export const savePirSummary = (id: string, summary: string, version: number) => patch<Pir>(`/api/v1/trains/${id}/pir`, { summary }, version)
+export const pirAction = (id: string, action: 'schedule' | 'hold' | 'close', version: number, summary?: string) => post<Pir>(`/api/v1/trains/${id}/pir:${action}`, action === 'hold' ? { summary: summary ?? null } : {}, version)
+export const addPirAction = (id: string, b: { text: string; ownerUserId: string; dueOn: string }) => post<PirAction>(`/api/v1/trains/${id}/pir/actions`, b)
+export const patchPirAction = (id: string, b: { text?: string; ownerUserId?: string; dueOn?: string }, version: number) => patch<PirAction>(`/api/v1/pir-actions/${id}`, b, version)
+export const pirActionState = (id: string, action: 'complete' | 'reopen', version: number) => post<PirAction>(`/api/v1/pir-actions/${id}:${action}`, {}, version)
+export const getKnownIssues = (id: string) => get<KnownIssuesData>(`/api/v1/trains/${id}/known-issues`)
+export const addKnownIssue = (id: string, b: { title: string; severity: string; workaround: string | null; externalKey: string | null }) => post<KnownIssue>(`/api/v1/trains/${id}/known-issues`, b)
+export const patchKnownIssue = (id: string, issueId: string, b: { title?: string; severity?: string; workaround?: string; externalKey?: string }, version: number) => patch<KnownIssue>(`/api/v1/trains/${id}/known-issues/${issueId}`, b, version)
+export const knownIssueAction = (id: string, issueId: string, action: 'accept' | 'resolve' | 'reopen', version: number) => post<KnownIssue>(`/api/v1/trains/${id}/known-issues/${issueId}:${action}`, {}, version)
+export const exitHypercare = (id: string, version: number) => post<unknown>(`/api/v1/trains/${id}:exit-hypercare`, {}, version)

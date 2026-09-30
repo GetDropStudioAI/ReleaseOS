@@ -5,6 +5,7 @@ import { FreezesPanel } from './Freezes'
 import { fmtDayTime } from './time'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
+import { Closeout } from './Closeout'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { advanceTrain, getFreezesAhead, getReadiness, getStream, getTrain, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
 
@@ -131,6 +132,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <FreezesPanel trainId={t.id} refreshKey={refreshKey} onChanged={onChanged} />
       <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
+      <Closeout train={t} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
     </>
   )
 }

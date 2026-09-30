@@ -69,7 +69,8 @@ public sealed class CommWebhookSender(IHttpClientFactory http, IConfiguration co
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Post, uri) { Content = new StringContent(body, new UTF8Encoding(false), "application/json") };
-                using var res = await http.CreateClient(ClientName).SendAsync(req, timer.Token);
+                // Headers only: the status decides, and the body is never read or buffered (SEC-C3).
+                using var res = await http.CreateClient(ClientName).SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timer.Token);
                 if (res.IsSuccessStatusCode) return null;
                 last = (int)res.StatusCode is >= 300 and < 400 ? $"HTTP {(int)res.StatusCode} (redirects are not followed)" : $"HTTP {(int)res.StatusCode}";
                 if ((int)res.StatusCode is not (408 or 429 or >= 500)) return last;

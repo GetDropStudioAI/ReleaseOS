@@ -34,6 +34,28 @@ public static partial class ExternalKeys
         return slash < 0 ? key.ToUpperInvariant() : key[..slash].ToUpperInvariant() + key[slash..];
     }
 
+    /// <summary>The longest status name kept from a source system. Jira and ServiceNow status names are a few words; anything longer is not a status (SEC-C4).</summary>
+    public const int MaxStateLength = 100;
+
+    /// <summary>
+    /// Whether a status name another system sent is plausible enough to store, audit, show and quote in alerts (OI-12 keeps keys, states and dates only):
+    /// not blank, at most <see cref="MaxStateLength"/> characters, and no control, format (bidi override, zero width), line or paragraph separator,
+    /// private-use or unpaired surrogate character. A value that fails is refused, never trimmed or altered, and never repeated in a message.
+    /// </summary>
+    public static bool IsPlausibleState(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s) || s.Length > MaxStateLength) return false;
+        for (var i = 0; i < s.Length; i++)
+        {
+            var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(s, i);
+            if (cat is System.Globalization.UnicodeCategory.Control or System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.LineSeparator
+                or System.Globalization.UnicodeCategory.ParagraphSeparator or System.Globalization.UnicodeCategory.PrivateUse or System.Globalization.UnicodeCategory.Surrogate)
+                return false;
+            if (char.IsHighSurrogate(s[i])) i++;   // a valid pair was classified as one code point above
+        }
+        return true;
+    }
+
     /// <summary>ServiceNow change_request.state codes to their names; names pass through (a display-value response).</summary>
     public static string ChangeStateName(string raw) => raw.Trim() switch
     {

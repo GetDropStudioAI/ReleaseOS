@@ -29,7 +29,10 @@ public sealed class ServiceNowConnector(ConnectorHttp http, ConnectorCredentials
         if (result.GetArrayLength() == 0) throw new ConnectorException(ConnectorErrorKind.NotFound, $"ServiceNow has no {key}", 404);
         var row = result[0];
         var raw = Str(row, "state") ?? throw new ConnectorException(ConnectorErrorKind.Parse, "ServiceNow's answer has no state");
-        return new ExternalStatus(key, task ? ExternalKeys.ChangeTaskStateName(raw) : ExternalKeys.ChangeStateName(raw), Date(Str(row, "start_date")), Date(Str(row, "end_date")));
+        var state = task ? ExternalKeys.ChangeTaskStateName(raw) : ExternalKeys.ChangeStateName(raw);   // an unknown code or a display value passes through...
+        if (!ExternalKeys.IsPlausibleState(state))                                                       // ...so it is judged like any text from another system (SEC-C4)
+            throw new ConnectorException(ConnectorErrorKind.Parse, $"ServiceNow's state is blank, longer than {ExternalKeys.MaxStateLength} characters or contains control characters; it was not stored");
+        return new ExternalStatus(key, state, Date(Str(row, "start_date")), Date(Str(row, "end_date")));
     }
 
     public async Task PingAsync(CancellationToken ct)
@@ -56,10 +59,27 @@ public sealed class ServiceNowConnector(ConnectorHttp http, ConnectorCredentials
         using (doc)
         {
             var token = Str(doc.RootElement, "access_token") ?? throw new ConnectorException(ConnectorErrorKind.Auth, "ServiceNow's OAuth answer has no access token");
+            // The token goes into a request header as is, and .NET writes a header added without validation to the wire verbatim (a CR/LF in it
+            // would start a second header). Only an RFC 6750 b64token of sane length is used (SEC-C5).
+            if (!IsBearerToken(token)) throw new ConnectorException(ConnectorErrorKind.Auth, "ServiceNow's OAuth answer has no usable access token");
             var life = doc.RootElement.TryGetProperty("expires_in", out var e) && e.TryGetInt32(out var s) ? s : 60;
             _bearer = token; _bearerUntil = now.AddSeconds(Math.Max(10, life - 30));
             return "Bearer " + token;
         }
+    }
+
+    public const int MaxTokenLength = 8192;
+
+    /// <summary>RFC 6750 b64token: 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"=", here at most <see cref="MaxTokenLength"/> characters.</summary>
+    public static bool IsBearerToken(string s)
+    {
+        if (s.Length is 0 or > MaxTokenLength) return false;
+        var end = s.Length;
+        while (end > 0 && s[end - 1] == '=') end--;
+        if (end == 0) return false;
+        for (var i = 0; i < end; i++)
+            if (!(char.IsAsciiLetterOrDigit(s[i]) || s[i] is '-' or '.' or '_' or '~' or '+' or '/')) return false;
+        return true;
     }
 
     private static string? Str(JsonElement e, string name) =>

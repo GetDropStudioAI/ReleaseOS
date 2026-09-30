@@ -72,6 +72,7 @@ builder.Services.AddSingleton<AnalyticsService>();   // REOS-46 analytics M1-M15
 builder.Services.AddSingleton<IAnalyticsConnectionFactory>(new SqliteAnalyticsConnectionFactory(connectionString));
 builder.Services.AddSingleton<ReleaseMgmt.Api.Sync.SyncHealthService>();   // REOS-42 sync health, connector-wide banner state, webhook allowlist
 builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration
+builder.Services.AddSyncEngine(config);   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -169,6 +170,7 @@ api.MapRunbook();
 api.MapRuns();
 api.MapParser();
 api.MapAdmin();
+api.MapConnectors();   // REOS-39
 api.MapAttachments();
 api.MapNotifications();
 api.MapTemplates();   // REOS-38

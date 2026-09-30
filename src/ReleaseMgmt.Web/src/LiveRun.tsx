@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { endRun, getForecast, getRun, getRuns, runStepAction, startRun, type ApiError, type RunDetail, type RunForecast, type RunStepRow } from './api'
 import { Conflict, isConflict } from './Conflict'
 import { errMsg, plural } from './format'
 import { fmtCountdown, fmtDay, fmtHM, fmtHMS, fmtMinSec, serverNow, zoneAbbr } from './time'
-import type { Mode } from './route'
-import type { Selection } from './Planning'
+import { buildPath, type Mode } from './route'
+import { usePaneFocus, type Selection } from './Planning'
+import { useAction } from './useAction'
+import { ConfirmInline } from './ConfirmInline'
+import { announce } from './announce'
+import { useRestoreFocus } from './focus'
 
 const SECTIONS = ['PreCheck', 'Deploy', 'Verify', 'Hypercare', 'Rollback']
 const SECTION_LABEL: Record<string, string> = { PreCheck: 'Pre-check', Deploy: 'Deploy', Verify: 'Verify', Hypercare: 'Hypercare', Rollback: 'Rollback (only if called)' }
@@ -40,13 +44,15 @@ function useTick() {
 
 const varCls = (v: number | null) => v === null ? 'muted' : v >= 15 ? 'bad' : v >= 5 ? 'warn' : ''
 const sign = (v: number) => v > 0 ? `+${v}` : `${v}`
+// Variance is not colour alone (WCAG 1.4.1): a glyph when late, and the words for screen readers.
+const varText = (v: number) => <>{v >= 5 ? <span aria-hidden="true">▲ </span> : null}{sign(v)}<span className="sr-only"> min{v >= 15 ? ', late beyond tolerance' : v >= 5 ? ', late' : ''}</span></>
 
 function stateOf(s: RunStepRow, nowMs: number, doneCodes: Set<string>) {
   switch (s.status) {
     case 'Done': return { text: '✓ Done', cls: 'ok' }
     case 'Failed': return { text: '✗ Failed', cls: 'bad' }
     case 'Skipped': return { text: '▲ Skipped', cls: 'warn' }
-    case 'Running': return { text: `● ${fmtMinSec((nowMs - Date.parse(s.actualStartAt!)) / 1000)}`, cls: 'accent' }
+    case 'Running': return { text: `● Running ${fmtMinSec((nowMs - Date.parse(s.actualStartAt!)) / 1000)}`, cls: 'accent' }
     default: return s.dependsOn.every(d => doneCodes.has(d)) ? { text: '○ Ready', cls: '' } : { text: '○ Waiting', cls: 'muted' }
   }
 }
@@ -77,19 +83,20 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
   const { run, forecast: fc, err } = data
   const [problem, setProblem] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ApiError | null>(null)
+  const { run: act, pending } = useAction()
   const label = mode === 'live' ? 'Live' : 'Rehearsal'
 
   const modeNav = (
     <nav aria-label="Runbook mode" className="tabs mode-tabs">
-      {(['plan', 'rehearsal', 'live'] as Mode[]).map(m => <a key={m} href="#" aria-current={mode === m ? 'page' : undefined} onClick={e => { e.preventDefault(); onMode(m) }}>{m === 'plan' ? 'Plan' : m === 'rehearsal' ? 'Rehearsal' : 'Live'}</a>)}
+      {(['plan', 'rehearsal', 'live'] as Mode[]).map(m => <a key={m} href={buildPath({ view: 'trains', trainId, selection: null, mode: m })} aria-current={mode === m ? 'page' : undefined} onClick={e => { e.preventDefault(); onMode(m) }}>{m === 'plan' ? 'Plan' : m === 'rehearsal' ? 'Rehearsal' : 'Live'}</a>)}
     </nav>
   )
   if (err) return <>{modeNav}<p className="bad" role="alert">✗ {err}</p></>
   if (run === undefined) return <>{modeNav}<p className="muted">Loading…</p></>
   if (run === null) {
-    const start = async () => { setProblem(null); try { await startRun(trainId, mode === 'live' ? 'Live' : 'Rehearsal'); onChanged() } catch (e) { setProblem(errMsg(e)) } }
+    const start = () => act('Starting…', async () => { setProblem(null); try { await startRun(trainId, mode === 'live' ? 'Live' : 'Rehearsal'); announce(`${label} run started.`); onChanged() } catch (e) { setProblem(errMsg(e)) } })
     return <>{modeNav}<h1>{label} run</h1><p className="muted">There is no {label.toLowerCase()} run for this train yet.{mode === 'live' ? ' A live run needs the train to be Executing and a runbook with steps.' : ' A rehearsal can start any time the runbook has steps.'}</p>
-      {canPlan && <p><button type="button" className="text" onClick={start}>Start {label.toLowerCase()} run</button></p>}
+      {canPlan && <p><button type="button" className="text" disabled={!!pending} onClick={() => void start()}>{pending ?? `Start ${label.toLowerCase()} run`}</button></p>}
       {problem && <p className="bad" role="alert">✗ {problem}</p>}</>
   }
 
@@ -105,7 +112,13 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
   const done = main.filter(s => s.status === 'Done' || s.status === 'Skipped').length
   const win: [number, number] = fc?.windowStart && fc.windowEnd ? [Date.parse(fc.windowStart), Date.parse(fc.windowEnd)] : [Math.min(...run.steps.map(s => Date.parse(s.plannedStartAt))), Math.max(...run.steps.map(s => Date.parse(s.plannedEndAt)))]
   const fcRow = (code: string) => fc?.steps.find(x => x.step === code)
-  const end = async (outcome: 'Completed' | 'RolledBack' | 'Aborted') => { setProblem(null); setConflict(null); try { await endRun(run.id, outcome, run.version); onChanged() } catch (e) { if (isConflict(e)) setConflict(e); else setProblem(errMsg(e)) } }
+  const end = (outcome: 'Completed' | 'RolledBack' | 'Aborted', busyLabel: string) => act(busyLabel, async () => { setProblem(null); setConflict(null); try { await endRun(run.id, outcome, run.version); announce(`Run ended: ${outcome === 'RolledBack' ? 'rolled back' : outcome.toLowerCase()}.`); onChanged() } catch (e) { if (isConflict(e)) setConflict(e); else setProblem(errMsg(e)) } })
+  // One click per step (UX review 7): Start on the ready row, Mark done on the running row; the drawer stays for notes, Fail and Skip.
+  const stepAct = (s: RunStepRow, action: 'start' | 'done') => act(`${s.stepId}:${action}`, async () => {
+    setProblem(null); setConflict(null)
+    try { await runStepAction(run.id, s.stepId, action, null, s.version); announce(`${s.stepCode} ${action === 'start' ? 'started' : 'done'}.`); onChanged() }
+    catch (e) { if (isConflict(e)) setConflict(e); else setProblem(errMsg(e)); onChanged() }
+  })
   const lateMin = fc ? fc.steps.reduce((m, s) => Math.max(m, s.endVarianceMin ?? 0), 0) : 0
 
   return (
@@ -120,7 +133,7 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
         <div><div className="mono big">{fmtHMS(nowMs)}</div><div className="muted">Now · {fmtDay(nowMs)} {zoneAbbr(nowMs)}</div></div>
         <div><div className="mono big" data-testid="window-countdown">{windowSec === null ? '—' : fmtCountdown(windowSec)}</div><div className="muted">Window closes {fc?.windowEnd ? fmtHM(fc.windowEnd) : '—'}</div></div>
         <div><div className={`mono big ${fc?.alertRaised ? 'bad' : ''}`}>{fc?.forecastFinish ? fmtHM(fc.forecastFinish) : '—'}</div><div className="muted">Finish forecast · plan {fc ? fmtHM(fc.plannedFinish) : '—'}</div></div>
-        <div><div className={`mono big ${toDeadline !== null && toDeadline < 1800 ? 'warn' : ''}`}>{toDeadline === null ? '—' : fmtCountdown(toDeadline)}</div><div className="muted">To rollback deadline</div></div>
+        <div><div className={`mono big ${toDeadline !== null && toDeadline < 1800 ? 'warn' : ''}`}>{toDeadline === null ? '—' : fmtCountdown(toDeadline)}</div><div className="muted">To rollback deadline{toDeadline !== null && toDeadline < 1800 ? <span className="warn"> · {toDeadline < 0 ? '▲ passed' : '▲ under 30 min'}</span> : null}</div></div>
         <div><div className="mono big">{done} / {main.length}</div><div className="muted">Steps done</div></div>
       </section>
 
@@ -132,7 +145,7 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
       {problem && <p className="bad" role="alert">✗ {problem}</p>}
       {conflict && <Conflict error={conflict} what="run" />}
 
-      <table className="grid runtable">
+      <table className="grid runtable" aria-label={`${label} runbook steps`}>
         <thead><tr><th>Step</th><th>Title · owner · plan</th><th>Actual / fc</th><th className="n">Var</th><th>State</th>
           <th aria-hidden="true" className="axis"><span className="mono">{fmtHM(win[0])}</span><span className="mono">{fmtHM(win[1])}</span></th></tr></thead>
         <tbody>
@@ -140,7 +153,7 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
             const rows = run.steps.filter(s => s.section === sec)
             if (rows.length === 0) return null
             return [
-              <tr key={sec} className="sec"><td colSpan={6}>{SECTION_LABEL[sec]}</td></tr>,
+              <tr key={sec} className="sec"><th scope="rowgroup" colSpan={6} className="cap">{SECTION_LABEL[sec]}</th></tr>,
               ...rows.map(s => {
                 const f = fcRow(s.stepCode); const st = stateOf(s, nowMs, doneCodes)
                 const sel = selection?.kind === 'step' && selection.id === s.stepId
@@ -148,14 +161,19 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
                   : s.status === 'Running' ? `${fmtHM(s.actualStartAt!)}–` : null
                 const fcText = f?.start && f.end ? `${fmtHM(f.start)}–${fmtHM(f.end)}` : ''
                 const lateStart = s.actualStartAt ? Math.floor((Date.parse(s.actualStartAt) - Date.parse(s.plannedStartAt)) / 60000) : 0
+                const ready = s.status === 'Scheduled' && s.dependsOn.every(d => doneCodes.has(d))
+                const inline = s.canAct && !run.endedAt && s.section !== 'Rollback' && (ready || s.status === 'Running') ? (s.status === 'Running' ? 'done' : 'start') : null
+                const rowBusy = pending === `${s.stepId}:${inline}`
                 return (
-                  <tr key={s.stepId} aria-selected={sel} className={sel ? 'selected' : undefined}>
+                  <tr key={s.stepId} className={sel ? 'selected' : undefined}>
                     <td className={`mono ${s.status === 'Running' ? 'accent' : 'muted'}`}>{s.stepCode}</td>
-                    <td><button type="button" className="text plainlink" onClick={() => onSelect({ kind: 'step', id: s.stepId })}>{s.title}</button>
+                    <td><button type="button" className="text plainlink" aria-current={sel ? 'true' : undefined} onClick={() => onSelect({ kind: 'step', id: s.stepId })}>{s.title}</button>
                       <div className="muted small">{s.ownerName ?? '—'} · {fmtHM(s.plannedStartAt)} · {s.plannedDurationMin} min{s.dependsOn.length > 0 && s.status === 'Scheduled' ? ` · after ${s.dependsOn.join(', ')}` : ''}{lateStart >= 5 && s.actualStartAt ? <span className="warn"> · {lateStart} late</span> : null}</div></td>
                     <td className="mono small">{actual ?? ''}{s.status === 'Running' && fcText ? <span className="muted">{f?.end ? fmtHM(f.end) : ''}</span> : null}{!actual && fcText ? <span className="muted">{fcText}</span> : null}</td>
-                    <td className={`n small ${varCls(f?.endVarianceMin ?? null)}`}>{f?.endVarianceMin != null && s.section !== 'Rollback' ? sign(f.endVarianceMin) : ''}</td>
-                    <td className={`small ${st.cls}`}>{st.text}</td>
+                    <td className={`n small ${varCls(f?.endVarianceMin ?? null)}`}>{f?.endVarianceMin != null && s.section !== 'Rollback' ? varText(f.endVarianceMin) : ''}</td>
+                    <td className={`small ${st.cls}`}>{st.text}
+                      {inline && <> <button type="button" className="text" disabled={!!pending} onClick={() => void stepAct(s, inline)}>
+                        {rowBusy ? (inline === 'start' ? 'Starting…' : 'Marking done…') : inline === 'start' ? 'Start' : 'Mark done'}<span className="sr-only"> {s.stepCode}</span></button></>}</td>
                     <td><Bars s={s} f={f} win={win} nowMs={nowMs} deadlineMs={deadlineMs} /></td>
                   </tr>)
               }),
@@ -167,9 +185,10 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
 
       {canPlan && !run.endedAt && (
         <p className="actions-col">
-          <button type="button" className="text" onClick={() => end('Completed')}>End run: completed</button>
-          <button type="button" className="text" onClick={() => end('RolledBack')}>End run: rolled back</button>
-          <button type="button" className="text destructive" onClick={() => end('Aborted')}>End run: aborted</button>
+          <button type="button" className="text" disabled={!!pending} onClick={() => void end('Completed', 'Ending…')}>{pending === 'Ending…' ? 'Ending…' : 'End run: completed'}</button>
+          <button type="button" className="text" disabled={!!pending} onClick={() => void end('RolledBack', 'Ending as rolled back…')}>{pending === 'Ending as rolled back…' ? 'Ending as rolled back…' : 'End run: rolled back'}</button>
+          <ConfirmInline label="End run: aborted" question="Abort this run? Ending a run cannot be undone." confirmLabel="Abort run" pendingLabel="Aborting…" disabled={!!pending}
+            onConfirm={() => end('Aborted', 'Aborting…')} />
         </p>)}
     </>
   )
@@ -178,14 +197,18 @@ export function LiveRun({ trainId, mode, canPlan, data, selection, onSelect, onM
 // ---- the running-step drawer (right pane): timer, dependencies, instructions, and Done / Fail / Skip ------------------------------------------
 export function RunStepDrawer({ stepId, data, onClose, onChanged }: { stepId: string; data: ReturnType<typeof useRun>; onClose: () => void; onChanged: () => void }) {
   useTick()
+  useRestoreFocus()   // closing the drawer gives focus back to the row that opened it
   const { run, forecast: fc } = data
   const [note, setNote] = useState('')
   const [skipping, setSkipping] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ApiError | null>(null)
+  const { run: once, pending } = useAction()
+  const headRef = usePaneFocus(stepId)
+  const noteHint = useId(), errId = useId()
   useEffect(() => { setNote(''); setSkipping(false); setErr(null); setConflict(null) }, [stepId])
   const s = run?.steps.find(x => x.stepId === stepId)
-  const head = <div className="section-head"><span className="cap">Step · <span className="mono">{s?.stepCode ?? ''}</span></span><button type="button" className="text quiet" aria-label="Close inspector" onClick={onClose}>Close</button></div>
+  const head = <div ref={headRef} className="section-head"><span className="cap">Step · <span className="mono">{s?.stepCode ?? ''}</span></span><button type="button" className="text quiet" aria-label="Close inspector" onClick={onClose}>Close</button></div>
   if (!run || !s) return <>{head}<p className="muted">Loading…</p></>
 
   const nowMs = serverNow()
@@ -193,12 +216,15 @@ export function RunStepDrawer({ stepId, data, onClose, onChanged }: { stepId: st
   const elapsed = running ? (nowMs - Date.parse(s.actualStartAt!)) / 1000 : 0
   const left = running ? s.plannedDurationMin * 60 - elapsed : 0
   const f = fc?.steps.find(x => x.step === s.stepCode)
-  const act = async (action: 'start' | 'done' | 'fail' | 'skip') => {
+  const LABEL = { start: 'Starting…', done: 'Marking done…', fail: 'Failing…', skip: 'Skipping…' } as const
+  const act = (action: 'start' | 'done' | 'fail' | 'skip') => once(LABEL[action], async () => {
     setErr(null); setConflict(null)
-    if (action === 'skip' && !note.trim()) { setErr('Skipping a step needs a note saying why.'); return }
-    try { await runStepAction(run.id, s.stepId, action, note.trim() || null, s.version); setNote(''); setSkipping(false); onChanged() }
+    if (action === 'skip' && !note.trim()) { setErr('Reason for skipping: skipping a step needs a note saying why.'); document.getElementById('step-note')?.focus(); return }
+    try { await runStepAction(run.id, s.stepId, action, note.trim() || null, s.version); setNote(''); setSkipping(false); announce(`${s.stepCode} ${action === 'done' ? 'done' : action === 'start' ? 'started' : action === 'fail' ? 'failed' : 'skipped'}.`); onChanged() }
     catch (e) { if (isConflict(e)) setConflict(e); else setErr(errMsg(e)); onChanged() }
-  }
+  })
+  const busy = (a: keyof typeof LABEL, idle: string) => pending === LABEL[a] ? LABEL[a] : idle
+  const noteMissing = skipping && !!err && !note.trim()
   const stepCls = s.status === 'Done' ? 'ok' : s.status === 'Failed' ? 'bad' : s.status === 'Running' ? 'accent' : ''
   return (
     <>
@@ -217,20 +243,21 @@ export function RunStepDrawer({ stepId, data, onClose, onChanged }: { stepId: st
         {f?.end && <><dt>Forecast end</dt><dd className="mono">{fmtHM(f.end)}</dd></>}
         {s.note && <><dt>Note</dt><dd>{s.note}</dd></>}
       </dl>
-      {s.instructions && <><p className="cap">Instructions</p><ol className="instr">{s.instructions.split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ol></>}
+      {s.instructions && <><h3 className="cap">Instructions</h3><ol className="instr">{s.instructions.split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ol></>}
       {s.canAct && !run.endedAt && (s.status === 'Scheduled' || s.status === 'Running') && (
         <>
-          <p className="inline-form"><label className="cap" htmlFor="step-note">Note</label>
-            <input id="step-note" className="line block" placeholder={skipping ? 'Why is this step skipped? (required)' : 'Visible to everyone on the call'} value={note} onChange={e => setNote(e.target.value)} /></p>
+          <p className="inline-form"><label className="cap" htmlFor="step-note">{skipping ? 'Reason for skipping (required)' : 'Note'}</label>
+            <input id="step-note" className="line block" placeholder={skipping ? 'Why is this step skipped?' : 'Visible to everyone on the call'} value={note} onChange={e => setNote(e.target.value)}
+              aria-required={skipping} aria-invalid={noteMissing || undefined} aria-describedby={noteMissing ? `${errId} ${noteHint}` : noteHint} /></p>
           <p className="actions-col">
-            {s.status === 'Scheduled' && <button type="button" className="text" onClick={() => act('start')}>Start step</button>}
-            {running && <button type="button" className="text" onClick={() => act('done')}>Mark done</button>}
-            {running && <button type="button" className="text destructive" onClick={() => act('fail')}>Fail</button>}
-            {s.status === 'Scheduled' && (skipping ? <button type="button" className="text" onClick={() => act('skip')}>Confirm skip</button> : <button type="button" className="text" onClick={() => setSkipping(true)}>Skip…</button>)}
+            {s.status === 'Scheduled' && <button type="button" className="text" disabled={!!pending} onClick={() => void act('start')}>{busy('start', 'Start step')}</button>}
+            {running && <button type="button" className="text" disabled={!!pending} onClick={() => void act('done')}>{busy('done', 'Mark done')}</button>}
+            {running && <ConfirmInline label="Fail" question="Fail this step? The rollback steps become ready to run." confirmLabel="Fail step" pendingLabel="Failing…" disabled={!!pending} onConfirm={() => act('fail')} />}
+            {s.status === 'Scheduled' && (skipping ? <button type="button" className="text" disabled={!!pending} onClick={() => void act('skip')}>{busy('skip', 'Confirm skip')}</button> : <button type="button" className="text" disabled={!!pending} onClick={() => { setSkipping(true); document.getElementById('step-note')?.focus() }}>Skip…</button>)}
           </p>
-          <p className="muted">Skip needs a note. Fail leaves the rollback steps ready to run.</p>
+          <p id={noteHint} className="muted">Skip needs a note. Fail leaves the rollback steps ready to run.</p>
         </>)}
-      {err && <p className="bad" role="alert">✗ {err}</p>}
+      {err && <p id={errId} className="bad" role="alert">✗ {err}</p>}
       {conflict && <Conflict error={conflict} what="step" />}
     </>
   )

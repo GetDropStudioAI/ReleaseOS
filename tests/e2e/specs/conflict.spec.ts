@@ -60,7 +60,8 @@ test('a window edit that loses the race keeps the draft and offers overwrite or 
   await expect(b.locator('label:has-text("Starts") input')).toHaveValue('2026-12-01T20:00')      // Bob's draft is intact
   await expect(b.locator('label:has-text("Ends") input')).toHaveValue('2026-12-01T23:00')
 
-  await b.click('button:has-text("Overwrite with mine")')                                          // Bob decides
+  // Bob decides; the notice clears as the request starts, so wait for the save itself before reading the window back
+  await Promise.all([b.waitForResponse(r => r.url().includes(`/api/v1/trains/${t.id}/window`) && r.request().method() === 'PUT'), b.click('button:has-text("Overwrite with mine")')])
   await expect(b.locator('.conflict')).toHaveCount(0)
   const now = await b.evaluate(async id => (await (await fetch(`/api/v1/trains/${id}/window`)).json() as { startsAt: string }).startsAt, t.id)
   expect(now).toBe('2026-12-02T02:00:00Z')                                                          // 20:00 on 1 Dec in the display zone (America/Chicago, CST = UTC-6, D24)

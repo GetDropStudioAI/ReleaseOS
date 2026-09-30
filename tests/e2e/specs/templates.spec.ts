@@ -34,7 +34,8 @@ test('a Release Manager drafts, approves and retires a template; a Viewer sees i
   await expect(row).toContainText('templates-rm')
   await expect(page.locator('button:text-is("Edit")')).toHaveCount(0)           // approved templates are immutable
 
-  await page.locator('button:text-is("Retire")').click()
+  await page.locator('button:text-is("Retire")').click()                        // an inline confirm, not a modal
+  await page.locator('button:text-is("Retire template")').click()
   await expect(row).toContainText('✗ Retired')
   await expect(page.locator('button:text-is("Approve")')).toHaveCount(0)
 
@@ -45,7 +46,7 @@ test('a Release Manager drafts, approves and retires a template; a Viewer sees i
 test('an RTE can draft but not approve; a Viewer has no actions', async ({ page }) => {
   await signIn(page, 'templates-rte@example.com', 'RTE')
   await page.click('nav[aria-label=Primary] a:has-text("Templates")')
-  await page.locator('table.grid tr', { hasText: 'Standard release' }).click()
+  await page.getByRole('button', { name: 'Standard release', exact: true }).click()
   await expect(page.locator('button:text-is("Edit")')).toBeVisible()
   await expect(page.locator('button:text-is("Approve")')).toHaveCount(0)
 
@@ -55,7 +56,7 @@ test('an RTE can draft but not approve; a Viewer has no actions', async ({ page 
   await signIn(page, 'templates-viewer@example.com', 'Viewer')
   await page.click('nav[aria-label=Primary] a:has-text("Templates")')
   await expect(page.locator('button:text-is("New template")')).toHaveCount(0)
-  await page.locator('table.grid tr', { hasText: 'Standard release' }).click()
+  await page.getByRole('button', { name: 'Standard release', exact: true }).click()
   await expect(page.locator('button:text-is("Edit")')).toHaveCount(0)
   await expect(page.locator('button:text-is("Approve")')).toHaveCount(0)
 })

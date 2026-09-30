@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, get, getStream, type Me, type StreamRow, type UserRow } from './api'
+import { primaryOf, useRowNav } from './rowNav'
 import { fmtDay, fmtHMS, zoneAbbr, zonedInputToUtc } from './time'
 
 /**
  * Audit viewer (REOS-38, Q-038a..c): filter line, dense newest-first event table, before/after JSON in the right-hand detail column
  * (same split layout as Admin), CSV export of exactly the applied filter. Read-only: nothing on this screen writes.
- * Keyboard: j / k move the selection, Enter moves focus into the detail, Esc closes it.
+ * Keyboard, while focus is in the event table: j / k move the selection (and focus), Enter moves focus into the detail, Esc closes it.
  */
 interface AuditItem {
   id: number; occurredAt: string; actorUserId: string | null; actorName: string | null; releaseTrainId: string | null; trainTitle: string | null
@@ -74,6 +75,7 @@ function Detail({ item, onClose, closeRef }: { item: AuditItem; onClose: () => v
         <dt>Event</dt><dd className="mono">#{item.id}</dd>
       </dl>
       {isObj(before) && isObj(after) && <p className="muted">{changed.size === 0 ? 'No field differs.' : `${changed.size} changed: ${[...changed].join(', ')}`}</p>}
+      {changed.size > 0 && <p className="muted small">Marks: + added, − removed, ~ changed.</p>}
       <JsonSide label="Before" glyph="−" cls="bad" value={before} changed={changed} other={after} />
       <JsonSide label="After" glyph="+" cls="ok" value={after} changed={changed} other={before} />
       <p><button type="button" className="text" ref={closeRef} onClick={onClose}>Close (Esc)</button></p>
@@ -125,27 +127,20 @@ export function AuditViewer({ me }: { me: Me }) {
   const set = (k: keyof Filters) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setDraft(d => ({ ...d, [k]: e.target.value }))
 
   const sel = rows?.find(r => r.id === selected) ?? null
-  const move = useCallback((delta: number) => {
-    if (!rows || rows.length === 0) return
-    const i = rows.findIndex(r => r.id === selected)
-    const j = i < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, i + delta))
-    setSelected(rows[j].id)
-    document.getElementById(`audit-${rows[j].id}`)?.scrollIntoView?.({ block: 'nearest' })
-  }, [rows, selected])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      if (t && (['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName) || t.isContentEditable)) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (e.key === 'j') { e.preventDefault(); move(1) }
-      else if (e.key === 'k') { e.preventDefault(); move(-1) }
-      else if (e.key === 'Escape' && selected !== null) { setSelected(null) }
-      else if (e.key === 'Enter' && sel && t?.tagName !== 'BUTTON' && t?.tagName !== 'A') { e.preventDefault(); closeRef.current?.focus() }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [move, selected, sel])
+  // j / k / Enter only while focus is in the table (WCAG 2.1.4); moving focuses the row's time button, Enter moves focus into the detail.
+  const [, , nav] = useRowNav(rows?.length ?? 0,
+    i => { if (rows?.[i]) { setSelected(rows[i].id); requestAnimationFrame(() => closeRef.current?.focus()) } },
+    i => { if (rows?.[i]) setSelected(rows[i].id) })
+  /** Close the detail and give focus back to the event's row, so it does not fall to <body> with the Close button. */
+  const close = () => {
+    const id = selected
+    setSelected(null)
+    requestAnimationFrame(() => primaryOf(document.getElementById(`audit-${id}`))?.focus())
+  }
+  const onEsc = (e: React.KeyboardEvent) => {
+    const t = e.target as HTMLElement
+    if (e.key === 'Escape' && selected !== null && !['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName)) { e.preventDefault(); close() }
+  }
 
   if (!allowed) return <><h1>Audit</h1><p className="muted" role="status">The audit log is available to Release Train Engineers, Release Managers and Governance Officers.</p></>
 
@@ -168,19 +163,21 @@ export function AuditViewer({ me }: { me: Me }) {
         <button type="button" className="text" onClick={clear}>Clear</button>
         <a className="textbtn" href={`/api/v1/audit.csv${csvQuery ? `?${csvQuery}` : ''}`} download>Export CSV</a>
       </form>
+      {error && <p className="bad" role="alert">✗ {error}</p>}
       <p className="muted" role="status">
-        {error ? <span className="bad" role="alert">✗ {error}</span>
+        {error ? ''
           : loading && !rows ? 'Loading…'
           : rows ? `${rows.length} event${rows.length === 1 ? '' : 's'}${next ? ' loaded, more available' : ''}${anyFilter ? ' matching the filters' : ''} · newest first · times in ${zoneAbbr()}` : ''}
       </p>
-      <div className="split">
+      <div className="split" onKeyDown={onEsc}>
         <div>
-          <table className="grid audit-table">
+          <table className="grid audit-table" aria-label="Audit events, newest first" {...nav}>
             <thead><tr><th>Time</th><th>Actor</th><th>Train</th><th>Entity</th><th>Action</th></tr></thead>
             <tbody>
               {rows?.map(r => (
-                <tr key={r.id} id={`audit-${r.id}`} className={r.id === selected ? 'selected' : undefined} aria-selected={r.id === selected} onClick={() => setSelected(r.id)}>
-                  <td className="mono"><button type="button" className="plainlink text" onClick={e => { e.stopPropagation(); setSelected(r.id) }} aria-label={`Show event ${r.id}, ${r.action}`}>{fmtDay(r.occurredAt)} {fmtHMS(r.occurredAt)}</button></td>
+                <tr key={r.id} id={`audit-${r.id}`} className={r.id === selected ? 'selected' : undefined} onClick={() => setSelected(r.id)}>
+                  <td className="mono"><button type="button" className="plainlink text" data-rownav aria-current={r.id === selected ? 'true' : undefined}
+                    onClick={e => { e.stopPropagation(); setSelected(r.id) }} aria-label={`${fmtDay(r.occurredAt)} ${fmtHMS(r.occurredAt)}, event ${r.id}, ${r.action}`}>{fmtDay(r.occurredAt)} {fmtHMS(r.occurredAt)}</button></td>
                   <td>{r.actorName ?? (r.actorUserId ? <span className="muted">unknown user</span> : <span className="muted">○ System</span>)}</td>
                   <td>{r.trainTitle ?? <span className="muted">none</span>}</td>
                   <td>{r.entityType} <span className="mono muted" title={r.entityId}>{r.entityId.length > 10 ? `${r.entityId.slice(0, 8)}…` : r.entityId}</span></td>
@@ -193,7 +190,7 @@ export function AuditViewer({ me }: { me: Me }) {
           {next && <p><button type="button" className="text" disabled={loading} onClick={() => load(applied, next)}>{loading ? 'Loading…' : 'Load more'}</button></p>}
         </div>
         <aside className="detail" aria-label="Event detail">
-          {sel ? <Detail item={sel} onClose={() => setSelected(null)} closeRef={closeRef} /> : <p className="muted">Select an event to see what changed. j / k move, Enter opens the detail, Esc closes it.</p>}
+          {sel ? <Detail item={sel} onClose={close} closeRef={closeRef} /> : <p className="muted">Select an event to see what changed. In the table, j / k move, Enter opens the detail, Esc closes it.</p>}
         </aside>
       </div>
     </>

@@ -54,7 +54,13 @@ interface Stop { tag: string; name: string; hasName: boolean; visibleIndicator: 
 
 /** Tab through the page from the top; returns every stop until focus leaves the document or comes round to the first stop. */
 async function tabThrough(page: Page, max = 260): Promise<Stop[]> {
-  await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0) })
+  // Start at the very top of the document: a view that moves focus to its heading on open (App.tsx) would otherwise start the walk mid-page.
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0)
+    let top = document.getElementById('tab-walk-start')
+    if (!top) { top = document.createElement('span'); top.id = 'tab-walk-start'; top.tabIndex = -1; document.body.prepend(top) }
+    top.focus({ preventScroll: true })
+  })
   const stops: Stop[] = []
   for (let i = 0; i < max; i++) {
     await page.keyboard.press('Tab')

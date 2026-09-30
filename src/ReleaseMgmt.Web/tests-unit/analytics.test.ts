@@ -95,7 +95,7 @@ test('chartTable: M7 is aggregated, others carry the metric columns with non-emp
   const m = metric('gate_cycle_time')
   const t3 = chartTable('M3', m.recs, [{ name: 'GateName', unit: '' }, { name: 'samples', unit: 'gates' }, { name: 'median_h', unit: 'hours' }, { name: 'p90_h', unit: 'hours' }])
   assert.ok(t3.headers.every(h => h.length > 0))
-  assert.deepEqual(t3.headers, ['GateName', 'samples (gates)', 'median_h (hours)', 'p90_h (hours)'])
+  assert.deepEqual(t3.headers, ['Gate', 'Gates timed', 'Median (hours)', 'p90 (hours)'])   // readable on screen; the CSV keeps the raw names (columnHeader)
   assert.deepEqual(t3.rows[0], ['QA Sign-off', '24', '130', '226'])
   assert.equal(columnHeader({ name: 'x', unit: '' }), 'x')
 })

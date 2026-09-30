@@ -62,8 +62,15 @@ test('the Communicate button opens the drawer with the template, a hydrated prev
   await expect(schedule.locator('tr', { hasText: 'Go/No-Go outcome' })).toContainText('ready to send')
   for (const h of await schedule.locator('th').all()) await expect(h).not.toBeEmpty()                     // no empty headers
 
+  // Esc typed in a field belongs to the field; elsewhere it closes the drawer and focus goes back to the Communicate button
+  await expect(drawer.locator('h2')).toBeFocused()                                                           // focus moved into the drawer on open
+  await drawer.locator('label:has-text("Template") select').focus()
+  await page.keyboard.press('Escape')
+  await expect(drawer).toBeVisible()
+  await drawer.locator('h2').focus()
   await page.keyboard.press('Escape')
   await expect(page.locator('.comms-drawer')).toHaveCount(0)
+  await expect(page.locator('button:text-is("Communicate")')).toBeFocused()
 })
 
 test('sending asks for the previewed train version, stores through the API and reports it; the webhook is chosen from approved destinations', async ({ page, context }) => {
@@ -71,22 +78,24 @@ test('sending asks for the previewed train version, stores through the API and r
   const sent: { headers: Record<string, string>; body: unknown }[] = []
   await mock(page, { version: 7, dispatched: sent })
   const drawer = await open(page, 'comms2@example.com')
-  await drawer.locator('table.comms-schedule button:has-text("Go/No-Go outcome")').click()             // pick the unsent schedule item
+  await expect(drawer.locator('table.comms-schedule tr.selected')).toContainText('ready to send')          // the next unsent item is pre-selected with its template
+  await drawer.locator('table.comms-schedule button:has-text("Go/No-Go outcome")').click()             // picking it explicitly keeps it
   await expect(drawer.locator('table.comms-schedule tr.selected')).toContainText('ready to send')
 
   await drawer.locator('button:text-is("Copy Markdown")').click()
-  await expect(drawer.locator('[role=status]', { hasText: 'Markdown copied and recorded' })).toBeVisible()
+  await expect(drawer.getByTestId('comms-result')).toContainText('Markdown copied and recorded')
+  await expect(page.getByTestId('announcer')).toContainText('Markdown copied and recorded')                                  // spoken through the app's one live region
   expect(sent[0].headers['if-match']).toBe('7')                                                            // the version the preview showed
   expect(sent[0].body).toMatchObject({ channel: 'Copy', format: 'Markdown', templateId: 'c1', scheduleItemId: 's1' })
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('**R26.24** is Go')              // the stored text is what was copied
 
   await drawer.locator('button:text-is("Copy rich text")').click()
-  await expect(drawer.locator('[role=status]', { hasText: 'Rich text copied and recorded' })).toBeVisible()
+  await expect(drawer.getByTestId('comms-result')).toContainText('Rich text copied and recorded')
   expect(sent[1].body).toMatchObject({ channel: 'Copy', format: 'RichText' })
 
   await expect(drawer.locator('select#comms-hook option')).toHaveText(['release-ops (hooks.example.test)'])
   await drawer.locator('button:text-is("Post to release-ops")').click()
-  await expect(drawer.locator('[role=status]', { hasText: 'Webhook release-ops: delivered' })).toBeVisible()
+  await expect(drawer.getByTestId('comms-result')).toContainText('Webhook release-ops: delivered')
   expect(sent[2].body).toMatchObject({ channel: 'Webhook', webhookDestinationId: 'w1' })
 })
 

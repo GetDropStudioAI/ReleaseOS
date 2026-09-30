@@ -85,30 +85,34 @@ for (const scheme of ['light', 'dark'] as const) {
         await expect(page.getByTestId('sync-banner').locator('p')).toHaveCount(1)
 
         // DETAIL + KEYBOARD: Details opens the right-hand column; j / k move the selection, Enter focuses the detail, Esc closes it
-        const detail = page.locator('aside[aria-label="Alert detail"]')
+        const detail = page.getByTestId('alert-detail')
+        const current = page.locator('table.sync-alerts [aria-current="true"]')
         await openRow(page, authMsg).locator('button:text-is("Details")').click()
-        await expect(openRow(page, authMsg)).toHaveAttribute('aria-selected', 'true')
+        await expect(openRow(page, authMsg).locator('button:text-is("Details")')).toHaveAttribute('aria-current', 'true')
         await expect(detail.locator('h2')).toHaveText('ServiceNow AuthFailed')
         await expect(detail).toContainText('Likely cause')
         await expect(detail).toContainText('To clear it')
         await expect(detail).toContainText(authMsg)
-        await page.keyboard.press('j')
-        await expect(page.locator('table.sync-alerts tr[aria-selected="true"]')).toHaveCount(1)
+        await page.keyboard.press('j')                                                       // focus is on the clicked Details button, so in the tables
+        await expect(current).toHaveCount(1)
+        await expect(current).toBeFocused()                                                  // focus follows the selection
         await page.keyboard.press('k')
-        await expect(page.locator('table.sync-alerts tr[aria-selected="true"]')).toHaveCount(1)
+        await expect(current).toHaveCount(1)
+        await expect(current).toBeFocused()
         await openRow(page, authMsg).locator('button:text-is("Details")').click()
-        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())     // Enter on a focused button would just press it
-        await page.keyboard.press('Enter')
+        await page.keyboard.press('Enter')                                                   // Enter on the row's Details button moves focus into the detail
         await expect(detail.locator('button:text-is("Close (Esc)")')).toBeFocused()
         await scan(page, `sync health with an alert open (${scheme})`)                        // banner, tables, detail, allowlist form: both themes
         await page.keyboard.press('Escape')
-        await expect(page.locator('table.sync-alerts tr[aria-selected="true"]')).toHaveCount(0)
+        await expect(current).toHaveCount(0)
         await expect(detail).toContainText('Select an alert')
+        await expect(openRow(page, authMsg).locator('button:text-is("Details")')).toBeFocused()   // focus returns to the row, not to <body>
 
         // RESOLVE: inline confirm (no modal); the row leaves Open, stays in the history, and the banner clears everywhere
         await openRow(page, authMsg).locator('button:text-is("Details")').click()
         await detail.locator('button:text-is("Resolve now")').click()
         await expect(detail.locator('[role=group][aria-label="Confirm resolve"]')).toContainText('The row stays in the history')
+        await expect(detail.locator('button:text-is("Confirm")')).toBeFocused()
         await detail.locator('button:text-is("Confirm")').click()
         await expect(openRow(page, authMsg)).toHaveCount(0)
         const history = page.locator('table[aria-label="Resolved alerts"] tbody tr', { hasText: authMsg })

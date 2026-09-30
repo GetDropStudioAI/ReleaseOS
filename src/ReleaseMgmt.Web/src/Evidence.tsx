@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError, get, getMe, type Me } from './api'
 import { errMsg } from './format'
 import { fmtDayTime } from './time'
+import { announce } from './announce'
+import { ConfirmInline } from './ConfirmInline'
 
 export interface EvidenceRow {
   id: string; entityType: string; entityId: string; fileName: string; contentType: string; sizeBytes: number; sha256: string
@@ -32,16 +34,16 @@ export function Evidence({ trainId, entityType, entityId, refreshKey = 0 }: { tr
   const [me, setMe] = useState<Me | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [confirm, setConfirm] = useState<string | null>(null)
   const [rev, setRev] = useState(0)
   const input = useRef<HTMLInputElement>(null)
+  const attach = useRef<HTMLButtonElement>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => { getMe().then(setMe).catch(() => setMe(null)) }, [])
   useEffect(() => {
     get<EvidenceRow[]>(`/api/v1/trains/${trainId}/attachments?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`)
       .then(r => { setRows(r); setErr(null) }).catch(e => setErr(errMsg(e)))
   }, [trainId, entityType, entityId, refreshKey, rev])
-  useEffect(() => { setConfirm(null) }, [entityId])
 
   const roles = me?.roles ?? []
   const canUpload = roles.some(r => r === 'RTE' || r === 'ReleaseManager' || r === 'GovernanceOfficer')
@@ -53,20 +55,21 @@ export function Evidence({ trainId, entityType, entityId, refreshKey = 0 }: { tr
     if (!file) return
     if (file.size > MAX_BYTES) { setErr(`${file.name} is ${fmtSize(file.size)}; evidence files can be at most 50 MB.`); return }
     setBusy(true); setErr(null)
-    try { await upload(entityType, entityId, file); setRev(v => v + 1) } catch (e) { setErr(errMsg(e, 'The upload failed. Check your connection and try again.')) } finally { setBusy(false) }
+    try { await upload(entityType, entityId, file); announce(`${file.name} attached.`); setRev(v => v + 1) } catch (e) { setErr(errMsg(e, 'The upload failed. Check your connection and try again.')) } finally { setBusy(false) }
   }
-  const del = async (id: string) => {
-    setErr(null); setConfirm(null)
-    try { await remove(id) } catch (e) { setErr(errMsg(e)) }
+  const del = async (a: EvidenceRow) => {
+    setErr(null)
+    try { await remove(a.id); announce(`${a.fileName} deleted.`) } catch (e) { setErr(errMsg(e)) }
     setRev(v => v + 1)
+    requestAnimationFrame(() => (attach.current ?? heading.current)?.focus())   // the row is gone: land on Attach file (or the section heading)
   }
 
   return (
     <section aria-label="Evidence">
-      <div className="section-head"><h3 className="cap dark">Evidence</h3>
+      <div className="section-head"><h3 className="cap dark" ref={heading} tabIndex={-1}>Evidence</h3>
         {canUpload && <span>
           <input ref={input} type="file" className="sr-only" tabIndex={-1} aria-label="Choose evidence file" onChange={e => pick(e.target.files)} />
-          <button type="button" className="text" disabled={busy} onClick={() => input.current?.click()}>{busy ? 'Uploading…' : 'Attach file'}</button>
+          <button ref={attach} type="button" className="text" disabled={busy} onClick={() => input.current?.click()}>{busy ? 'Uploading…' : 'Attach file'}</button>
         </span>}
       </div>
       {err && <p className="bad" role="alert">✗ {err}</p>}
@@ -85,9 +88,7 @@ export function Evidence({ trainId, entityType, entityId, refreshKey = 0 }: { tr
                   <td className="nowrap"><span className="muted">{a.uploadedByName ?? '—'}</span> <span className="mono">{fmtDayTime(a.uploadedAt)}</span></td>
                   <td className="nowrap">
                     <a className="text" href={`/api/v1/attachments/${a.id}`} download={a.fileName} aria-label={`Download ${a.fileName}`}>Download</a>
-                    {canDelete(a) && (confirm === a.id
-                      ? <> <button type="button" className="text destructive" onClick={() => del(a.id)}>Confirm delete</button> <button type="button" className="text quiet" onClick={() => setConfirm(null)}>Cancel</button></>
-                      : <> <button type="button" className="text destructive" aria-label={`Delete ${a.fileName}`} onClick={() => setConfirm(a.id)}>Delete</button></>)}
+                    {canDelete(a) && <> <ConfirmInline label="Delete" triggerLabel={`Delete ${a.fileName}`} question={`Delete ${a.fileName}?`} confirmLabel="Confirm delete" pendingLabel="Deleting…" onConfirm={() => del(a)} /></>}
                   </td>
                 </tr>))}
             </tbody>

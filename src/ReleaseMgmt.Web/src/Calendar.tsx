@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ApiError, get, getStream, post, type Me, type StreamRow } from './api'
 import { buildPath, ROOT, type Route } from './route'
+import { announce } from './announce'
+import { useFocusWhen } from './focus'
 import { displayZone, fmtDayTime, fmtHM, serverNow, zoneAbbr } from './time'
+import { useAction } from './useAction'
 
 /**
  * Screen "Calendar" (REOS-51, docs/UI.md row "Calendar", Q-051*): month and week grids of trains (target date, deployment window, gate due dates) with freeze
@@ -66,7 +69,7 @@ function openRoute(r: Partial<Route>, onOpen?: (r: Partial<Route>) => void) {
   window.dispatchEvent(new PopStateEvent('popstate'))
 }
 
-export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => void }) {
+export function Calendar({ onOpen, trainId: current }: { me: Me; onOpen?: (r: Partial<Route>) => void; trainId?: string | null }) {
   const [mode, setMode] = useState<Mode>('month')
   const [focus, setFocus] = useState<string>(() => todayIso())
   const [data, setData] = useState<CalendarPayload | null>(null)
@@ -144,9 +147,9 @@ export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => v
           <button type="button" className="choice" aria-pressed={mode === 'week'} onClick={() => setMode('week')}>Week</button>
         </span>
         <span>
-          <button type="button" className="text" onClick={() => step(-1)}>{mode === 'month' ? '‹ Previous month' : '‹ Previous week'}</button>{' '}
+          <button type="button" className="text" onClick={() => step(-1)}><span aria-hidden="true">‹</span> Previous {mode}</button>{' '}
           <button type="button" className="text" onClick={() => setFocus(todayIso())}>Today</button>{' '}
-          <button type="button" className="text" onClick={() => step(1)}>{mode === 'month' ? 'Next month ›' : 'Next week ›'}</button>
+          <button type="button" className="text" onClick={() => step(1)}>Next {mode} <span aria-hidden="true">›</span></button>
         </span>
         <span className="muted">Dates in {displayZone()} ({zoneAbbr()})</span>
       </div>
@@ -174,7 +177,9 @@ export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => v
                     className={cls} tabIndex={day === focus ? 0 : -1} aria-selected={day === focus} data-date={day}
                     onKeyDown={e => onKey(e, day)} onClick={e => { if (e.target === e.currentTarget) setFocus(day) }}>
                     <div className={`cal-daynum${day === today ? ' today' : ''}`}>
-                      {num === 1 || (mode === 'week' && col === 0) ? new Date(parse(day)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : num}
+                      <span aria-hidden="true">{num === 1 || (mode === 'week' && col === 0) ? new Date(parse(day)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : num}</span>
+                      {/* every day carries its full date for screen readers: a bare "30" under an "October" caption would be read as 30 October */}
+                      <span className="sr-only">{new Date(parse(day)).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
                       {day === today && <> · today</>}
                     </div>
                     {fz.map(f => {
@@ -209,33 +214,45 @@ export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => v
         <span className="bad">▲ Freeze</span> and <span className="warn">◐ Chill</span> days are shaded. Arrow keys move by day, Page Up and Page Down by {mode}, Home and End to the week edges; Enter opens the first item on the day and each item is also a button.
       </p>
 
-      <Subscribe />
+      <Subscribe current={current} />
     </section>
   )
 }
 
 /** The ICS feed link: created, rotated and revoked here; the secret is shown once, straight after it is issued, and is not recoverable (only its hash is stored). */
-function Subscribe() {
+function Subscribe({ current }: { current?: string | null }) {
   const [rows, setRows] = useState<IcsTokenRow[] | null>(null)
   const [issued, setIssued] = useState<IcsIssued | null>(null)
   const [confirm, setConfirm] = useState<{ id: string; action: 'rotate' | 'revoke' } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const { run: guard, pending } = useAction()
+  const busy = pending !== null
   const [copied, setCopied] = useState<string | null>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const firstLink = useRef<HTMLInputElement>(null)
+  const createRef = useRef<HTMLButtonElement>(null)
+  const confirmRef = useFocusWhen<HTMLButtonElement>(confirm !== null)
+  const triggers = useRef(new Map<string, HTMLButtonElement>())   // Rotate / Revoke per row, to give focus back on Cancel
   const [trains, setTrains] = useState<StreamRow[]>([])
   const [trainId, setTrainId] = useState('')
   const load = useCallback(() => get<IcsTokenRow[]>('/api/v1/me/ics-tokens').then(r => { setRows(r); setError(null) }).catch(e => setError(errText(e))), [])
   useEffect(() => { load() }, [load])
-  useEffect(() => { getStream().then(t => { setTrains(t); setTrainId(id => id || t[0]?.id || '') }).catch(() => setTrains([])) }, [])
+  // One-train subscriptions default to the train last opened in the Stream, else the first.
+  useEffect(() => { getStream().then(t => { setTrains(t); setTrainId(id => id || (current && t.some(x => x.id === current) ? current : t[0]?.id) || '') }).catch(() => setTrains([])) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const active = rows?.find(r => r.active) ?? null
-  const run = async (fn: () => Promise<void>) => {
-    setBusy(true); setError(null)
-    try { await fn(); await load() } catch (e) { setError(errText(e)) } finally { setBusy(false) }
-  }
-  const create = () => run(async () => { setIssued(await post<IcsIssued>('/api/v1/me/ics-tokens', { scope: 'all' })); setCopied(null) })
-  const rotate = (id: string) => run(async () => { setIssued(await post<IcsIssued>(`/api/v1/me/ics-tokens/${id}:rotate`, { scope: 'all' })); setConfirm(null); setCopied(null) })
-  const revoke = (id: string) => run(async () => { await post(`/api/v1/me/ics-tokens/${id}:revoke`, {}); setIssued(null); setConfirm(null) })
+  // One request at a time: a double click on Create or Confirm is ignored. After each, focus goes where the next step is, never to <body>.
+  const run = (label: string, fn: () => Promise<void>, then: () => void) => guard(label, async () => {
+    setError(null)
+    try { await fn(); await load(); requestAnimationFrame(then) } catch (e) { setError(errText(e)) }
+  })
+  const ready = () => { announce('Link ready. Copy it now: it is shown only once.'); firstLink.current?.focus() }
+  const create = () => run('Creating…', async () => { setIssued(await post<IcsIssued>('/api/v1/me/ics-tokens', { scope: 'all' })); setCopied(null) }, ready)
+  const rotate = (id: string) => run('Rotating…', async () => { setIssued(await post<IcsIssued>(`/api/v1/me/ics-tokens/${id}:rotate`, { scope: 'all' })); setConfirm(null); setCopied(null) }, ready)
+  const revoke = (id: string) => run('Revoking…', async () => { await post(`/api/v1/me/ics-tokens/${id}:revoke`, {}); setIssued(null); setConfirm(null) },
+    () => { announce('Link revoked.'); createRef.current?.focus() })
+  const cancel = () => { const c = confirm; setConfirm(null); requestAnimationFrame(() => c && triggers.current.get(`${c.id}:${c.action}`)?.focus()) }
+  const hide = () => { setIssued(null); requestAnimationFrame(() => heading.current?.focus()) }
 
   const origin = window.location.origin
   const urls = (t: string) => [
@@ -245,40 +262,40 @@ function Subscribe() {
     ...(trainId ? [{ key: 'train', label: 'One train', url: `${origin}/api/v1/ics/${t}/trains/${encodeURIComponent(trainId)}.ics` }] : []),
   ]
   const copy = async (key: string, url: string) => {
-    try { await navigator.clipboard.writeText(url); setCopied(key) }
+    try { await navigator.clipboard.writeText(url); setCopied(key); announce('Link copied.') }
     catch { setCopied(null); setError('The browser did not allow copying. Select the address and copy it by hand.') }
   }
 
   return (
     <section aria-labelledby="subscribe-h">
-      <h2 id="subscribe-h" className="cap">Subscribe</h2>
+      <h2 id="subscribe-h" className="cap" ref={heading} tabIndex={-1}>Subscribe</h2>
       <p className="muted">Add the calendar to Outlook, Apple Calendar or Google Calendar with a link. Anyone who has the link can see gate, window and freeze titles and times, so keep it private. You have one link; it works until you rotate or revoke it.</p>
       {error && <p className="bad" role="alert">✗ {error}</p>}
       {rows === null && !error && <p className="muted">Loading…</p>}
 
       {issued && (
         <div className="cal-issued" role="region" aria-label="Your new calendar link">
-          <p className="ok" role="status">✓ Link ready. Copy it now: it is shown only once and cannot be shown again. If you lose it, rotate to get a new one.</p>
+          <p className="ok">✓ Link ready. Copy it now: it is shown only once and cannot be shown again. If you lose it, rotate to get a new one.</p>
           <table className="grid" aria-label="Calendar feed links">
             <thead><tr><th scope="col">Feed</th><th scope="col">Link</th><th scope="col">Action</th></tr></thead>
             <tbody>
-              {urls(issued.token).map(u => (
+              {urls(issued.token).map((u, i) => (
                 <tr key={u.key}>
                   <td>{u.key === 'train'
                     ? <label>One train <select className="line" value={trainId} onChange={e => setTrainId(e.target.value)} aria-label="Train for the one-train feed">{trains.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
                     : u.label}</td>
-                  <td className="wrap"><input className="line wide cal-mono" readOnly value={u.url} aria-label={`${u.label} link`} onFocus={e => e.currentTarget.select()} /></td>
+                  <td className="wrap"><input ref={i === 0 ? firstLink : undefined} className="line wide cal-mono" readOnly value={u.url} aria-label={`${u.label} link`} onFocus={e => e.currentTarget.select()} /></td>
                   <td><button type="button" className="text" onClick={() => copy(u.key, u.url)}>{copied === u.key ? '✓ Copied' : 'Copy'}</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p><button type="button" className="text" onClick={() => setIssued(null)}>I have copied it, hide the link</button></p>
+          <p><button type="button" className="text" onClick={hide}>I have copied it, hide the link</button></p>
         </div>
       )}
 
       {rows && !active && (
-        <p>You have no calendar link. <button type="button" className="text strong" disabled={busy} onClick={create}>Create link</button></p>
+        <p>You have no calendar link. <button type="button" className="text strong" ref={createRef} disabled={busy} onClick={() => void create()}>{pending === 'Creating…' ? pending : 'Create link'}</button></p>
       )}
 
       {rows && rows.length > 0 && (
@@ -293,8 +310,8 @@ function Subscribe() {
                 <td className="wrap">
                   {r.active && confirm?.id !== r.id && (
                     <>
-                      <button type="button" className="text" disabled={busy} onClick={() => setConfirm({ id: r.id, action: 'rotate' })}>Rotate</button>{' '}
-                      <button type="button" className="text" disabled={busy} onClick={() => setConfirm({ id: r.id, action: 'revoke' })}>Revoke</button>
+                      <button type="button" className="text" ref={el => { if (el) triggers.current.set(`${r.id}:rotate`, el); else triggers.current.delete(`${r.id}:rotate`) }} disabled={busy} onClick={() => setConfirm({ id: r.id, action: 'rotate' })}>Rotate</button>{' '}
+                      <button type="button" className="text" ref={el => { if (el) triggers.current.set(`${r.id}:revoke`, el); else triggers.current.delete(`${r.id}:revoke`) }} disabled={busy} onClick={() => setConfirm({ id: r.id, action: 'revoke' })}>Revoke</button>
                     </>
                   )}
                   {r.active && confirm?.id === r.id && (
@@ -302,8 +319,8 @@ function Subscribe() {
                       <span className="warn">{confirm.action === 'rotate'
                         ? '▲ The current link stops working at once. Calendars using it will stop updating until you paste the new link.'
                         : '▲ The link stops working at once and you will have no calendar link until you create one.'}</span>{' '}
-                      <button type="button" className="text strong" disabled={busy} onClick={() => (confirm.action === 'rotate' ? rotate(r.id) : revoke(r.id))}>Confirm {confirm.action}</button>{' '}
-                      <button type="button" className="text" onClick={() => setConfirm(null)}>Cancel</button>
+                      <button type="button" className="text strong" ref={confirmRef} disabled={busy} onClick={() => void (confirm.action === 'rotate' ? rotate(r.id) : revoke(r.id))}>{busy ? pending : `Confirm ${confirm.action}`}</button>{' '}
+                      <button type="button" className="text" disabled={busy} onClick={cancel}>Cancel</button>
                     </span>
                   )}
                 </td>

@@ -22,7 +22,10 @@ public sealed class JiraCloudConnector(ConnectorHttp http, ConnectorCredentials 
         using var doc = await http.GetJsonAsync($"rest/api/3/issue/{Uri.EscapeDataString(key)}?fields=status", Auth, ct);
         var name = Dig(doc.RootElement, "fields", "status", "name");
         if (name is not { ValueKind: JsonValueKind.String }) throw new ConnectorException(ConnectorErrorKind.Parse, "Jira's answer has no status name");
-        return new ExternalStatus(key, name.Value.GetString()!);
+        var state = name.Value.GetString();
+        if (!ExternalKeys.IsPlausibleState(state))
+            throw new ConnectorException(ConnectorErrorKind.Parse, $"Jira's status name is blank, longer than {ExternalKeys.MaxStateLength} characters or contains control characters; it was not stored");
+        return new ExternalStatus(key, state!);
     }
 
     private async Task<ExternalStatus> FixVersionAsync(string key, CancellationToken ct)

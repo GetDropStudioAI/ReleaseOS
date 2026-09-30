@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Api;
 using ReleaseMgmt.Api.Auth;
 using ReleaseMgmt.Api.Endpoints;
+using ReleaseMgmt.Api.Exports;
 using ReleaseMgmt.Api.Reminders;
 using ReleaseMgmt.Infrastructure.Services;
 using ReleaseMgmt.Infrastructure.Analytics;
@@ -74,6 +75,7 @@ builder.Services.AddSingleton<ReleaseMgmt.Api.Sync.SyncHealthService>();   // RE
 builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration
 builder.Services.AddSyncEngine(config);   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
 builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
+builder.Services.AddPdfExports(config, builder.Environment.IsDevelopment());   // REOS-50: PDF export jobs + worker (QuestPDF)
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -187,6 +189,7 @@ api.MapComms();   // REOS-43/44
 api.MapCommDispatch();   // REOS-45
 api.MapCalendar();   // REOS-51
 api.MapImports(); api.MapGridExports();   // REOS-48/49
+api.MapPdfExports();   // REOS-50
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

@@ -7,6 +7,7 @@ import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
 import { Closeout } from './Closeout'
 import { commsKey, type CommsDraft } from './CommsDrawer'
+import { ExportsPanel } from './ExportsPanel'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { advanceTrain, getFreezesAhead, getReadiness, getStream, getTrain, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
 
@@ -95,7 +96,6 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   const blockers = r?.blockers.length ?? 0
   const gatesBefore = t.nextStatus ? t.gates.filter(g => ORDER.indexOf(g.requiredBeforeStatus) <= ORDER.indexOf(t.nextStatus!)) : []
   const others = (r?.blockers ?? []).filter(b => b.failure.guard !== 'GateLockout')
-  const soon = 'Available in a later milestone'
   // Checklist shows the gate the user picked, else the first gate still open, else the last.
   const checklistGate = t.gates.find(g => g.id === chosenGate) ?? t.gates.find(g => g.status !== 'Certified' && g.status !== 'Waived') ?? t.gates[t.gates.length - 1]
   const pickGate = (gid: string) => { setChosenGate(gid); onSelect({ kind: 'gate', id: gid }) }
@@ -109,7 +109,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
           <button type="button" className="text" onClick={() => onMode('live')}>Live runbook</button>
           {canDecide && <button type="button" className="text" onClick={() => setGoDraft(goDraft ? undefined : emptyGoNoGo())}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</button>}
           <button type="button" className="text" aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</button>
-          <button type="button" className="text" disabled title={soon}>Export</button>
+          <button type="button" className="text" onClick={() => document.getElementById('exports')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Export</button>
           {t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} title={blockers > 0 ? `${plural(blockers, 'guard')} not met` : undefined} onClick={advance}>Advance to {t.nextStatus}</button>}
         </span>
       </div>
@@ -135,6 +135,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       <FreezesPanel trainId={t.id} refreshKey={refreshKey} onChanged={onChanged} />
       <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
       <Closeout train={t} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
+      <ExportsPanel trainId={t.id} refreshKey={refreshKey} />
     </>
   )
 }

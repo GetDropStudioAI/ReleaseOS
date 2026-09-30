@@ -10,6 +10,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageReference Include="QuestPDF" Version="2026.9.1" />
     <PackageReference Include="Sep" Version="0.17.1" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="ClosedXML" Version="0.105.1" />

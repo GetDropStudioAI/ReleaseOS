@@ -18,7 +18,7 @@ const monthTitle = (iso: string) => new Date(`${iso.slice(0, 7)}-01T00:00:00Z`).
 
 /** Pages the month grid (Next month) until its caption shows the month of `iso`. */
 async function showMonth(page: Page, iso: string) {
-  const caption = page.locator('table.cal caption')
+  const caption = page.locator('.cal-caption')
   for (let i = 0; i < 6 && (await caption.textContent()) !== monthTitle(iso); i++) await page.getByRole('button', { name: /^Next month/ }).click()
   await expect(caption).toHaveText(monthTitle(iso))
 }
@@ -84,11 +84,11 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.locator(`td[data-date="${next.toISOString().slice(0, 10)}"]`)).toBeFocused()
       await page.keyboard.press('ArrowLeft')
       await expect(cell).toBeFocused()
-      const before = await page.locator('table.cal caption').textContent()
+      const before = await page.locator('.cal-caption').textContent()
       await page.keyboard.press('PageDown')
-      await expect(page.locator('table.cal caption')).not.toHaveText(before!)
+      await expect(page.locator('.cal-caption')).not.toHaveText(before!)
       await page.keyboard.press('PageUp')
-      await expect(page.locator('table.cal caption')).toHaveText(before!)
+      await expect(page.locator('.cal-caption')).toHaveText(before!)
       await cell.click({ position: { x: 2, y: 2 } })                                  // (a 31st clamps to the 30th on the way back)
 
       // Enter opens the first item of the day
@@ -104,9 +104,9 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.locator('table.cal.week tbody tr')).toHaveCount(1)
       await expect(page.locator('table.cal.week td')).toHaveCount(7)
       await expect(page.getByTestId('cal-target').filter({ hasText: 'Card portal' })).toBeVisible()
-      const wk = await page.locator('table.cal caption').textContent()
+      const wk = await page.locator('.cal-caption').textContent()
       await page.getByRole('button', { name: /^Next week/ }).click()
-      await expect(page.locator('table.cal caption')).not.toHaveText(wk!)
+      await expect(page.locator('.cal-caption')).not.toHaveText(wk!)
       await page.getByRole('button', { name: 'Today', exact: true }).click()
       await expect(page.locator('table.cal td.cal-today')).toHaveCount(1)
       await scan(page, `calendar week (${scheme})`)

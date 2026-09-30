@@ -6,7 +6,7 @@ import { displayZone, fmtDayTime, fmtHM, serverNow, zoneAbbr } from './time'
 /**
  * Screen "Calendar" (REOS-51, docs/UI.md row "Calendar", Q-051*): month and week grids of trains (target date, deployment window, gate due dates) with freeze
  * and chill windows as tinted date ranges, and the "Subscribe" section for the ICS feed link.
- * Semantics: one role="grid" table (caption, column headers, gridcells) with a roving tabindex. Arrow keys move the day, Home/End the start/end of the week,
+ * Semantics: one role="grid" table (labelled by the month heading above it, column headers, gridcells) with a roving tabindex. Arrow keys move the day, Home/End the start/end of the week,
  * Page Up/Down the month (the week in week view), Enter opens the first train of the day; every entry is also a real button. Status is glyph + word +
  * colour; freeze days are tinted AND named in text (visible on the first day of each row, and for screen readers on every day). Dates are shown in Display:TimeZone.
  */
@@ -153,8 +153,8 @@ export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => v
       {error && <p className="bad" role="alert">✗ {error}</p>}
       {!data && !error && <p className="muted" role="status">Loading…</p>}
 
+      <div id={captionId} className="cal-caption" aria-live="polite">{title}</div>   {/* outside the grid: a role=grid table may not contain a caption (axe aria-required-children) */}
       <table className={`cal ${mode}`} role="grid" aria-labelledby={captionId} data-testid="calendar-grid">
-        <caption id={captionId} className="cal-caption" aria-live="polite">{title}</caption>
         <thead>
           <tr>{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => <th key={d} scope="col" abbr={d}>{d.slice(0, 3)}</th>)}</tr>
         </thead>

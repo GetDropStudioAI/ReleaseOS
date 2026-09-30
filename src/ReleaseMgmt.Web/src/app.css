@@ -195,7 +195,7 @@ label.block textarea.bulk-text { margin-top: 4px; }
 /* REOS-51 calendar: hairline rules and tinted date ranges only (no boxes); tints are tokens, text on a tint is forced to a contrast-safe colour */
 .cal-bar { display: flex; gap: 20px; align-items: baseline; flex-wrap: wrap; margin: 4px 0 8px; }
 table.cal { width: 100%; border-collapse: collapse; table-layout: fixed; }
-table.cal .cal-caption { text-align: left; font-size: 15px; font-weight: 600; padding: 4px 0 6px; }
+.cal-caption { text-align: left; font-size: 15px; font-weight: 600; padding: 4px 0 6px; }
 table.cal th { font-size: 12px; font-weight: 600; color: var(--secondary); text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--separator-strong); }
 table.cal td { vertical-align: top; height: 104px; padding: 4px 6px; border-bottom: 1px solid var(--separator); border-left: 1px solid var(--separator); overflow: hidden; }
 table.cal td:first-child { border-left: 0; }

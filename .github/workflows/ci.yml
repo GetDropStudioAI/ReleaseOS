@@ -46,6 +46,8 @@ jobs:
           npx playwright install chromium
       - name: E2E (Playwright drives the real app, started through start.py)
         working-directory: tests/e2e
+        env:
+          Pdf__QuestPdfLicense: Evaluation   # test runs only: accepted in Development, refused in production (OI-2, the real licence tier is the owner's decision)
         run: npx playwright test
       - name: Keep the Playwright report when E2E fails
         if: failure()

@@ -119,7 +119,10 @@ public class AuthnSecurityTests
     [Fact]
     public async Task SEC_B2_dev_login_refuses_a_Host_that_is_not_this_machine_so_DNS_rebinding_cannot_sign_in()
     {
-        using var f = new ApiFactory();
+        // Host filtering (SEC-E1, HostFilteringTests) already answers 400 to this request in Development. Switch it off here so this test proves the
+        // dev login's own check, the second layer, which still holds if AllowedHosts is ever widened.
+        using var root = new ApiFactory();
+        using var f = root.WithWebHostBuilder(b => b.UseSetting("AllowedHosts", "*"));
         var c = f.CreateClient();
         // A page on rebind.attacker.example whose name now resolves to 127.0.0.1: to the browser the request is same-origin, so the cross-site guard lets it through.
         var req = new HttpRequestMessage(HttpMethod.Post, "/auth/dev-login") { Content = JsonContent.Create(new { email = "rm@x.com", name = "rm", role = Roles.ReleaseManager }) };

@@ -10,7 +10,7 @@
 The same actions are available in the app toolbar (Reset, Exit) while it runs under this script.
 Requires Python 3.9+, the .NET 10 SDK and Node 22 on PATH.
 If a Reset pulls a new start.py, it relaunches itself so the new supervisor logic takes effect.
-Backend: http://127.0.0.1:6080 (dotnet run, Development). Frontend: http://127.0.0.1:6273 (Vite, proxies /api, /hub, /auth).
+Backend: http://127.0.0.1:6080 (dotnet run, Development unless ASPNETCORE_ENVIRONMENT or DOTNET_ENVIRONMENT names another). Frontend: http://127.0.0.1:6273 (Vite, proxies /api, /hub, /auth).
 A small control channel listens on 127.0.0.1:5099 only; every state-changing call needs a per-run token.
 """
 from __future__ import annotations
@@ -139,6 +139,12 @@ class Child:
             pass
 
 
+def backend_environment() -> str:
+    """Development unless the operator chose an environment (SEC-B1, docs/security/scan-authn.md). Development maps the anonymous dev sign-in and the dev
+    tools, so an explicit ASPNETCORE_ENVIRONMENT or DOTNET_ENVIRONMENT (Production on a pilot host, say) is passed through, never replaced."""
+    return os.environ.get("ASPNETCORE_ENVIRONMENT") or os.environ.get("DOTNET_ENVIRONMENT") or "Development"
+
+
 def which(name: str) -> str:
     found = shutil.which(name)
     if not found:
@@ -182,12 +188,13 @@ class Supervisor:
         if not (WEB_DIR / "node_modules").exists():
             self.set("starting", "Installing frontend packages (first run)")
             subprocess.run([npm, "ci"], cwd=WEB_DIR, check=True)
+        env = backend_environment()
         api = Child("api", [dotnet, "run", "--no-launch-profile"], API_DIR,
-                    {"ASPNETCORE_ENVIRONMENT": "Development", "ASPNETCORE_URLS": API_URL, "DOTNET_CLI_TELEMETRY_OPTOUT": "1"})
+                    {"ASPNETCORE_ENVIRONMENT": env, "ASPNETCORE_URLS": API_URL, "DOTNET_CLI_TELEMETRY_OPTOUT": "1"})
         web = Child("web", [npm, "run", "dev", "--", "--port", str(WEB_PORT), "--strictPort"], WEB_DIR,
                     {"VITE_CONTROL_TOKEN": self.token})
         self.children = [api, web]
-        self.set("starting", "Starting backend")
+        self.set("starting", f"Starting backend ({env})")
         api.start()
         wait_for(f"{API_URL}/healthz", 180, "The backend")
         self.set("starting", "Starting frontend")

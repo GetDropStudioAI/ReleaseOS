@@ -84,6 +84,8 @@ public class CommDispatchTests
         {
             b.UseSetting("Comms:Webhooks:AllowPrivateTargets", allowPrivate ? "true" : "false");   // true: the fake handler has no DNS, so the resolver check is skipped
             if (timeoutSeconds is double t) b.UseSetting("Comms:Webhooks:TimeoutSeconds", t.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            b.UseSetting("Auth:Session:IdleMinutes", "10080");   // the fake clock jumps days while these clients stay signed in (SEC-B4 limits follow the same clock)
+            b.UseSetting("Auth:Session:AbsoluteHours", "168");
             b.ConfigureServices(s =>
             {
                 s.RemoveAll<TimeProvider>();

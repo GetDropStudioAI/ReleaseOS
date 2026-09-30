@@ -33,6 +33,13 @@ public sealed record ParseResult(IReadOnlyList<ParsedTask> Tasks, IReadOnlyList<
 public static partial class ChecklistParser
 {
     public const int MaxLines = 500;
+    /// <summary>A task's text is held to the import's limit for <c>Tasks.Description</c> (2,000 characters), so both ways in accept the same tasks.</summary>
+    public const int MaxDescription = 2000;
+    /// <summary>A line longer than this cannot be a valid task (text, an owner and a product) and is refused unread (SEC-D4: an unbounded owner or product name was
+    /// edit-distanced against every user, team and product).</summary>
+    public const int MaxLineLength = 2500;
+    /// <summary>Typed names longer than this get no "closest matches": a typo is short, and the edit distance of a long name only costs time.</summary>
+    public const int MaxClosestLength = 300;
     public const string ExpectedForms = "Expected `# Gate name`, `- task text @owner [Product]`, `// comment` or a blank line";
 
     [GeneratedRegex(@"\[([^\[\]]*)\]")] private static partial Regex ProductTag();
@@ -42,6 +49,8 @@ public static partial class ChecklistParser
     {
         var issues = new List<ParseIssue>();
         var tasks = new List<ParsedTask>();
+        if ((text?.Length ?? 0) > (long)MaxLines * (MaxLineLength + 2))
+            return new ParseResult([], [new ParseIssue(1, "Error", "TooLong", $"At most {MaxLines} lines of up to {MaxLineLength:N0} characters can be pasted at once; this is {text!.Length:N0} characters. Split it into batches", [])]);
         var lines = (text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         if (lines.Length > MaxLines)
             return new ParseResult([], [new ParseIssue(MaxLines + 1, "Error", "TooManyLines", $"At most {MaxLines} lines can be pasted at once; this has {lines.Length}. Split it into batches", [])]);
@@ -57,6 +66,12 @@ public static partial class ChecklistParser
             var n = i + 1;
             var line = lines[i].Trim();
             if (line.Length == 0 || line.StartsWith("//", StringComparison.Ordinal)) continue;
+            if (line.Length > MaxLineLength)
+            {
+                issues.Add(Err(n, "LineTooLong", $"This line is {line.Length:N0} characters; a line holds at most {MaxLineLength:N0} (a task's text at most {MaxDescription:N0})", []));
+                if (line[0] == '#') { gate = null; gateAnnounced = true; }   // tasks below an unreadable gate line must not land in the previous gate
+                continue;
+            }
 
             if (line[0] == '#')
             {
@@ -86,6 +101,7 @@ public static partial class ChecklistParser
 
             var description = Regex.Replace(body, @"\s+", " ").Trim();
             if (description.Length == 0) lineIssues.Add(Err(n, "EmptyTask", "This task has no description", []));
+            else if (description.Length > MaxDescription) lineIssues.Add(Err(n, "TaskTooLong", $"This task's text is {description.Length:N0} characters; a task holds at most {MaxDescription:N0}", []));
             if (gate is null && lineIssues.All(x => x.Code != "UnknownGate"))
             {
                 // Either no `#` line yet and no gate chosen in the UI, or the last `#` line named a gate that does not exist (already reported).
@@ -154,6 +170,7 @@ public static partial class ChecklistParser
     public static IReadOnlyList<string> Closest(string typed, IEnumerable<string> candidates)
     {
         var t = typed.Trim().ToLowerInvariant();
+        if (t.Length > MaxClosestLength) return [];
         var pool = candidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (t.Length == 0) return [.. pool.Take(3)];
         var limit = Math.Max(2, t.Length / 3);

@@ -58,7 +58,8 @@ public static class WebhookUrlPolicy
 
     private static bool IsInternal(Uri uri, string host)
     {
-        if (uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6 && IPAddress.TryParse(host.Trim('[', ']'), out var ip)) return WebhookAddressPolicy.IsBlocked(ip);
+        // Any host that is an address in the form the handler connects to, whatever Uri.HostNameType says ("１２７.０.０.１" is a "Dns" name; SEC-C2)
+        if (ReleaseMgmt.Infrastructure.Sync.ConnectorUrlPolicy.LiteralAddress(uri) is { } ip) return WebhookAddressPolicy.IsBlocked(ip);
         if (host == "localhost" || InternalSuffixes.Any(host.EndsWith)) return true;
         return !host.Contains('.');   // a single-label name only resolves inside the network (or a search domain)
     }

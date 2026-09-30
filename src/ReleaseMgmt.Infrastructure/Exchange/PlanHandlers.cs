@@ -50,7 +50,7 @@ internal sealed class TasksHandler : TrainScopedHandler
         var ok = true;
         var gates = ((ILookup<string, StageGates>)env.Bag["gates"])[t.Id].Where(g => string.Equals(g.GateName.Trim(), row.Cells["Gate"], StringComparison.OrdinalIgnoreCase)).ToList();
         StageGates? gate = null;
-        if (gates.Count == 0) { env.Err(row.Row, "Gate", $"{t.Title} has no gate named {PlanEnv.Quote(row.Cells["Gate"])}.{PlanEnv.Did(RowParser.Suggest(row.Cells["Gate"], ((ILookup<string, StageGates>)env.Bag["gates"])[t.Id].Select(g => g.GateName)))}"); ok = false; }
+        if (gates.Count == 0) { env.Err(row.Row, "Gate", $"{t.Title} has no gate named {PlanEnv.Quote(row.Cells["Gate"])}.{PlanEnv.Did(env.Suggest(row.Cells["Gate"], ((ILookup<string, StageGates>)env.Bag["gates"])[t.Id].Select(g => g.GateName)))}"); ok = false; }
         else if (gates.Count > 1) { env.Err(row.Row, "Gate", $"{t.Title} has {gates.Count} gates named {PlanEnv.Quote(row.Cells["Gate"])}; rename one so the file can name it"); ok = false; }
         else { gate = gates[0]; r.After["Gate"] = gate.GateName.Trim(); }
 
@@ -63,7 +63,7 @@ internal sealed class TasksHandler : TrainScopedHandler
             var all = ((ILookup<string, BundledProducts>)env.Bag["products"])[t.Id].ToList();
             var hits = all.Where(x => string.Equals(x.ProductName.Trim(), product, StringComparison.OrdinalIgnoreCase)).ToList();
             if (hits.Count == 1) { productId = hits[0].Id; r.After["Product"] = hits[0].ProductName.Trim(); }
-            else { env.Err(row.Row, "Product", hits.Count == 0 ? $"{t.Title} has no product named {PlanEnv.Quote(product)}.{PlanEnv.Did(RowParser.Suggest(product, all.Select(x => x.ProductName)))}" : $"{t.Title} has {hits.Count} products named {PlanEnv.Quote(product)}"); ok = false; }
+            else { env.Err(row.Row, "Product", hits.Count == 0 ? $"{t.Title} has no product named {PlanEnv.Quote(product)}.{PlanEnv.Did(env.Suggest(product, all.Select(x => x.ProductName)))}" : $"{t.Title} has {hits.Count} products named {PlanEnv.Quote(product)}"); ok = false; }
         }
         if (!ok) return null;
         r.Key = TaskKey(t.Title, gate!.GateName.Trim(), row.Cells["Description"]);
@@ -180,7 +180,7 @@ internal sealed class StepsHandler : TrainScopedHandler
             var all = ((ILookup<string, BundledProducts>)env.Bag["products"])[t.Id].ToList();
             var hits = all.Where(x => string.Equals(x.ProductName.Trim(), product, StringComparison.OrdinalIgnoreCase)).ToList();
             if (hits.Count == 1) { productId = hits[0].Id; r.After["Product"] = hits[0].ProductName.Trim(); }
-            else { env.Err(row.Row, "Product", hits.Count == 0 ? $"{t.Title} has no product named {PlanEnv.Quote(product)}.{PlanEnv.Did(RowParser.Suggest(product, all.Select(x => x.ProductName)))}" : $"{t.Title} has {hits.Count} products named {PlanEnv.Quote(product)}"); ok = false; }
+            else { env.Err(row.Row, "Product", hits.Count == 0 ? $"{t.Title} has no product named {PlanEnv.Quote(product)}.{PlanEnv.Did(env.Suggest(product, all.Select(x => x.ProductName)))}" : $"{t.Title} has {hits.Count} products named {PlanEnv.Quote(product)}"); ok = false; }
         }
         if (!ok) return null;
         r.Key = K(t.Title, row.Cells["StepCode"]);
@@ -219,7 +219,7 @@ internal sealed class StepsHandler : TrainScopedHandler
                     if (d == code) { env.Err(p.Row, "DependsOn", $"{code} cannot depend on itself"); good = false; }
                     else if (!universe.Contains(d))
                     {
-                        env.Err(p.Row, "DependsOn", $"{d} is not a step in this file or in {title}.{PlanEnv.Did(RowParser.Suggest(d, universe))}"); good = false;
+                        env.Err(p.Row, "DependsOn", $"{d} is not a step in this file or in {title}.{PlanEnv.Did(env.Suggest(d, universe))}"); good = false;
                     }
                 }
                 if (good) graph[code] = deps; else clean = false;
@@ -355,7 +355,7 @@ internal sealed class LinksHandler : KindHandler
         else
         {
             var what = type switch { "Train" => "train title", "Product" => "product name", "Gate" => "gate name", "RunbookStep" => "step code", _ => "title" };
-            env.Err(row.Row, "EntityRef", hits.Count == 0 ? $"{t.Title} has no {type} with {what} {PlanEnv.Quote(reference)}.{PlanEnv.Did(RowParser.Suggest(reference, all.Select(x => x.Name)))}"
+            env.Err(row.Row, "EntityRef", hits.Count == 0 ? $"{t.Title} has no {type} with {what} {PlanEnv.Quote(reference)}.{PlanEnv.Did(env.Suggest(reference, all.Select(x => x.Name)))}"
                                                           : $"{t.Title} has {hits.Count} items of type {type} named {PlanEnv.Quote(reference)}; rename one so the file can name it");
             ok = false;
         }

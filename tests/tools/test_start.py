@@ -76,6 +76,18 @@ class Helpers(unittest.TestCase):
         s.close()
 
 
+class ControlChannelHost(unittest.TestCase):
+    """DNS rebinding (SEC-E2): the control channel refuses any Host that is not a loopback name, whatever the port."""
+    def test_loopback_names_are_served(self):
+        for h in ("127.0.0.1:5099", "localhost:5099", "127.0.0.1:6273", "LOCALHOST", "[::1]:5099", "127.0.0.1"):
+            self.assertTrue(start.loopback_host(h), h)
+
+    def test_foreign_and_missing_hosts_are_refused(self):
+        for h in ("attacker.example:5099", "attacker.example", "127.0.0.1.attacker.example:5099", "localhost.attacker.example",
+                  "[::2]:5099", "", None, "evil:127.0.0.1"):
+            self.assertFalse(start.loopback_host(h), h)
+
+
 class FrontendDeps(unittest.TestCase):
     """A stale node_modules (installed before package-lock.json changed) is reinstalled on start, not left to fail in Vite."""
     def setUp(self):
@@ -102,6 +114,48 @@ class FrontendDeps(unittest.TestCase):
         self.assertTrue(start.frontend_deps_current(self.web))
         (self.web / "package-lock.json").write_text('{"packages": {"node_modules/@microsoft/signalr": {}}}')
         self.assertFalse(start.frontend_deps_current(self.web))
+
+
+class BackendEnvironment(unittest.TestCase):
+    """SEC-B1 (docs/security/scan-authn.md): Development maps the anonymous dev sign-in, so start.py must not turn an environment the operator chose into
+    Development. Nothing is started: Child, the port probe and the readiness wait are replaced, and the environment handed to the backend is captured."""
+
+    def backend_env(self, **environ):
+        import os
+        from unittest import mock
+        captured = {}
+
+        class FakeChild:
+            def __init__(self, name, cmd, cwd, env):
+                captured[name] = env
+
+            def start(self): pass
+            def alive(self): return True
+            def stop(self): pass
+
+        web = Path(tempfile.mkdtemp()); (web / "node_modules").mkdir()
+        with mock.patch.dict(os.environ, environ), mock.patch.multiple(start, Child=FakeChild, free=lambda port: True, which=lambda name: name, frontend_deps_current=lambda *a: True,
+                                                                       wait_for=lambda *a, **k: None, WEB_DIR=web):
+            for k in ("ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT"):
+                if k not in environ:
+                    os.environ.pop(k, None)   # restored by patch.dict
+            sup = start.Supervisor(open_browser=False)
+            sup.revision = lambda: "test"
+            sup.launch()
+        return captured["api"]
+
+    def test_a_developer_laptop_still_gets_development(self):
+        self.assertEqual(self.backend_env()["ASPNETCORE_ENVIRONMENT"], "Development")
+
+    def test_an_explicit_aspnetcore_environment_is_not_overridden(self):
+        self.assertEqual(self.backend_env(ASPNETCORE_ENVIRONMENT="Production")["ASPNETCORE_ENVIRONMENT"], "Production")
+
+    def test_an_explicit_dotnet_environment_is_not_overridden(self):
+        self.assertEqual(self.backend_env(DOTNET_ENVIRONMENT="Production")["ASPNETCORE_ENVIRONMENT"], "Production")
+
+    def test_the_backend_is_always_bound_to_loopback(self):
+        self.assertEqual(self.backend_env(ASPNETCORE_URLS="http://0.0.0.0:6080")["ASPNETCORE_URLS"], start.API_URL)
+        self.assertTrue(start.API_URL.startswith("http://127.0.0.1:"))
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ public sealed record HydrationResult(string? Subject, string Text, IReadOnlyList
 public sealed class CommHydrationService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, DisplayClock clock, Func<string, Task>? snapshotProbe = null)
 {
     public const string SourceMissing = "CommPreviewSource";
+    public const string TooLarge = "CommPreviewTooLarge";
 
     private DateTime Now
     {
@@ -40,6 +41,10 @@ public sealed class CommHydrationService(IDbContextFactory<ReleaseDbContext> dbf
     {
         if (source.Sources != 1)
             return ServiceResult<HydrationResult>.Fail(new GuardFailure(SourceMissing, "Give exactly one of templateId, libraryTemplateId or text to preview"));
+        // Ad-hoc text (any signed-in role may preview) is held to the limits a saved template has, so a preview never parses more than a template could hold (SEC-D1).
+        if (source.Text is { Length: > CommLibraryService.MaxBody } || (source.Subject?.Trim().Length ?? 0) > CommLibraryService.MaxSubject)
+            return ServiceResult<HydrationResult>.Fail(new GuardFailure(TooLarge,
+                $"A message is limited to a {CommLibraryService.MaxSubject}-character subject and a {CommLibraryService.MaxBody:N0}-character body, as a saved template is"));
         await using var db = await dbf.CreateDbContextAsync(ct);
         await using var tx = await BeginReadAsync(db, ct);
 

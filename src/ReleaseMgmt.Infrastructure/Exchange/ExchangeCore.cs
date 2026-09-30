@@ -78,6 +78,10 @@ internal sealed class PlanEnv(ReleaseDbContext db, ImportKindSpec spec, string m
 
     public bool Has(string column) => header.Columns.ContainsKey(column);
     public void Err(int row, string column, string message) => Errors.Add(new(row, column, message));
+
+    /// <summary>"Did you mean" work shared by every row of this plan (SEC-D2): a file of near-miss names cannot make a preview run for minutes.</summary>
+    public SuggestBudget SuggestBudget { get; } = new();
+    public IReadOnlyList<string> Suggest(string input, IEnumerable<string> pool, int max = 1) => RowParser.Suggest(input, pool, max, SuggestBudget);
     public void Warn(int row, string column, string message) => Warnings.Add(new(row, column, message));
 
     // ---- shared lookups (loaded on demand, read-only) ---------------------------------------------------------------------------------
@@ -115,7 +119,7 @@ internal sealed class PlanEnv(ReleaseDbContext db, ImportKindSpec spec, string m
         var hits = Trains.Where(t => string.Equals(t.Title, cell, StringComparison.OrdinalIgnoreCase)).ToList();
         if (hits.Count == 1) return hits[0];
         if (hits.Count > 1) { Err(row, column, $"{Quote(cell)} matches {hits.Count} trains with the same title; rename one so the file can name it"); return null; }
-        var near = RowParser.Suggest(cell, Trains.Select(t => t.Title));
+        var near = Suggest(cell, Trains.Select(t => t.Title));
         Err(row, column, $"No train is titled {Quote(cell)}.{Did(near)}");
         return null;
     }
@@ -134,7 +138,7 @@ internal sealed class PlanEnv(ReleaseDbContext db, ImportKindSpec spec, string m
         else user = Users.FirstOrDefault(u => string.Equals(u.Email, cell, StringComparison.OrdinalIgnoreCase));
         if (user is not null) { userId = user.Id; canonical = user.Email; return true; }
         var pool = Teams.Select(t => "@" + t.Handle).Concat(Users.Where(u => u.Handle != null).Select(u => "@" + u.Handle!)).Concat(Users.Select(u => u.Email));
-        Err(row, column, $"No team or user matches {Quote(cell)}.{Did(RowParser.Suggest(cell, pool, 2))}");
+        Err(row, column, $"No team or user matches {Quote(cell)}.{Did(Suggest(cell, pool, 2))}");
         return false;
     }
 
@@ -243,7 +247,8 @@ internal abstract class KindHandler
             if (env.Errors.Count > errorsBefore) p.Op = RowOp.Error;
         }
         Final(env, planned);
-        foreach (var e in env.Errors.Where(e => e.Row > 0)) { var p = planned.FirstOrDefault(x => x.Row == e.Row); if (p is not null) p.Op = RowOp.Error; }
+        var byRow = planned.ToLookup(x => x.Row);   // one lookup per error, not a scan of every row (10,000 rows x 100,000 errors was 10^9 comparisons)
+        foreach (var e in env.Errors.Where(e => e.Row > 0)) { var p = byRow[e.Row].FirstOrDefault(); if (p is not null) p.Op = RowOp.Error; }
         return new PlanOutcome(planned, env.Errors, env.Warnings, [.. env.Decertifies]);
     }
 

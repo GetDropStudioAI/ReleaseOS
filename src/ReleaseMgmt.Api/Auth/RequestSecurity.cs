@@ -49,9 +49,15 @@ public sealed class CrossSiteRequestGuard(RequestDelegate next, IConfiguration c
     }
 }
 
-/// <summary>Headers every response gets unless a handler already set them: no MIME sniffing, no framing (clickjacking), no referrer leak.</summary>
+/// <summary>Headers every response gets unless a handler already set them: no MIME sniffing, no framing (clickjacking), no referrer leak, no powerful
+/// browser features, a separate browsing-context group. HTML pages also get <see cref="PageCsp"/> (SEC-E6); downloads keep their own stricter policy.</summary>
 public sealed class SecurityHeaders(RequestDelegate next)
 {
+    /// <summary>The SPA loads only its own bundle: no inline or evaluated script, no plugins, no framing, no foreign base or form target. Inline style
+    /// stays allowed because the chart renderer writes style attributes into its SVG. connect-src 'self' covers the API and the SignalR socket.</summary>
+    public const string PageCsp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; "
+        + "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
     public Task InvokeAsync(HttpContext http)
     {
         http.Response.OnStarting(() =>
@@ -60,6 +66,9 @@ public sealed class SecurityHeaders(RequestDelegate next)
             h.TryAdd("X-Content-Type-Options", "nosniff");
             h.TryAdd("X-Frame-Options", "DENY");
             h.TryAdd("Referrer-Policy", "no-referrer");
+            h.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+            h.TryAdd("Cross-Origin-Opener-Policy", "same-origin");
+            if (http.Response.ContentType?.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) == true) h.TryAdd("Content-Security-Policy", PageCsp);
             return Task.CompletedTask;
         });
         return next(http);
@@ -87,6 +96,7 @@ public sealed class SessionValidator(IDbContextFactory<ReleaseDbContext> dbf, Ti
             _seen[uid] = s = (active, now);
         }
         if (s.Active) return;
+        SecurityEvents.SessionEndedForInactiveUser(ctx.HttpContext, uid);   // SEC-E4
         ctx.RejectPrincipal();
         await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     }

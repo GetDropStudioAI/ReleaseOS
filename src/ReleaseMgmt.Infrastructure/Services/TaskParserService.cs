@@ -45,6 +45,10 @@ public sealed class TaskParserService(IDbContextFactory<ReleaseDbContext> dbf, T
 
             var certified = gates.Where(g => g.Status == "Certified" && result.Tasks.Any(t => t.GateId == g.Id)).Select(g => g.GateName).ToList();
             var now = Now;
+            // Previews are scratch data (no audit row). Uncommitted ones that expired more than a day ago are dropped here, so they cannot pile up in the
+            // database and in every backup (SEC-D9); the day's grace keeps the "expired" answer for a late commit. Committed ones stay: the commit's audit row names them.
+            var stale = now - PreviewLifetime - TimeSpan.FromDays(1);
+            await db.Set<ParsePreviews>().Where(x => x.CommittedAt == null && x.CreatedAt < stale).ExecuteDeleteAsync(ct);   // same transaction; rows are not loaded
             var stored = new StoredPreview(result.Tasks, result.Issues, certified);
             var row = new ParsePreviews
             {

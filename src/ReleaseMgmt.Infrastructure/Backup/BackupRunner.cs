@@ -18,9 +18,11 @@ public static class BackupRunner
         var file = Path.Combine(backupDir, $"{(nightly ? NightlyPrefix : Prefix)}{utcNow.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture)}{Extension}");
         using var source = new SqliteConnection(sourceConnectionString);
         source.Open();
+        Pragma(source, "PRAGMA busy_timeout=5000;");   // CLAUDE.md: every connection waits for a lock rather than failing at once
         using var dest = new SqliteConnection($"Data Source={file};Pooling=False");
         dest.Open();
-        source.BackupDatabase(dest);
+        Pragma(dest, "PRAGMA busy_timeout=5000;");
+        CopyWaitingForLocks(source, dest);
         using (var cmd = dest.CreateCommand())
         {
             // The copy inherits WAL mode; switch it off so a backup is one self-contained file.
@@ -36,6 +38,26 @@ public static class BackupRunner
         }
         return file;
     }
+
+    /// <summary>The online backup takes a read lock on the source; while a writer holds the database for a moment (SQLITE_BUSY or SQLITE_LOCKED, which
+    /// Windows file locking produces far more often than Linux) the whole copy is retried, for up to <see cref="BusyWait"/>, then the error is thrown and
+    /// the backup service raises its alert (rule 8). CI run 71 failed a backup this way.</summary>
+    public static readonly TimeSpan BusyWait = TimeSpan.FromSeconds(30);
+
+    private static void CopyWaitingForLocks(SqliteConnection source, SqliteConnection dest)
+    {
+        var deadline = DateTime.UtcNow + BusyWait;
+        for (var delay = 50; ; delay = Math.Min(delay * 2, 1000))
+        {
+            try { source.BackupDatabase(dest); return; }
+            catch (SqliteException e) when (e.SqliteErrorCode is 5 or 6 && DateTime.UtcNow + TimeSpan.FromMilliseconds(delay) < deadline)   // SQLITE_BUSY, SQLITE_LOCKED
+            {
+                Thread.Sleep(delay);
+            }
+        }
+    }
+
+    private static void Pragma(SqliteConnection c, string sql) { using var cmd = c.CreateCommand(); cmd.CommandText = sql; cmd.ExecuteNonQuery(); }
 
     public static int Prune(string backupDir, DateTime utcNow)
     {

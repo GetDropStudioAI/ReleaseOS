@@ -97,7 +97,7 @@ internal sealed class TeamsHandler : KindHandler
             foreach (var e in RowParser.Split(list))
             {
                 var u = env.Users.FirstOrDefault(x => string.Equals(x.Email, e, StringComparison.OrdinalIgnoreCase));
-                if (u is null) { env.Err(row.Row, "Members", $"No user has the email {PlanEnv.Quote(e)}.{PlanEnv.Did(RowParser.Suggest(e, env.Users.Select(x => x.Email)))}"); ok = false; }
+                if (u is null) { env.Err(row.Row, "Members", $"No user has the email {PlanEnv.Quote(e)}.{PlanEnv.Did(env.Suggest(e, env.Users.Select(x => x.Email)))}"); ok = false; }
                 else { ids.Add(u.Id); emails.Add(u.Email); }
             }
             if (!ok) return null;

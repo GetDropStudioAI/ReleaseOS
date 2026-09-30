@@ -10,7 +10,13 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>Where preview files live (outside SQLite and outside wwwroot). Config key <c>Imports:Directory</c>; default: <c>imports</c> next to the database file.</summary>
-public sealed record ImportOptions(string Directory);
+/// <param name="MaxColumns">Config <c>Imports:MaxColumns</c> (Q-SEC-D2): a wider file is refused unread.</param>
+/// <param name="MaxOpenPreviewsPerUser">Config <c>Imports:MaxOpenPreviewsPerUser</c> (Q-SEC-D4): each preview keeps its file and plan on disk for 30 minutes; a person's
+/// older previews beyond this many are expired (files deleted) when they start a new one, so repeated uploads cannot fill the disk.</param>
+public sealed record ImportOptions(string Directory, int MaxColumns = ImportLimits.DefaultMaxColumns, int MaxOpenPreviewsPerUser = ImportOptions.DefaultMaxOpenPreviewsPerUser)
+{
+    public const int DefaultMaxOpenPreviewsPerUser = 5;
+}
 
 public sealed record ImportCounts(int New, int Updated, int Unchanged, int Errors);
 
@@ -60,7 +66,7 @@ public sealed class CsvImportService(IDbContextFactory<ReleaseDbContext> dbf, Ti
         var name = CleanName(fileName);
         var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
-        var (content, fatal) = CsvFile.Read(bytes);
+        var (content, fatal) = CsvFile.Read(bytes, options.MaxColumns);
         if (content is null)
         {
             await RecordRejectedAsync(spec.Kind, name, sha, fatal!, actor, ct);
@@ -72,6 +78,7 @@ public sealed class CsvImportService(IDbContextFactory<ReleaseDbContext> dbf, Ti
         {
             var now = Now;
             await ExpireOldAsync(db, now, ct);
+            await ExpireSurplusAsync(db, actor.UserId, ct);
             var header = RowParser.ResolveHeader(spec, content.Header);
             var parsed = header.Errors.Any(e => e.Message.StartsWith("Required column", StringComparison.Ordinal)) ? [] : content.Rows.Select(r => RowParser.Parse(spec, header, r.Row, r.Cells)).ToList();
             var env = new PlanEnv(db, spec, m, header, parsed, now);
@@ -97,7 +104,9 @@ public sealed class CsvImportService(IDbContextFactory<ReleaseDbContext> dbf, Ti
             await File.WriteAllBytesAsync(FilePath(job.Id), bytes, ct);
             await File.WriteAllTextAsync(PlanPath(job.Id), JsonSerializer.Serialize(stored, J), ct);
 
-            return ServiceResult<ImportPreview>.Ok(new ImportPreview(job.Id, spec.Kind, m, name, sha, bytes.Length, content.Rows.Count, columns, header.Skipped, counts, errors, plan.Warnings, plan.Decertifies,
+            // The response lists what ErrorsJson keeps (the first 1,000 and an "N more" entry); counts.errors is the true total (SEC-D3: 100,000 errors was a
+            // response of tens of megabytes and a table the browser could not draw).
+            return ServiceResult<ImportPreview>.Ok(new ImportPreview(job.Id, spec.Kind, m, name, sha, bytes.Length, content.Rows.Count, columns, header.Skipped, counts, Capped(errors), plan.Warnings, plan.Decertifies,
                 [.. rows.Take(PreviewRows)], rows.Count, job.Status, Iso(job.CreatedAt), Iso(job.CreatedAt + ImportLimits.PreviewLifetime), job.Version));
         }, ct);
     }
@@ -119,6 +128,15 @@ public sealed class CsvImportService(IDbContextFactory<ReleaseDbContext> dbf, Ti
         var cutoff = now - ImportLimits.PreviewLifetime;
         var old = await db.Set<ImportJobs>().Where(j => j.Status == "Previewed" && j.CreatedAt < cutoff).ToListAsync(ct);
         foreach (var j in old) { j.Status = "Expired"; j.Version++; DeleteFiles(j.Id, keepPlan: false); }
+    }
+
+    /// <summary>The new preview will be one of at most <see cref="ImportOptions.MaxOpenPreviewsPerUser"/> open ones for this person: older ones expire now (SEC-D9).</summary>
+    private async Task ExpireSurplusAsync(ReleaseDbContext db, string userId, CancellationToken ct)
+    {
+        var open = await db.Set<ImportJobs>().Where(j => j.Status == "Previewed" && j.UploadedByUserId == userId)
+            .OrderByDescending(j => j.CreatedAt).ThenByDescending(j => j.Id).ToListAsync(ct);
+        open = [.. open.Where(j => j.Status == "Previewed")];   // tracked rows ExpireOldAsync just expired (not saved yet) come back with their new status
+        foreach (var j in open.Skip(Math.Max(0, options.MaxOpenPreviewsPerUser - 1))) { j.Status = "Expired"; j.Version++; DeleteFiles(j.Id, keepPlan: false); }
     }
 
     private void DeleteFiles(string jobId, bool keepPlan)
@@ -150,7 +168,7 @@ public sealed class CsvImportService(IDbContextFactory<ReleaseDbContext> dbf, Ti
                 return Fail<ImportCommitResult>(ExchangeGuards.ImportTampered, "The stored file no longer matches its SHA-256; upload the file again");
             var stored = JsonSerializer.Deserialize<StoredPlan>(await File.ReadAllTextAsync(PlanPath(job.Id), ct), J)!;
 
-            var (content, fatal) = CsvFile.Read(bytes);
+            var (content, fatal) = CsvFile.Read(bytes, options.MaxColumns);
             if (content is null) return Fail<ImportCommitResult>(ExchangeGuards.ImportRejected, fatal!);
             var header = RowParser.ResolveHeader(spec, content.Header);
             var parsed = content.Rows.Select(r => RowParser.Parse(spec, header, r.Row, r.Cells)).ToList();

@@ -53,9 +53,23 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
 
     public static string Sha256Hex(string s) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 
+    // SEC-A4: "a schedule item is fulfilled once" is checked before the webhook call and the item is stamped after it, so two dispatches of one item (double
+    // click, two tabs, a retry) could both pass the check and both post to the channel. Dispatches that name a schedule item are serialised per item (striped
+    // locks, this singleton, one process: the app is one deployable on one SQLite file), so the second sees the item sent and is refused before sending.
+    private readonly SemaphoreSlim[] _scheduleLocks = [.. Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1))];
+
     // ---- dispatch ---------------------------------------------------------------------------------------------------
     /// <param name="expectedTrainVersion">The train Version the caller previewed (If-Match). A moved train is a Conflict: the caller re-previews.</param>
     public async Task<ServiceResult<DispatchView>> DispatchAsync(string trainId, DispatchRequest req, Actor actor, int? expectedTrainVersion, CancellationToken ct = default)
+    {
+        if (req.ScheduleItemId is null) return await DispatchCoreAsync(trainId, req, actor, expectedTrainVersion, ct);
+        var gate = _scheduleLocks[(uint)StringComparer.Ordinal.GetHashCode(req.ScheduleItemId) % (uint)_scheduleLocks.Length];
+        await gate.WaitAsync(ct);
+        try { return await DispatchCoreAsync(trainId, req, actor, expectedTrainVersion, ct); }
+        finally { gate.Release(); }
+    }
+
+    private async Task<ServiceResult<DispatchView>> DispatchCoreAsync(string trainId, DispatchRequest req, Actor actor, int? expectedTrainVersion, CancellationToken ct)
     {
         // ---- 1. read and validate, no writes yet
         ReleaseTrains train;
@@ -114,8 +128,9 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
         string subject = subj.Text, stored = body.Text;
         if (req.Channel == Webhook)
         {
-            if (!TryUnescapeJson(subj.Text, out subject)) return Fail(CommGuards.RenderInvalid, "The rendered subject is not valid for a JSON webhook (a value was not escaped)");
-            stored = BuildWebhookPayload(dest!.Kind, subj.Text, body.Text, trainId, template.Id, Now);
+            var (subjectJson, bodyJson) = dest!.Kind == "Slack" ? (SlackSafe(subj.Text), SlackSafe(body.Text)) : (subj.Text, body.Text);
+            if (!TryUnescapeJson(subjectJson, out subject)) return Fail(CommGuards.RenderInvalid, "The rendered subject is not valid for a JSON webhook (a value was not escaped)");
+            stored = BuildWebhookPayload(dest.Kind, subjectJson, bodyJson, trainId, template.Id, Now);
             try { using var _ = JsonDocument.Parse(stored); }
             catch (JsonException) { return Fail(CommGuards.RenderInvalid, "The rendered message is not valid for a JSON webhook (a value was not escaped)"); }
         }
@@ -218,6 +233,14 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
             return (null, new GuardFailure(CommGuards.WebhookNotAllowed, $"Destination '{d.Name}' carries credentials in its URL and cannot be used"));
         return (d, null);
     }
+
+    /// <summary>
+    /// Slack does not honour Markdown's backslash escapes: its only escape is the HTML entity, and <c>&lt;...&gt;</c> is a control sequence (a link
+    /// <c>&lt;https://x|label&gt;</c>, <c>&lt;!channel&gt;</c>, <c>&lt;@U123&gt;</c>). The JsonString target marks every '&lt;' and '&gt;' that came from a VALUE as
+    /// <c>\&lt;</c> / <c>\&gt;</c> (JSON: a doubled backslash), and template text is left as the author wrote it; for a Slack destination those marked characters become
+    /// <c>&amp;lt;</c> and <c>&amp;gt;</c>, so a train title or blocker cannot post a link or ping a channel (security review SEC-D6). Input and output are JSON string content.
+    /// </summary>
+    internal static string SlackSafe(string jsonContent) => jsonContent.Replace(@"\\<", "&lt;").Replace(@"\\>", "&gt;");
 
     /// <summary>Teams and Slack incoming webhooks take {"text": ...}; Generic gets the parts separately. Inputs are already escaped for a JSON string.</summary>
     internal static string BuildWebhookPayload(string kind, string subjectJson, string bodyJson, string trainId, string templateId, DateTime at) =>

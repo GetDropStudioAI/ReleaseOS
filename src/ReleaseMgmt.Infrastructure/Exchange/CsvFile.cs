@@ -13,7 +13,7 @@ public static class CsvFile
 
     /// <summary>The content, or a message that says why the file cannot be read at all. Blank lines and all-empty rows are skipped but still counted in row numbers.
     /// Stops reading as soon as the row limit is passed: a 10,000-row cap is not a reason to parse a 4 MB file to the end.</summary>
-    public static (CsvContent? Content, string? Fatal) Read(byte[] bytes)
+    public static (CsvContent? Content, string? Fatal) Read(byte[] bytes, int maxColumns = ImportLimits.DefaultMaxColumns)
     {
         if (bytes.Length == 0) return (null, "The file is empty");
         if (bytes.Length > ImportLimits.MaxBytes) return (null, $"The file is larger than {ImportLimits.MaxBytes / (1024 * 1024)} MB");
@@ -31,6 +31,9 @@ public static class CsvFile
         var record = 0;
         foreach (var r in reader)
         {
+            // Checked before a cell is copied: a row of a million commas is refused, not turned into a million strings and errors (SEC-D3).
+            if (r.ColCount > maxColumns)
+                return (null, $"{(header is null ? "The header row" : $"Row {record + 1}")} has {r.ColCount:N0} columns; an import file has at most {maxColumns:N0}. Check that it is comma-separated and remove unused columns");
             var cells = new string[r.ColCount];
             for (var i = 0; i < cells.Length; i++) cells[i] = r[i].ToString();
             if (header is null) { header = cells; continue; }

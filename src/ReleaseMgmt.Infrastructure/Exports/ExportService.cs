@@ -14,6 +14,7 @@ namespace ReleaseMgmt.Infrastructure.Exports;
 public static class ExportGuards
 {
     public const string Licence = "ExportLicence", Config = "ExportConfig", Role = "ExportRole", BadKind = "ExportKind", NotReady = "ExportNotReady", Terminal = "ExportJobFinished";
+    public const string QueueFull = "ExportQueueFull";
 }
 
 /// <summary>What is kept in <c>ExportJobs.Parameters</c> (the schema has no columns for these; Q-050a).</summary>
@@ -68,6 +69,11 @@ public sealed class ExportService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             var open = await db.Set<ExportJobs>().Where(j => j.ReleaseTrainId == trainId && j.Kind == k && j.RequestedByUserId == actor.UserId && (j.Status == "Queued" || j.Status == "Running")).ToListAsync(ct);
             var dup = open.FirstOrDefault(j => ParamsOf(j).Format == fmt);
             if (dup is not null) return ServiceResult<ExportJobView>.Ok(await ViewAsync(db, dup, ct));
+            // One worker renders jobs in turn: a requester may have only so many waiting, so nobody can hold everyone else's exports behind a queue of their own (SEC-D8).
+            var mine = await db.Set<ExportJobs>().CountAsync(j => j.RequestedByUserId == actor.UserId && (j.Status == "Queued" || j.Status == "Running"), ct);
+            if (mine >= options.MaxOpenJobsPerUser)
+                return ServiceResult<ExportJobView>.Fail(new GuardFailure(ExportGuards.QueueFull,
+                    $"You already have {mine} exports waiting or running (the limit is {options.MaxOpenJobsPerUser}). Wait for them to finish, then ask again"));
 
             var now = Now;
             var id = Ids.New();

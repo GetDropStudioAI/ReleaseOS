@@ -73,7 +73,7 @@ internal sealed class TrainsHandler : KindHandler
         {
             var templates = (List<TrainTemplates>)env.Bag["templates"];
             var t = templates.FirstOrDefault(x => string.Equals(x.Name, tpl, StringComparison.OrdinalIgnoreCase));
-            if (t is null) { env.Err(row.Row, "Template", $"No template is named {PlanEnv.Quote(tpl)}.{PlanEnv.Did(RowParser.Suggest(tpl, templates.Select(x => x.Name)))}"); ok = false; }
+            if (t is null) { env.Err(row.Row, "Template", $"No template is named {PlanEnv.Quote(tpl)}.{PlanEnv.Did(env.Suggest(tpl, templates.Select(x => x.Name)))}"); ok = false; }
             else { r.After["Template"] = t.Name; templateId = t.Id; }
         }
         var start = row.Cells.GetValueOrDefault("WindowStart", ""); var end = row.Cells.GetValueOrDefault("WindowEnd", "");

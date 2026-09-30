@@ -28,6 +28,8 @@ if (args is ["restore", var backupFile, var targetDb])
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.With<IcsTokenRedactor>()   // SEC-B10: feed tokens never reach a sink, whatever the levels or the format
+    .Enrich.With<LogSanitizer>()   // security review SEC-D5: one event is one line, whatever a logged value holds
     .WriteTo.File(ctx.Configuration["Logging:File"] ?? "logs/releasemgmt-.log", rollingInterval: RollingInterval.Day));
 
 var config = builder.Configuration;
@@ -45,6 +47,9 @@ builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.ServerTimeBroadcaster
 builder.Services.AddSingleton<INotifier, Notifier>();
 builder.Services.AddSingleton<UserProvisioner>();
 builder.Services.AddSingleton<SessionValidator>();   // REOS-53
+builder.Services.AddSingleton<SessionLifetime>();    // SEC-B4/B5: idle and absolute limits, server-side sign-out
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IPostConfigureOptions<Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions>, KeyRingPermissions>();   // SEC-B12
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IConfigureOptions<CookieAuthenticationOptions>, CookieProtectionPurpose>();   // SEC-B11
 builder.Services.AddSingleton<TrainLifecycleService>();
 builder.Services.AddSingleton<GateService>();
 builder.Services.AddSingleton<WaiverService>();
@@ -77,6 +82,7 @@ builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus sche
 builder.Services.AddSyncEngine(config);   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
 builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
 builder.Services.AddPdfExports(config, builder.Environment.IsDevelopment());   // REOS-50: PDF export jobs + worker (QuestPDF)
+builder.Services.AddProxyHeaders(config);   // SEC-E5: X-Forwarded-For/Proto from trusted proxies only
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -88,19 +94,35 @@ builder.Services.AddSingleton<ReleaseMgmt.Infrastructure.Comms.ICommDispatchRend
 builder.Services.AddExchange(config, dbPath);   // REOS-48/49: CSV import (preview/commit), CSV/XLSX grid exports
 
 var roleMap = config.GetSection("Auth:RoleMap").Get<Dictionary<string, string>>() ?? new();
+var defaultRole = OidcSignIn.DefaultRole(config);   // SEC-B9: unset = an identity in no mapped group is refused
 var authority = config["Auth:Oidc:Authority"];
+// SEC-B3: outside Development the cookie is Secure and __Host- prefixed whatever scheme reached Kestrel (the runbook puts a TLS proxy in front of plain http).
+var httpsCookie = config.GetValue("Auth:Cookie:RequireHttps", !builder.Environment.IsDevelopment());
+// SEC-B13: the cookie scheme also answers challenges (401, which the SPA turns into its sign-in page). An OIDC default challenge redirected every background
+// API and hub call to the identity provider and planted nonce/correlation cookies each time; organisation sign-in starts only at GET /auth/login.
 var auth = builder.Services.AddAuthentication(o =>
 {
     o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    if (authority is not null) o.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
 }).AddCookie(o =>
 {
-    o.Cookie.Name = "releasemgmt.auth";
+    o.Cookie.Name = httpsCookie ? "__Host-releasemgmt.auth" : "releasemgmt.auth";
+    o.Cookie.SecurePolicy = httpsCookie ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
     o.Cookie.HttpOnly = true;
     o.Cookie.SameSite = SameSiteMode.Lax;   // REOS-53: stated, not left to the framework default (Q-053b)
-    o.Events.OnValidatePrincipal = ctx => ctx.HttpContext.RequestServices.GetRequiredService<SessionValidator>().ValidateAsync(ctx);   // Q-053c
-    o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
-    o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
+    o.ExpireTimeSpan = SessionLifetime.Idle(config);   // SEC-B4: idle timeout (sliding); the absolute limit is checked below
+    o.SlidingExpiration = true;
+    o.Events.OnSigningIn = async ctx =>
+    {
+        await ctx.HttpContext.RequestServices.GetRequiredService<SessionLifetime>().OnSigningIn(ctx);
+        SecurityEvents.SignedIn(ctx);   // SEC-E4
+    };
+    o.Events.OnValidatePrincipal = async ctx =>
+    {
+        if (await ctx.HttpContext.RequestServices.GetRequiredService<SessionLifetime>().ValidateAsync(ctx))   // SEC-B4/B5
+            await ctx.HttpContext.RequestServices.GetRequiredService<SessionValidator>().ValidateAsync(ctx);   // Q-053c
+    };
+    o.Events.OnRedirectToLogin = SecurityEvents.Unauthenticated;        // 401, never a redirect (SEC-E4 logs it at Debug)
+    o.Events.OnRedirectToAccessDenied = SecurityEvents.AccessDenied;    // 403, never a redirect (SEC-E4 logs who and what)
 });
 if (authority is not null)
 {
@@ -113,17 +135,7 @@ if (authority is not null)
         o.SaveTokens = false;
         o.GetClaimsFromUserInfoEndpoint = true;
         o.Scope.Add("profile"); o.Scope.Add("email");
-        o.Events.OnTokenValidated = async ctx =>
-        {
-            if (ctx.Principal?.Identity is not ClaimsIdentity id) return;
-            RoleMapper.AddRoles(id, roleMap);
-            var email = id.FindFirst(ClaimTypes.Email)?.Value ?? id.FindFirst("email")?.Value ?? id.FindFirst("preferred_username")?.Value;
-            if (email is null) { ctx.Fail("The identity provider returned no email claim"); return; }
-            var role = id.FindAll(ClaimTypes.Role).Select(c => c.Value).OrderBy(r => Array.IndexOf(Roles.All, r)).First();
-            var uid = await ctx.HttpContext.RequestServices.GetRequiredService<UserProvisioner>()
-                .UpsertAsync(email, id.FindFirst("name")?.Value ?? email, role);
-            id.AddClaim(new Claim("uid", uid));
-        };
+        o.Events.OnTokenValidated = ctx => OidcSignIn.OnTokenValidated(ctx, roleMap, defaultRole);   // SEC-B7/B8/B9
     });
 }
 builder.Services.AddAuthorization(Policies.Configure);
@@ -139,8 +151,11 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA
 // assets must be served before the authorization middleware or the sign-in page itself would 401.
+app.UseForwardedHeaders();                    // SEC-E5: first, so every later check sees the real client and scheme
 app.UseExceptionHandler();
+if (!app.Environment.IsDevelopment()) app.UseHsts();   // SEC-E5: browsers keep to https once they have reached the app over it
 app.UseMiddleware<SecurityHeaders>();          // REOS-53
+app.UseMiddleware<RequestBodyLimit>();         // security review SEC-D7: Limits:MaxRequestBodyBytes (Q-SEC-D1)
 app.UseMiddleware<CrossSiteRequestGuard>();    // REOS-53: before authentication, so a cross-site write never reaches a handler
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -161,6 +176,7 @@ app.MapGet("/healthz", [AllowAnonymous] async (IDbContextFactory<ReleaseDbContex
     return db == "ok" ? Results.Ok(body) : Results.Json(body, statusCode: 503);
 });
 
+var devTools = DevSignIn.Enabled(app.Environment, config, app.Logger);   // SEC-B1: Development, and not beside organisation sign-in unless opted in
 app.MapHub<ReleaseMgmt.Api.Realtime.TrainsHub>(ReleaseMgmt.Api.Realtime.TrainsHub.Path);
 var api = app.MapGroup("/api/v1");
 api.MapGet("/me", (ClaimsPrincipal u) => new
@@ -176,7 +192,7 @@ api.MapGovernance();
 api.MapFreezes();
 api.MapCloseout();
 api.MapGet("/config", (IConfiguration c) => Results.Ok(new { displayTimeZone = c["Display:TimeZone"] ?? "America/Chicago" })).RequireAuthorization(Policies.Read);
-if (app.Environment.IsDevelopment()) api.MapDev();
+if (devTools) api.MapDev();
 api.MapSession();
 api.MapRunbook();
 api.MapRuns();
@@ -190,18 +206,19 @@ api.MapAudit();
 api.MapAnalytics();   // REOS-46
 api.MapAnalyticsExport();   // REOS-47
 api.MapSync();   // REOS-42
-if (app.Environment.IsDevelopment()) api.MapSyncDev();   // REOS-42 dev-only seeding
+if (devTools) api.MapSyncDev();   // REOS-42 dev-only seeding
 api.MapComms();   // REOS-43/44
 api.MapCommDispatch();   // REOS-45
 api.MapCalendar();   // REOS-51
 api.MapImports(); api.MapGridExports();   // REOS-48/49
 api.MapPdfExports();   // REOS-50
 
-// Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
-if (app.Environment.IsDevelopment())
+// Dev-only fake login: POST /auth/dev-login {email, name, role}. Never mapped outside Development; see DevSignIn for when it exists and who may call it.
+if (devTools)
 {
     app.MapPost("/auth/dev-login", [AllowAnonymous] async (DevLogin req, HttpContext http) =>
     {
+        if (!DevSignIn.IsLocal(http)) return DevSignIn.Refuse(http, app.Logger);   // SEC-B2: this machine only (also defeats DNS rebinding)
         if (!Roles.All.Contains(req.Role)) return Results.BadRequest(new { message = $"Role must be one of {string.Join(", ", Roles.All)}" });
         var uid = await http.RequestServices.GetRequiredService<UserProvisioner>().UpsertAsync(req.Email, req.Name, req.Role);
         var id = new ClaimsIdentity(
@@ -220,8 +237,11 @@ if (!string.IsNullOrWhiteSpace(resetUrl) && !(Uri.TryCreate(resetUrl, UriKind.Ab
     resetUrl = null;
 }
 app.MapGet("/auth/config", [AllowAnonymous] () => Results.Ok(new { organisationSignIn = authority is not null, passwordResetUrl = string.IsNullOrWhiteSpace(resetUrl) ? null : resetUrl }));
-app.MapPost("/auth/logout", [AllowAnonymous] async (HttpContext http) =>
+app.MapPost("/auth/logout", [AllowAnonymous] async (HttpContext http, SessionLifetime sessions) =>
 {
+    var session = await http.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    sessions.SignedOut(session.Properties);   // SEC-B5: copies of this cookie die too
+    if (session.Succeeded) SecurityEvents.SignedOut(http, session.Principal);   // SEC-E4
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok();
 });

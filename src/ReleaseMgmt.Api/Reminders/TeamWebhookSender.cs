@@ -10,7 +10,11 @@ using ReleaseMgmt.Infrastructure.Persistence;
 
 namespace ReleaseMgmt.Api.Reminders;
 
-/// <summary>Which addresses a webhook may never reach (SSRF): loopback, private, link-local, CGNAT, multicast, reserved, unspecified. IPv4-mapped IPv6 is judged as IPv4.</summary>
+/// <summary>
+/// Which addresses a webhook or connector may never reach (SSRF): loopback, private, link-local, CGNAT, multicast, reserved, unspecified.
+/// IPv6 forms that carry an IPv4 address a translator or tunnel can deliver to (IPv4-mapped, IPv4-compatible, SIIT, NAT64 64:ff9b::/96, 6to4) are judged
+/// by that IPv4 address; the NAT64 local-use prefix 64:ff9b:1::/48, discard-only 100::/64 and documentation 2001:db8::/32 are always blocked (SEC-C1).
+/// </summary>
 public static class WebhookAddressPolicy
 {
     public static bool IsBlocked(IPAddress ip)
@@ -18,7 +22,14 @@ public static class WebhookAddressPolicy
         if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
         if (IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any) || ip.Equals(IPAddress.IPv6None)) return true;
         if (ip.AddressFamily == AddressFamily.InterNetworkV6)
-            return ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6UniqueLocal || ip.IsIPv6Multicast || ip.IsIPv6Teredo;
+        {
+            if (ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6UniqueLocal || ip.IsIPv6Multicast || ip.IsIPv6Teredo) return true;
+            var v6 = ip.GetAddressBytes();
+            if (EmbeddedIPv4(v6) is { } v4) return IsBlocked(v4);
+            return (v6[0] == 0x00 && v6[1] == 0x64 && v6[2] == 0xff && v6[3] == 0x9b && v6[4] == 0x00 && v6[5] == 0x01)   // 64:ff9b:1::/48 NAT64 local use (RFC 8215)
+                || (v6[0] == 0x01 && v6[1] == 0x00 && v6.AsSpan(2, 6).IndexOfAnyExcept((byte)0) < 0)                  // 100::/64 discard-only
+                || (v6[0] == 0x20 && v6[1] == 0x01 && v6[2] == 0x0d && v6[3] == 0xb8);                                 // 2001:db8::/32 documentation
+        }
         var b = ip.GetAddressBytes();
         return b[0] is 0 or 10 or >= 224                                   // this-network, private, multicast + reserved
             || (b[0] == 100 && b[1] is >= 64 and <= 127)                    // CGNAT
@@ -27,6 +38,18 @@ public static class WebhookAddressPolicy
             || (b[0] == 192 && b[1] == 168)
             || (b[0] == 192 && b[1] == 0 && b[2] == 0)
             || (b[0] == 198 && b[1] is 18 or 19);
+    }
+
+    /// <summary>The IPv4 address inside ::a.b.c.d (IPv4-compatible), ::ffff:0:a.b.c.d (SIIT), 64:ff9b::a.b.c.d (NAT64) or 2002:aabb:ccdd::/48 (6to4); else null.</summary>
+    private static IPAddress? EmbeddedIPv4(byte[] v6)
+    {
+        var s = v6.AsSpan();
+        if (s[..12].IndexOfAnyExcept((byte)0) < 0
+            || (s[..8].IndexOfAnyExcept((byte)0) < 0 && s[8] == 0xff && s[9] == 0xff && s[10] == 0 && s[11] == 0)
+            || (s[0] == 0x00 && s[1] == 0x64 && s[2] == 0xff && s[3] == 0x9b && s[4..12].IndexOfAnyExcept((byte)0) < 0))
+            return new IPAddress(s[12..16]);
+        if (s[0] == 0x20 && s[1] == 0x02) return new IPAddress(s[2..6]);
+        return null;
     }
 }
 
@@ -111,7 +134,7 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
         var delay = TimeSpan.FromMilliseconds(Math.Clamp(config.GetValue("Notifications:Webhooks:RetryDelayMs", 500), 0, 30_000));
         var body = JsonSerializer.Serialize(kind == "Generic"
             ? new { kind = n.Kind, entityType = n.EntityType, entityId = n.EntityId, escalationLevel = n.EscalationLevel, message = n.Message, trainId = n.TrainId, at = time.GetUtcNow().UtcDateTime }
-            : (object)new { text = n.Message });   // Teams and Slack incoming webhooks both take {"text": ...}
+            : (object)new { text = ChatText(kind, n.Message) });   // Teams and Slack incoming webhooks both take {"text": ...}
 
         var last = "no attempt was made";
         for (var attempt = 1; attempt <= attempts; attempt++)
@@ -121,7 +144,9 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Post, uri) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
-                using var res = await http.CreateClient(ClientName).SendAsync(req, timer.Token);
+                // Headers only: the status decides, and the body is never read or buffered (a hostile endpoint could stream gigabytes, or a 200
+                // whose body never ends would time out and be posted again; SEC-C3).
+                using var res = await http.CreateClient(ClientName).SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timer.Token);
                 if (res.IsSuccessStatusCode) return null;
                 last = $"HTTP {(int)res.StatusCode}";
                 if ((int)res.StatusCode is not (408 or 429 or >= 500)) return $"{last} (not retried)";   // a 4xx will not get better
@@ -132,6 +157,15 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
         }
         return $"{last} after {attempts} attempt{(attempts == 1 ? "" : "s")}";
     }
+
+    /// <summary>
+    /// A notice is plain text built from names people typed (gate, step, train, a freeze reason). Teams renders <c>text</c> as Markdown and Slack as mrkdwn, so
+    /// unescaped, a gate called <c>[Sign in again](https://…)</c> posted a link under the bot's name and <c>&lt;!channel&gt;</c> pinged a whole Slack channel
+    /// (security review SEC-D6). Slack's only escape is the HTML entity for &amp;, &lt; and &gt;; Teams gets the same Markdown escaping as comm dispatch.
+    /// </summary>
+    internal static string ChatText(string kind, string message) => kind == "Slack"
+        ? message.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
+        : ReleaseMgmt.Domain.Services.CommEscaper.Markdown(message);
 
     private async Task FailAsync(string destinationId, string message, string? trainId, CancellationToken ct)
     {

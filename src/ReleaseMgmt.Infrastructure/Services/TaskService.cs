@@ -42,6 +42,9 @@ public sealed class TaskService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
             var t = await db.Set<ChecklistTasks>().SingleOrDefaultAsync(x => x.Id == taskId, ct);
             if (t is null) return ServiceResult<ChecklistTasks>.NotFound("task");
             if (VersionMismatch(expectedVersion, t.Version)) return ServiceResult<ChecklistTasks>.Conflict(t);
+            // SEC-A2: idempotent. Completing a completed task used to overwrite CompletedByUserId/CompletedAt (no decertify: IsCompleted did not change), which is the
+            // column the Compliance segregation-of-duties rule reads; reopening an open task bumped Version and wrote an audit row for nothing. Neither changes anything now.
+            if (t.IsCompleted == completed) return ServiceResult<ChecklistTasks>.Ok(t);
             var trainId = await db.Set<StageGates>().Where(g => g.Id == t.StageGateId).Select(g => g.ReleaseTrainId).SingleAsync(ct);
             var now = Now;
             t.IsCompleted = completed;

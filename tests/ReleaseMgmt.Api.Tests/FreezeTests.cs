@@ -59,6 +59,17 @@ public class FreezeTests
     private static Task<HttpResponseMessage> Grant(HttpClient c, string window, string requester, string? reason = null, string? expires = null, string train = "t3") =>
         c.PostAsJsonAsync($"/api/v1/freezes/{window}/overrides", new { trainId = train, requestedByUserId = requester, reason = reason ?? Reason, expiresAt = expires ?? At(3) });
 
+    /// <summary>
+    /// The usual flow: the named requester (an RTE or Release Manager of <paramref name="x"/>) files the request, then <paramref name="c"/> grants it. Since SEC-A1
+    /// (Q-SEC-A1) a grant needs a request its requester actually filed; a requester who cannot file one (a Viewer, a Governance Officer, nobody) gets no request.
+    /// </summary>
+    private static async Task<HttpResponseMessage> Grant(Ctx x, HttpClient c, string window, string requester, string? reason = null, string? expires = null, string train = "t3")
+    {
+        var asker = requester == x.RteId ? x.Rte : requester == x.RmId ? x.Rm : null;
+        if (asker is not null) await asker.PostAsJsonAsync($"/api/v1/freezes/{window}/override-requests", new { trainId = train, reason = Reason });
+        return await Grant(c, window, requester, reason, expires, train);
+    }
+
     [Fact]
     public async Task Creating_a_window_is_for_release_managers_and_governance_officers_and_is_audited()
     {
@@ -99,7 +110,7 @@ public class FreezeTests
         Sql(c.F, $"INSERT INTO FreezeOverrides(Id,FreezeWindowId,ReleaseTrainId,Reason,RequestedByUserId,ApprovedByUserId,ApprovedAt,ExpiresAt) VALUES('old','{fz}','t3','{Reason}','{c.RteId}','{c.RmId}','{At(-3)}','{At(-2)}')");
         Assert.Equal("FreezeLockout", await Guard(await Step(c, c.StepB, "start")));
 
-        Assert.Equal(HttpStatusCode.OK, (await Grant(c.Rm, fz, c.RteId)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Grant(c, c.Rm, fz, c.RteId)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await Step(c, c.StepB, "start")).StatusCode);
         Assert.Equal("Running", Scalar(c.F, $"SELECT Status FROM StepExecutions WHERE StepId='{c.StepB}'"));
     }
@@ -121,7 +132,7 @@ public class FreezeTests
         var c = await Setup(); using var _ = c.F;
         Sql(c.F, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('t4','Other','2026-10-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')");
         var fz = await NewFreeze(c.Rm);
-        Assert.Equal(HttpStatusCode.OK, (await Grant(c.Rm, fz, c.RteId, train: "t4")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Grant(c, c.Rm, fz, c.RteId, train: "t4")).StatusCode);
         Assert.Equal("FreezeLockout", await Guard(await Step(c, c.StepB, "start")));
     }
 
@@ -131,18 +142,18 @@ public class FreezeTests
         var c = await Setup(); using var _ = c.F;
         var fz = await NewFreeze(c.Rm);
 
-        Assert.Equal("OverrideSelfApproval", await Guard(await Grant(c.Rm, fz, c.RmId)));          // an RM requesting and approving is one person
-        Assert.Equal("OverrideSelfApproval", await Guard(await Grant(c.Go, fz, c.GoId)));
-        Assert.Equal(HttpStatusCode.Forbidden, (await Grant(c.Rte, fz, c.RmId)).StatusCode);        // an RTE cannot approve (policy)
-        Assert.Equal(HttpStatusCode.Forbidden, (await Grant(c.Viewer, fz, c.RteId)).StatusCode);
-        Assert.Equal("OverrideRequesterRole", await Guard(await Grant(c.Rm, fz, c.ViewerId)));      // a Viewer cannot be the requester
-        Assert.Equal("OverrideRequesterRole", await Guard(await Grant(c.Rm, fz, c.GoId)));          // nor a Governance Officer (D32: RTE or RM request)
-        Assert.Equal("OverrideRequesterRole", await Guard(await Grant(c.Rm, fz, "nobody")));
+        Assert.Equal("OverrideSelfApproval", await Guard(await Grant(c, c.Rm, fz, c.RmId)));          // an RM requesting and approving is one person
+        Assert.Equal("OverrideSelfApproval", await Guard(await Grant(c, c.Go, fz, c.GoId)));
+        Assert.Equal(HttpStatusCode.Forbidden, (await Grant(c, c.Rte, fz, c.RmId)).StatusCode);        // an RTE cannot approve (policy)
+        Assert.Equal(HttpStatusCode.Forbidden, (await Grant(c, c.Viewer, fz, c.RteId)).StatusCode);
+        Assert.Equal("OverrideRequesterRole", await Guard(await Grant(c, c.Rm, fz, c.ViewerId)));      // a Viewer cannot be the requester
+        Assert.Equal("OverrideRequesterRole", await Guard(await Grant(c, c.Rm, fz, c.GoId)));          // nor a Governance Officer (D32: RTE or RM request)
+        Assert.Equal("OverrideRequesterRole", await Guard(await Grant(c, c.Rm, fz, "nobody")));
         Assert.Equal("0", Scalar(c.F, "SELECT COUNT(*) FROM FreezeOverrides"));
 
-        Assert.Equal(HttpStatusCode.OK, (await Grant(c.Go, fz, c.RteId)).StatusCode);               // a GO approves an RTE's request
-        Assert.Equal(HttpStatusCode.OK, (await Grant(c.Go2, fz, c.RmId)).StatusCode);               // and an RM's
-        Assert.Equal(HttpStatusCode.OK, (await Grant(c.Rm, fz, c.RteId)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Grant(c, c.Go, fz, c.RteId)).StatusCode);               // a GO approves an RTE's request
+        Assert.Equal(HttpStatusCode.OK, (await Grant(c, c.Go2, fz, c.RmId)).StatusCode);               // and an RM's
+        Assert.Equal(HttpStatusCode.OK, (await Grant(c, c.Rm, fz, c.RteId)).StatusCode);
         Assert.Equal(c.GoId, Scalar(c.F, $"SELECT ApprovedByUserId FROM FreezeOverrides WHERE RequestedByUserId='{c.RteId}' ORDER BY ApprovedAt, Id LIMIT 1"));
     }
 
@@ -151,10 +162,10 @@ public class FreezeTests
     {
         var c = await Setup(); using var _ = c.F;
         var fz = await NewFreeze(c.Rm);
-        Assert.Equal("OverrideReason", await Guard(await Grant(c.Rm, fz, c.RteId, reason: "too short")));
-        Assert.Equal("OverrideExpiry", await Guard(await Grant(c.Rm, fz, c.RteId, expires: At(-1))));
-        Assert.Equal(HttpStatusCode.NotFound, (await Grant(c.Rm, "nope", c.RteId)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Grant(c.Rm, fz, c.RteId, train: "nope")).StatusCode);
+        Assert.Equal("OverrideReason", await Guard(await Grant(c, c.Rm, fz, c.RteId, reason: "too short")));
+        Assert.Equal("OverrideExpiry", await Guard(await Grant(c, c.Rm, fz, c.RteId, expires: At(-1))));
+        Assert.Equal(HttpStatusCode.NotFound, (await Grant(c, c.Rm, "nope", c.RteId)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Grant(c, c.Rm, fz, c.RteId, train: "nope")).StatusCode);
         Assert.Equal("0", Scalar(c.F, "SELECT COUNT(*) FROM FreezeOverrides"));
         Assert.Equal("0", Scalar(c.F, "SELECT COUNT(*) FROM AuditEvents WHERE EntityType='FreezeOverride'"));
     }
@@ -164,8 +175,8 @@ public class FreezeTests
     {
         var c = await Setup(); using var _ = c.F;
         var fz = await NewFreeze(c.Rm);
-        var first = await Json(await Grant(c.Go, fz, c.RteId, expires: At(1)));
-        var second = await Json(await Grant(c.Go, fz, c.RteId, expires: At(6)));   // renewal
+        var first = await Json(await Grant(c, c.Go, fz, c.RteId, expires: At(1)));
+        var second = await Json(await Grant(c, c.Go, fz, c.RteId, expires: At(6)));   // renewal
         Assert.NotEqual(first.GetProperty("id").GetString(), second.GetProperty("id").GetString());
         Assert.Equal("2", Scalar(c.F, "SELECT COUNT(*) FROM FreezeOverrides"));
         Assert.Equal("Grant,Renew", Scalar(c.F, "SELECT group_concat(Action) FROM (SELECT Action FROM AuditEvents WHERE EntityType='FreezeOverride' ORDER BY Id)"));
@@ -223,7 +234,7 @@ public class FreezeTests
         var all = await NewFreeze(c.Rm, "All products");
         var billing = await NewFreeze(c.Rm, "Billing only", "Freeze", "Billing*");
         var ledger = await NewFreeze(c.Rm, "Ledger only", "Freeze", "Ledger*");
-        await Grant(c.Rm, all, c.RteId);
+        await Grant(c, c.Rm, all, c.RteId);
 
         var rows = (await Json(await c.Viewer.GetAsync("/api/v1/freezes?trainId=t3"))).EnumerateArray().ToDictionary(e => e.GetProperty("window").GetProperty("id").GetString()!);
         Assert.True(rows[all].GetProperty("coversTrain").GetBoolean());

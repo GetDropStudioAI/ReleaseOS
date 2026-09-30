@@ -53,9 +53,23 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
 
     public static string Sha256Hex(string s) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 
+    // SEC-A4: "a schedule item is fulfilled once" is checked before the webhook call and the item is stamped after it, so two dispatches of one item (double
+    // click, two tabs, a retry) could both pass the check and both post to the channel. Dispatches that name a schedule item are serialised per item (striped
+    // locks, this singleton, one process: the app is one deployable on one SQLite file), so the second sees the item sent and is refused before sending.
+    private readonly SemaphoreSlim[] _scheduleLocks = [.. Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1))];
+
     // ---- dispatch ---------------------------------------------------------------------------------------------------
     /// <param name="expectedTrainVersion">The train Version the caller previewed (If-Match). A moved train is a Conflict: the caller re-previews.</param>
     public async Task<ServiceResult<DispatchView>> DispatchAsync(string trainId, DispatchRequest req, Actor actor, int? expectedTrainVersion, CancellationToken ct = default)
+    {
+        if (req.ScheduleItemId is null) return await DispatchCoreAsync(trainId, req, actor, expectedTrainVersion, ct);
+        var gate = _scheduleLocks[(uint)StringComparer.Ordinal.GetHashCode(req.ScheduleItemId) % (uint)_scheduleLocks.Length];
+        await gate.WaitAsync(ct);
+        try { return await DispatchCoreAsync(trainId, req, actor, expectedTrainVersion, ct); }
+        finally { gate.Release(); }
+    }
+
+    private async Task<ServiceResult<DispatchView>> DispatchCoreAsync(string trainId, DispatchRequest req, Actor actor, int? expectedTrainVersion, CancellationToken ct)
     {
         // ---- 1. read and validate, no writes yet
         ReleaseTrains train;

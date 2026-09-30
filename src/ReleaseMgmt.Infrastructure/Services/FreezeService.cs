@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Domain.Services;
@@ -16,10 +18,19 @@ public sealed record FreezeView(FreezeWindows Window, IReadOnlyList<FreezeOverri
 /// it reaches the approvers as a notification. <see cref="FindBlockingAsync"/> is the service-side twin of trg_Step_FreezeLockout, so the
 /// user gets a readable 422 first and the trigger stays the backstop.
 /// </summary>
-public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, INotifier? notifier = null, IAlertSink? alerts = null)
+public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, INotifier? notifier = null, IAlertSink? alerts = null,
+    IConfiguration? config = null)
     : ServiceBase(dbf, time, realtime)
 {
     public const int MinReasonLength = 20;
+    /// <summary>SEC-A1: the named requester has no unconsumed override request for this window and train.</summary>
+    public const string OverrideNotRequested = "OverrideNotRequested";
+
+    /// <summary>
+    /// Config key <c>Freeze:OverrideRequiresRequest</c> (default true; SEC-A1, Q-SEC-A1): a grant must name someone who actually filed an override request for
+    /// that window and train (the audited <c>RequestOverride</c> call), one request per grant. False restores the earlier behaviour (the approver names anyone).
+    /// </summary>
+    private readonly bool _requireRequest = config?.GetValue("Freeze:OverrideRequiresRequest", true) ?? true;
     public static readonly string[] Kinds = ["Freeze", "Chill"];
     private static readonly List<string> Approvers = [Roles.ReleaseManager, Roles.GovernanceOfficer];
     private static readonly List<string> Requesters = [Roles.RTE, Roles.ReleaseManager];
@@ -101,6 +112,13 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             var requester = await db.Set<Users>().AsNoTracking().SingleOrDefaultAsync(u => u.Id == n.RequestedByUserId, ct);
             if (requester is null || !requester.IsActive || !Requesters.Contains(requester.Role))
                 f.Add(new(Guards.OverrideRequesterRole, "The requester must be an active RTE or Release Manager"));
+            else if (_requireRequest && n.RequestedByUserId != actor.UserId && await OpenRequestersAsync(db, windowId, n.TrainId, ct) is var open && !open.Contains(requester.Id))
+            {
+                // SEC-A1: the two-person rule needs two real people. The request is the audited RequestOverride call (Q-034b); one request covers one grant.
+                var names = await db.Set<Users>().AsNoTracking().Where(u => open.Contains(u.Id) && u.IsActive).OrderBy(u => u.DisplayName).Select(u => u.DisplayName).ToListAsync(ct);
+                f.Add(new(OverrideNotRequested, $"{requester.DisplayName} has not asked for an override of '{w.Name}' on {train.Title}: the requester files the request first, and each grant needs its own request"
+                    + (names.Count > 0 ? $". Open requests: {string.Join(", ", names)}" : ""), names));
+            }
             if (f.Count > 0) return ServiceResult<FreezeOverrides>.Fail(f);
 
             var renewal = await db.Set<FreezeOverrides>().AnyAsync(o => o.FreezeWindowId == windowId && o.ReleaseTrainId == n.TrainId, ct);
@@ -110,6 +128,32 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             await db.SaveChangesAsync(ct);
             return ServiceResult<FreezeOverrides>.Ok(row);
         }, ct);
+
+    /// <summary>
+    /// SEC-A1: who has an open override request for this window and train. Requests are the audited <c>RequestOverride</c> calls (Q-034b: there is no requests
+    /// table, and AuditEvents is append-only by trigger). A grant consumes its requester's requests: a request is open when it was audited after the last
+    /// Grant/Renew audit row that named the same requester for the same window (audit ids are the autoincrement order, so two events in one second still order).
+    /// Override rows written without the service (seed data) have no audit row and consume nothing.
+    /// </summary>
+    private static async Task<List<string>> OpenRequestersAsync(ReleaseDbContext db, string windowId, string trainId, CancellationToken ct)
+    {
+        var lastRequest = await db.Set<AuditEvents>().AsNoTracking()
+            .Where(a => a.EntityType == "FreezeWindow" && a.EntityId == windowId && a.Action == "RequestOverride" && a.ReleaseTrainId == trainId && a.ActorUserId != null)
+            .GroupBy(a => a.ActorUserId!).Select(g => new { UserId = g.Key, Last = g.Max(a => a.Id) }).ToListAsync(ct);
+        if (lastRequest.Count == 0) return [];
+        var grants = await db.Set<AuditEvents>().AsNoTracking()
+            .Where(a => a.EntityType == "FreezeOverride" && a.ReleaseTrainId == trainId && (a.Action == "Grant" || a.Action == "Renew") && a.AfterJson != null)
+            .Select(a => new { a.Id, a.AfterJson }).ToListAsync(ct);
+        var lastGrant = new Dictionary<string, long>();
+        foreach (var g in grants)
+        {
+            using var doc = JsonDocument.Parse(g.AfterJson!);   // written by GrantOverrideAsync below; the table is append-only
+            var after = doc.RootElement;
+            if (after.TryGetProperty("windowId", out var win) && win.GetString() == windowId && after.TryGetProperty("requestedBy", out var by) && by.GetString() is { } uid)
+                lastGrant[uid] = Math.Max(lastGrant.GetValueOrDefault(uid), g.Id);
+        }
+        return [.. lastRequest.Where(r => r.Last > lastGrant.GetValueOrDefault(r.UserId)).Select(r => r.UserId)];
+    }
 
     /// <summary>An RTE or Release Manager asks for an override. Nothing is stored beyond the audit row: the approvers are notified and one of them grants it (Q-034b).</summary>
     public async Task<ServiceResult<int>> RequestOverrideAsync(string windowId, string trainId, string reason, DateTime? proposedExpiry, Actor actor, CancellationToken ct = default)

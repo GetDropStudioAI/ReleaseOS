@@ -76,6 +76,7 @@ builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
 builder.Services.AddNotificationScheduling(config);   // REOS-37: reminders, escalation, inbox, My work, team webhooks
+builder.Services.AddCommDispatch(config);   // REOS-45: comm dispatch service, webhook sender, fail-closed default renderer
 
 var roleMap = config.GetSection("Auth:RoleMap").Get<Dictionary<string, string>>() ?? new();
 var authority = config["Auth:Oidc:Authority"];
@@ -172,6 +173,7 @@ api.MapNotifications();
 api.MapTemplates();   // REOS-38
 api.MapAudit();
 api.MapAnalytics();   // REOS-46
+api.MapCommDispatch();   // REOS-45
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

@@ -123,3 +123,18 @@ a.textbtn { font: inherit; font-weight: 600; color: var(--accent); text-decorati
 .audit-table button.plainlink { font-family: var(--font-mono); font-size: 12px; }
 .audit-table td { font-size: 12.5px; }
 .audit-json { font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 0 0 12px; }
+
+/* REOS-45 communication drawer (mockups/Comms.html): the drawer column is 620 px wide while it is open; tokens only */
+@media (min-width: 901px) { .shell:has(.comms-drawer) { grid-template-columns: var(--stream-width) 1fr calc(var(--drawer-width) + 60px); } }
+.comms-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.comms-rule { border-top: 1px solid var(--separator-strong); padding-top: 6px; margin-top: 2px; }
+.comms-drawer .src { font-family: var(--font-mono); font-size: 12px; line-height: 19px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comms-drawer .tk { color: var(--accent); background: var(--running); }
+.comms-drawer .tk.unknown { color: var(--bad); background: var(--bad-tint); }
+.comms-drawer .preview-body { font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; } .comms-drawer .preview-body .gap { height: 0.6em; }
+.comms-drawer .preview-subject { font-weight: 600; margin-bottom: 6px; overflow-wrap: anywhere; }
+.comms-block { border-top: 1px solid var(--separator); padding-top: 8px; margin-top: 14px; }
+.comms-send { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; }
+.comms-drawer table.grid td { white-space: normal; } .comms-drawer table.grid td.nowrap { white-space: nowrap; }
+.comms-tabs { border-bottom: 1px solid var(--separator); margin-top: 8px; }
+@media (max-width: 900px) { .comms-cols { grid-template-columns: 1fr; } }

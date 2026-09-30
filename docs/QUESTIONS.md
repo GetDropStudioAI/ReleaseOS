@@ -93,3 +93,21 @@ Context: PROJECT_SCOPE names the endpoints and D29 the expiry behaviour; a few e
 - **A NoGo may carry `newTargetReleaseDate`; recording it does not move the train's target.** Moving the target stays the explicit `PATCH /trains/{id}` (audited, rebases gates), so one action never changes two things.
 - Recording or closing bumps the train `Version` so open views go stale (409) and live clients refetch.
 - Expiry notifications (owner + Release Manager, 1 h before) belong to REOS-37's scheduler.
+
+## Q-035a · M4 · Evidence storage, size limit and config keys (REOS-35)
+Context: PROJECT_SCOPE says "attachments stored outside `wwwroot`", 50 MB max, SHA-256 server-side; not settled: layout, config, what "too large" returns.
+**Decided 2026-09-30 (best practice; say if any should change):**
+- Config `Attachments:Directory` (default `data/attachments`, relative to the working directory like `Db:Path`, git-ignored) and `Attachments:MaxBytes` (default and ceiling 52,428,800, the schema CHECK; a larger value is clamped).
+- Files are **id-named** (`<last 2 chars of id>/<id>`), not content-addressed: two uploads of the same bytes are two rows/files, so deleting one never affects another. `StoragePath` is stored relative and re-checked to stay under the directory on every read.
+- The upload is streamed to `<dir>/.tmp/<guid>`, hashed as it streams, moved into place just before the DB commit, and removed if the commit or any later step fails. A cleanup that itself fails raises `IAlertSink` (`Attachments`/`UploadCleanup` or `DeleteCleanup`); a row whose file is missing raises `Attachments`/`FileMissing` on download and returns 404.
+- Over the limit returns **413** `{guard:"AttachmentTooLarge", message}` (also from `Content-Length` before any byte is read); an empty file is 422 `AttachmentEmpty`.
+- Multipart order: `entityType` and `entityId` fields **before** the `file` part, so a refused upload is refused unread. A `sha256` field, if sent, is ignored.
+- File name is sanitised at upload (last path segment, control/bidi/reserved characters removed, at most 180 chars); the stored `ContentType` is the client's if it is a plain `type/subtype`, else `application/octet-stream`. Downloads always send `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store` and `X-Content-SHA256`.
+
+## Q-035b · M4 · Who may attach and delete evidence; what is supported (REOS-35)
+Context: the scope role table has no evidence row. Schema allows entity types Train, Gate, Task, RunbookStep, Blocker, GoNoGo, PIR.
+**Decided 2026-09-30:** upload = RTE, Release Manager, Governance Officer (Compliance certifiers must be able to attach their evidence); Viewers read only. Delete = the uploader, or an RTE / Release Manager, only while unlocked. Reading and downloading is any signed-in role (`Policies.Read`). Supported targets are **Train, Gate and Task**; other entity types are refused with `AttachmentInvalidEntity` until a story needs them. Downloads are not audited (they would swamp the audit log); uploads and deletes are, with the file hash in the audit JSON. `Attachments` has no `Version` column, so there is no `If-Match` on these endpoints; the train `Version` is not bumped (evidence does not change readiness), but a `TrainChanged` push still tells open views to refetch.
+
+## Q-035c · M4 · Lock semantics beyond the trigger (REOS-35)
+Context: the trigger locks Gate and Task attachments when a gate becomes Certified or Waived and nothing ever unlocks them (decertify keeps them locked, D-rule "evidence is immutable").
+**Decided 2026-09-30:** the service also refuses **adding** evidence to a Certified or Waived gate or its tasks (`AttachmentLocked`, "reopen the gate first"), because a new row would be unlocked evidence on a certified gate. After a decertify the old evidence stays locked and new evidence can be added. Train-level attachments are never locked by the trigger and stay deletable.

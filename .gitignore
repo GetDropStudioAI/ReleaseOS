@@ -13,3 +13,4 @@ __pycache__/
 .start-control.json
 logs/
 /data/
+**/data/attachments/

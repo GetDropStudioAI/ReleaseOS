@@ -15,8 +15,12 @@ export function useRestoreFocus() {
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
     return () => {
-      const lost = !document.activeElement || document.activeElement === document.body
-      if (lost && opener && opener !== document.body && opener.isConnected) requestAnimationFrame(() => opener.focus())
+      // Decide on the next frame: at unmount time the browser may still report the removed heading as the active element.
+      requestAnimationFrame(() => {
+        const a = document.activeElement
+        const lost = !a || a === document.body || !a.isConnected
+        if (lost && opener && opener !== document.body && opener.isConnected) opener.focus()
+      })
     }
   }, [])
 }

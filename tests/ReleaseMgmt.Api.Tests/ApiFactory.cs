@@ -25,6 +25,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         builder.UseSetting("Realtime:ServerTimeSeconds", "1");
         builder.UseSetting("Attachments:Directory", AttachmentsDir);
         if (attachmentMaxBytes is long mb) builder.UseSetting("Attachments:MaxBytes", mb.ToString());
+        builder.UseSetting("Notifications:ScanSeconds", "3600");   // the scheduler is driven by its own tests; keep it quiet here
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
         builder.UseSetting("Logging:File", Path.Combine(_dir, "log-.txt"));
     }

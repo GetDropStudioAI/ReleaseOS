@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Api;
 using ReleaseMgmt.Api.Auth;
 using ReleaseMgmt.Api.Endpoints;
+using ReleaseMgmt.Api.Reminders;
 using ReleaseMgmt.Infrastructure.Services;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Services;
@@ -69,6 +70,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
+builder.Services.AddNotificationScheduling(config);   // REOS-37: reminders, escalation, inbox, My work, team webhooks
 
 var roleMap = config.GetSection("Auth:RoleMap").Get<Dictionary<string, string>>() ?? new();
 var authority = config["Auth:Oidc:Authority"];
@@ -161,6 +163,7 @@ api.MapRuns();
 api.MapParser();
 api.MapAdmin();
 api.MapAttachments();
+api.MapNotifications();
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

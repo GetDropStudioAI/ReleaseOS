@@ -176,6 +176,7 @@ api.MapNotifications();
 api.MapTemplates();   // REOS-38
 api.MapAudit();
 api.MapAnalytics();   // REOS-46
+api.MapAnalyticsExport();   // REOS-47
 api.MapSync();   // REOS-42
 if (app.Environment.IsDevelopment()) api.MapSyncDev();   // REOS-42 dev-only seeding
 api.MapComms();   // REOS-43/44

@@ -155,3 +155,24 @@ pre.preview.src { font-family: var(--font-mono); font-size: 12px; line-height: 1
 .token-summary { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 12px 0 0; }
 .preview-subject { margin: 4px 0; }
 label.block textarea.bulk-text { margin-top: 4px; }
+
+/* REOS-47 Analytics: hairline rules only, tokens only */
+.an-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 14px; }
+.an-filter { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; margin-top: 4px; }
+.an-filter label { display: inline-flex; gap: 6px; align-items: baseline; color: var(--secondary); }
+.an-filter input.line { color: var(--label); font-family: var(--font-mono); }
+.an-side { text-align: right; font-size: var(--text-caption); }
+.an-note { font-size: var(--text-caption); margin: 4px 0; }
+.an-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-top: 1px solid var(--separator-strong); border-bottom: 1px solid var(--separator-strong); margin-bottom: 22px; }
+.an-kpi { padding: 10px 16px; border-right: 1px solid var(--separator); } .an-kpi:first-child { padding-left: 0; } .an-kpi:last-child { border-right: 0; padding-right: 0; }
+.an-kpi-value { font-size: 30px; font-weight: 500; line-height: 1.15; } .an-kpi-sub { font-size: var(--text-caption); }
+@media (max-width: 1100px) { .an-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .an-kpi:nth-child(3n) { border-right: 0; } .an-kpi:nth-child(3n+1) { padding-left: 0; } }
+.an-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 40px; }
+@media (max-width: 1100px) { .an-charts { grid-template-columns: minmax(0, 1fr); } }
+.an-chart { min-width: 0; }
+.an-chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.an-title { margin: 0; font-size: 14px; font-weight: 600; } .an-sub { font-size: var(--text-caption); }
+.an-export { font-size: var(--text-caption); white-space: nowrap; color: var(--secondary); }
+.an-canvas { width: 100%; margin-top: 6px; } .an-empty { margin: 14px 0; }
+.an-viewdata { margin-top: 2px; font-size: var(--text-caption); }
+.an-table { margin-top: 6px; max-height: 320px; overflow: auto; } .an-table table.grid th.n, .an-table table.grid td.n { text-align: right; }

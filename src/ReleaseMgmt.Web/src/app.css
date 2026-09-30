@@ -123,3 +123,24 @@ a.textbtn { font: inherit; font-weight: 600; color: var(--accent); text-decorati
 .audit-table button.plainlink { font-family: var(--font-mono); font-size: 12px; }
 .audit-table td { font-size: 12.5px; }
 .audit-json { font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 0 0 12px; }
+
+/* REOS-42 sync health: the banner row sits between the toolbar and the regions; it must stay in the grid (display: none would shift the regions up a row) and has no height while empty */
+.shell { grid-template-rows: var(--toolbar-height) auto 1fr; }
+@media (max-width: 900px) { .shell { grid-template-rows: var(--toolbar-height) auto auto 1fr auto; } }
+.sync-banner-row { grid-column: 1 / -1; }
+.sync-banner { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; padding: 8px var(--pad-x); border-bottom: 1px solid var(--separator-strong); background: var(--bad-tint); }
+.sync-banner.warn { background: var(--warn-tint); }
+.sync-banner .sync-banner-effect { color: var(--label); }
+.sync-banner a { font-weight: 600; margin-left: auto; }
+.sync-head { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; flex-wrap: wrap; }
+.sync-head h1 { margin-bottom: 2px; } .sync-head .sync-side { text-align: right; font-size: 12.5px; }
+.scroll-x { overflow-x: auto; }
+table.grid td.wrap { white-space: normal; word-break: break-word; }
+.sync-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.sync-note { font-size: var(--text-caption); }
+.sync-add { margin: 10px 0 4px; }
+.sync-add label { display: inline-flex; gap: 6px; align-items: baseline; color: var(--secondary); }
+.sync-add input.line.url { width: 26em; }
+.sync-window { display: inline-flex; gap: 12px; margin-left: 12px; }
+.sync-window button { font: inherit; color: var(--secondary); background: none; border: 0; padding: 0 0 2px; cursor: pointer; border-bottom: 2px solid transparent; }
+.sync-window button[aria-pressed="true"] { color: var(--label); border-bottom-color: var(--accent); }

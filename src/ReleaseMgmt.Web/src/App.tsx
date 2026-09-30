@@ -7,6 +7,7 @@ import { Inbox } from './Inbox'
 import { AuditViewer } from './AuditViewer'
 import { Templates } from './Templates'
 import { SyncHealth } from './SyncHealth'
+import { SyncBanner, notifySyncChanged, useSyncState } from './SyncBanner'
 import { Connectors } from './Connectors'
 import { CommLibrary } from './CommLibrary'
 import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
@@ -23,7 +24,7 @@ import { getConfig } from './api'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
-const NAV = ['Trains', 'Calendar', 'Analytics', 'Sync health', 'Imports & exports']
+const NAV = ['Trains', 'Calendar', 'Analytics', 'Imports & exports']
 
 function ThemeChoices() {
   const [choice, setChoice] = useState<ThemeChoice>(loadTheme())
@@ -153,7 +154,8 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const [notifRev, setNotifRev] = useState(0)
   const refreshUnread = () => { getUnreadCount().then(c => setUnread(c.unread)).catch(() => { /* the nav count is a hint; the Inbox shows real errors */ }) }
   useEffect(refreshUnread, [])
-  const live = useLive(true, { onTrainChanged: refetch, onResync: () => { refetch(); refreshUnread(); setNotifRev(n => n + 1) }, onForecastChanged: refetch, onNotification: () => { refreshUnread(); setNotifRev(n => n + 1) } })
+  const sync = useSyncState(true)   // REOS-42: connector-wide banner state; refetches on notifySyncChanged, every minute, and after a reconnect
+  const live = useLive(true, { onTrainChanged: refetch, onResync: () => { refetch(); refreshUnread(); setNotifRev(n => n + 1); notifySyncChanged() }, onForecastChanged: refetch, onNotification: () => { refreshUnread(); setNotifRev(n => n + 1) }, onSyncAlert: notifySyncChanged })
   const { view, trainId: selected, selection } = route
   const mode = route.mode ?? 'plan'
   const runData = useRun(selected, mode, rev)
@@ -197,6 +199,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
         <button type="button" className="text" onClick={async () => { await logout(); onSignedOut() }}>Sign out</button>
         <SessionControls onSignedOut={onSignedOut} onStopped={onStopped} />
       </header>
+      <SyncBanner sync={sync} onOpen={() => to({ view: 'sync' })} />
       <aside className="stream" aria-label="Stream">
         <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} />
         <FreezeFooter refreshKey={rev} />

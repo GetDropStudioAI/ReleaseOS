@@ -197,3 +197,6 @@ export const getLibraryOptions = () => get<LibraryOption[]>('/api/v1/templates/l
 export const createTemplate = (b: TemplateInput) => post<TemplateDetail>('/api/v1/templates', b)
 export const updateTemplate = (id: string, b: TemplateInput, version: number) => call<TemplateDetail>('PUT', `/api/v1/templates/${id}`, b, version)
 export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
+
+// REOS-42: DELETE with If-Match (webhook allowlist rows carry a Version)
+export const delIfMatch = <T,>(url: string, ifMatch: number) => call<T>('DELETE', url, undefined, ifMatch)

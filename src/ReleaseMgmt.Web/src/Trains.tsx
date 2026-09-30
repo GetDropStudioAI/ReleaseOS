@@ -6,6 +6,7 @@ import { fmtDayTime } from './time'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
 import { Closeout } from './Closeout'
+import { commsKey, type CommsDraft } from './CommsDrawer'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { advanceTrain, getFreezesAhead, getReadiness, getStream, getTrain, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
 
@@ -68,6 +69,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   const [busy, setBusy] = useState(false)
   const [chosenGate, setChosenGate] = useState<string | null>(null)
   const [goDraft, setGoDraft] = useDraft<GoNoGoDraft>(goNoGoKey(id))   // the header button and the Go/No-Go section share one draft
+  const [comms, setComms] = useDraft<CommsDraft>(commsKey(id))   // REOS-45: App swaps the right drawer to the Comms drawer while this is open
   useEffect(() => {
     let live = true
     setErr(null)
@@ -106,7 +108,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
           <button type="button" className="text" onClick={() => onMode('rehearsal')}>Rehearsal</button>
           <button type="button" className="text" onClick={() => onMode('live')}>Live runbook</button>
           {canDecide && <button type="button" className="text" onClick={() => setGoDraft(goDraft ? undefined : emptyGoNoGo())}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</button>}
-          <button type="button" className="text" disabled title={soon}>Communicate</button>
+          <button type="button" className="text" aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</button>
           <button type="button" className="text" disabled title={soon}>Export</button>
           {t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} title={blockers > 0 ? `${plural(blockers, 'guard')} not met` : undefined} onClick={advance}>Advance to {t.nextStatus}</button>}
         </span>

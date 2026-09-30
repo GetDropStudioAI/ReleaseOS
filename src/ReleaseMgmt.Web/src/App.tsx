@@ -17,6 +17,7 @@ import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
 import { Inspector } from './Planning'
 import { LiveRun, RunStepDrawer, useRun } from './LiveRun'
 import { BulkDrawer, bulkKey, type BulkDraft } from './Bulk'
+import { CommsDrawer, commsKey, type CommsDraft } from './CommsDrawer'
 import { getTrain, getUnreadCount, type TrainDetail } from './api'
 import { useDraft } from './session'
 import { parsePath, ROOT, useRoute, type Route } from './route'
@@ -163,6 +164,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const mode = route.mode ?? 'plan'
   const runData = useRun(selected, mode, rev)
   const [bulk, setBulk] = useDraft<BulkDraft>(bulkKey(selected ?? ''))
+  const [comms, setComms] = useDraft<CommsDraft>(commsKey(selected ?? ''))   // REOS-45
   const [gates, setGates] = useState<TrainDetail['gates']>([])
   useEffect(() => { if (selected && bulk?.open) getTrain(selected).then(t => setGates(t.gates)).catch(() => setGates([])) }, [selected, bulk?.open, rev])
 
@@ -216,7 +218,9 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">
-          {selected && bulk?.open && canAdmin
+          {selected && comms?.open
+            ? <CommsDrawer trainId={selected} canDispatch={canAdmin} refreshKey={rev} onClose={() => setComms(undefined)} onChanged={refetch} />
+            : selected && bulk?.open && canAdmin
             ? <BulkDrawer trainId={selected} gates={gates} onClose={() => setBulk(bulk && bulk.text ? { ...bulk, open: false } : undefined)} onChanged={refetch} />
             : selected && mode !== 'plan' && selection?.kind === 'step'
               ? <RunStepDrawer stepId={selection.id} data={runData} onClose={() => to({ selection: null })} onChanged={refetch} />

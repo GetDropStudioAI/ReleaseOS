@@ -146,6 +146,25 @@ def which(name: str) -> str:
     return found
 
 
+LOCK_MARKER = ".releaseos-lock.sha256"   # written into node_modules after a successful `npm ci`
+
+
+def frontend_deps_current(web_dir: Path = WEB_DIR) -> bool:
+    """True only when node_modules was installed by `npm ci` from the package-lock.json now on disk. A checkout updated by a manual
+    `git pull` (or an install older than this check) has no matching marker, so the next start reinstalls instead of failing in Vite."""
+    try:
+        marker = (web_dir / "node_modules" / LOCK_MARKER).read_text().strip()
+        return marker == hashlib.sha256((web_dir / "package-lock.json").read_bytes()).hexdigest()
+    except OSError:
+        return False
+
+
+def install_frontend_deps(npm: str, web_dir: Path = WEB_DIR, run=subprocess.run) -> None:
+    run([npm, "ci"], cwd=web_dir, check=True)
+    digest = hashlib.sha256((web_dir / "package-lock.json").read_bytes()).hexdigest()
+    (web_dir / "node_modules" / LOCK_MARKER).write_text(digest + "\n")
+
+
 # ----------------------------------------------------------------------------- supervisor
 
 class Supervisor:
@@ -179,9 +198,9 @@ class Supervisor:
         if not free(API_PORT) or not free(WEB_PORT):
             raise RuntimeError(f"Port {API_PORT} or {WEB_PORT} is already in use. Is the app already running? Try `python start.py stop`.")
         dotnet, npm = which("dotnet"), which("npm")
-        if not (WEB_DIR / "node_modules").exists():
-            self.set("starting", "Installing frontend packages (first run)")
-            subprocess.run([npm, "ci"], cwd=WEB_DIR, check=True)
+        if not frontend_deps_current():
+            self.set("starting", "Installing frontend packages (package-lock.json changed since the last install)")
+            install_frontend_deps(npm)
         api = Child("api", [dotnet, "run", "--no-launch-profile"], API_DIR,
                     {"ASPNETCORE_ENVIRONMENT": "Development", "ASPNETCORE_URLS": API_URL, "DOTNET_CLI_TELEMETRY_OPTOUT": "1"})
         web = Child("web", [npm, "run", "dev", "--", "--port", str(WEB_PORT), "--strictPort"], WEB_DIR,
@@ -215,10 +234,6 @@ class Supervisor:
             self.detail = {**self.detail, "pull": result}
             self.set("resetting", f"Pulled {result['before']} → {result['after']}: restarting")
             self.halt()
-            deps = {"src/ReleaseMgmt.Web/package.json", "src/ReleaseMgmt.Web/package-lock.json"} & set(result["changed"])
-            if deps:
-                self.set("resetting", "Frontend dependencies changed: npm ci")
-                subprocess.run([which("npm"), "ci"], cwd=WEB_DIR, check=True)
             if hashlib.sha256((ROOT / "start.py").read_bytes()).hexdigest() != script_before:
                 self.set("resetting", "start.py itself changed: relaunching")
                 self.close_control()

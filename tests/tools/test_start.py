@@ -76,5 +76,33 @@ class Helpers(unittest.TestCase):
         s.close()
 
 
+class FrontendDeps(unittest.TestCase):
+    """A stale node_modules (installed before package-lock.json changed) is reinstalled on start, not left to fail in Vite."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.web = Path(self.tmp.name)
+        (self.web / "package-lock.json").write_text('{"packages": {"node_modules/react": {}}}')
+        self.calls = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def fake_npm_ci(self, cmd, cwd, check):
+        self.calls.append(cmd); (Path(cwd) / "node_modules").mkdir(exist_ok=True)
+
+    def test_missing_node_modules_is_not_current(self):
+        self.assertFalse(start.frontend_deps_current(self.web))
+
+    def test_node_modules_without_marker_is_stale(self):
+        (self.web / "node_modules").mkdir()
+        self.assertFalse(start.frontend_deps_current(self.web))
+
+    def test_install_marks_current_and_a_lock_change_makes_it_stale_again(self):
+        start.install_frontend_deps("npm", self.web, run=self.fake_npm_ci)
+        self.assertEqual(self.calls, [["npm", "ci"]])
+        self.assertTrue(start.frontend_deps_current(self.web))
+        (self.web / "package-lock.json").write_text('{"packages": {"node_modules/@microsoft/signalr": {}}}')
+        self.assertFalse(start.frontend_deps_current(self.web))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

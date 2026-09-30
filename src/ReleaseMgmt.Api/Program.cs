@@ -82,6 +82,7 @@ builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus sche
 builder.Services.AddSyncEngine(config);   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
 builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
 builder.Services.AddPdfExports(config, builder.Environment.IsDevelopment());   // REOS-50: PDF export jobs + worker (QuestPDF)
+builder.Services.AddProxyHeaders(config);   // SEC-E5: X-Forwarded-For/Proto from trusted proxies only
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -110,14 +111,18 @@ var auth = builder.Services.AddAuthentication(o =>
     o.Cookie.SameSite = SameSiteMode.Lax;   // REOS-53: stated, not left to the framework default (Q-053b)
     o.ExpireTimeSpan = SessionLifetime.Idle(config);   // SEC-B4: idle timeout (sliding); the absolute limit is checked below
     o.SlidingExpiration = true;
-    o.Events.OnSigningIn = ctx => ctx.HttpContext.RequestServices.GetRequiredService<SessionLifetime>().OnSigningIn(ctx);
+    o.Events.OnSigningIn = async ctx =>
+    {
+        await ctx.HttpContext.RequestServices.GetRequiredService<SessionLifetime>().OnSigningIn(ctx);
+        SecurityEvents.SignedIn(ctx);   // SEC-E4
+    };
     o.Events.OnValidatePrincipal = async ctx =>
     {
         if (await ctx.HttpContext.RequestServices.GetRequiredService<SessionLifetime>().ValidateAsync(ctx))   // SEC-B4/B5
             await ctx.HttpContext.RequestServices.GetRequiredService<SessionValidator>().ValidateAsync(ctx);   // Q-053c
     };
-    o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
-    o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
+    o.Events.OnRedirectToLogin = SecurityEvents.Unauthenticated;        // 401, never a redirect (SEC-E4 logs it at Debug)
+    o.Events.OnRedirectToAccessDenied = SecurityEvents.AccessDenied;    // 403, never a redirect (SEC-E4 logs who and what)
 });
 if (authority is not null)
 {
@@ -146,7 +151,9 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA
 // assets must be served before the authorization middleware or the sign-in page itself would 401.
+app.UseForwardedHeaders();                    // SEC-E5: first, so every later check sees the real client and scheme
 app.UseExceptionHandler();
+if (!app.Environment.IsDevelopment()) app.UseHsts();   // SEC-E5: browsers keep to https once they have reached the app over it
 app.UseMiddleware<SecurityHeaders>();          // REOS-53
 app.UseMiddleware<RequestBodyLimit>();         // security review SEC-D7: Limits:MaxRequestBodyBytes (Q-SEC-D1)
 app.UseMiddleware<CrossSiteRequestGuard>();    // REOS-53: before authentication, so a cross-site write never reaches a handler
@@ -232,7 +239,9 @@ if (!string.IsNullOrWhiteSpace(resetUrl) && !(Uri.TryCreate(resetUrl, UriKind.Ab
 app.MapGet("/auth/config", [AllowAnonymous] () => Results.Ok(new { organisationSignIn = authority is not null, passwordResetUrl = string.IsNullOrWhiteSpace(resetUrl) ? null : resetUrl }));
 app.MapPost("/auth/logout", [AllowAnonymous] async (HttpContext http, SessionLifetime sessions) =>
 {
-    sessions.SignedOut((await http.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme)).Properties);   // SEC-B5: copies of this cookie die too
+    var session = await http.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    sessions.SignedOut(session.Properties);   // SEC-B5: copies of this cookie die too
+    if (session.Succeeded) SecurityEvents.SignedOut(http, session.Principal);   // SEC-E4
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok();
 });

@@ -71,3 +71,25 @@ Notes:
 - Open confirmations, not blocking: Q-007, Q-010, Q-011, Q-037a (level-2 escalation reading). Not built and recorded: train creation from a template or a prior train (Q-038t3).
 
 **Closed 2026-09-30:** all eight stories (REOS-31 to 38) moved In Review to Done together.
+
+## Sprint 4 (REOS-39 to 54)
+
+Full regression on the merged head (REOS-53 merge on top of 733b3b2).
+
+| Check | Result |
+|---|---|
+| 1 build | `dotnet build --no-incremental`: 0 errors, 0 warnings |
+| 2 tests | 298 Domain + 200 Infrastructure + 523 API + 2 DR drill passed, 0 failed |
+| 3 oracle | 82/82 |
+| 3b tooling | `tests/tools/test_start.py` OK |
+| 4 metrics | `seed_and_query.py` ran clean |
+| 5 web | build ok, 13 web unit tests pass |
+| 6 UI, both themes | Playwright 77/77 on a freshly started host (`Pdf__QuestPdfLicense=Evaluation`); axe plus keyboard-only walkthrough of all 12 views, both themes |
+| 7 CI | see the closing note below |
+| 8 human items | REOS-54: pilot run and evidence-pack acceptance by a Governance Officer is human-led and not done |
+
+Notes:
+- A full-suite run on the merged tree failed because Playwright reused a stale API process built before REOS-50; the train view crashed on a non-array export-jobs response. Fixed by making the panel show an inline error. Always start e2e on a fresh host.
+- REOS-52 found and fixed three product defects (train-list readiness lookups, audit entity filter, API start on a restored database). REOS-53 found and fixed a Viewer able to complete or reopen tasks (Q-053a), sessions surviving user deactivation (Q-053c), four 500s on bad input, and missing keyboard focus on bottom-rule inputs.
+- Not fixed, needs owner decision: webhook URLs stored in clear (Q-053e), key ring plain XML (Q-052e), QuestPDF licence tier (OI-2), NBomber licence (Q-052a).
+- Load and DR numbers are from a 4-core shared container, not the pilot host.

@@ -53,6 +53,8 @@ builder.Services.AddSingleton<RunbookService>();
 builder.Services.AddSingleton<RunService>();
 builder.Services.AddSingleton<ForecastService>();
 builder.Services.AddSingleton<TaskParserService>();
+builder.Services.AddSingleton<ChangeRecordService>();
+builder.Services.AddSingleton<GoNoGoService>();
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.SessionStateJanitor>();
 builder.Services.AddSingleton<AdminService>();
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
@@ -143,6 +145,7 @@ api.MapGet("/me", (ClaimsPrincipal u) => new
 }).RequireAuthorization(Policies.Read);
 api.MapLifecycle();
 api.MapTrainQueries();
+api.MapGovernance();
 api.MapGet("/config", (IConfiguration c) => Results.Ok(new { displayTimeZone = c["Display:TimeZone"] ?? "America/Chicago" })).RequireAuthorization(Policies.Read);
 if (app.Environment.IsDevelopment()) api.MapDev();
 api.MapSession();

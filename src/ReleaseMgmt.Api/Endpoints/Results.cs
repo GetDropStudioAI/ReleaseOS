@@ -13,6 +13,8 @@ public static class Results2
         _ => Results.NotFound(new { message = $"{r.Missing} not found" }),
     };
 
+    public static async Task<IResult> ToHttpAsync<T>(this Task<ServiceResult<T>> t) => (await t).ToHttp();
+
     public static object GuardBody(IReadOnlyList<GuardFailure> failures)
     {
         var first = failures[0];

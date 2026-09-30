@@ -64,7 +64,6 @@ public static class LifecycleEndpoints
             s.ReopenAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Read);
     }
 
-    private static async Task<IResult> ToHttpAsync<T>(this Task<ServiceResult<T>> t) => (await t).ToHttp();
 
     /// <summary>Gate authorization: RTE/RM always; otherwise the gate owner; Compliance certification only by a Governance Officer.</summary>
     private static async Task<IResult> Gate(string id, ClaimsPrincipal u, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct, bool forbidComplianceNonGo, Func<Task<ServiceResult<StageGates>>> act)

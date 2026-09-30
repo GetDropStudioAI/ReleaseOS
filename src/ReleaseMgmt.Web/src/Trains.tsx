@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useSession } from './session'
+import { useDraft, useSession } from './session'
+import { ChangeRecordPanel, GoNoGo, emptyGoNoGo, goNoGoKey, type GoNoGoDraft } from './Governance'
 import { fmtDayTime } from './time'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
@@ -58,12 +59,13 @@ export function Stream({ rows, selected, onSelect }: { rows: StreamRow[] | null;
   )
 }
 
-export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, canPlan, onMode }: { id: string; refreshKey: number; onChanged: () => void; selection: Selection; onSelect: (s: Selection) => void; canPlan: boolean; onMode: (m: import('./route').Mode) => void }) {
+export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, canPlan, canDecide, onMode }: { id: string; refreshKey: number; onChanged: () => void; selection: Selection; onSelect: (s: Selection) => void; canPlan: boolean; canDecide: boolean; onMode: (m: import('./route').Mode) => void }) {
   const [t, setT] = useState<TrainDetail | null>(null)
   const [r, setR] = useState<Readiness | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [chosenGate, setChosenGate] = useState<string | null>(null)
+  const [goDraft, setGoDraft] = useDraft<GoNoGoDraft>(goNoGoKey(id))   // the header button and the Go/No-Go section share one draft
   useEffect(() => {
     let live = true
     setErr(null)
@@ -101,7 +103,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
         <span className="actions">
           <button type="button" className="text" onClick={() => onMode('rehearsal')}>Rehearsal</button>
           <button type="button" className="text" onClick={() => onMode('live')}>Live runbook</button>
-          <button type="button" className="text" disabled title={soon}>Record Go/No-Go</button>
+          {canDecide && <button type="button" className="text" onClick={() => setGoDraft(goDraft ? undefined : emptyGoNoGo())}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</button>}
           <button type="button" className="text" disabled title={soon}>Communicate</button>
           <button type="button" className="text" disabled title={soon}>Export</button>
           {t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} title={blockers > 0 ? `${plural(blockers, 'guard')} not met` : undefined} onClick={advance}>Advance to {t.nextStatus}</button>}
@@ -124,6 +126,8 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} />
       <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} />
       {checklistGate && <Checklist gateId={checklistGate.id} trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
+      <GoNoGo trainId={t.id} trainVersion={t.version} canDecide={canDecide} refreshKey={refreshKey} onChanged={onChanged} />
+      <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
     </>
   )

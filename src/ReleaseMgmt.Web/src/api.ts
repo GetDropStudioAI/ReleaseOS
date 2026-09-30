@@ -112,3 +112,19 @@ export const startRun = (trainId: string, mode: 'Rehearsal' | 'Live') => post<Ru
 export const runStepAction = (runId: string, stepId: string, action: 'start' | 'done' | 'fail' | 'skip', note: string | null, version: number) =>
   post<unknown>(`/api/v1/runs/${runId}/steps/${stepId}:${action}`, { note }, version)
 export const endRun = (runId: string, outcome: 'Completed' | 'RolledBack' | 'Aborted', version: number) => post<unknown>(`/api/v1/runs/${runId}:end`, { outcome }, version)
+
+export interface ChangeRecord { releaseTrainId: string; justification: string | null; implementationPlan: string | null; riskImpactAnalysis: string | null; backoutPlan: string | null; testPlan: string | null; communicationPlan: string | null; cabDate: string | null; version: number }
+export interface AffectedCi { id: string; ciName: string; ciExternalId: string | null }
+export const getChangeRecord = (id: string) => get<ChangeRecord>(`/api/v1/trains/${id}/change-record`)
+export const putChangeRecord = (id: string, b: Omit<ChangeRecord, 'releaseTrainId' | 'version'>, version: number) => call<ChangeRecord>('PUT', `/api/v1/trains/${id}/change-record`, b, version)
+export const getCis = (id: string) => get<AffectedCi[]>(`/api/v1/trains/${id}/cis`)
+export const addCi = (id: string, ciName: string, ciExternalId: string | null) => post<AffectedCi>(`/api/v1/trains/${id}/cis`, { ciName, ciExternalId })
+export const removeCi = (id: string, ciId: string) => del<unknown>(`/api/v1/trains/${id}/cis/${ciId}`)
+
+export interface Condition { id: string; decisionId: string; text: string; ownerUserId: string; expiresAt: string; closedAt: string | null; closedByUserId: string | null; version: number }
+export interface Decision { id: string; decision: 'Go' | 'NoGo' | 'GoWithConditions'; decidedByUserId: string; decidedAt: string; notes: string | null; newTargetReleaseDate: string | null }
+export interface DecisionView { decision: Decision; conditions: Condition[] }
+export interface NewConditionBody { text: string; ownerUserId: string; expiresAt: string }
+export const getDecisions = (trainId: string) => get<DecisionView[]>(`/api/v1/trains/${trainId}/gonogo`)
+export const recordDecision = (trainId: string, b: { decision: string; notes: string | null; newTargetReleaseDate: string | null; conditions: NewConditionBody[] }, version: number) => post<unknown>(`/api/v1/trains/${trainId}/gonogo`, b, version)
+export const closeCondition = (id: string, version: number) => post<unknown>(`/api/v1/conditions/${id}:close`, {}, version)

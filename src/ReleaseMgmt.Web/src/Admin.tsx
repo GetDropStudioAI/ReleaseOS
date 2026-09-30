@@ -127,7 +127,7 @@ function HolidaysTable({ canEdit }: { canEdit: boolean }) {
         </p>
       )}
       <table className="grid">
-        <thead><tr><th>Date</th><th>Name</th>{canEdit && <th></th>}</tr></thead>
+        <thead><tr><th>Date</th><th>Name</th>{canEdit && <th><span className="sr-only">Actions</span></th>}</tr></thead>
         <tbody>
           {rows?.map(h => (
             <tr key={h.day}>

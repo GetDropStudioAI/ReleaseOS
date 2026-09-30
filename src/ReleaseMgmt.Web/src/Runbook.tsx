@@ -54,7 +54,7 @@ export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onC
           <div key={sec}>
             <h3 className={sec === 'Rollback' ? 'cap warn' : 'cap'}>{sec}</h3>
             <table className="grid">
-              <thead><tr><th>Step</th><th /><th>Owner</th><th>Planned</th><th>Depends on</th></tr></thead>
+              <thead><tr><th>Step</th><th><span className="sr-only">Title</span></th><th>Owner</th><th>Planned</th><th>Depends on</th></tr></thead>
               <tbody>
                 {list.map(s => {
                   const sel = selection?.kind === 'step' && selection.id === s.id

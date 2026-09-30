@@ -179,7 +179,7 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
       {conflict && <Conflict error={conflict} what="task" />}
       {gate.tasks.length === 0 ? <p className="muted">No tasks on this gate.</p> : (
         <table className="grid">
-          <thead><tr><th>State</th><th>Task</th><th>Owner</th><th>Product</th><th>Done</th><th /></tr></thead>
+          <thead><tr><th>State</th><th>Task</th><th>Owner</th><th>Product</th><th>Done</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {gate.tasks.map(t => {
               const sel = selection?.kind === 'task' && selection.id === t.id

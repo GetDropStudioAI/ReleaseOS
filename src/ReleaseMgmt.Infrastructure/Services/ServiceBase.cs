@@ -58,6 +58,9 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         }
     }
 
+    /// <summary>A fresh context for read-only queries outside a write transaction.</summary>
+    protected async Task<ReleaseDbContext> OpenAsync(CancellationToken ct) => await dbf.CreateDbContextAsync(ct);
+
     protected static bool VersionMismatch(int? expected, int current) => expected is int v && v != current;
 
     /// <summary>One AuditEvents row per service write (D27). A null actor is the system (scheduler, notifier, sync).</summary>

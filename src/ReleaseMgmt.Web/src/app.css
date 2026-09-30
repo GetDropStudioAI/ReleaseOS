@@ -104,3 +104,7 @@ table.grid tr.selected .accent { color: color-mix(in srgb, var(--accent) 65%, va
 .toolbar > *, .toolbar a, .toolbar button, .toolbar .muted, .toolbar strong { white-space: nowrap; }
 .toolbar { gap: 16px; }
 .metrics { gap: 8px 28px; }
+
+textarea.line { border: 0; border-bottom: 1px solid var(--tertiary); background: transparent; font: inherit; color: inherit; padding: 4px 0; resize: vertical; }
+button.text.strong { font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

@@ -83,3 +83,13 @@ Question and what was built (all provisional, one place each in `RunForecasting`
 - **Late escalation** fires when a Live step *starts* 5+ minutes behind its plan (owner or owning team's members + all RTEs, level 1) and, at 30+ minutes, also the Release Managers (level 2). A step that is late because it has not started yet is REOS-37's timer (NotificationScheduler).
 - **Rollback deadline crossing** notifies all RTEs and Release Managers once per run, the first time the forecast finish passes the deadline.
 - Notification or push failures after a committed step are raised through `IAlertSink`, never swallowed and never undo the step.
+
+## Q-012 · M4 · Go/No-Go rules the scope leaves open (REOS-33)
+Context: PROJECT_SCOPE names the endpoints and D29 the expiry behaviour; a few edges are not settled.
+**Decided 2026-09-30 (best practice; say if any should change):**
+- **The latest decision is picked by `DecidedAt`** (also inside the Executing trigger), and timestamps have whole-second resolution, so a decision that is not strictly later than the latest is refused (`DecisionTooSoon`) instead of guessing an order.
+- **Conditions can be added after the fact only to the latest GoWithConditions decision** (`NotLatestDecision` otherwise); decisions themselves never change. A superseding decision starts a fresh condition list.
+- **Who closes a condition:** its owner or a Release Manager. Recording and adding conditions is Release Manager only (RTE has no Go/No-Go rights, PROJECT_SCOPE section 1).
+- **A NoGo may carry `newTargetReleaseDate`; recording it does not move the train's target.** Moving the target stays the explicit `PATCH /trains/{id}` (audited, rebases gates), so one action never changes two things.
+- Recording or closing bumps the train `Version` so open views go stale (409) and live clients refetch.
+- Expiry notifications (owner + Release Manager, 1 h before) belong to REOS-37's scheduler.

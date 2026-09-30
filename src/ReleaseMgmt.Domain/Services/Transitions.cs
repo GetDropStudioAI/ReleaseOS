@@ -69,4 +69,15 @@ public static class Guards
     public const string StepsIncomplete = "StepsIncomplete";
     public const string InvalidSessionState = "InvalidSessionState";
     public const string SessionStateTooLarge = "SessionStateTooLarge";
+    public const string DecisionTooSoon = "DecisionTooSoon";
+    public const string GoNoGoRole = "GoNoGoRole";
+    public const string InvalidDecision = "InvalidDecision";
+    public const string ConditionsRequired = "ConditionsRequired";
+    public const string ConditionsNotAllowed = "ConditionsNotAllowed";
+    public const string InvalidCondition = "InvalidCondition";
+    public const string ConditionClosed = "ConditionClosed";
+    public const string ConditionCloseRole = "ConditionCloseRole";
+    public const string NotLatestDecision = "NotLatestDecision";
+    public const string DuplicateCi = "DuplicateCi";
+    public const string InvalidCi = "InvalidCi";
 }

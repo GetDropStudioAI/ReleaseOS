@@ -236,3 +236,14 @@ export const setConnectorCredentials = (source: string, body: { kind: string; us
 export const clearConnectorCredentials = (source: string) => call<ConnectorRow>('DELETE', `/api/v1/connectors/${source}/credentials`)
 export const testConnector = (source: string) => post<{ ok: boolean; source: string; elapsedMs: number }>(`/api/v1/connectors/${source}:test`)
 export const syncConnector = (source: string) => post<{ source: string; outcome: string; linksChecked: number; errorKind: string | null; message: string | null }>(`/api/v1/connectors/${source}:sync`)
+
+// REOS-50 PDF export jobs (release report, run sheet, evidence pack + ZIP, scorecard). The file itself is fetched from exportJobFileUrl (a plain link: attachment, private, no-store).
+export type ExportKind = 'ReleaseReport' | 'RunSheet' | 'EvidencePack' | 'Scorecard'
+export interface ExportJob {
+  id: string; kind: string; label: string; format: 'pdf' | 'zip'; trainId: string | null; trainTitle: string | null; status: 'Queued' | 'Running' | 'Done' | 'Failed'
+  fileName: string; sha256: string | null; sizeBytes: number | null; contentType: string | null; error: string | null; attempts: number; ref: string
+  requestedByUserId: string; requestedByName: string | null; createdAt: string; startedAt: string | null; completedAt: string | null; version: number
+}
+export const listExportJobs = (trainId: string) => get<ExportJob[]>(`/api/v1/export-jobs?trainId=${encodeURIComponent(trainId)}`)
+export const createExportJob = (trainId: string, kind: ExportKind, format: 'pdf' | 'zip' = 'pdf') => post<ExportJob>(`/api/v1/trains/${trainId}/export-jobs`, { kind, format })
+export const exportJobFileUrl = (id: string) => `/api/v1/export-jobs/${id}/file`

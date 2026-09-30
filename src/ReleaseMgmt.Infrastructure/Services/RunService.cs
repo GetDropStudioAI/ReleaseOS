@@ -94,6 +94,8 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
                 var blocked = await UnfinishedDependenciesAsync(db, runId, stepId, ct);
                 if (blocked.Count > 0)
                     return ServiceResult<StepExecutions>.Fail(new GuardFailure(Guards.DependencyNotDone, $"Step {step.StepCode} cannot start until these are Done or Skipped: {string.Join(", ", blocked)}", blocked));
+                var frozen = await FreezeService.FindBlockingAsync(db, step, run.Mode, Now, ct);   // readable 422 before trg_Step_FreezeLockout (the backstop)
+                if (frozen is not null) return ServiceResult<StepExecutions>.Fail(FreezeService.LockoutFailure(frozen, step.StepCode));
             }
 
             var before = new { status = ex.Status, version = ex.Version };

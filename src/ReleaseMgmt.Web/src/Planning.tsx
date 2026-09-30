@@ -10,6 +10,7 @@ import { Conflict, isConflict } from './Conflict'
 import type { ApiError } from './api'
 import { StepInspector } from './Runbook'
 import { Evidence } from './Evidence'
+import { WaiversPanel } from './Freezes'
 import { bulkKey, type BulkDraft } from './Bulk'
 
 export type Selection = { kind: 'gate'; id: string } | { kind: 'task'; gateId: string; id: string } | { kind: 'product'; id: string } | { kind: 'step'; id: string } | null
@@ -260,6 +261,7 @@ export function Inspector({ selection, trainId, canPlan, refreshKey, onClose, on
           <ul className="plain">{gate.certify.reasons.map((r, i) => <li key={i} className="bad">✗ {r}</li>)}</ul></div>)}
     {gate.status === 'Pending' && <p className="muted">Start the gate first, then work its checklist.</p>}
     {trainId && <Evidence trainId={trainId} entityType="Gate" entityId={gate.id} refreshKey={refreshKey} />}
+    <WaiversPanel gateId={gate.id} gateStatus={gate.status} gateVersion={gate.version} refreshKey={refreshKey} onChanged={onChanged} />
     {err && <p className="bad" role="alert">✗ {err}</p>}
     {conflict && <Conflict error={conflict} what="gate" />}</>)
 }

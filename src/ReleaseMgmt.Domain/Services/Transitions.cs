@@ -80,4 +80,12 @@ public static class Guards
     public const string NotLatestDecision = "NotLatestDecision";
     public const string DuplicateCi = "DuplicateCi";
     public const string InvalidCi = "InvalidCi";
+    public const string FreezeLockout = "FreezeLockout";
+    public const string FreezeInvalid = "FreezeInvalid";
+    public const string FreezeCreateRole = "FreezeCreateRole";
+    public const string OverrideReason = "OverrideReason";
+    public const string OverrideExpiry = "OverrideExpiry";
+    public const string OverrideSelfApproval = "OverrideSelfApproval";
+    public const string OverrideApproverRole = "OverrideApproverRole";
+    public const string OverrideRequesterRole = "OverrideRequesterRole";
 }

@@ -111,3 +111,16 @@ Context: the scope role table has no evidence row. Schema allows entity types Tr
 ## Q-035c · M4 · Lock semantics beyond the trigger (REOS-35)
 Context: the trigger locks Gate and Task attachments when a gate becomes Certified or Waived and nothing ever unlocks them (decertify keeps them locked, D-rule "evidence is immutable").
 **Decided 2026-09-30:** the service also refuses **adding** evidence to a Certified or Waived gate or its tasks (`AttachmentLocked`, "reopen the gate first"), because a new row would be unlocked evidence on a certified gate. After a decertify the old evidence stays locked and new evidence can be added. Train-level attachments are never locked by the trigger and stay deletable.
+
+## Q-034a · M4 · Who creates freeze windows, and what does a Chill do? (REOS-34)
+Context: the role table in PROJECT_SCOPE section 1 lists request and approve for overrides but not creating a freeze window.
+**Decided 2026-09-30 (best practice; say if it should change):** windows are created by a Release Manager or Governance Officer (policy `FreezeApprove`, checked again in `FreezeService`, guard `FreezeCreateRole`): a freeze is a governance control, and an RTE who can request overrides should not also define the rules. There is no edit or delete of a window in v1 (nothing in section 6 asks for it). `Kind = Chill` is advisory: the trigger only enforces `Freeze`, so the service guard does too. No maximum override TTL is enforced (the schema only needs ExpiresAt > ApprovedAt); the expiry must be in the future.
+
+## Q-034b · M4 · How is an override "requested" when FreezeOverrides only has approved rows? (REOS-34)
+Context: `FreezeOverrides` has `RequestedByUserId` and `ApprovedByUserId` both NOT NULL and rows are immutable, so there is no pending state to store; adding a requests table would change `db/schema.sql`.
+Options considered: (a) no schema change: the request is an audited service call that notifies the other Release Managers and Governance Officers (`FreezeOverrideRequested`), and the approver inserts the immutable row naming the requester / (b) a `FreezeOverrideRequests` table.
+**Built (a):** `POST /freezes/{id}/override-requests` (RTE or RM) writes one audit row and notifies approvers; `POST /freezes/{id}/overrides` (RM or GO) inserts the row with `requestedByUserId` in the body. The approver must not be the requester (`OverrideSelfApproval`), and the requester must be an active RTE or Release Manager (`OverrideRequesterRole`, D32). Revisit as (b) if the team wants a queue with a proper pending state.
+
+## Q-034c · M4 · Where the freeze guard applies, and what readiness says (REOS-34)
+Context: the story says "gate/step start"; `trg_Step_FreezeLockout` only covers a Live Deploy-section step (StepExecutions to Running). Gate starts have no freeze trigger.
+**Decided:** the service guard `FreezeLockout` mirrors the trigger exactly (Live run, Deploy section, start time inside a `Freeze` window, product pattern or no pattern, no unexpired override for that train) and runs in `RunService.StartStepAsync` after the dependency check. Gates are not blocked (no rule in the scope or schema). `IReadinessService` is unchanged: the trigger does not fire on train advance, so a freeze is not an Executing blocker; the train screen shows freezes and override state instead (`GET /freezes?trainId=`).

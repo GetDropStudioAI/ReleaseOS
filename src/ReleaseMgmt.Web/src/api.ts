@@ -128,3 +128,17 @@ export interface NewConditionBody { text: string; ownerUserId: string; expiresAt
 export const getDecisions = (trainId: string) => get<DecisionView[]>(`/api/v1/trains/${trainId}/gonogo`)
 export const recordDecision = (trainId: string, b: { decision: string; notes: string | null; newTargetReleaseDate: string | null; conditions: NewConditionBody[] }, version: number) => post<unknown>(`/api/v1/trains/${trainId}/gonogo`, b, version)
 export const closeCondition = (id: string, version: number) => post<unknown>(`/api/v1/conditions/${id}:close`, {}, version)
+
+// REOS-34: freeze windows, immutable overrides (renew = new row) and waivers
+export interface FreezeWindow { id: string; name: string; kind: 'Freeze' | 'Chill'; startsAt: string; endsAt: string; productPattern: string | null; createdByUserId: string; version: number }
+export interface FreezeOverride { id: string; freezeWindowId: string; releaseTrainId: string; reason: string; requestedByUserId: string; approvedByUserId: string; approvedAt: string; expiresAt: string }
+export interface FreezeRow { window: FreezeWindow; overrides: FreezeOverride[]; active: boolean; coversTrain: boolean | null; trainHasValidOverride: boolean | null }
+export interface Waiver { id: string; stageGateId: string; reason: string; requestedByUserId: string; approvedByUserId: string | null; requestedAt: string; approvedAt: string | null; version: number }
+export const getFreezes = (trainId?: string) => get<FreezeRow[]>(`/api/v1/freezes${trainId ? `?trainId=${encodeURIComponent(trainId)}` : ''}`)
+export const createFreeze = (b: { name: string; kind: string; startsAt: string; endsAt: string; productPattern: string | null }) => post<FreezeWindow>('/api/v1/freezes', b)
+export const grantOverride = (windowId: string, b: { trainId: string; requestedByUserId: string; reason: string; expiresAt: string }) => post<FreezeOverride>(`/api/v1/freezes/${windowId}/overrides`, b)
+export const requestOverride = (windowId: string, b: { trainId: string; reason: string; expiresAt: string | null }) => post<{ notified: number }>(`/api/v1/freezes/${windowId}/override-requests`, b)
+export const getWaivers = (gateId: string) => get<Waiver[]>(`/api/v1/gates/${gateId}/waivers`)
+export const requestWaiver = (gateId: string, reason: string) => post<Waiver>(`/api/v1/gates/${gateId}/waivers`, { reason })
+export const waiveGate = (gateId: string, version: number) => post<unknown>(`/api/v1/gates/${gateId}:waive`, {}, version)
+export const approveWaiver =(id: string, version: number) => post<Waiver>(`/api/v1/waivers/${id}:approve`, {}, version)

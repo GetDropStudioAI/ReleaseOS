@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import Admin from './Admin'
+import { Templates } from './Templates'
 import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
 import { Inspector } from './Planning'
 import { LiveRun, RunStepDrawer, useRun } from './LiveRun'
@@ -170,6 +171,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
         <nav aria-label="Primary" className="tabs">
           {NAV.map((n, i) => <a key={n} href="/" onClick={e => { e.preventDefault(); to({ view: 'trains' }) }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
           {canAdmin && <a href="/admin" onClick={e => { e.preventDefault(); to({ view: 'admin' }) }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
+          <a href="/templates" onClick={e => { e.preventDefault(); to({ view: 'templates' }) }} aria-current={view === 'templates' ? 'page' : undefined}>Templates</a>
         </nav>
         <span className="spacer" />
         <LiveStatus state={live.state} time={live.serverTime} />
@@ -182,9 +184,9 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
         <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} />
         <FreezeFooter refreshKey={rev} />
       </aside>
-      <main className={view === 'admin' ? 'workspace wide' : 'workspace'}>
+      <main className={view === 'admin' || view === 'templates' ? 'workspace wide' : 'workspace'}>
         {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {view === 'templates' ? <Templates me={me} /> : view === 'admin' ? <Admin canEdit={canAdmin} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">

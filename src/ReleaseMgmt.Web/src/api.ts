@@ -164,3 +164,18 @@ export const addKnownIssue = (id: string, b: { title: string; severity: string; 
 export const patchKnownIssue = (id: string, issueId: string, b: { title?: string; severity?: string; workaround?: string; externalKey?: string }, version: number) => patch<KnownIssue>(`/api/v1/trains/${id}/known-issues/${issueId}`, b, version)
 export const knownIssueAction = (id: string, issueId: string, action: 'accept' | 'resolve' | 'reopen', version: number) => post<KnownIssue>(`/api/v1/trains/${id}/known-issues/${issueId}:${action}`, {}, version)
 export const exitHypercare = (id: string, version: number) => post<unknown>(`/api/v1/trains/${id}:exit-hypercare`, {}, version)
+
+// REOS-38 train templates
+export interface TemplateRow { id: string; name: string; status: string; defaultRiskTier: string; approvedByUserId: string | null; approvedByName: string | null; approvedAt: string | null; reviewDueOn: string | null; reviewOverdue: boolean; gateCount: number; stepCount: number; scheduleCount: number; version: number }
+export interface TemplateGate { id?: string; gateName: string; gateClass: string; sequenceOrder?: number; offsetDays: number; requiredBeforeStatus: string; ownerTeamId: string | null; ownerTeamName?: string | null }
+export interface TemplateStep { id?: string; stepCode: string; section: string; title: string; offsetMinutes: number; plannedDurationMin: number; ownerTeamId: string | null; ownerTeamName?: string | null }
+export interface TemplateSchedule { id?: string; libraryTemplateId: string; libraryName?: string; templateType?: string; offsetDays: number }
+export interface TemplateDetail { template: TemplateRow; gates: TemplateGate[]; steps: TemplateStep[]; schedule: TemplateSchedule[] }
+export interface TemplateInput { name: string; defaultRiskTier: string; gates: TemplateGate[]; steps: TemplateStep[]; schedule: TemplateSchedule[] }
+export interface LibraryOption { id: string; name: string; templateType: string }
+export const getTemplates = () => get<TemplateRow[]>('/api/v1/templates')
+export const getTemplate = (id: string) => get<TemplateDetail>(`/api/v1/templates/${id}`)
+export const getLibraryOptions = () => get<LibraryOption[]>('/api/v1/templates/library-options')
+export const createTemplate = (b: TemplateInput) => post<TemplateDetail>('/api/v1/templates', b)
+export const updateTemplate = (id: string, b: TemplateInput, version: number) => call<TemplateDetail>('PUT', `/api/v1/templates/${id}`, b, version)
+export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)

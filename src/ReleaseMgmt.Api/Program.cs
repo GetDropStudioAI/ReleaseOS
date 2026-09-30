@@ -60,6 +60,7 @@ builder.Services.AddSingleton<FreezeService>();
 builder.Services.AddSingleton<CloseoutService>();
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.SessionStateJanitor>();
 builder.Services.AddSingleton<AdminService>();
+builder.Services.AddSingleton<TemplateService>();   // REOS-38
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
 // REOS-35 evidence attachments: stored outside wwwroot (Attachments:Directory), capped at Attachments:MaxBytes (never above the 50 MB schema CHECK)
@@ -164,6 +165,7 @@ api.MapParser();
 api.MapAdmin();
 api.MapAttachments();
 api.MapNotifications();
+api.MapTemplates();   // REOS-38
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

@@ -112,3 +112,7 @@ button.text.strong { font-weight: 600; }
 /* REOS-35: Download is a real link that looks like a text button */
 a.text { font-weight: 600; text-decoration: none; }
 a.text:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* REOS-38 train templates: inline editing controls inside grids */
+table.grid input.narrow { width: 4.5em; } table.grid input.mid { width: 10em; } .inline-form input.line.wide { width: 18em; }
+table.grid td select.line, table.grid td input.line { max-width: 100%; }

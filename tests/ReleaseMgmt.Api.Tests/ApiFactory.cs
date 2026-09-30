@@ -22,6 +22,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         if (passwordResetUrl is not null) builder.UseSetting("Auth:PasswordResetUrl", passwordResetUrl);
         builder.UseSetting("Api:RequireIfMatch", requireIfMatch ? "true" : "false");   // existing contract tests predate Q-004; the 428 tests opt in
         builder.UseSetting("Realtime:ServerTimeSeconds", "1");
+        builder.UseSetting("Notifications:ScanSeconds", "3600");   // the scheduler is driven by its own tests; keep it quiet here
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
         builder.UseSetting("Logging:File", Path.Combine(_dir, "log-.txt"));
     }

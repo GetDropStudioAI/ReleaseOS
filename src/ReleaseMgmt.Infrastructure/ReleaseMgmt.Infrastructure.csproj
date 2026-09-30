@@ -11,6 +11,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageReference Include="Sep" Version="0.17.1" />
   </ItemGroup>
 
   <PropertyGroup>

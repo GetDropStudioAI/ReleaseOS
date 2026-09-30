@@ -116,3 +116,10 @@ a.text:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* REOS-38 train templates: inline editing controls inside grids */
 table.grid input.narrow { width: 4.5em; } table.grid input.mid { width: 10em; } .inline-form input.line.wide { width: 18em; }
 table.grid td select.line, table.grid td input.line { max-width: 100%; }
+
+/* REOS-38 audit viewer */
+.audit-filters { margin: 8px 0; } .audit-filters label { display: inline-flex; gap: 6px; align-items: baseline; color: var(--secondary); }
+a.textbtn { font: inherit; font-weight: 600; color: var(--accent); text-decoration: none; } a.textbtn:hover { color: var(--accent-hover); }
+.audit-table button.plainlink { font-family: var(--font-mono); font-size: 12px; }
+.audit-table td { font-size: 12.5px; }
+.audit-json { font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 0 0 12px; }

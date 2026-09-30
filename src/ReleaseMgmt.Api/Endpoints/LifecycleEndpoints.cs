@@ -14,6 +14,7 @@ public static class LifecycleEndpoints
 {
     public sealed record AdvanceRequest(string To);
     public sealed record CompleteRequest(string CloseCode, string? Notes);
+    public sealed record RehearsedRequest(string? RunId, string? Note);
     public sealed record PatchTrainRequest(DateOnly? TargetReleaseDate);
     public sealed record WaiverRequestBody(string Reason);
     public sealed record AddTaskRequest(string Description, string? OwnerUserId, string? OwnerTeamId);
@@ -30,8 +31,8 @@ public static class LifecycleEndpoints
             s.AbortAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapPost("/trains/{id}:complete", (string id, CompleteRequest body, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
             s.CompleteAsync(id, body.CloseCode, body.Notes, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
-        api.MapPost("/trains/{id}:rehearsed-rollback", (string id, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
-            s.RecordRollbackRehearsedAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
+        api.MapPost("/trains/{id}:rehearsed-rollback", (string id, RehearsedRequest? body, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
+            s.RecordRollbackRehearsedAsync(id, ActorOf(u), req.IfMatch(), body?.RunId, body?.Note, ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapPost("/trains/{id}:capture-baseline", (string id, ClaimsPrincipal u, BaselineService s, CancellationToken ct) =>
             s.CaptureAsync(id, ActorOf(u), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapPatch("/trains/{id}", (string id, PatchTrainRequest body, ClaimsPrincipal u, HttpRequest req, ScheduleService s, CancellationToken ct) =>

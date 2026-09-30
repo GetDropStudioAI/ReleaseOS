@@ -84,17 +84,36 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
         t.LastChangedByUserId = actor.UserId; t.LastChangedAt = now; t.UpdatedAt = now; t.Version++;
     }
 
-    /// <summary>Records the rollback rehearsal attestation (needed for High/VeryHigh trains before Executing).</summary>
+    /// <summary>
+    /// Records the rollback-rehearsal attestation (needed for High/VeryHigh trains before Executing). The attester is the acting RTE/Release Manager;
+    /// <paramref name="rehearsalRunId"/> optionally links the ended Rehearsal run that is the evidence, and <paramref name="note"/> says what was rehearsed.
+    /// Both go into the audit row (Q-036a). Attesting again replaces the earlier attestation; the audit row keeps what it replaced.
+    /// </summary>
     public Task<ServiceResult<ReleaseTrains>> RecordRollbackRehearsedAsync(string trainId, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
+        RecordRollbackRehearsedAsync(trainId, actor, expectedVersion, null, null, ct);
+
+    public Task<ServiceResult<ReleaseTrains>> RecordRollbackRehearsedAsync(string trainId, Actor actor, int? expectedVersion, string? rehearsalRunId, string? note, CancellationToken ct = default) =>
         RunAsync(async db =>
         {
             var t = await db.Set<ReleaseTrains>().SingleOrDefaultAsync(x => x.Id == trainId, ct);
             if (t is null) return ServiceResult<ReleaseTrains>.NotFound("train");
             if (VersionMismatch(expectedVersion, t.Version)) return ServiceResult<ReleaseTrains>.Conflict(t);
+            if (t.CurrentStatus is "Complete" or "Aborted")
+                return ServiceResult<ReleaseTrains>.Fail(new GuardFailure(Guards.TrainClosed, $"The train is {t.CurrentStatus}; a rollback rehearsal can no longer be attested"));
+            if (!string.IsNullOrWhiteSpace(rehearsalRunId))
+            {
+                var run = await db.Set<RunbookRuns>().AsNoTracking().SingleOrDefaultAsync(r => r.Id == rehearsalRunId, ct);
+                if (run is null || run.ReleaseTrainId != trainId || run.Mode != "Rehearsal")
+                    return ServiceResult<ReleaseTrains>.Fail(new GuardFailure(CloseoutGuards.InvalidRehearsalRun, "The evidence must be a Rehearsal run of this train"));
+                if (run.EndedAt is null)
+                    return ServiceResult<ReleaseTrains>.Fail(new GuardFailure(CloseoutGuards.InvalidRehearsalRun, "The rehearsal run is still open; end it before attesting"));
+            }
             var now = Now;
+            var before = t.RollbackRehearsedAt is null ? null : new { at = t.RollbackRehearsedAt, byUserId = t.RollbackRehearsedByUserId };
             t.RollbackRehearsedAt = now; t.RollbackRehearsedByUserId = actor.UserId;
             Stamp(t, actor, now);
-            Audit(db, actor, t.Id, "ReleaseTrain", t.Id, "RollbackRehearsed", null, new { at = now });
+            Audit(db, actor, t.Id, "ReleaseTrain", t.Id, "RollbackRehearsed", before,
+                new { at = now, runId = string.IsNullOrWhiteSpace(rehearsalRunId) ? null : rehearsalRunId, note = string.IsNullOrWhiteSpace(note) ? null : note.Trim() });
             await db.SaveChangesAsync(ct);
             return ServiceResult<ReleaseTrains>.Ok(t);
         }, ct);

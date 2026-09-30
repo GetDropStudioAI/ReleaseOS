@@ -9,6 +9,7 @@ using ReleaseMgmt.Api.Auth;
 using ReleaseMgmt.Api.Endpoints;
 using ReleaseMgmt.Api.Reminders;
 using ReleaseMgmt.Infrastructure.Services;
+using ReleaseMgmt.Infrastructure.Analytics;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Backup;
@@ -67,6 +68,8 @@ builder.Services.AddSingleton<SeedService>();
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
 builder.Services.AddSingleton<AttachmentService>();
 builder.Services.AddSingleton<AuditQueryService>();   // REOS-38 audit viewer (read-only)
+builder.Services.AddSingleton<AnalyticsService>();   // REOS-46 analytics M1-M15 (read-only, own connection)
+builder.Services.AddSingleton<IAnalyticsConnectionFactory>(new SqliteAnalyticsConnectionFactory(connectionString));
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -168,6 +171,7 @@ api.MapAttachments();
 api.MapNotifications();
 api.MapTemplates();   // REOS-38
 api.MapAudit();
+api.MapAnalytics();   // REOS-46
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

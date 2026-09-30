@@ -42,6 +42,7 @@ public sealed class SeedService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
                 db.Set<TemplateGates>().Add(new TemplateGates { Id = Ids.New(), TemplateId = t.Id, GateName = g.Name, GateClass = g.Class, SequenceOrder = ++order, OffsetDays = g.Offset, RequiredBeforeStatus = g.Before });
         }
         await db.SaveChangesAsync(ct);
+        await CommDefaults.EnsureAsync(dbf, DefaultTemplateName, ct);   // REOS-43: default comm library + T-minus plan (only while the library is empty)
     }
 
     public async Task SeedDemoDataAsync(CancellationToken ct = default)

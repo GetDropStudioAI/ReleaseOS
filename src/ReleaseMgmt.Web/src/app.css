@@ -144,3 +144,14 @@ table.grid td.wrap { white-space: normal; word-break: break-word; }
 .sync-window { display: inline-flex; gap: 12px; margin-left: 12px; }
 .sync-window button { font: inherit; color: var(--secondary); background: none; border: 0; padding: 0 0 2px; cursor: pointer; border-bottom: 2px solid transparent; }
 .sync-window button[aria-pressed="true"] { color: var(--label); border-bottom-color: var(--accent); }
+
+/* REOS-43/44 comm library: tokens are accent text, problems are error-coloured and underlined (never a tinted box or pill) */
+.tk { color: var(--accent); } .tkbad { color: var(--bad); text-decoration: underline wavy; text-underline-offset: 3px; }
+pre.src { font-family: var(--font-mono); font-size: 12px; line-height: 19px; white-space: pre-wrap; word-break: break-word; margin: 2px 0 8px; padding-top: 6px; border-top: 1px solid var(--separator-strong); }
+pre.preview { font: inherit; white-space: pre-wrap; word-break: break-word; line-height: 1.5; margin: 2px 0 8px; padding-top: 6px; border-top: 1px solid var(--separator-strong); }
+pre.preview.src { font-family: var(--font-mono); font-size: 12px; line-height: 19px; }
+.comm-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 1100px) { .comm-cols { grid-template-columns: minmax(0, 1fr); } }
+.token-summary { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 12px 0 0; }
+.preview-subject { margin: 4px 0; }
+label.block textarea.bulk-text { margin-top: 4px; }

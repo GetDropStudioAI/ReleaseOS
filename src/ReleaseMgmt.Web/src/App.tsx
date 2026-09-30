@@ -6,6 +6,9 @@ import { MyWork } from './MyWork'
 import { Inbox } from './Inbox'
 import { AuditViewer } from './AuditViewer'
 import { Templates } from './Templates'
+import { Analytics } from './Analytics'
+import { Calendar } from './Calendar'
+import { ImportExport } from './ImportExport'
 import { SyncHealth } from './SyncHealth'
 import { SyncBanner, notifySyncChanged, useSyncState } from './SyncBanner'
 import { Connectors } from './Connectors'
@@ -24,7 +27,7 @@ import { getConfig } from './api'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
-const NAV = ['Trains', 'Calendar', 'Analytics', 'Imports & exports']
+const NAV = ['Trains']
 
 function ThemeChoices() {
   const [choice, setChoice] = useState<ThemeChoice>(loadTheme())
@@ -185,6 +188,9 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
           {NAV.map((n, i) => <a key={n} href="/" onClick={e => { e.preventDefault(); to({ view: 'trains' }) }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
           <a href="/work" onClick={e => { e.preventDefault(); to({ view: 'work' }) }} aria-current={view === 'work' ? 'page' : undefined}>My work</a>
           <a href="/inbox" onClick={e => { e.preventDefault(); to({ view: 'inbox' }) }} aria-current={view === 'inbox' ? 'page' : undefined}>{unread > 0 ? `Inbox (${unread})` : 'Inbox'}</a>
+          <a href="/calendar" onClick={e => { e.preventDefault(); to({ view: 'calendar' }) }} aria-current={view === 'calendar' ? 'page' : undefined}>Calendar</a>
+          <a href="/analytics" onClick={e => { e.preventDefault(); to({ view: 'analytics' }) }} aria-current={view === 'analytics' ? 'page' : undefined}>Analytics</a>
+          <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }} aria-current={view === 'importexport' ? 'page' : undefined}>Imports &amp; exports</a>
           <a href="/sync" onClick={e => { e.preventDefault(); to({ view: 'sync' }) }} aria-current={view === 'sync' ? 'page' : undefined}>Sync health</a>
           <a href="/library" onClick={e => { e.preventDefault(); to({ view: 'library' }) }} aria-current={view === 'library' ? 'page' : undefined}>Comm library</a>
           {canAdmin && <a href="/connectors" onClick={e => { e.preventDefault(); to({ view: 'connectors' }) }} aria-current={view === 'connectors' ? 'page' : undefined}>Connectors</a>}
@@ -206,7 +212,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </aside>
       <main className={view !== 'trains' ? 'workspace wide' : 'workspace'}>
         {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
+        {view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? 'No trains yet. Create one to start planning.' : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">

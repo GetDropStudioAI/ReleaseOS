@@ -49,3 +49,25 @@ Final regression re-run on head `f3f2bac` (after the display-zone change that to
 Defects the regression found and fixed this sprint: axe contrast (selected Stream row 4.37:1; selected table rows; status colours on the selection tint) and nested-interactive timeline; the 409 notice vanishing on refetch; Windows `localhost`/IPv6 timing out the e2e job; a provisional browser-time-zone choice that contradicted D24.
 
 **Closed 2026-09-30:** REOS-22 to 30 and REOS-56 to 59 (13 stories) moved In Review -> Done together. Open confirmations left in `docs/QUESTIONS.md`, built to provisional defaults and not blockers: Q-007 (product Health), Q-010 (plan lock while a Live run is open), Q-011 (forecast edge rules).
+
+### AMO Sprint 3 (REOS-31 to 38): started 2026-09-30, closed 2026-09-30
+Full regression on head `a1a0ed0` (the final merged head of all eight stories).
+
+| Check | Result | Head |
+|---|---|---|
+| 1 build | `dotnet build ReleaseMgmt.sln -c Release --no-incremental`: 0 errors, 0 warnings | `a1a0ed0` |
+| 2 tests | 45 Domain + 60 Infrastructure + 196 API passed, 0 failed | |
+| 3 oracle | 82/82 | |
+| 3b tooling | `tests/tools/test_start.py` OK | |
+| 4 metrics | `seed_and_query.py` ran clean | |
+| 5 web build | `npm ci && npm run build`: ok, no TypeScript errors | |
+| 6 CI | run 55: `build-test` green on `windows-latest` and `macos-latest` (build, tests, oracle, tooling, Playwright on both) | `a1a0ed0` |
+| 7 UI, both themes | Playwright 35/35 locally on the merged tree; axe (serious/critical) scans in light and dark for the Stream and workspace, admin, live runbook, governance panels (freeze, waivers, close-out, evidence), My work, Inbox and Audit | |
+| 8 human items | none listed on REOS-31 to 38 | |
+
+Notes:
+- Stories REOS-34 to 38 were built by parallel agents in isolated worktrees and merged one at a time; the merged tree, not the individual branches, is what this regression covers. Merge conflicts were only appended-line collisions (`Program.cs`, `api.ts`, `QUESTIONS.md`, `app.css`, `App.tsx`).
+- Two spec fixes came out of the merged run (My work/Inbox: the drill notifies every RTE and a 25-minute-late step is level 1; Audit: two events so j/k have a second row on a fresh database). No product defect.
+- Open confirmations, not blocking: Q-007, Q-010, Q-011, Q-037a (level-2 escalation reading). Not built and recorded: train creation from a template or a prior train (Q-038t3).
+
+**Closed 2026-09-30:** all eight stories (REOS-31 to 38) moved In Review to Done together.

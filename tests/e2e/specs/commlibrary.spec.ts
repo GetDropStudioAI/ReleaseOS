@@ -103,7 +103,7 @@ test('a Viewer reads the library and previews but has no editing or sending acti
   await openLibrary(page)
   await expect(page.locator('button:text-is("New template")')).toHaveCount(0)
   await pickTrain(page, 'R26.13')
-  await page.locator('table.grid tr', { hasText: 'T-1 Go/No-Go outcome' }).click()
+  await page.locator('table.grid tr', { hasText: 'T-1 Go/No-Go outcome' }).first().click()
   await expect(page.locator('textarea.bulk-text')).toHaveAttribute('readonly', '')
   await expect(page.locator('button:text-is("Save changes")')).toHaveCount(0)
   await expect(page.locator('button:text-is("Add to R26.13 Reporting")')).toHaveCount(0)

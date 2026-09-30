@@ -197,3 +197,17 @@ export const getLibraryOptions = () => get<LibraryOption[]>('/api/v1/templates/l
 export const createTemplate = (b: TemplateInput) => post<TemplateDetail>('/api/v1/templates', b)
 export const updateTemplate = (id: string, b: TemplateInput, version: number) => call<TemplateDetail>('PUT', `/api/v1/templates/${id}`, b, version)
 export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
+// REOS-39 connectors (credentials are write-only: no response carries them, only whether some are stored and of what kind)
+export interface ConnectorRow {
+  source: 'Jira' | 'ServiceNow'; baseUrl: string; isEnabled: boolean; hasCredentials: boolean; credentialKind: string | null; status: string
+  lastCycleStartedAt: string | null; lastCycleCompletedAt: string | null; lastSuccessAt: string | null; consecutiveFailures: number
+  openAlerts: number; linkCount: number; staleLinks: number; mismatchLinks: number; version: number | null
+}
+export const getConnectors = () => get<ConnectorRow[]>('/api/v1/connectors')
+export const saveConnector = (source: string, body: { baseUrl?: string; isEnabled?: boolean }, version?: number | null) =>
+  call<ConnectorRow>('PUT', `/api/v1/connectors/${source}`, body, version ?? undefined)
+export const setConnectorCredentials = (source: string, body: { kind: string; username: string; secret: string }) =>
+  call<ConnectorRow>('PUT', `/api/v1/connectors/${source}/credentials`, body)
+export const clearConnectorCredentials = (source: string) => call<ConnectorRow>('DELETE', `/api/v1/connectors/${source}/credentials`)
+export const testConnector = (source: string) => post<{ ok: boolean; source: string; elapsedMs: number }>(`/api/v1/connectors/${source}:test`)
+export const syncConnector = (source: string) => post<{ source: string; outcome: string; linksChecked: number; errorKind: string | null; message: string | null }>(`/api/v1/connectors/${source}:sync`)

@@ -67,6 +67,7 @@ builder.Services.AddSingleton<SeedService>();
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
 builder.Services.AddSingleton<AttachmentService>();
 builder.Services.AddSingleton<AuditQueryService>();   // REOS-38 audit viewer (read-only)
+builder.Services.AddSyncEngine(config);   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -164,6 +165,7 @@ api.MapRunbook();
 api.MapRuns();
 api.MapParser();
 api.MapAdmin();
+api.MapConnectors();   // REOS-39
 api.MapAttachments();
 api.MapNotifications();
 api.MapTemplates();   // REOS-38

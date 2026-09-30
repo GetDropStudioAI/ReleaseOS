@@ -53,6 +53,38 @@ public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, Tim
         return r.Id;
     }
 
+    /// <summary>Auto-resolve (PROJECT_SCOPE 5.3.8, REOS-40): one clean cycle marks the open alert for this (source, kind, key) resolved. The row stays as history
+    /// (IsResolved, ResolvedAt); a later failure opens a new row. Returns whether an open alert was resolved.</summary>
+    public async Task<bool> ResolveAsync(string source, string kind, string key, CancellationToken ct = default) =>
+        await ResolveAsync([(source, kind, key)], ct) > 0;
+
+    /// <summary>Resolves every open alert among the given (source, kind, key) fingerprints in one transaction, then pushes each. Returns how many were resolved.</summary>
+    public async Task<int> ResolveAsync(IReadOnlyCollection<(string Source, string Kind, string Key)> keys, CancellationToken ct = default)
+    {
+        if (keys.Count == 0) return 0;
+        var fps = keys.Select(k => Fingerprint(k.Source, k.Kind, k.Key)).Distinct().ToList();
+        var result = await RunAsync<List<string>>(async db =>
+        {
+            var now = Now;
+            var open = await db.Set<SyncAlerts>().Where(a => fps.Contains(a.Fingerprint) && !a.IsResolved).ToListAsync(ct);
+            foreach (var a in open)
+            {
+                a.IsResolved = true; a.ResolvedAt = now; a.Version++;
+                Audit(db, null, a.ReleaseTrainId, "SyncAlert", a.Id, "AutoResolved", after: new { a.SourceSystem, a.Kind, a.OccurrenceCount });
+            }
+            if (open.Count > 0) await db.SaveChangesAsync(ct);
+            return ServiceResult<List<string>>.Ok(open.Select(a => a.Id).ToList());
+        }, ct);
+        if (!result.IsOk) throw new InvalidOperationException("Could not resolve the alerts: " + (result.Failures.Count > 0 ? result.Failures[0].Message : result.Missing));
+        if (realtime is not null)
+            foreach (var id in result.Value!)
+            {
+                try { await realtime.SyncAlertRaisedAsync(id, ct); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "Alert {AlertId} was resolved but the live push failed", id); }
+            }
+        return result.Value!.Count;
+    }
+
     private async Task<(string Id, bool Created)> WriteAsync(string source, string kind, string key, string message, string? trainId, CancellationToken ct)
     {
         var fp = Fingerprint(source, kind, key);

@@ -18,9 +18,9 @@
   --separator: #e5e5ea;         /* row rules */
   --grid: #ececf0;              /* chart gridlines */
   /* Fiserv Orange for main wording (design direction D). Exact #FF6600 is 2.94:1 on white, so light mode uses AA-safe shades:
-     --brand-title for text 22px+ and 2px indicators (3.56:1), --brand-text for smaller wording (5.23:1). Dark mode uses exact Fiserv Orange. */
+     --brand-title for titles and 2px indicators (4.79:1 on --bg, 4.64:1 on --panel: AA at any size), --brand-text for smaller wording (5.23:1). Dark mode uses exact Fiserv Orange. */
   --brand: #ff6600;
-  --brand-title: #e65c00;
+  --brand-title: #c24e00;
   --brand-text: #b84a00;
   --accent: #0a64d8;
   --accent-hover: #084fad;

@@ -93,7 +93,7 @@
 | bad | 6.04 / 5.84 / 5.54 / 5.21 | 5.98 / 5.63 / 5.00 / 4.43 (glyph only) |
 
 **Fiserv Orange for main wording.** Exact `#FF6600` is 2.94:1 on white, which fails even the 3:1 large-text floor in light mode. The ReleaseOS design system therefore uses:
-- `#E65C00` for titles 22px and larger in light mode (3.56:1);
+- `#C24E00` for titles in light mode (4.79:1, so AA at any size; the first choice `#E65C00` at 3.56:1 only qualified as large text at 24px or bold, and axe caught a 22px regular title);
 - `#B84A00` for smaller wording in light mode (5.23:1);
 - exact `#FF6600` in dark mode (5.68:1).
 

@@ -34,7 +34,7 @@ public static class TrainQueryEndpoints
 
     public static void MapTrainQueries(this RouteGroupBuilder api)
     {
-        api.MapGet("/trains", async (IDbContextFactory<ReleaseDbContext> dbf, IReadinessService readiness, TimeProvider time, CancellationToken ct) =>
+        api.MapGet("/trains", async (IDbContextFactory<ReleaseDbContext> dbf, TrainLifecycleService lifecycle, TimeProvider time, CancellationToken ct) =>
         {
             await using var db = await dbf.CreateDbContextAsync(ct);
             var today = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
@@ -47,12 +47,11 @@ public static class TrainQueryEndpoints
             var gates = (await db.Set<StageGates>().AsNoTracking().Where(g => ids.Contains(g.ReleaseTrainId)).ToListAsync(ct))
                 .ToLookup(g => g.ReleaseTrainId);
             var rows = new List<StreamRow>();
+            // Blockers for the next hop: the same guards :advance runs, counted for every train at once (a per-train readiness call took ~1 ms each: 230 ms for 200 trains; REOS-52).
+            var blockerCounts = await lifecycle.NextHopBlockerCountsAsync(db, trains, ct);
             foreach (var t in trains)
             {
-                var i = Array.IndexOf(Next, t.CurrentStatus);
-                var blockers = 0;
-                if (i >= 0 && i < Next.Length - 1)   // blockers for the next hop: the same guards :advance runs
-                    blockers = (await readiness.GetAsync(t.Id, Next[i + 1], ct)).Value?.Blockers.Count ?? 0;
+                var blockers = blockerCounts[t.Id];
                 rows.Add(new StreamRow(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
                     BusinessDays.Between(today, t.TargetReleaseDate, holidays), blockers,
                     [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, t.ActualEndAt?.ToString("yyyy-MM-dd"), t.Version));

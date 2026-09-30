@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- REOS-52 load test. A console app, not an xUnit project, so dotnet test never runs it (it takes minutes).
+       Run it with: python3 tools/run_load_test.py (or dotnet run -c Release with this project). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <ServerGarbageCollector>true</ServerGarbageCollector>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <PackageReference Include="NBomber" Version="6.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReleaseMgmt.Api\ReleaseMgmt.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The child-process launcher is shared with the DR drill so both run the built API the same way. -->
+    <Compile Include="..\ReleaseMgmt.DrDrill.Tests\AppProcess.cs" Link="AppProcess.cs" />
+  </ItemGroup>
+
+</Project>

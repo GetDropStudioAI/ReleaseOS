@@ -49,7 +49,11 @@ public static class BackupRunner
         return removed;
     }
 
-    /// <summary>Copies a backup over the target database, refusing an unhealthy backup.</summary>
+    /// <summary>
+    /// Copies a backup over the target database, refusing an unhealthy backup, and puts the restored file back into WAL mode (a backup is written in the default
+    /// journal mode so it is one self-contained file; the live database is WAL, D2). The key ring, credentials and attachments are separate directories the runbook
+    /// copies back (D12); this only restores the database.
+    /// </summary>
     public static void Restore(string backupFile, string targetDb)
     {
         var check = IntegrityCheck(backupFile);
@@ -61,6 +65,12 @@ public static class BackupRunner
             if (File.Exists(targetDb + suffix)) File.Delete(targetDb + suffix);
         }
         File.Copy(backupFile, targetDb, overwrite: true);
+        using var c = new SqliteConnection($"Data Source={targetDb};Pooling=False");
+        c.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "PRAGMA journal_mode=WAL;";
+        var mode = (string)cmd.ExecuteScalar()!;
+        if (!mode.Equals("wal", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException($"The restored database could not be switched to WAL (journal_mode={mode})");
     }
 
     public static string IntegrityCheck(string dbFile)

@@ -41,10 +41,18 @@ public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf)
 
     public static int ClampLimit(int? limit) => Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
 
-    private static IQueryable<AuditEvents> Apply(IQueryable<AuditEvents> q, AuditFilter f)
+    /// <param name="newestFirstPage">
+    /// True for the paged, newest-first query. An entity-type filter with no entity id is then written so that IX_Audit_Entity cannot be used
+    /// (<c>EntityType || ''</c>). The entity types are a dozen values that each own a few percent to a third of the log, so the index finds tens of thousands
+    /// of matches and SQLite then sorts them all by Id (~80 ms for 100 000 rows, growing with the log); walking the primary key downwards stops after
+    /// one page (~0.5 ms; found by the REOS-52 load test). With an entity id the index is the right choice and is left alone. A plain ANALYZE does not
+    /// change this plan in the SQLite build we ship, which is why the query itself is steered.
+    /// </param>
+    private static IQueryable<AuditEvents> Apply(IQueryable<AuditEvents> q, AuditFilter f, bool newestFirstPage = false)
     {
         if (!string.IsNullOrEmpty(f.Train)) q = q.Where(a => a.ReleaseTrainId == f.Train);
-        if (!string.IsNullOrEmpty(f.Entity)) q = q.Where(a => a.EntityType == f.Entity);
+        if (!string.IsNullOrEmpty(f.Entity))
+            q = newestFirstPage && string.IsNullOrEmpty(f.EntityId) ? q.Where(a => a.EntityType + "" == f.Entity) : q.Where(a => a.EntityType == f.Entity);
         if (!string.IsNullOrEmpty(f.EntityId)) q = q.Where(a => a.EntityId == f.EntityId);
         if (!string.IsNullOrEmpty(f.Actor)) q = q.Where(a => a.ActorUserId == f.Actor);
         if (!string.IsNullOrWhiteSpace(f.Action))
@@ -71,7 +79,7 @@ public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf)
     {
         var n = ClampLimit(limit);
         await using var db = await dbf.CreateDbContextAsync(ct);
-        var q = Apply(db.Set<AuditEvents>().AsNoTracking(), f);
+        var q = Apply(db.Set<AuditEvents>().AsNoTracking(), f, newestFirstPage: true);
         if (cursor is { } c) q = q.Where(a => a.Id < c);
         var rows = await Project(db, q.OrderByDescending(a => a.Id)).Take(n + 1).ToListAsync(ct);
         var more = rows.Count > n;

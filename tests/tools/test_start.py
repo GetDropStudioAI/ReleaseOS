@@ -76,6 +76,18 @@ class Helpers(unittest.TestCase):
         s.close()
 
 
+class ControlChannelHost(unittest.TestCase):
+    """DNS rebinding (SEC-E2): the control channel refuses any Host that is not a loopback name, whatever the port."""
+    def test_loopback_names_are_served(self):
+        for h in ("127.0.0.1:5099", "localhost:5099", "127.0.0.1:6273", "LOCALHOST", "[::1]:5099", "127.0.0.1"):
+            self.assertTrue(start.loopback_host(h), h)
+
+    def test_foreign_and_missing_hosts_are_refused(self):
+        for h in ("attacker.example:5099", "attacker.example", "127.0.0.1.attacker.example:5099", "localhost.attacker.example",
+                  "[::2]:5099", "", None, "evil:127.0.0.1"):
+            self.assertFalse(start.loopback_host(h), h)
+
+
 class FrontendDeps(unittest.TestCase):
     """A stale node_modules (installed before package-lock.json changed) is reinstalled on start, not left to fail in Vite."""
     def setUp(self):

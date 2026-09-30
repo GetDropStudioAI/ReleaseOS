@@ -146,6 +146,18 @@ def which(name: str) -> str:
     return found
 
 
+def loopback_host(host_header: str | None) -> bool:
+    """The control channel answers only requests addressed to a loopback name. A page on attacker.example that rebinds its DNS to 127.0.0.1
+    reaches this port as 'same origin' but still sends Host: attacker.example, so it is refused (SEC-E2). Any port: the Vite proxy forwards
+    /control with its own Host (127.0.0.1:6273)."""
+    host = (host_header or "").strip().lower()
+    if host.startswith("["):
+        name = host[1:host.find("]")] if "]" in host else ""
+    else:
+        name = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+    return name in ("127.0.0.1", "localhost", "::1")
+
+
 LOCK_MARKER = ".releaseos-lock.sha256"   # written into node_modules after a successful `npm ci`
 
 
@@ -273,6 +285,8 @@ class Supervisor:
                 self.wfile.write(data)
 
             def do_GET(self) -> None:
+                if not loopback_host(self.headers.get("Host")):
+                    return self._send(421, {"message": "misdirected request: only loopback host names are served"})
                 if self.path.rstrip("/") == "/control/status":
                     self._send(200, {"state": sup.state, "message": sup.message, **sup.detail, "revision": sup.revision(),
                                      "running": bool(sup.children) and all(c.alive() for c in sup.children)})
@@ -280,6 +294,8 @@ class Supervisor:
                     self._send(404, {"message": "not found"})
 
             def do_POST(self) -> None:
+                if not loopback_host(self.headers.get("Host")):
+                    return self._send(421, {"message": "misdirected request: only loopback host names are served"})
                 if not secrets.compare_digest(self.headers.get("X-Control-Token", ""), sup.token):
                     return self._send(403, {"message": "bad control token"})
                 path = self.path.rstrip("/")

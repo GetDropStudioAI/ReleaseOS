@@ -8,10 +8,11 @@ export function useFocusWhen<T extends HTMLElement>(when: boolean) {
 }
 
 /**
- * For a drawer or inline panel: on mount remember what had focus, on unmount give it back if focus fell to <body>
- * (the control that opened it was not unmounted, but focus inside the panel went with the panel).
+ * For a drawer or inline panel: on mount remember what had focus, on unmount give it back if focus fell to <body>.
+ * The opener may have been re-rendered while the panel was open (its screen reloaded), so `fallback` names the trigger by selector:
+ * when the remembered element is gone, focus goes to whatever matches it now.
  */
-export function useRestoreFocus() {
+export function useRestoreFocus(fallback?: string) {
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
     return () => {
@@ -19,10 +20,12 @@ export function useRestoreFocus() {
       requestAnimationFrame(() => {
         const a = document.activeElement
         const lost = !a || a === document.body || !a.isConnected
-        if (lost && opener && opener !== document.body && opener.isConnected) opener.focus()
+        if (!lost) return
+        const target = opener && opener !== document.body && opener.isConnected ? opener : fallback ? document.querySelector<HTMLElement>(fallback) : null
+        target?.focus()
       })
     }
-  }, [])
+  }, [fallback])
 }
 
 /** Move focus without scrolling the page twice (the caller has already scrolled) and without animating when reduced motion is asked for. */

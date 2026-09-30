@@ -127,7 +127,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
               else sec?.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
             })
           }}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</button>}
-          <button type="button" className="text" aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</button>
+          <button type="button" className="text" data-comms-trigger aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</button>
           <button type="button" className="text" onClick={() => scrollAndFocus(document.querySelector<HTMLElement>('#exports h2'))}>Export</button>
           {t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} aria-describedby={blockers > 0 ? whyId : undefined} onClick={advance}>{busy ? 'Advancing…' : `Advance to ${t.nextStatus}`}</button>}
         </span>

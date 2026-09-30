@@ -243,7 +243,7 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
   const headingId = `${ids}-title`, whyId = `${ids}-why`
 
   // focus the drawer's heading when it opens, and give focus back to the opener ("Communicate") when it closes (WCAG 2.4.3)
-  useRestoreFocus()   // first: it must record the opener before the heading takes focus
+  useRestoreFocus('[data-comms-trigger]')   // first: it must record the opener before the heading takes focus
   const headingRef = useFocusWhen<HTMLHeadingElement>(true)
 
   useEffect(() => {

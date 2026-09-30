@@ -39,7 +39,7 @@ export function ExportsPanel({ trainId, refreshKey = 0 }: { trainId: string; ref
 
   useEffect(() => { getMe().then(m => setCanAudit((m?.roles ?? []).some(r => r === 'RTE' || r === 'ReleaseManager' || r === 'GovernanceOfficer'))).catch(() => setCanAudit(false)) }, [])
 
-  const load = useCallback(() => listExportJobs(trainId).then(r => { setJobs(r); setErr(null) }).catch(e => setErr(errMsg(e))), [trainId])
+  const load = useCallback(() => listExportJobs(trainId).then(r => { if (!Array.isArray(r)) throw new Error('Export jobs could not be loaded: unexpected response from the server.'); setJobs(r); setErr(null) }).catch(e => setErr(errMsg(e))), [trainId])
   useEffect(() => { void load() }, [load, refreshKey, rev])
 
   const open = jobs?.some(j => j.status === 'Queued' || j.status === 'Running') ?? false

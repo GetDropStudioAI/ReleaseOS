@@ -15,7 +15,7 @@ namespace ReleaseMgmt.Infrastructure.Reminders;
 /// audited in the same transaction. The first occurrence also tells the RTEs and Release Managers in-app (PROJECT_SCOPE 5.3), which is
 /// also the live push (NotificationCreated). Source and kind must be values the schema's CHECKs allow.
 /// </summary>
-public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, ILogger<SyncAlertWriter> log, INotifier? notifier = null)
+public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, ILogger<SyncAlertWriter> log, INotifier? notifier = null, IRealtimePublisher? realtime = null)
     : ServiceBase(dbf, time)
 {
     private readonly IDbContextFactory<ReleaseDbContext> _dbf = dbf;
@@ -44,6 +44,11 @@ public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, Tim
                 // The alert row is saved and visible; only its in-app copy failed. Nothing further can carry this, so it is logged loudly.
                 log.LogError(ex, "Alert {AlertId} ({Source}/{Kind}) was saved but its in-app notification failed", r.Id, source, kind);
             }
+        }
+        if (realtime is not null)
+        {
+            try { await realtime.SyncAlertRaisedAsync(r.Id, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "Alert {AlertId} was saved but the live push failed", r.Id); }
         }
         return r.Id;
     }

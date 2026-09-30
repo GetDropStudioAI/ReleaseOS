@@ -18,6 +18,7 @@ public sealed class TrainsHub(TimeProvider time) : Hub
     public const string NotificationCreated = "NotificationCreated";
     public const string ServerTime = "ServerTime";
     public const string ForecastChanged = "ForecastChanged";
+    public const string SyncAlertRaised = "SyncAlertRaised";
 
     /// <summary>A new connection gets the server clock straight away, so countdowns are right from the first second (the 10 s timer keeps them honest).</summary>
     public override async Task OnConnectedAsync()
@@ -43,6 +44,9 @@ public sealed class SignalRPublisher(IHubContext<TrainsHub> hub) : IRealtimePubl
 
     public Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default) =>
         hub.Clients.All.SendAsync(TrainsHub.ForecastChanged, trainId, runId, ct);
+
+    public Task SyncAlertRaisedAsync(string alertId, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(TrainsHub.SyncAlertRaised, alertId, ct);
 }
 
 /// <summary>

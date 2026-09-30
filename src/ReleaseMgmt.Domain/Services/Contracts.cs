@@ -26,6 +26,8 @@ public interface IRealtimePublisher
     Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default);
     /// <summary>A step event changed a run's forecast; clients on that train refetch GET /runs/{id}/forecast.</summary>
     Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default);
+    /// <summary>A SyncAlerts row was raised, repeated or resolved; every client refetches GET /sync/alerts and the connector-wide banner state.</summary>
+    Task SyncAlertRaisedAsync(string alertId, CancellationToken ct = default);
 }
 
 /// <summary>Used where no live channel exists (tests, tools).</summary>
@@ -34,4 +36,5 @@ public sealed class NullRealtimePublisher : IRealtimePublisher
     public Task TrainChangedAsync(string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
     public Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
     public Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SyncAlertRaisedAsync(string alertId, CancellationToken ct = default) => Task.CompletedTask;
 }

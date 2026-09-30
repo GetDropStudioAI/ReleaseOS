@@ -10,6 +10,7 @@ interface Handlers {
   onNotification?: (notificationId: string) => void
   /** A run's forecast changed (a step event): refetch the forecast. */
   onForecastChanged?: (trainId: string, runId: string) => void
+  onSyncAlert?: (alertId: string) => void
   /** Fired after a reconnect: events may have been missed, so refetch everything on screen. */
   onResync: () => void
 }
@@ -32,6 +33,7 @@ export function useLive(enabled: boolean, handlers: Handlers) {
     hub.on('NotificationCreated', (id: string) => h.current.onNotification?.(id))
     hub.on('ServerTime', (t: string) => { setServerTime(t); setServerTimeState(t) })
     hub.on('ForecastChanged', (tid: string, rid: string) => h.current.onForecastChanged?.(tid, rid))
+    hub.on('SyncAlertRaised', (id: string) => h.current.onSyncAlert?.(id))
     hub.onreconnecting(() => setState('reconnecting'))
     hub.onreconnected(() => { setState('live'); h.current.onResync() })
     hub.onclose(() => setState('offline'))

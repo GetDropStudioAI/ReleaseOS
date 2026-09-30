@@ -15,6 +15,12 @@ public sealed class DbRuleExceptionHandler : IExceptionHandler
             await ctx.Response.WriteAsJsonAsync(new { guard = "PreconditionRequired", message = ex.Message }, ct);
             return true;
         }
+        if (ex is BadHttpRequestException bad)   // a missing query value or malformed body is the client's mistake: keep Kestrel's 4xx instead of the handler's 500 (REOS-53)
+        {
+            ctx.Response.StatusCode = bad.StatusCode;
+            await ctx.Response.WriteAsJsonAsync(new { guard = "BadRequest", message = "The request could not be read: a required value is missing or the body is not valid" }, ct);
+            return true;
+        }
         if (!DbRules.TryGetMessage(ex, out var message)) return false;
         ctx.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
         await ctx.Response.WriteAsJsonAsync(new { guard = Guards.DbRule, message }, ct);

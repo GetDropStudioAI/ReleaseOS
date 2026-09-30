@@ -59,12 +59,28 @@ public static class LifecycleEndpoints
 
         api.MapPost("/gates/{id}/tasks", (string id, AddTaskRequest body, ClaimsPrincipal u, TaskService s, CancellationToken ct) =>
             s.AddAsync(id, body.Description, body.OwnerUserId, body.OwnerTeamId, ActorOf(u), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
-        api.MapPost("/tasks/{id}:complete", (string id, ClaimsPrincipal u, HttpRequest req, TaskService s, CancellationToken ct) =>
-            s.CompleteAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Read);
-        api.MapPost("/tasks/{id}:reopen", (string id, ClaimsPrincipal u, HttpRequest req, TaskService s, CancellationToken ct) =>
-            s.ReopenAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Read);
+        // REOS-53 (Q-053a): completing or reopening a task is refused for anyone who is not a planner, the task's owner (or owning team) or the gate's owner.
+        // Reopen can decertify a Certified gate, so "any signed-in role" (a Viewer included) was too wide.
+        api.MapPost("/tasks/{id}:complete", async (string id, ClaimsPrincipal u, HttpRequest req, TaskService s, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
+            await TaskDenial(id, u, dbf, ct) ?? await s.CompleteAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Read);
+        api.MapPost("/tasks/{id}:reopen", async (string id, ClaimsPrincipal u, HttpRequest req, TaskService s, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
+            await TaskDenial(id, u, dbf, ct) ?? await s.ReopenAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Read);
     }
 
+
+    /// <summary>Null when the caller may act on the task (RTE/RM, the task's owner or owning team, or the gate's owner); otherwise a 403. An unknown task is left to the service (404).</summary>
+    private static async Task<IResult?> TaskDenial(string taskId, ClaimsPrincipal u, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct)
+    {
+        if (u.IsInRole(Roles.RTE) || u.IsInRole(Roles.ReleaseManager)) return null;
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        var t = await db.Set<ChecklistTasks>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == taskId, ct);
+        if (t is null) return null;
+        var uid = u.FindFirstValue("uid");
+        var g = await db.Set<StageGates>().AsNoTracking().SingleAsync(x => x.Id == t.StageGateId, ct);
+        var teams = new[] { t.OwnerTeamId, g.OwnerTeamId }.OfType<string>().ToList();
+        var owner = t.OwnerUserId == uid || g.OwnerUserId == uid || (teams.Count > 0 && await db.Set<TeamMembers>().AnyAsync(m => teams.Contains(m.TeamId) && m.UserId == uid, ct));
+        return owner ? null : Results.Json(new { message = "Only the task or gate owner, an RTE or a Release Manager can do this" }, statusCode: StatusCodes.Status403Forbidden);
+    }
 
     /// <summary>Gate authorization: RTE/RM always; otherwise the gate owner; Compliance certification only by a Governance Officer.</summary>
     private static async Task<IResult> Gate(string id, ClaimsPrincipal u, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct, bool forbidComplianceNonGo, Func<Task<ServiceResult<StageGates>>> act)

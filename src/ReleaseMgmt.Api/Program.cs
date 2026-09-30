@@ -44,6 +44,7 @@ builder.Services.AddSingleton<IRealtimePublisher, ReleaseMgmt.Api.Realtime.Signa
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.ServerTimeBroadcaster>();
 builder.Services.AddSingleton<INotifier, Notifier>();
 builder.Services.AddSingleton<UserProvisioner>();
+builder.Services.AddSingleton<SessionValidator>();   // REOS-53
 builder.Services.AddSingleton<TrainLifecycleService>();
 builder.Services.AddSingleton<GateService>();
 builder.Services.AddSingleton<WaiverService>();
@@ -95,6 +96,9 @@ var auth = builder.Services.AddAuthentication(o =>
 }).AddCookie(o =>
 {
     o.Cookie.Name = "releasemgmt.auth";
+    o.Cookie.HttpOnly = true;
+    o.Cookie.SameSite = SameSiteMode.Lax;   // REOS-53: stated, not left to the framework default (Q-053b)
+    o.Events.OnValidatePrincipal = ctx => ctx.HttpContext.RequestServices.GetRequiredService<SessionValidator>().ValidateAsync(ctx);   // Q-053c
     o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
     o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
 });
@@ -136,6 +140,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA
 // assets must be served before the authorization middleware or the sign-in page itself would 401.
 app.UseExceptionHandler();
+app.UseMiddleware<SecurityHeaders>();          // REOS-53
+app.UseMiddleware<CrossSiteRequestGuard>();    // REOS-53: before authentication, so a cross-site write never reaches a handler
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();

@@ -90,6 +90,7 @@ public static class AttachmentEndpoints
             http.Response.Headers.XContentTypeOptions = "nosniff";
             http.Response.Headers.CacheControl = "private, no-store";
             http.Response.Headers["X-Content-SHA256"] = a.Sha256;
+            http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; sandbox";   // REOS-53: if a browser ever renders it (uploaded HTML or SVG), it runs nothing and has no origin
             // fileDownloadName -> Content-Disposition: attachment with an RFC 6266 encoded name; the name was sanitised at upload.
             return Results.File(new FileStream(r.Value.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan),
                 AttachmentService.SafeContentType(a.ContentType), AttachmentService.SanitizeFileName(a.FileName), enableRangeProcessing: false);

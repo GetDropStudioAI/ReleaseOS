@@ -26,6 +26,7 @@ public static partial class SessionEndpoints
         api.MapPut("/me/session/{clientId}", async (string clientId, PutSessionBody body, ClaimsPrincipal u, SessionService s, CancellationToken ct) =>
         {
             if (!ClientIdShape().IsMatch(clientId)) return Results.BadRequest(new { message = "clientId must be 8-64 letters, digits or dashes" });
+            if (body.Ui.ValueKind == JsonValueKind.Undefined) return Results.BadRequest(new { message = "ui is required" });   // an absent field is a default JsonElement, whose GetRawText throws (was a 500)
             var r = await s.PutAsync(Uid(u), clientId, body.SchemaVersion, body.ActiveTrainId, body.Ui.GetRawText(), ct);
             return r.IsOk ? Results.NoContent() : Results2.ToHttp(r);
         }).RequireAuthorization(Policies.Read);

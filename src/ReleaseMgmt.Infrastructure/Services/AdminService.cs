@@ -53,7 +53,7 @@ public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimePr
     public Task<ServiceResult<Teams>> CreateTeamAsync(string handle, string name, IEnumerable<string> memberUserIds, Actor actor, CancellationToken ct = default) =>
         RunAsync(async db =>
         {
-            if (!ValidHandle(handle) || string.IsNullOrWhiteSpace(name)) return Invalid<Teams>("A team needs a name and a handle (letters, digits, '.', '_' or '-')");
+            if (handle is null || !ValidHandle(handle) || string.IsNullOrWhiteSpace(name)) return Invalid<Teams>("A team needs a name and a handle (letters, digits, '.', '_' or '-')");
             var t = new Teams { Id = Ids.New(), Handle = handle.TrimStart('@'), Name = name.Trim() };
             db.Set<Teams>().Add(t);
             foreach (var m in memberUserIds.Distinct()) db.Set<TeamMembers>().Add(new TeamMembers { TeamId = t.Id, UserId = m });

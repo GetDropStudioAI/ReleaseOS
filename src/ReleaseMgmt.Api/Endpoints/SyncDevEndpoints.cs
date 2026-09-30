@@ -18,6 +18,7 @@ public static class SyncDevEndpoints
         // Raises (or repeats) an alert through the real SyncAlertWriter, so the SyncAlertRaised push reaches every open client. -> { id }
         api.MapPost("/dev/sync/raise", async (RaiseBody b, SyncAlertWriter w, CancellationToken ct) =>
         {
+            if (string.IsNullOrWhiteSpace(b.Source) || string.IsNullOrWhiteSpace(b.Kind)) return Results.BadRequest(new { message = "source and kind are required" });
             string id = "";
             for (var i = 0; i < Math.Clamp(b.Repeat ?? 1, 1, 500); i++)
                 id = await w.RaiseAsync(b.Source, b.Kind, b.Key ?? "dev", b.Message ?? $"{b.Source} {b.Kind} (dev)", b.TrainId, ct);

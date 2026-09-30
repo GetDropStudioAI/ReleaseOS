@@ -77,7 +77,9 @@ public class LiveBackupConsistencyTests : IDisposable
 
         var svc = new TaskService(new Factory(Db), TimeProvider.System);
         var actor = new Actor("rte");
-        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(seconds));
+        // Run until the minimum time AND the minimum work are both reached (a slow shared CI runner needs longer, not a weaker test); hard cap 90 s.
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         long writes = 0;
         var writers = tasks.Select(t => Task.Run(async () =>
         {
@@ -109,10 +111,12 @@ public class LiveBackupConsistencyTests : IDisposable
             Assert.False(File.Exists(file + "-wal"), "a backup is one self-contained file");
             using (var jm = c.CreateCommand()) { jm.CommandText = "PRAGMA journal_mode"; Assert.Equal("delete", jm.ExecuteScalar()); }
             await Task.Delay(20);
+            if (clock.Elapsed.TotalSeconds >= seconds && Interlocked.Read(ref writes) > 50 && backups.Count >= 3) break;
         }
+        stop.Cancel();
         await Task.WhenAll(writers);   // a failed writer (for example SQLITE_BUSY surfacing as an exception) fails the test here
 
-        Assert.True(backups.Count >= 3, $"only {backups.Count} backups completed in {seconds} s");
+        Assert.True(backups.Count >= 3, $"only {backups.Count} backups completed in {clock.Elapsed.TotalSeconds:F0} s");
         Assert.True(backups[^1].AuditRows > backups[0].AuditRows, "the writers must have been running between the first and the last backup");
         Assert.True(writes > 50, $"only {writes} writes happened");
         Console.WriteLine($"live backup consistency: {backups.Count} backups during {writes} concurrent service writes, audit rows {backups[0].AuditRows} -> {backups[^1].AuditRows}; every backup passed integrity_check and the Version/audit invariant");

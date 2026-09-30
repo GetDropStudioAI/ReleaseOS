@@ -58,8 +58,7 @@ public class ImportExportTests
               ('k5','g5','p1','Sign the release note','{rid}',NULL,1,1,'2026-10-02T00:00:00Z','{rid}');
             INSERT INTO RunbookSteps(Id,ReleaseTrainId,BundledProductId,StepCode,Section,Title,Instructions,OwnerUserId,OwnerTeamId,PlannedStartAt,PlannedDurationMin) VALUES
               ('s1','t1',NULL,'R-001','PreCheck','Confirm Go',NULL,'u-dana',NULL,'2026-10-30T01:00:00Z',5),
-              ('s2','t1','p1','R-002','Deploy','Deploy API','step 1
-            step 2, with a comma',NULL,'team-web','2026-10-30T01:05:00Z',15),
+              ('s2','t1','p1','R-002','Deploy','Deploy API','step 1'||char(10)||'step 2, with a comma',NULL,'team-web','2026-10-30T01:05:00Z',15),
               ('s3','t1',NULL,'R-003','Verify','Smoke test',NULL,'{rid}',NULL,'2026-10-30T01:20:00Z',20),
               ('s4','t2',NULL,'R-001','Deploy','Live step',NULL,'u-dana',NULL,'2026-11-20T01:00:00Z',10);
             INSERT INTO StepDependencies(StepId,DependsOnStepId) VALUES ('s2','s1'),('s3','s1'),('s3','s2');

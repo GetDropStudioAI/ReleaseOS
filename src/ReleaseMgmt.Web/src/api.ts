@@ -197,3 +197,26 @@ export const getLibraryOptions = () => get<LibraryOption[]>('/api/v1/templates/l
 export const createTemplate = (b: TemplateInput) => post<TemplateDetail>('/api/v1/templates', b)
 export const updateTemplate = (id: string, b: TemplateInput, version: number) => call<TemplateDetail>('PUT', `/api/v1/templates/${id}`, b, version)
 export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
+
+// ---- REOS-43/44: comm library, per-train messages, T-minus schedule, preview (CommLibrary.tsx, CommSchedule.tsx) ----
+export interface TokenError { kind: string; token: string; part: 'subject' | 'body'; line: number; column: number; message: string; suggestion: string | null }
+export interface CommToken { name: string; description: string }
+export interface LibraryTemplate { id: string; templateType: string; name: string; audience: string; subjectLine: string; markdownBody: string; version: number; tokensUsed: string[]; tokenErrors: TokenError[]; trainCopies: number; valid: boolean }
+export interface LibraryInput { name: string; templateType: string; audience: string; subjectLine: string; markdownBody: string }
+export interface TrainMessage { id: string; releaseTrainId: string; libraryTemplateId: string | null; libraryName: string | null; templateType: string; audience: string; subjectLine: string; markdownBody: string; version: number; dispatched: boolean; dispatchCount: number; tokensUsed: string[]; tokenErrors: TokenError[]; valid: boolean }
+export interface ScheduleItem { id: string; releaseTrainId: string; commTemplateId: string; name: string; templateType: string; audience: string; subjectLine: string; dueAt: string; sentAt: string | null; dispatchId: string | null; tMinus: number; label: string; state: 'Sent' | 'SentLate' | 'Overdue' | 'Ready' | 'Scheduled'; late: boolean; lateMinutes: number; version: number }
+export type CommTarget = 'PlainText' | 'Markdown' | 'Html' | 'JsonString'
+export interface CommPreview { subject: string | null; text: string; tokenErrors: TokenError[]; asOf: string; trainVersion: number; canDispatch: boolean; target: CommTarget; tokensUsed: string[]; templateId: string | null; templateVersion: number | null }
+export const COMM_AUDIENCES = ['Exec', 'Ops', 'SupportDesk', 'Clients', 'All'] as const
+export const getCommTokens = () => get<CommToken[]>('/api/v1/comm-library/tokens')
+export const getCommLibrary = () => get<LibraryTemplate[]>('/api/v1/comm-library')
+export const createLibraryTemplate = (b: LibraryInput) => post<LibraryTemplate>('/api/v1/comm-library', b)
+export const updateLibraryTemplate = (id: string, b: LibraryInput, version: number) => call<LibraryTemplate>('PUT', `/api/v1/comm-library/${id}`, b, version)
+export const getTrainMessages = (trainId: string) => get<TrainMessage[]>(`/api/v1/trains/${trainId}/comms`)
+export const copyToTrain = (trainId: string, libraryTemplateId: string) => post<TrainMessage>(`/api/v1/trains/${trainId}/comms`, { libraryTemplateId })
+export const updateTrainMessage = (id: string, b: { audience: string; subjectLine: string; markdownBody: string }, version: number) => call<TrainMessage>('PUT', `/api/v1/comm-templates/${id}`, b, version)
+export const getCommSchedule = (trainId: string) => get<ScheduleItem[]>(`/api/v1/trains/${trainId}/comm-schedule`)
+export const seedCommSchedule = (trainId: string, templateId: string) => post<ScheduleItem[]>(`/api/v1/trains/${trainId}/comm-schedule:seed`, { templateId })
+export const markCommSent = (id: string, version: number) => post<ScheduleItem>(`/api/v1/comm-schedule/${id}:mark-sent`, {}, version)
+export const previewComm = (trainId: string, b: { templateId?: string; libraryTemplateId?: string; subject?: string; text?: string; target?: CommTarget }) =>
+  post<CommPreview>(`/api/v1/trains/${trainId}/comms:preview`, b)

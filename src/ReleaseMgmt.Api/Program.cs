@@ -67,6 +67,7 @@ builder.Services.AddSingleton<SeedService>();
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
 builder.Services.AddSingleton<AttachmentService>();
 builder.Services.AddSingleton<AuditQueryService>();   // REOS-38 audit viewer (read-only)
+builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton(new BackupOptions(connectionString, config["Backup:Directory"] ?? "data/backups", BackupOptions.DefaultInterval));
@@ -168,6 +169,7 @@ api.MapAttachments();
 api.MapNotifications();
 api.MapTemplates();   // REOS-38
 api.MapAudit();
+api.MapComms();   // REOS-43/44
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

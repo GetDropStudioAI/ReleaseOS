@@ -222,3 +222,19 @@ table.cal td.cal-tint .accent, table.cal td.cal-sel .accent { color: color-mix(i
 .cal-issued input.wide { width: 34em; max-width: 100%; }
 @media (max-width: 800px) { table.cal td { height: 84px; padding: 2px 3px; } table.cal th { padding: 4px 3px; } }
 .cal-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* REOS-48/49 imports and exports (mockups/ImportExport.html): a summary bar with rules above and below, struck-through old values, no boxes */
+.strong { font-weight: 600; }
+.kind-tabs { flex-wrap: wrap; row-gap: 6px; margin: 6px 0 4px; }
+.kind-help { margin: 2px 0 10px; }
+h2.file-name { font-size: var(--text-drawer-title); letter-spacing: var(--tracking-title); margin: 2px 0 2px; font-weight: 600; word-break: break-all; }
+h2.aside-title { font-size: var(--text-drawer-title); letter-spacing: var(--tracking-title); margin: 2px 0 8px; }
+.import-bar { display: flex; gap: 8px 32px; align-items: baseline; flex-wrap: wrap; border-top: 1px solid var(--separator-strong); border-bottom: 1px solid var(--separator-strong); padding: 8px 0; margin: 12px 0 4px; }
+.import-bar .spacer { flex: 1; }
+.import-bar .tabs { align-items: baseline; }
+.import-bar .counts { display: inline-flex; gap: 8px 28px; flex-wrap: wrap; }
+.import-bar .big { font-size: 18px; font-weight: 600; }
+.old { color: var(--secondary); text-decoration: line-through; }
+.preview-table td { font-size: 12.5px; }
+.export-grids td { vertical-align: top; }
+.export-note { margin-top: 12px; border-top: 1px solid var(--separator-strong); padding-top: 8px; }

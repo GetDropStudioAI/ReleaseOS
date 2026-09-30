@@ -82,6 +82,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
 builder.Services.AddNotificationScheduling(config);   // REOS-37: reminders, escalation, inbox, My work, team webhooks
 builder.Services.AddCommDispatch(config);   // REOS-45: comm dispatch service, webhook sender, fail-closed default renderer
 builder.Services.AddSingleton<ReleaseMgmt.Infrastructure.Comms.ICommDispatchRenderer, ReleaseMgmt.Api.Comms.CommHydrationAdapter>();   // dispatch renders through the REOS-44 hydrator (wins over the fail-closed default)
+builder.Services.AddExchange(config, dbPath);   // REOS-48/49: CSV import (preview/commit), CSV/XLSX grid exports
 
 var roleMap = config.GetSection("Auth:RoleMap").Get<Dictionary<string, string>>() ?? new();
 var authority = config["Auth:Oidc:Authority"];
@@ -185,6 +186,7 @@ if (app.Environment.IsDevelopment()) api.MapSyncDev();   // REOS-42 dev-only see
 api.MapComms();   // REOS-43/44
 api.MapCommDispatch();   // REOS-45
 api.MapCalendar();   // REOS-51
+api.MapImports(); api.MapGridExports();   // REOS-48/49
 
 // Dev-only fake login (config Auth:Oidc:*): POST /auth/dev-login {email, name, role}. Never mapped outside Development.
 if (app.Environment.IsDevelopment())

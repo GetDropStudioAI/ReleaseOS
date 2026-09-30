@@ -63,7 +63,9 @@ test('a Release Manager writes a template: an unknown token is flagged and block
   await expect(msgs).toHaveCount(2)                                       // the library row and the train's message row
   await expect(page.locator('h2.cap', { hasText: 'R26.13 Reporting' }).first()).toBeVisible()
   await page.locator('textarea.bulk-text').fill('Tailored for this train: {Status}')
+  const saved = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/api/v1/comm-templates/') && r.ok())
   await page.locator('button:text-is("Save changes")').click()
+  await saved                                                            // the train copy's save has landed (clicking away earlier let it snap back: CI run 74)
   await page.locator('table.grid tr', { hasText: name }).first().click()                          // the library row: its text is unchanged
   await expect(page.locator('textarea.bulk-text')).toHaveValue('Changed {Status}')
 

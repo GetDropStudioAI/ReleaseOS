@@ -62,8 +62,8 @@ auth, `Content-Disposition` and download headers, XLSX (ClosedXML) parsing of un
 
 ## 3. Result
 
-**38 findings, 37 distinct defects (SEC-A3 and SEC-B6 are the same one, found by two reviewers): 3 High, 23 Medium, 11 Low.**
-Of the 37, 33 are fixed, 3 are partly fixed, and 1 is not fixed and waits on a decision. Every fix came with a test that failed before it and passes after it.
+**39 findings, 38 distinct defects (SEC-A3 and SEC-B6 are the same one, found by two reviewers): 3 High, 23 Medium, 12 Low.**
+Of the 38, 35 are fixed, 2 are partly fixed, and 1 is not fixed and waits on a decision. Every fix came with a test that failed before it and passes after it.
 Nothing Critical was found. No SQL injection, XSS, XXE, path traversal, zip slip, unsafe deserialization, SSRF to an internal address through the
 real HTTP clients, or known-vulnerable dependency was found.
 
@@ -86,13 +86,13 @@ real HTTP clients, or known-vulnerable dependency was found.
 
 | Top 10:2025 | Findings | Verdict now |
 |---|---|---|
-| A03 Supply chain | SEC-E3 | Dependencies clean; CI token least privilege; action SHA pinning open (Q-SEC-E2) |
+| A03 Supply chain | SEC-E3 | Dependencies clean; CI token least privilege; actions pinned to commit SHAs (keeping them current: Q-SEC-E2) |
 | A04 Cryptographic failures | SEC-B3, B11, B12 | Fixed |
 | A05 Injection | SEC-D5 (log), D6 (Slack/Teams markup) | Fixed; SQL, XSS, header, path, zip, XXE, ICS and template injection checked clean |
 | A06 Insecure design | SEC-E1, E2 (DNS rebinding), A1 | Fixed |
 | A08 Integrity | SEC-A2, C4 | Fixed; no unsafe deserialization |
 | A09 Logging and alerting | SEC-E4, B10, D5 | Fixed |
-| A10 Exceptional conditions | SEC-B13 | Fixed; no swallowed exceptions |
+| A10 Exceptional conditions | SEC-B13, E7 (backups failed under write load) | Fixed; no swallowed exceptions |
 
 ## 4. All findings
 
@@ -137,7 +137,8 @@ Detail, evidence and reproduction tests for each are in the per-area reports: [a
 | SEC-D9 | Stored previews unbounded per user and never purged | Low | Fixed |
 | SEC-D10 | Calendar-feed brake behind a proxy that sends no client address | Low | Not fixed (Q-SEC-D5; forwarded headers fix the usual case) |
 | SEC-E2 | `start.py` control channel accepted any Host | Low | Fixed |
-| SEC-E3 | CI token default permissions; actions on mutable tags | Low | Partly fixed (Q-SEC-E2) |
+| SEC-E3 | CI token default permissions; actions on mutable tags | Low | Fixed (keeping pins current: Q-SEC-E2) |
+| SEC-E7 | Backups failed with "database is locked" under write load (no busy timeout, no retry) | Low | Fixed |
 | SEC-E6 | No Content-Security-Policy on the web page | Low | Fixed |
 
 ## 5. Decisions for the product owner
@@ -145,7 +146,7 @@ Detail, evidence and reproduction tests for each are in the per-area reports: [a
 Recorded in [QUESTIONS.md](QUESTIONS.md), each with the safest default already built: Q-SEC-A1 to A5 (override-request expiry, Viewers seeing
 emails, import-preview visibility), Q-SEC-B1 and B4 to B9 (whether a pilot may ever run through `start.py`, session lengths, a durable sign-out list,
 feed-link expiry, IdP subject binding, unmapped users), Q-SEC-C1 to C3 (NAT64 prefixes, status-name bound, connector host allowlist), Q-SEC-D1 to D6
-(per-field limits, export retention, the feed brake), Q-SEC-E1 to E3 (production `AllowedHosts`, action pinning, inline style in the CSP).
+(per-field limits, export retention, the feed brake), Q-SEC-E1 to E3 (production `AllowedHosts`, keeping action pins current, inline style in the CSP).
 The most important: **Q-SEC-E1** (production must set `AllowedHosts`), **Q-SEC-B1** (never run a pilot in Development) and **Q-SEC-C3** (restrict
 connectors to the real Atlassian and ServiceNow hosts).
 

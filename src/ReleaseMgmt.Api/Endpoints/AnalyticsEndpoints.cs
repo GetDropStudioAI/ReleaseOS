@@ -33,9 +33,9 @@ public static class AnalyticsEndpoints
         }).RequireAuthorization(Policies.Read);
     }
 
-    private static IResult Bad(string message) => Results.Json(new { guard = "InvalidFilter", message }, statusCode: StatusCodes.Status400BadRequest);
+    internal static IResult Bad(string message) => Results.Json(new { guard = "InvalidFilter", message }, statusCode: StatusCodes.Status400BadRequest);
 
-    private static bool TryWindow(HttpRequest req, TimeProvider time, out AnalyticsWindow w, out IResult? bad)
+    internal static bool TryWindow(HttpRequest req, TimeProvider time, out AnalyticsWindow w, out IResult? bad)
     {
         w = null!; bad = null;
         string? Get(string k) => req.Query[k].ToString() is { Length: > 0 } v ? v.Trim() : null;

@@ -88,4 +88,17 @@ public static class Guards
     public const string OverrideSelfApproval = "OverrideSelfApproval";
     public const string OverrideApproverRole = "OverrideApproverRole";
     public const string OverrideRequesterRole = "OverrideRequesterRole";
+    // REOS-81: products and gates added, edited and removed on a train
+    public const string PlanLocked = "PlanLocked";
+    public const string InvalidProduct = "InvalidProduct";
+    public const string DuplicateProduct = "DuplicateProduct";
+    public const string ProductInUse = "ProductInUse";
+    public const string InvalidGate = "InvalidGate";
+    public const string DuplicateGateName = "DuplicateGateName";
+    public const string GateNotEditable = "GateNotEditable";
+    public const string GateNotRemovable = "GateNotRemovable";
+    public const string GateInUse = "GateInUse";
+    public const string RequiredBeforePassed = "RequiredBeforePassed";
+    public const string SequenceBeforeCertified = "SequenceBeforeCertified";
+    public const string StatusNotEditable = "StatusNotEditable";
 }

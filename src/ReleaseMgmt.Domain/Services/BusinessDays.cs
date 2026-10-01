@@ -21,6 +21,23 @@ public static class BusinessDays
         return d;
     }
 
+    /// <summary>The offset N for which <see cref="SubtractBusinessDays"/>(target, N) is exactly <paramref name="dueOn"/>, or null when no N gives that date
+    /// (a weekend or holiday, a date after the target, or further back than <paramref name="maxDays"/> business days). REOS-81: a gate given a due date stores this offset.</summary>
+    public static int? OffsetOf(DateOnly target, DateOnly dueOn, IReadOnlySet<DateOnly> holidays, int maxDays)
+    {
+        if (dueOn > target) return null;
+        if (dueOn == target) return 0;
+        if (!IsBusinessDay(dueOn, holidays)) return null;
+        var n = 0;
+        for (var d = target.AddDays(-1); d >= dueOn; d = d.AddDays(-1))
+        {
+            if (!IsBusinessDay(d, holidays)) continue;
+            if (++n > maxDays) return null;
+            if (d == dueOn) return n;
+        }
+        return null;
+    }
+
     /// <summary>The next business day strictly after <paramref name="from"/> (escalation level 2 is +1 business day).</summary>
     public static DateOnly AddBusinessDays(DateOnly from, int days, IReadOnlySet<DateOnly> holidays)
     {

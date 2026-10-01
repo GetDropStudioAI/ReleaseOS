@@ -13,15 +13,17 @@ namespace ReleaseMgmt.Api.Endpoints;
 public static class TrainQueryEndpoints
 {
     public sealed record StreamRow(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, int Blockers, string[] Gates, string? CloseCode, string? EndedOn, int Version);
-    public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, int TMinus, string RequiredBeforeStatus, string? OwnerName, string? CertifiedBy, string? CertifiedOn, int TasksDone, int TasksTotal, int Version);
+    public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, int TMinus, string RequiredBeforeStatus, string? OwnerName, string? CertifiedBy, string? CertifiedOn, int TasksDone, int TasksTotal, int Version, int SequenceOrder);   // SequenceOrder: REOS-81 (insert a gate before another)
     public sealed record TrainDetail(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, string? ChangeTicketNumber, string? CloseCode, bool RollbackRehearsed, string? NextStatus, int Version, GateRow[] Gates);
 
     public sealed record FreezeAhead(string Id, string Name, string Kind, string StartsAt, string EndsAt, string Scope, bool Active, int OverridesGranted);
-    public sealed record ProductRow(string Id, string Name, string VersionTag, string ProjectCode, int TasksDone, int TasksTotal, string[] OpenBlockers, string Health);
+    public sealed record ProductRow(string Id, string Name, string VersionTag, string ProjectCode, int TasksDone, int TasksTotal, string[] OpenBlockers, string Health, int Version);   // Version: REOS-81 (If-Match on edit/remove)
     public sealed record ProductsResponse(int TasksDone, int TasksTotal, ProductRow[] Products);
     public sealed record TaskRow(string Id, string Description, string? Owner, string? Product, bool Done, string? CompletedAt, string? CompletedBy, int Version);
     public sealed record Certify(bool Eligible, string[] Reasons);
-    public sealed record GateDetail(string Id, string TrainId, string TrainStatus, string Name, string Class, string Status, string DueOn, int TMinus, string? OwnerName, int Version, TaskRow[] Tasks, Certify Certify);
+    // REOS-81: SequenceOrder, OffsetDays, RequiredBeforeStatus and the owner ids let the Inspector edit the gate's definition.
+    public sealed record GateDetail(string Id, string TrainId, string TrainStatus, string Name, string Class, string Status, string DueOn, int TMinus, string? OwnerName, int Version, TaskRow[] Tasks, Certify Certify,
+                                    int SequenceOrder, int OffsetDays, string RequiredBeforeStatus, string? OwnerUserId, string? OwnerTeamId, string TargetReleaseDate);
     public sealed record WindowBody(DateTime StartsAt, DateTime EndsAt);
     public sealed record WindowRow(string StartsAt, string EndsAt, int Version);
 
@@ -98,7 +100,7 @@ public static class TrainQueryEndpoints
                 var done = tasks[p.Id].Count(k => k.IsCompleted); var total = tasks[p.Id].Count();
                 var open = blockers[p.Id].Select(b => b.Severity).ToArray();
                 var health = open.Length > 0 ? "At risk" : total > 0 && done == total ? "Ready" : "On track";
-                return new ProductRow(p.Id, p.ProductName, p.VersionTag, p.ProjectCode, done, total, open, health);
+                return new ProductRow(p.Id, p.ProductName, p.VersionTag, p.ProjectCode, done, total, open, health, p.Version);
             }).ToArray();
             return Results.Ok(new ProductsResponse(rows.Sum(r => r.TasksDone), rows.Sum(r => r.TasksTotal), rows));
         }).RequireAuthorization(Policies.Read);
@@ -129,7 +131,8 @@ public static class TrainQueryEndpoints
                 [.. tasks.Select(k => new TaskRow(k.Id, k.TaskDescription, k.OwnerUserId is null ? teamNames.GetValueOrDefault(k.OwnerTeamId ?? "") : people.GetValueOrDefault(k.OwnerUserId),
                     k.BundledProductId is null ? null : products.GetValueOrDefault(k.BundledProductId), k.IsCompleted, k.CompletedAt?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
                     k.CompletedByUserId is null ? null : people.GetValueOrDefault(k.CompletedByUserId), k.Version))],
-                new Certify(reasons.Count == 0, [.. reasons])));
+                new Certify(reasons.Count == 0, [.. reasons]),
+                g.SequenceOrder, g.OffsetDays, g.RequiredBeforeStatus, g.OwnerUserId, g.OwnerTeamId, train.TargetReleaseDate.ToString("yyyy-MM-dd")));
         }).RequireAuthorization(Policies.Read);
 
         api.MapGet("/trains/{id}/window", async (string id, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
@@ -166,7 +169,7 @@ public static class TrainQueryEndpoints
                 [.. gates.Select(g => new GateRow(g.Id, g.GateName, g.GateClass, g.Status, g.DueOn.ToString("yyyy-MM-dd"), BusinessDays.Between(g.DueOn, t.TargetReleaseDate, holidays),
                     g.RequiredBeforeStatus, g.OwnerUserId is null ? teamNames.GetValueOrDefault(g.OwnerTeamId ?? "") : people.GetValueOrDefault(g.OwnerUserId),
                     g.CertifiedByUserId is null ? null : people.GetValueOrDefault(g.CertifiedByUserId), g.CertifiedAt?.ToString("yyyy-MM-dd"),
-                    tasks[g.Id].Count(k => k.IsCompleted), tasks[g.Id].Count(), g.Version))]));
+                    tasks[g.Id].Count(k => k.IsCompleted), tasks[g.Id].Count(), g.Version, g.SequenceOrder))]));
         }).RequireAuthorization(Policies.Read);
     }
 }

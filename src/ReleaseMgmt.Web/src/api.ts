@@ -255,3 +255,27 @@ export interface ExportJob {
 export const listExportJobs = (trainId: string) => get<ExportJob[]>(`/api/v1/export-jobs?trainId=${encodeURIComponent(trainId)}`)
 export const createExportJob = (trainId: string, kind: ExportKind, format: 'pdf' | 'zip' = 'pdf') => post<ExportJob>(`/api/v1/trains/${trainId}/export-jobs`, { kind, format })
 export const exportJobFileUrl = (id: string) => `/api/v1/export-jobs/${id}/file`
+
+// ---- REOS-81: add, edit and remove a train's products and gates (Planning.tsx). Edits and removals carry If-Match. ------------------------------
+export type ProductRowV = ProductRow & { version: number }
+export interface ProductInput { name?: string; versionTag?: string; projectCode?: string }
+export interface ProductSaved { id: string; releaseTrainId: string; productName: string; versionTag: string; projectCode: string; version: number }
+export const addProduct = (trainId: string, p: ProductInput) => post<ProductSaved>(`/api/v1/trains/${trainId}/products`, p)
+export const patchProduct = (id: string, p: ProductInput, version: number) => patch<ProductSaved>(`/api/v1/products/${id}`, p, version)
+export const removeProduct = (id: string, version: number) => delIfMatch<ProductSaved>(`/api/v1/products/${id}`, version)
+export const GATE_CLASSES = ['Standard', 'Compliance'] as const
+export const REQUIRED_BEFORE = ['Gated', 'Executing', 'Complete'] as const
+/** Exactly one of offsetDays / dueOn and one of ownerUserId / ownerTeamId. A gate's status is never part of this: it moves only through its actions. */
+export interface GateInput {
+  gateName?: string; gateClass?: string; offsetDays?: number; dueOn?: string; requiredBeforeStatus?: string
+  ownerUserId?: string | null; ownerTeamId?: string | null; sequenceOrder?: number
+}
+export interface GateSaved {
+  id: string; releaseTrainId: string; gateName: string; gateClass: string; sequenceOrder: number; offsetDays: number; dueOn: string; requiredBeforeStatus: string
+  ownerUserId: string | null; ownerTeamId: string | null; status: string; version: number
+}
+export type GateDefinition = GateDetail & { sequenceOrder: number; offsetDays: number; requiredBeforeStatus: string; ownerUserId: string | null; ownerTeamId: string | null; targetReleaseDate: string }
+export const getGateDefinition = (id: string) => get<GateDefinition>(`/api/v1/gates/${id}`)
+export const addGate = (trainId: string, g: GateInput) => post<GateSaved>(`/api/v1/trains/${trainId}/gates`, g)
+export const patchGate = (id: string, g: GateInput, version: number) => patch<GateSaved>(`/api/v1/gates/${id}`, g, version)
+export const removeGate = (id: string, version: number) => delIfMatch<GateSaved>(`/api/v1/gates/${id}`, version)

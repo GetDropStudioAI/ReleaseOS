@@ -60,7 +60,10 @@ test('a window edit that loses the race keeps the draft and offers overwrite or 
   await expect(b.locator('label:has-text("Starts") input')).toHaveValue('2026-12-01T20:00')      // Bob's draft is intact
   await expect(b.locator('label:has-text("Ends") input')).toHaveValue('2026-12-01T23:00')
 
-  await b.click('button:has-text("Overwrite with mine")')                                          // Bob decides
+  // Bob decides. The conflict line clears as the save starts, not when it lands, so wait for the PUT itself before reading the window back.
+  const overwrite = b.waitForResponse(r => r.request().method() === 'PUT' && r.url().endsWith(`/api/v1/trains/${t.id}/window`))
+  await b.click('button:has-text("Overwrite with mine")')
+  expect((await overwrite).status()).toBe(200)
   await expect(b.locator('.conflict')).toHaveCount(0)
   const now = await b.evaluate(async id => (await (await fetch(`/api/v1/trains/${id}/window`)).json() as { startsAt: string }).startsAt, t.id)
   expect(now).toBe('2026-12-02T02:00:00Z')                                                          // 20:00 on 1 Dec in the display zone (America/Chicago, CST = UTC-6, D24)

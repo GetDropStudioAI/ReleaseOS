@@ -59,10 +59,15 @@ test('Inbox: unread notice is semibold with words, nav shows the count, opening 
   await expect(nav(page).getByRole('link', { name: /^Inbox \(\d+\)$/ })).toBeVisible()
   await scan(page, 'Inbox')
 
-  // j selects the newest row (the drill's notice), Enter opens its train's live run and marks it read
+  // j moves down to the drill's notice, Enter opens its train's live run and marks it read. The notice is not always the newest row: in a full run
+  // an earlier spec's failing connector keeps notifying every RTE (sync alerts, which have no train to open), so walk to it rather than assume row 1.
   await page.locator('h1').click()
-  await page.keyboard.press('j')
-  await expect(page.locator('tbody tr').first()).toHaveAttribute('aria-selected', 'true')
+  const rows = page.locator('tbody tr')
+  const target = await rows.evaluateAll(trs => trs.findIndex(tr => tr.textContent?.includes('Step R-002 started')))
+  expect(target).toBeGreaterThanOrEqual(0)
+  for (let i = 0; i <= target; i++) await page.keyboard.press('j')
+  await expect(rows.nth(target)).toHaveAttribute('aria-selected', 'true')
+  await expect(rows.nth(target)).toContainText('Step R-002 started')
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}/live`))
 

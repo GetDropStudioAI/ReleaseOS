@@ -40,7 +40,7 @@ jobs:
         run: dotnet build ReleaseMgmt.sln --configuration Release
       - name: Test
         run: dotnet test ReleaseMgmt.sln --configuration Release --no-build
-      - name: Schema reference suite (89 cases)
+      - name: Schema reference suite (94 cases)
         run: python tests/reference/test_schema.py
       - name: Manual upgrade scripts reach db/schema.sql
         run: python tests/reference/test_upgrades.py

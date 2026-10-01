@@ -11,6 +11,7 @@ import { commsKey, type CommsDraft } from './CommsDrawer'
 import { ExportsPanel } from './ExportsPanel'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { scrollAndFocus } from './focus'
+import { MilestonesSection, milestoneState, useMilestones } from './Milestones'
 import { advanceTrain, getFreezesAhead, getReadiness, getStream, getTrain, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
 
 // Aborted trains keep a group of their own (shown only when the list has any), so a train never silently vanishes from the Stream (UX review 26).
@@ -81,6 +82,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   const [chosenGate, setChosenGate] = useState<string | null>(null)
   const [goDraft, setGoDraft] = useDraft<GoNoGoDraft>(goNoGoKey(id))   // the header button and the Go/No-Go section share one draft
   const [comms, setComms] = useDraft<CommsDraft>(commsKey(id))   // REOS-45: App swaps the right drawer to the Comms drawer while this is open
+  const milestones = useMilestones(id, refreshKey)   // Q-0843: the timeline's ◆ markers and the Milestones section share one fetch
   useEffect(() => {
     let live = true
     setErr(null); setRErr(null)
@@ -151,8 +153,10 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       )}
       {t.nextStatus && rErr && <p className="bad" role="alert">✗ The readiness for {t.nextStatus} could not be loaded: {rErr} <button type="button" className="text" onClick={retry}>Retry</button></p>}
       <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} canPlan={canPlan} trainStatus={t.status} onChanged={onChanged} />
-      <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} trainId={t.id} trainStatus={t.status} canPlan={canPlan} onChanged={onChanged} />
+      <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} trainId={t.id} trainStatus={t.status} canPlan={canPlan} onChanged={onChanged}
+        milestones={(milestones.rows ?? []).map(m => ({ id: m.id, name: m.name, dueOn: m.dueOn, tMinus: m.tMinus, state: milestoneState(m) }))} />
       {checklistGate && <Checklist gateId={checklistGate.id} trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
+      <MilestonesSection trainId={t.id} rows={milestones.rows} error={milestones.error} canPlan={canPlan} onChanged={onChanged} />
       <GoNoGo trainId={t.id} trainVersion={t.version} canDecide={canDecide} refreshKey={refreshKey} onChanged={onChanged} />
       <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <FreezesPanel trainId={t.id} refreshKey={refreshKey} onChanged={onChanged} />

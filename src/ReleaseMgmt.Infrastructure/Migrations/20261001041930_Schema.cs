@@ -5,7 +5,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
-    /// <summary>Creates the 48 tables and 22 indexes by executing db/schema.sql's DDL verbatim (the contract, CLAUDE.md rule 1).
+    /// <summary>Creates the 49 tables and 23 indexes by executing db/schema.sql's DDL verbatim (the contract, CLAUDE.md rule 1).
     /// The EF model (ModelMap) is asserted against the result by SchemaContractTests. Forward-only.</summary>
     public partial class Schema : Migration
     {

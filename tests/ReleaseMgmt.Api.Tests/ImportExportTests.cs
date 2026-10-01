@@ -782,7 +782,7 @@ public class ImportExportTests
         Assert.Equal(["R26.10"], (await Get("/api/v1/exports/trains.csv?status=Planning")).Skip(1).Select(r => r[0]).ToArray());
         Assert.Equal(HttpStatusCode.BadRequest, (await w.Rte.GetAsync("/api/v1/exports/gates.csv?train=nope")).StatusCode);
         var g = await Ok(await w.Rte.GetAsync("/api/v1/exports/grids"));
-        Assert.Equal(17, g.GetArrayLength());
+        Assert.Equal(18, g.GetArrayLength());   // 17 + milestones (Q-0845)
         Assert.Equal(9, g.EnumerateArray().Count(x => x.GetProperty("importKind").ValueKind == JsonValueKind.String));
     }
 

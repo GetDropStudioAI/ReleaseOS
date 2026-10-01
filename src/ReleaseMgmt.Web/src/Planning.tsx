@@ -180,24 +180,30 @@ export function Products({ trainId, refreshKey, selection, onSelect, canPlan = f
 }
 
 // ---- Gate timeline: x is in business days (T−n), so a gap of one business day is one step wherever weekends fall ------------------------
-export function Timeline({ gates, todayT, targetDate, selectedId, onSelect, trainId, trainStatus, canPlan = false, onChanged }: { gates: GateRow[]; todayT: number; targetDate: string; selectedId: string | null; onSelect: (id: string) => void; trainId?: string; trainStatus?: string; canPlan?: boolean; onChanged?: () => void }) {
+/** A milestone marker on the timeline (Q-0843): state is the word and colour class from Milestones.milestoneState. */
+export interface TimelineMilestone { id: string; name: string; dueOn: string; tMinus: number; state: { cls: string; word: string } }
+export function Timeline({ gates, todayT, targetDate, selectedId, onSelect, trainId, trainStatus, canPlan = false, onChanged, milestones = [] }: { gates: GateRow[]; todayT: number; targetDate: string; selectedId: string | null; onSelect: (id: string) => void; trainId?: string; trainStatus?: string; canPlan?: boolean; onChanged?: () => void; milestones?: TimelineMilestone[] }) {
   const W = 730, L = 50, R = 680
-  // The axis spans the first gate to the target (or to today if the target has passed); "now" is pinned to the left edge when it is earlier than the first gate.
-  const max = Math.max(1, ...gates.map(g => g.tMinus))
-  const min = Math.min(0, todayT)
+  // The axis spans the first gate (or milestone) to the target (or to today, or a milestone, after it); "now" is pinned to the left edge when it is earlier than the first gate.
+  const max = Math.max(1, ...gates.map(g => g.tMinus), ...milestones.map(m => m.tMinus))
+  const min = Math.min(0, todayT, ...milestones.map(m => m.tMinus))
   const x = (t: number) => L + ((max - Math.min(t, max)) / (max - min)) * (R - L)
   const nowX = x(todayT)
   const nowPinned = todayT > max
   const first = (name: string | null) => name ? name.split(' ')[0] : ''
   const stateText = (g: GateRow) => g.status === 'Certified' ? `✓ ${g.certifiedOn ? day(g.certifiedOn) : ''}${g.certifiedBy ? ' · ' + first(g.certifiedBy) : ''}`
     : `${(STATUS[g.status] ?? STATUS.Pending).word}${g.ownerName ? ' · ' + first(g.ownerName) : ''}`
+  // Milestones (Q-0843) sit in their own lane under the gates: a ◆ on a hairline from the axis, then "name · date" and the state word, alternating two rows.
+  const H = milestones.length > 0 ? 156 : 104
+  const targetX = x(0)
   return (
     <section aria-label="Gate timeline">
-      <div className="section-head"><h2 className="cap dark">Gates · business days to target</h2>
+      <div className="section-head"><h2 className="cap dark">Gates{milestones.length > 0 ? ' and milestones' : ''} · business days to target</h2>
         {canPlan && trainId && !planLocked(trainStatus) && <AddGateButton trainId={trainId} trainStatus={trainStatus} />}</div>
       {canPlan && trainId && !planLocked(trainStatus) && <AddGate trainId={trainId} trainStatus={trainStatus} gates={gates} onAdded={id => { onChanged?.(); onSelect(id) }} />}
-      <svg className="timeline" width="100%" viewBox={`0 0 ${W} 104`} role="group"
-           aria-label={`Gate timeline to ${day(targetDate)}: ` + gates.map(g => `${g.name} ${STATUS[g.status]?.word ?? g.status}`).join(', ')}>
+      <svg className="timeline" width="100%" viewBox={`0 0 ${W} ${H}`} role="group"
+           aria-label={`Gate timeline to ${day(targetDate)}: ` + gates.map(g => `${g.name} ${STATUS[g.status]?.word ?? g.status}`).join(', ')
+             + (milestones.length > 0 ? '; milestones: ' + milestones.map(m => `${m.name} ${day(m.dueOn)} ${m.state.word.replace('✓ ', '')}`).join(', ') : '')}>
         <line className="tl-axis" x1={L} x2={R} y1="52" y2="52" />
         <line className="tl-now" x1={nowX} x2={nowX} y1="16" y2="62" strokeDasharray="3 3" />
         <text className="tl-now-label" x={nowX + 4} y="11">now{nowPinned ? ` · ${tMinus(todayT)}` : ''}</text>
@@ -216,9 +222,22 @@ export function Timeline({ gates, todayT, targetDate, selectedId, onSelect, trai
             </g>
           )
         })}
-        <g><path className="tl-target" d={`M${R} 45 L${R + 7} 52 L${R} 59 L${R - 7} 52 Z`} />
-          <text className="tl-name" x={R + 8} y="30" textAnchor="end">Target</text>
-          <text className="tl-day mono" x={R + 8} y="74" textAnchor="end">{day(targetDate)} · T0</text></g>
+        {milestones.map((m, i) => {
+          const mx = x(m.tMinus)
+          const anchor = mx < L + 20 ? 'start' : mx > R - 20 ? 'end' : 'middle'
+          const labelY = i % 2 === 0 ? 132 : 148
+          return (
+            <g key={m.id} className="tl-ms" role="img" aria-label={`Milestone ${m.name}, ${day(m.dueOn)}, ${m.state.word.replace('✓ ', '')}`} data-testid="timeline-milestone">
+              <title>{`${m.name} · ${day(m.dueOn)} · ${m.state.word}`}</title>
+              <line className="tl-ms-tick" x1={mx} x2={mx} y1="58" y2={labelY - 26} strokeDasharray="1 2" />
+              <text className={`tl-ms-glyph ${m.state.cls}`} x={mx} y={labelY - 14} textAnchor="middle" aria-hidden="true">◆</text>
+              <text className="tl-ms-name" x={mx} y={labelY} textAnchor={anchor} aria-hidden="true">{m.name} · <tspan className="tl-day mono">{day(m.dueOn)}</tspan> <tspan className={m.state.cls}>{m.state.word}</tspan></text>
+            </g>
+          )
+        })}
+        <g><path className="tl-target" d={`M${targetX} 45 L${targetX + 7} 52 L${targetX} 59 L${targetX - 7} 52 Z`} />
+          <text className="tl-name" x={targetX + 8} y="30" textAnchor="end">Target</text>
+          <text className="tl-day mono" x={targetX + 8} y="74" textAnchor="end">{day(targetDate)} · T0</text></g>
       </svg>
     </section>
   )

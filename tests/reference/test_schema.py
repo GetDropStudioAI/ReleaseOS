@@ -223,5 +223,15 @@ check(db, "UPDATE Users SET IdpIssuer='https://idp.example/' WHERE Id='dev'", Fa
 check(db, "INSERT INTO SessionRevocations(SessionId,UserId,RevokedAt,ExpiresAt) VALUES('ab12','rte',?,'2026-10-21T02:00:00Z')", True, "record a signed-out session", (NOW,))
 check(db, "INSERT INTO SessionRevocations(SessionId,UserId,RevokedAt,ExpiresAt) VALUES('ab12','rte',?,'2026-10-21T02:00:00Z')", False, "same session revoked twice", (NOW,), expect="UNIQUE")
 
+print("Train milestones (informational key dates)")
+db5 = db_fresh()
+db5.execute("INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Ops')")
+M = "INSERT INTO TrainMilestones(Id,ReleaseTrainId,Name,DueOn,OwnerUserId,OwnerTeamId,IsDone,DoneAt,DoneByUserId) VALUES(?,'t1',?,?,?,?,?,?,?)"
+check(db5, M, True, "milestone with no owner", ('m1','Code complete','2026-10-16',None,None,0,None,None))
+check(db5, M, False, "milestone owned by a user and a team", ('m2','UAT sign-off','2026-10-21','rte','tm1',0,None,None), expect="CHECK")
+check(db5, M, False, "milestone name over 200 characters", ('m3','x'*201,'2026-10-21',None,None,0,None,None), expect="CHECK")
+check(db5, M, False, "milestone due date that is not a date", ('m4','UAT sign-off','2026-10-32',None,None,0,None,None), expect="CHECK")
+check(db5, M, False, "done milestone without who and when", ('m5','UAT sign-off','2026-10-21',None,'tm1',1,None,None), expect="CHECK")
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

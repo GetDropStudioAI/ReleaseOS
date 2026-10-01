@@ -66,8 +66,8 @@ public sealed class SchemaContractTests : IDisposable
     {
         var migrated = Master(Migrated());
         var reference = Master(FromSchemaSql());
-        Assert.Equal(48, reference.Count(r => r.Type == "table"));
-        Assert.Equal(22, reference.Count(r => r.Type == "index"));
+        Assert.Equal(49, reference.Count(r => r.Type == "table"));   // 48 + TrainMilestones (REOS-84)
+        Assert.Equal(23, reference.Count(r => r.Type == "index"));   // 22 + IX_Milestones_Train
         Assert.Equal(reference.Select(r => (r.Type, r.Name)), migrated.Select(r => (r.Type, r.Name)));
         foreach (var (a, b) in reference.Zip(migrated)) Assert.Equal(a.Sql, b.Sql); // DDL text identical, incl. CHECKs
     }

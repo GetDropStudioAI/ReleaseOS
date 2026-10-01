@@ -22,7 +22,7 @@ public static class IcsScopes
 /// <item>DTSTAMP and LAST-MODIFIED come from stored timestamps (train UpdatedAt, gate LastChangedAt), never from the clock: an unchanged database yields a byte-identical file.</item>
 /// <item>Events are written in UID order.</item>
 /// </list>
-/// Timed events (deployment windows, runbook steps) are UTC in the file; gate due dates, target dates and freeze/chill ranges are all-day (VALUE=DATE).
+/// Timed events (deployment windows, runbook steps) are UTC in the file; gate due dates, milestones, target dates and freeze/chill ranges are all-day (VALUE=DATE).
 /// </summary>
 public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
 {
@@ -53,6 +53,8 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
             bool Mine(string? uid, string? tid) => uid == userId || (tid is not null && teamIds.Contains(tid));
             foreach (var g in (await db.Set<StageGates>().AsNoTracking().Where(g => g.Status != "Certified" && g.Status != "Waived").ToListAsync(ct)).Where(g => byId.ContainsKey(g.ReleaseTrainId) && Mine(g.OwnerUserId, g.OwnerTeamId)))
                 events.Add(GateEvent(g, byId[g.ReleaseTrainId]));
+            foreach (var m in (await db.Set<TrainMilestones>().AsNoTracking().Where(m => !m.IsDone).ToListAsync(ct)).Where(m => byId.ContainsKey(m.ReleaseTrainId) && Mine(m.OwnerUserId, m.OwnerTeamId)))
+                events.Add(MilestoneEvent(m, byId[m.ReleaseTrainId]));
             foreach (var s in (await db.Set<RunbookSteps>().AsNoTracking().ToListAsync(ct)).Where(s => byId.ContainsKey(s.ReleaseTrainId) && Mine(s.OwnerUserId, s.OwnerTeamId)))
             {
                 var t = byId[s.ReleaseTrainId];
@@ -81,6 +83,7 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
                 events.Add(new Ev($"{w.Id}-window@releasemgmt", $"{t.Title}: deployment window", Utc(w.StartsAt), Utc(w.EndsAt), (w.Version - 1) + (t.Version - 1), t.UpdatedAt));
             }
             foreach (var g in gates) events.Add(GateEvent(g, byId[g.ReleaseTrainId]));
+            foreach (var m in (await db.Set<TrainMilestones>().AsNoTracking().ToListAsync(ct)).Where(m => byId.ContainsKey(m.ReleaseTrainId))) events.Add(MilestoneEvent(m, byId[m.ReleaseTrainId]));
             // A train feed and the all-trains feed carry the freezes too, so the calendar shows why a date is blocked.
             events.AddRange(await FreezeEvents(db, ct));
         }
@@ -100,6 +103,11 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
     private static Ev GateEvent(StageGates g, ReleaseTrains t) =>
         new($"{g.Id}-gate@releasemgmt", $"{t.Title}: {g.GateName} due", Day(g.DueOn), Day(g.DueOn.AddDays(1)), (g.Version - 1) + (t.Version - 1),
             g.LastChangedAt is DateTime c && c > t.UpdatedAt ? c : t.UpdatedAt);
+
+    /// <summary>All-day on the milestone's date; UID <c>{id}-milestone@releasemgmt</c> (Q-0844). The title says "done" once it is, so a subscriber sees it without opening the app.</summary>
+    private static Ev MilestoneEvent(TrainMilestones m, ReleaseTrains t) =>
+        new($"{m.Id}-milestone@releasemgmt", $"{t.Title}: {m.Name}{(m.IsDone ? " (done)" : "")}", Day(m.DueOn), Day(m.DueOn.AddDays(1)), (m.Version - 1) + (t.Version - 1),
+            m.LastChangedAt is DateTime c && c > t.UpdatedAt ? c : t.UpdatedAt);
 
     private static async Task<IEnumerable<Ev>> FreezeEvents(ReleaseDbContext db, CancellationToken ct) =>
         (await db.Set<FreezeWindows>().AsNoTracking().ToListAsync(ct)).Select(w =>

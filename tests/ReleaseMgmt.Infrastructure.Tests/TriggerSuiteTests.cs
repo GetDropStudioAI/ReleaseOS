@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Tests;
 
 /// <summary>
-/// Port of tests/reference/test_schema.py: same 89 cases, same order, same expected messages, run against the
+/// Port of tests/reference/test_schema.py: same 94 cases, same order, same expected messages, run against the
 /// EF-migrated database (not schema.sql directly). The Python oracle stays and must keep passing.
 /// Sections that share a database in the oracle share one in-order scenario here.
 /// </summary>
@@ -310,5 +310,18 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         Check(db3, Certify("g2", "gov2"), false, "certify Compliance gate with zero tasks", expect: "at least one task");
         Exec(db3, "UPDATE StageGates SET GateClass='Standard' WHERE Id='g2'");
         Check(db3, Certify("g2", "gov2"), true, "Standard gate with zero tasks may certify");
+    }
+
+    [Fact]
+    public void Train_milestones_informational_key_dates()
+    {
+        using var db5 = fx.Fresh();
+        Exec(db5, "INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Ops')");
+        const string M = "INSERT INTO TrainMilestones(Id,ReleaseTrainId,Name,DueOn,OwnerUserId,OwnerTeamId,IsDone,DoneAt,DoneByUserId) VALUES(?,'t1',?,?,?,?,?,?,?)";
+        Check(db5, M, true, "milestone with no owner", ["m1", "Code complete", "2026-10-16", null, null, 0, null, null]);
+        Check(db5, M, false, "milestone owned by a user and a team", ["m2", "UAT sign-off", "2026-10-21", "rte", "tm1", 0, null, null], "CHECK");
+        Check(db5, M, false, "milestone name over 200 characters", ["m3", new string('x', 201), "2026-10-21", null, null, 0, null, null], "CHECK");
+        Check(db5, M, false, "milestone due date that is not a date", ["m4", "UAT sign-off", "2026-10-32", null, null, 0, null, null], "CHECK");
+        Check(db5, M, false, "done milestone without who and when", ["m5", "UAT sign-off", "2026-10-21", null, "tm1", 1, null, null], "CHECK");
     }
 }

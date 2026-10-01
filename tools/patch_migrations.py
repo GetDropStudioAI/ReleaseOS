@@ -5,7 +5,7 @@ import re, glob, pathlib
 d = pathlib.Path(__file__).resolve().parent.parent / "src/ReleaseMgmt.Infrastructure/Migrations"
 NS = "ReleaseMgmt.Infrastructure.Migrations"
 BODY = {
- "Schema": ("Creates the 48 tables and 22 indexes by executing db/schema.sql's DDL verbatim (the contract, CLAUDE.md rule 1).\n    /// The EF model (ModelMap) is asserted against the result by SchemaContractTests. Forward-only.", "SchemaSql.TablesAndIndexes()"),
+ "Schema": ("Creates the 49 tables and 23 indexes by executing db/schema.sql's DDL verbatim (the contract, CLAUDE.md rule 1).\n    /// The EF model (ModelMap) is asserted against the result by SchemaContractTests. Forward-only.", "SchemaSql.TablesAndIndexes()"),
  "Triggers": ("Applies all 42 triggers from db/schema.sql verbatim and in file order (same-event triggers fire newest-first,\n    /// so order decides which rule's error a caller sees). A migration that rebuilds a table must re-apply that table's triggers;\n    /// SchemaContractTests fails if any trigger name is missing.", "SchemaSql.Triggers()"),
 }
 for name, (doc, src) in BODY.items():

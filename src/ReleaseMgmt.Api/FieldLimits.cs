@@ -119,6 +119,9 @@ public static class FieldLimits
         // Train templates (REOS-38)
         [typeof(TemplateInput)] = new() { ["Name"] = Name, ["DefaultRiskTier"] = Code },   // Gates, Steps, Schedule: their rows below
         [typeof(TemplateGateInput)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerTeamId"] = Id },
+        // REOS-84: train milestones (the service's own limits, which the schema's CHECKs also hold)
+        [typeof(MilestoneEndpoints.AddMilestoneBody)] = new() { ["Name"] = MilestoneRules.MaxName, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Note"] = MilestoneRules.MaxNote },
+        [typeof(MilestoneEndpoints.PatchMilestoneBody)] = new() { ["Name"] = MilestoneRules.MaxName, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Note"] = MilestoneRules.MaxNote },
         // REOS-83: add a user ahead of first sign-in (email as Users.Email, import limit)
         [typeof(UserCreationEndpoints.NewUser)] = new() { ["Email"] = UserCreationService.MaxEmailLength, ["DisplayName"] = UserCreationService.MaxNameLength, ["Role"] = Code, ["Handle"] = Handle },
         // REOS-81: a train's products and gates

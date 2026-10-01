@@ -164,6 +164,7 @@ Recovery point: at most 15 minutes of changes are lost (the backup interval). Re
 |---|---|---|
 | `001_idp_identity_and_session_revocations.sql` | migrations `20260929110130_Schema` + `20260929110136_Triggers` | REOS-61/62: `Users.IdpIssuer`/`IdpSubject` (rebuilds `Users`), `SessionRevocations` |
 | `002_webhook_urls_encrypted.sql` | migrations `20260930234604_Schema` + `20260930234616_Triggers` | REOS-73: records the new migrations only; the app encrypts `WebhookDestinations` at its next start (needs the key ring and `secrets/`, so restore both first) |
+| `003_train_milestones.sql` | migrations `20261001030509_Schema` + `20261001030524_Triggers` | REOS-84: adds `TrainMilestones` and `IX_Milestones_Train` |
 
 Rollback: stop, put the previous `publish` directory back, restore the pre-upgrade database backup (section 7 step 3, because a newer schema may not run on an older build), start.
 

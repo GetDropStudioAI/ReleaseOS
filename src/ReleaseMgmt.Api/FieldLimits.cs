@@ -42,6 +42,8 @@ public static class FieldLimits
     public const int LongText = CommLibraryService.MaxBody;
     /// <summary>An ITSM key: import <c>ExternalLinks.Key</c> (100).</summary>
     public const int ExternalKey = 100;
+    /// <summary>Product version tag and project code: import <c>Products.VersionTag</c> and <c>Products.ProjectCode</c> (100).</summary>
+    public const int Tag = 100;
     /// <summary>A URL: the connector and webhook checks (2,048).</summary>
     public const int Url = ConnectorUrlPolicy.MaxUrlLength;
     /// <summary>A pasted checklist: at most 500 lines of 2,500 characters plus line ends (the parser's own whole-paste limit).</summary>
@@ -117,6 +119,10 @@ public static class FieldLimits
         // Train templates (REOS-38)
         [typeof(TemplateInput)] = new() { ["Name"] = Name, ["DefaultRiskTier"] = Code },   // Gates, Steps, Schedule: their rows below
         [typeof(TemplateGateInput)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerTeamId"] = Id },
+        // REOS-80: new train (blank, from template, copy). Dates and timestamps are ISO strings, well under Code.
+        [typeof(NewTrainInput)] = new() { ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code, ["TemplateId"] = Id, ["WindowStartsAt"] = Code, ["WindowEndsAt"] = Code },
+        [typeof(NewProductInput)] = new() { ["ProductName"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag },
+        [typeof(CloneTrainInput)] = new() { ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code },
         [typeof(TemplateStepInput)] = new() { ["StepCode"] = StepCode, ["Section"] = Code, ["Title"] = StepTitle, ["OwnerTeamId"] = Id },
         [typeof(TemplateScheduleInput)] = new() { ["LibraryTemplateId"] = Id },
     };

@@ -247,3 +247,18 @@ export interface ExportJob {
 export const listExportJobs = (trainId: string) => get<ExportJob[]>(`/api/v1/export-jobs?trainId=${encodeURIComponent(trainId)}`)
 export const createExportJob = (trainId: string, kind: ExportKind, format: 'pdf' | 'zip' = 'pdf') => post<ExportJob>(`/api/v1/trains/${trainId}/export-jobs`, { kind, format })
 export const exportJobFileUrl = (id: string) => `/api/v1/export-jobs/${id}/file`
+
+// REOS-82 external links on a train (keys, states and dates only, OI-12). Remove sends the link's Version (If-Match).
+export type LinkEntityType = 'Train' | 'Product' | 'Gate' | 'RunbookStep' | 'Blocker' | 'KnownIssue'
+export interface LinkWarning { rule: string; message: string; since: string }
+export interface ExternalLinkRow {
+  id: string; trainId: string; entityType: LinkEntityType; entityId: string; sourceSystem: 'Jira' | 'ServiceNow'; externalKey: string
+  expectedStatus: string | null; lastSyncedStatus: string | null; lastSyncedAt: string | null; syncState: string; stale: boolean; version: number; warnings: LinkWarning[]
+}
+export const getLinks = (trainId: string) => get<ExternalLinkRow[]>(`/api/v1/trains/${trainId}/links`)
+export const addLink = (trainId: string, body: { entityType: LinkEntityType; entityId: string; sourceSystem: string; externalKey: string }) =>
+  post<ExternalLinkRow>(`/api/v1/trains/${trainId}/links`, body)
+export const removeLink = (id: string, version: number) => call<boolean>('DELETE', `/api/v1/links/${id}`, undefined, version)
+
+// REOS-83 add a user ahead of their first sign-in (admin). The role is provisional: sign-in replaces it with the identity provider's.
+export const createUser = (body: { email: string; displayName: string; role: string; handle?: string }) => post<UserRow>('/api/v1/users', body)

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useDraft, useSession } from './session'
 import { ChangeRecordPanel, GoNoGo, emptyGoNoGo, goNoGoKey, type GoNoGoDraft } from './Governance'
 import { FreezesPanel } from './Freezes'
+import { Links } from './Links'
 import { fmtDayTime } from './time'
 import { day, errMsg, plural, splitId, tMinus } from './format'
 import { Runbook } from './Runbook'
@@ -133,6 +134,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       <GoNoGo trainId={t.id} trainVersion={t.version} canDecide={canDecide} refreshKey={refreshKey} onChanged={onChanged} />
       <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <FreezesPanel trainId={t.id} refreshKey={refreshKey} onChanged={onChanged} />
+      <Links key={t.id} trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
       <Closeout train={t} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <ExportsPanel trainId={t.id} refreshKey={refreshKey} />

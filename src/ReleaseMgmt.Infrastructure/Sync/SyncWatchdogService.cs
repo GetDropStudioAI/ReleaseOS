@@ -29,13 +29,18 @@ public sealed class SyncWatchdogService : BackgroundService
     {
         _dbf = dbf; _time = time; _alerts = alerts; _sink = sink; _o = options; _log = log;
         _startedAt = Now;
+        Heartbeat = new ServiceHeartbeat(time, options.Enabled, SyncIntervals.StallIntervals * options.Watchdog, TimeSpan.Zero);   // REOS-69: 3 missed ticks
     }
+
+    /// <summary>The timer loop's liveness for <c>/healthz</c> (REOS-69).</summary>
+    public ServiceHeartbeat Heartbeat { get; }
 
     private DateTime Now { get { var t = _time.GetUtcNow().UtcDateTime; return new DateTime(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc); } }
 
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
         if (!_o.Enabled) return;
+        Heartbeat.Started();
         using var timer = new PeriodicTimer(_o.Watchdog, _time);
         try
         {
@@ -47,9 +52,14 @@ public sealed class SyncWatchdogService : BackgroundService
                     // If the store itself is failing there is no table to alert in; the log is all that is left.
                     _log.LogError(ex, "The sync watchdog's check failed");
                 }
+                Heartbeat.Beat();
             }
         }
         catch (OperationCanceledException) { /* shutting down */ }
+        finally
+        {
+            if (!stop.IsCancellationRequested) { Heartbeat.Exited(); _log.LogError("The sync watchdog's loop ended while the app is running; /healthz reports it stalled"); }
+        }
     }
 
     /// <summary>One check. Returns the sources that are stalled now.</summary>

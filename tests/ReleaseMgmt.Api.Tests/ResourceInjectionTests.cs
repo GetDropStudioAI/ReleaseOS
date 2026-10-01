@@ -36,7 +36,9 @@ public class ResourceInjectionTests
         var (f, _, viewer) = await World(); using var _f = f;
         var r = await viewer.PostAsJsonAsync("/api/v1/trains/t1/comms:preview", new { text = new string('{', 50_000) });
         Assert.Equal(HttpStatusCode.UnprocessableEntity, r.StatusCode);
-        Assert.Equal("CommPreviewTooLarge", (await Json(r)).GetProperty("guard").GetString());
+        // REOS-66: the central field-length filter now refuses it before the service (which keeps its own CommPreviewTooLarge check behind it)
+        var why = await Json(r);
+        Assert.Equal(("FieldTooLong", "text", 20_000), (why.GetProperty("guard").GetString(), why.GetProperty("field").GetString(), why.GetProperty("max").GetInt32()));
 
         var subject = await viewer.PostAsJsonAsync("/api/v1/trains/t1/comms:preview", new { subject = new string('s', 201), text = "x" });
         Assert.Equal(HttpStatusCode.UnprocessableEntity, subject.StatusCode);
@@ -135,16 +137,18 @@ public class ResourceInjectionTests
         Assert.Equal("1", Scalar(f, "SELECT COUNT(*) FROM ParsePreviews"));
     }
 
-    // ---- SEC-D10 (not fixed, Q-SEC-D5): the anonymous feed brake is keyed by client address -------------------------------------------------------
+    // ---- SEC-D10 (REOS-67, Q-SEC-D5): the anonymous feed brake counts and refuses failed lookups only ------------------------------------------------
 
-    [Fact(Skip = "SEC-D10 reproduced, not fixed: the brake's design is Q-051e and the remedy depends on the deployment's proxy (Q-SEC-D5). Unskip to reproduce: fails with 429.")]
+    [Fact]
     public async Task Strangers_guessing_feed_tokens_behind_the_same_proxy_address_do_not_lock_out_a_valid_calendar()
     {
         var (f, _, viewer) = await World(); using var _f = f;
         var path = (await Json(await viewer.PostAsJsonAsync("/api/v1/me/ics-tokens", new { scope = "all" }))).GetProperty("path").GetString()!;
         var anon = f.CreateClient();   // the test server gives every client the same (empty) address, as a reverse proxy without forwarded headers does
         for (var i = 0; i < 61; i++) Assert.Equal(HttpStatusCode.NotFound, (await anon.GetAsync($"/api/v1/ics/{new string('A', 43)}.ics")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await anon.GetAsync(path)).StatusCode);   // today: 429 for everyone behind that address for the rest of the minute
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await anon.GetAsync($"/api/v1/ics/{new string('A', 43)}.ics")).StatusCode);   // the brake still holds for failures
+        Assert.Equal(HttpStatusCode.OK, (await anon.GetAsync(path)).StatusCode);   // before REOS-67: 429 for everyone behind that address for the rest of the minute
+        Assert.Equal(HttpStatusCode.OK, (await anon.GetAsync(path)).StatusCode);   // a served feed does not count toward the brake either
     }
 
     // ---- checked, no issue: ICS property injection (pinned) ----------------------------------------------------------------------------------------

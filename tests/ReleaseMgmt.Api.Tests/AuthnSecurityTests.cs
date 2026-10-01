@@ -402,12 +402,7 @@ public class AuthnSecurityTests
     }
 }
 
-/// <summary>Runs alone: Program's <c>UseSerilog</c> does not preserve the static logger, so in-process hosts running in parallel all write through the static
-/// <c>Log.Logger</c> of whichever host was built last, and a log file would not be this host's log.</summary>
-[CollectionDefinition(Name, DisableParallelization = true)]
-public sealed class SerilogStaticLoggerCollection { public const string Name = "Serilog static logger (runs alone)"; }
-
-[Collection(SerilogStaticLoggerCollection.Name)]
+/// <summary>Reads this host's own log file; runs in parallel with the rest since each host has its own Serilog logger (REOS-70).</summary>
 public class AuthnLogRedactionTests
 {
     // ------------------------------------------------------------------ SEC-B10: feed tokens in logs when request logging is raised

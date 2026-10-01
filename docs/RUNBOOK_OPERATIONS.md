@@ -62,7 +62,7 @@ Minimum for production:
 | `Auth:DefaultRole` | empty (default): an identity in no mapped group or role is refused at sign-in. `Viewer`: such identities may sign in read-only (with Entra ID's default "assignment required: no", that is every member and guest of the tenant) |
 | `Auth:PasswordResetUrl` | optional; absolute `https` URL of the identity provider's self-service reset page |
 | `Display:TimeZone` | IANA zone for the screens |
-| `AllowedHosts` | the host name(s) users type, e.g. `releases.example.com` (`;`-separated). The shipped default `*` accepts any `Host` header; set it so a DNS-rebinding page cannot reach the app under its own name (SEC-E1, Q-SEC-E1). Development already allows loopback names only |
+| `AllowedHosts` | **required outside Development.** The host name(s) users type, e.g. `releases.example.com` (`;`-separated; `*.example.com` is allowed). Any other `Host` header is answered 400, so a DNS-rebinding page cannot reach the app under its own name (SEC-E1). Nothing is shipped for it: while it is unset, empty or `*` the app **refuses to start** and logs `AllowedHosts is empty` / `AllowedHosts is "*"` (REOS-68, Q-SEC-E1). Development allows loopback names only (`appsettings.Development.json`) and is not checked |
 | `Proxy:KnownProxies`, `Proxy:KnownNetworks` | only when the TLS-terminating reverse proxy is **not** on the same host: its address(es), or CIDR network(s). A proxy on the same host (loopback) is trusted by default. Without this the app judges the proxy's address and scheme instead of the client's (SEC-E5) |
 
 Other keys, with their defaults, are listed by the code that reads them. Security limits added by the 2026-09-30 scan ([SECURITY_SCAN.md](SECURITY_SCAN.md)): `Limits:MaxRequestBodyBytes` (1 MiB; uploads keep their own caps), `Imports:MaxColumns` (200), `Imports:MaxOpenPreviewsPerUser` (5), `Exports:MaxOpenJobsPerUser` (10), `Freeze:OverrideRequiresRequest` (true). Also: `Api:RequireIfMatch` (true), `Attachments:MaxBytes` (50 MB), `Audit:CsvMaxRows` (50,000), `Realtime:ServerTimeSeconds` (10), `Notifications:ScanSeconds` (30), `Notifications:Webhooks:*`, `Comms:Webhooks:*` (timeout 10 s), `Sync:PollSeconds` (300), `Sync:WindowPollSeconds` (60), `Sync:TimeoutSeconds`, `Sync:WatchdogSeconds`, `Sync:StaleAfterMinutes`, `Sync:AllowedHosts`, `Sync:AllowPrivateTargets` (false), `Connectors:{Jira|ServiceNow}:BaseUrl`, `Ics:MaxFailuresPerMinute` (60), `Seed:Demo` (false outside Development), `Auth:Session:IdleMinutes` (60), `Auth:Session:AbsoluteHours` (12, from sign-in), `Auth:SessionRecheckSeconds` (10), `Auth:Cookie:RequireHttps` (true outside Development: the session cookie is `__Host-releasemgmt.auth`, `Secure`, so browsers must reach the app over HTTPS), `Auth:DevLogin:Enabled` (Development only; default on unless `Auth:Oidc:Authority` is set). **Do not set `Seed:Demo=true` in production**: it inserts demonstration trains. **Never run a pilot or production host in Development** (`python start.py` defaults to it): Development maps an anonymous "sign in as any role" endpoint for callers on the same machine.
@@ -100,7 +100,7 @@ WantedBy=multi-user.target
 
 **Reverse proxy and TLS.** Terminate HTTPS at a reverse proxy (or configure a Kestrel certificate). The proxy must pass WebSocket upgrades for `/hub/trains`. **The proxy must not log request paths under `/api/v1/ics/`**: calendar feed tokens are carried in that path. The app itself keeps them out of its own logs.
 
-**Health.** `GET /healthz` is anonymous and returns 200 `{status:"Healthy", db:"ok", backup:<last success time>}` or 503. Point your monitor at it, and alert if `backup` is older than about 30 minutes.
+**Health.** `GET /healthz` is anonymous and returns 200 `{status:"Healthy", db:"ok", backup:<last success time>, poller:{...}, watchdog:{...}}` or 503. `poller` and `watchdog` each give `state` (`disabled` when `Sync:Enabled=false`, `running`, or `stalled`), `lastCycleUtc` (the last pass of its timer loop) and `stalledAfterSeconds` (3 of its intervals: 900 s for the poller, 180 s for the watchdog). It is **503 when the database check fails or an enabled loop has stalled** (REOS-69, Q-069); restart the service and look for "loop ended" errors in the log. Point your monitor at it, and alert if `backup` is older than about 30 minutes.
 
 ## 6. Backups
 
@@ -153,7 +153,7 @@ If a credential leaks: revoke it at the source first, then replace it as above. 
 
 ## 10. Monitoring and alerts
 
-- `/healthz` (process, database, last backup).
+- `/healthz` (process, database, last backup, sync poller and watchdog loops; 503 when one has stalled).
 - **Sync health** screen and the banner shown on every screen when a connector is failing or the sync engine has stalled; alerts also arrive in the inbox of RTEs and Release Managers.
 - Notification failures, webhook failures (`Webhook/DeliveryFailed`), export failures (`Export/ExportFailed`) and backup failures are all alerts, never silent.
 - Security events are logged under the category `ReleaseMgmt.Security`: sign-in (who, role, method), sign-out, access denied (Warning: who, role, method, path) and sessions ended because the user was deactivated. A burst of `Access denied` lines from one user is worth a look.

@@ -8,6 +8,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
     private readonly string _dir = Directory.CreateTempSubdirectory("reos-api-").FullName;
     public string DbPath => Path.Combine(_dir, "app.db");
     public string AttachmentsDir => Path.Combine(_dir, "attachments");
+    public const string TestHosts = "localhost;releases.example.com";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -28,6 +29,9 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         builder.UseSetting("Notifications:ScanSeconds", "3600");   // the scheduler is driven by its own tests; keep it quiet here
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
         builder.UseSetting("Logging:File", Path.Combine(_dir, "log-.txt"));
+        // REOS-68: outside Development the app refuses to start unless AllowedHosts names its host. The test server's own host is localhost;
+        // releases.example.com is the deployment name the proxy tests send. Any other Host is still refused with 400.
+        if (environment != "Development") builder.UseSetting("AllowedHosts", TestHosts);
     }
 
     protected override void Dispose(bool disposing)

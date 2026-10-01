@@ -46,11 +46,15 @@ public static class CalendarEndpoints
 
     private static async Task<IResult> Feed(string token, string scope, string? trainId, HttpContext http, IcsTokenService tokens, IcsFeedService feeds, IConfiguration cfg, CancellationToken ct)
     {
-        if (Throttled(http, tokens, cfg, failed: false)) return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+        // SEC-D10 (Q-SEC-D5, option b): a valid token is always served. The brake sees only failed lookups: once a client address has failed more than
+        // Ics:MaxFailuresPerMinute times this minute its further failures are 429 instead of 404. Behind a proxy that does not forward the client address
+        // every caller shares one address, so a brake in front of the lookup let strangers lock every calendar out; tokens are 256-bit, so the brake was
+        // never what stops guessing.
         var userId = await tokens.ResolveAsync(token, ct);
         var body = userId is null ? null : await feeds.BuildAsync(scope, trainId, userId, ct);
         if (body is null)
         {
+            if (Throttled(http, tokens, cfg, failed: false)) return Results.StatusCode(StatusCodes.Status429TooManyRequests);
             Throttled(http, tokens, cfg, failed: true);
             return Results.NotFound();
         }

@@ -75,7 +75,7 @@ public class ProxyAndBrowserHardeningTests
         var anon = f.CreateClient();
         for (var i = 0; i < 61; i++) await anon.SendAsync(Get($"/api/v1/ics/{new string('A', 43)}.ics", "203.0.113.66"));
         Assert.Equal(HttpStatusCode.TooManyRequests, (await anon.SendAsync(Get($"/api/v1/ics/{new string('A', 43)}.ics", "203.0.113.66"))).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await anon.SendAsync(Get(path, "203.0.113.7"))).StatusCode);   // SEC-D10 is left only for proxies that send no address
+        Assert.Equal(HttpStatusCode.OK, (await anon.SendAsync(Get(path, "203.0.113.7"))).StatusCode);   // a valid token is served whatever any address has failed (REOS-67)
     }
 
     [Fact]

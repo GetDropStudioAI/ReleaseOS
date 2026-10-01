@@ -28,11 +28,12 @@ export function Glyph({ status }: { status: string }) {
   return <span className={x.cls} role="img" aria-label={x.word} title={x.word}>{x.g}</span>
 }
 
-export function Stream({ rows, selected, onSelect }: { rows: StreamRow[] | null; selected: string | null; onSelect: (id: string) => void }) {
+export function Stream({ rows, selected, onSelect, onNew }: { rows: StreamRow[] | null; selected: string | null; onSelect: (id: string) => void; onNew?: () => void }) {
   const { filter: q, setFilter: setQ } = useSession()   // the filter is saved with the tab's UI state
   const shown = (rows ?? []).filter(r => r.title.toLowerCase().includes(q.trim().toLowerCase()))
   return (
     <>
+      {onNew && <div className="section-head stream-head"><span className="cap">Trains</span><button type="button" className="text" onClick={onNew}>New train</button></div>}
       <p><label className="cap" htmlFor="flt">Filter trains</label>
         <input id="flt" className="line block" placeholder="Title or release id" value={q} onChange={e => setQ(e.target.value)} /></p>
       {GROUPS.map(g => {

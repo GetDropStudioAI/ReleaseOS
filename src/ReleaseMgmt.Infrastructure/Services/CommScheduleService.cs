@@ -51,28 +51,8 @@ public sealed class CommScheduleService(IDbContextFactory<ReleaseDbContext> dbf,
             if (plan.Count == 0) f.Add(new(CommGuards.CommPlanEmpty, $"Template \"{template.Name}\" has no T-minus plan to seed from"));
             if (f.Count > 0) return ServiceResult<List<CommScheduleItemView>>.Fail(f);
 
-            var library = await db.Set<CommTemplateLibrary>().AsNoTracking().ToDictionaryAsync(l => l.Id, ct);
-            var holidays = (await db.Set<Holidays>().AsNoTracking().Select(h => h.Day).ToListAsync(ct)).ToHashSet();
             var window = await db.Set<DeploymentWindows>().AsNoTracking().SingleOrDefaultAsync(w => w.ReleaseTrainId == trainId, ct);
-            var copies = await db.Set<CommTemplates>().Where(c => c.ReleaseTrainId == trainId && c.LibraryTemplateId != null).ToListAsync(ct);
-
-            var created = new List<object>(); var copied = new List<object>();
-            foreach (var p in plan.OrderBy(p => p.OffsetDays).ThenBy(p => library[p.LibraryTemplateId].Name, StringComparer.OrdinalIgnoreCase))
-            {
-                var lib = library[p.LibraryTemplateId];
-                var copy = copies.FirstOrDefault(c => c.LibraryTemplateId == lib.Id);
-                if (copy is null)
-                {
-                    copy = CommLibraryService.CopyOf(trainId, lib);
-                    db.Set<CommTemplates>().Add(copy); copies.Add(copy);
-                    copied.Add(new { copy.Id, fromLibrary = lib.Id, lib.Name });
-                    await db.SaveChangesAsync(ct);   // the copy first: the schedule row references it
-                }
-                var due = CommScheduling.DueAtUtc(train.TargetReleaseDate, p.OffsetDays, lib.TemplateType, window?.StartsAt, window?.EndsAt, holidays, Options);
-                var row = new CommSchedule { Id = Ids.New(), ReleaseTrainId = trainId, CommTemplateId = copy.Id, DueAt = Truncate(due) };
-                db.Set<CommSchedule>().Add(row);
-                created.Add(new { row.Id, offsetDays = p.OffsetDays, message = lib.Name, dueAt = row.DueAt });
-            }
+            var (created, copied) = await AddRowsAsync(db, train, plan, window, Options, ct);
             Audit(db, actor, trainId, "CommSchedule", trainId, "Seed", null, new { templateId = template.Id, template = template.Name, targetDate = train.TargetReleaseDate.ToString("yyyy-MM-dd"), items = created, copiedMessages = copied });
             await db.SaveChangesAsync(ct);
             return ServiceResult<List<CommScheduleItemView>>.Ok(await ViewsAsync(db, trainId, ct) ?? []);
@@ -97,6 +77,38 @@ public sealed class CommScheduleService(IDbContextFactory<ReleaseDbContext> dbf,
             await db.SaveChangesAsync(ct);
             return ServiceResult<CommScheduleItemView>.Ok((await ViewsAsync(db, row.ReleaseTrainId, ct))!.Single(v => v.Id == scheduleId));
         }, ct);
+
+    /// <summary>
+    /// Adds one <c>CommSchedule</c> row per plan line (and the train's copy of each library message it needs, reusing an existing copy) to the caller's
+    /// transaction. Shared by <see cref="SeedAsync"/> and train creation from a template (REOS-80), so both date the schedule the same way. The caller audits.
+    /// </summary>
+    internal static async Task<(List<object> Created, List<object> Copied)> AddRowsAsync(ReleaseDbContext db, ReleaseTrains train, IReadOnlyList<TemplateCommSchedule> plan,
+        DeploymentWindows? window, CommScheduling.Options options, CancellationToken ct)
+    {
+        var trainId = train.Id;
+        var library = await db.Set<CommTemplateLibrary>().AsNoTracking().ToDictionaryAsync(l => l.Id, ct);
+        var holidays = (await db.Set<Holidays>().AsNoTracking().Select(h => h.Day).ToListAsync(ct)).ToHashSet();
+        var copies = await db.Set<CommTemplates>().Where(c => c.ReleaseTrainId == trainId && c.LibraryTemplateId != null).ToListAsync(ct);
+
+        var created = new List<object>(); var copied = new List<object>();
+        foreach (var p in plan.OrderBy(p => p.OffsetDays).ThenBy(p => library[p.LibraryTemplateId].Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var lib = library[p.LibraryTemplateId];
+            var copy = copies.FirstOrDefault(c => c.LibraryTemplateId == lib.Id);
+            if (copy is null)
+            {
+                copy = CommLibraryService.CopyOf(trainId, lib);
+                db.Set<CommTemplates>().Add(copy); copies.Add(copy);
+                copied.Add(new { copy.Id, fromLibrary = lib.Id, lib.Name });
+                await db.SaveChangesAsync(ct);   // the copy first: the schedule row references it
+            }
+            var due = CommScheduling.DueAtUtc(train.TargetReleaseDate, p.OffsetDays, lib.TemplateType, window?.StartsAt, window?.EndsAt, holidays, options);
+            var row = new CommSchedule { Id = Ids.New(), ReleaseTrainId = trainId, CommTemplateId = copy.Id, DueAt = Truncate(due) };
+            db.Set<CommSchedule>().Add(row);
+            created.Add(new { row.Id, offsetDays = p.OffsetDays, message = lib.Name, dueAt = row.DueAt });
+        }
+        return (created, copied);
+    }
 
     private static DateTime Truncate(DateTime t) => new(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
 

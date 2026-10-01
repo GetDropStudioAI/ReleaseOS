@@ -243,3 +243,4 @@ h2.aside-title { font-size: var(--text-drawer-title); letter-spacing: var(--trac
    same specificity and come later, which removed the accent rule (outline is none there), so a keyboard user saw no focus at all; and a date input did not
    match :focus-visible while one of its inner segments had focus (measured in Chromium), hence :focus-within. Restated last, with the same look. */
 input.line:focus, input.line:focus-within, textarea.line:focus, .inline-form input.line:focus, .inline-form textarea.line:focus, table.grid td input.line:focus, .an-filter input.line:focus { outline: none; border-bottom: 2px solid var(--accent); }
+.stream-head { margin-top: 0; } /* REOS-80: "New train" above the Stream filter */

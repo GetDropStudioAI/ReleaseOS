@@ -185,9 +185,11 @@ public class EndpointRoleMatrixTests
         POST /api/v1/templates                                   Admin
         POST /api/v1/templates/{id}:approve                      Approvers
         POST /api/v1/templates/{id}:retire                       Approvers
+        POST /api/v1/trains                                      Plan
         POST /api/v1/trains/{id}:abort                           Plan
         POST /api/v1/trains/{id}:advance                         Plan
         POST /api/v1/trains/{id}:capture-baseline                Plan
+        POST /api/v1/trains/{id}:clone                           Plan
         POST /api/v1/trains/{id}:complete                        Plan
         POST /api/v1/trains/{id}:exit-hypercare                  Plan
         POST /api/v1/trains/{id}:rehearsed-rollback              Plan

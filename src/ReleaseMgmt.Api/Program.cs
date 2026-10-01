@@ -71,6 +71,7 @@ builder.Services.AddSingleton<AdminService>();
 builder.Services.AddSingleton<TemplateService>();   // REOS-38
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
+builder.Services.AddSingleton<MilestoneService>();   // train milestones (Q-0840..)
 // REOS-35 evidence attachments: stored outside wwwroot (Attachments:Directory), capped at Attachments:MaxBytes (never above the 50 MB schema CHECK)
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
 builder.Services.AddSingleton<AttachmentService>();
@@ -212,6 +213,7 @@ api.MapCommDispatch();   // REOS-45
 api.MapCalendar();   // REOS-51
 api.MapImports(); api.MapGridExports();   // REOS-48/49
 api.MapPdfExports();   // REOS-50
+api.MapMilestones();   // train milestones (Q-0840..)
 
 // Dev-only fake login: POST /auth/dev-login {email, name, role}. Never mapped outside Development; see DevSignIn for when it exists and who may call it.
 if (devTools)

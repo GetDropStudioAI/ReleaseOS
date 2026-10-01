@@ -31,4 +31,16 @@ public static partial class SchemaSql
 
     [GeneratedRegex(@"^CREATE TRIGGER \w+.*?\bEND;", RegexOptions.Singleline | RegexOptions.Multiline)]
     private static partial Regex TriggerRegex();
+
+    /// <summary>The named tables and indexes of schema.sql, in file order, each with IF NOT EXISTS: what an incremental migration runs to add objects that the
+    /// Schema migration already creates on a fresh database (Q-0840). SQLite stores the text without IF NOT EXISTS, so the stored DDL still equals schema.sql.</summary>
+    public static IReadOnlyList<string> IfNotExists(params string[] names)
+    {
+        var found = TablesAndIndexes().Where(s => names.Contains(NameRegex().Match(s).Groups[2].Value)).ToList();
+        if (found.Count != names.Length) throw new InvalidOperationException($"schema.sql does not define all of: {string.Join(", ", names)}");
+        return [.. found.Select(s => NameRegex().Replace(s, m => $"{m.Groups[1].Value}IF NOT EXISTS {m.Groups[2].Value}", 1))];
+    }
+
+    [GeneratedRegex(@"^(CREATE (?:TABLE|(?:UNIQUE )?INDEX) )(\w+)")]
+    private static partial Regex NameRegex();
 }

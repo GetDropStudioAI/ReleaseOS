@@ -56,6 +56,7 @@ public static class ModelMap
         b.Entity<ParsePreviews>(e => { e.ToTable("ParsePreviews"); e.HasKey(e => e.Id);  });
         b.Entity<ConnectorState>(e => { e.ToTable("ConnectorState"); e.HasKey(e => e.SourceSystem);  });
         b.Entity<AuditEvents>(e => { e.ToTable("AuditEvents"); e.HasKey(e => e.Id); e.Property(e => e.Id).ValueGeneratedOnAdd(); });
+        b.Entity<TrainMilestones>(e => { e.ToTable("TrainMilestones"); e.HasKey(e => e.Id);  });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<Teams>().HasOne<WebhookDestinations>().WithMany().HasForeignKey(e => e.WebhookDestinationId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -151,5 +152,10 @@ public static class ModelMap
         b.Entity<IcsTokens>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ParsePreviews>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ParsePreviews>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainMilestones>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainMilestones>().HasOne<Users>().WithMany().HasForeignKey(e => e.OwnerUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainMilestones>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainMilestones>().HasOne<Users>().WithMany().HasForeignKey(e => e.DoneByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainMilestones>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
     }
 }

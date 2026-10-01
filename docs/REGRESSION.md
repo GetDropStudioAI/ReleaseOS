@@ -8,7 +8,7 @@ A story moves to In Review when its own acceptance criteria pass. It stays there
 |---|---|---|---|
 | 1 | Build, warnings as findings | `dotnet build ReleaseMgmt.sln -c Release --no-incremental` | 0 errors, 0 warnings |
 | 2 | All .NET tests | `dotnet test ReleaseMgmt.sln -c Release` | 0 failed |
-| 3 | Schema oracle | `python3 tests/reference/test_schema.py` | 82 passed, 0 failed |
+| 3 | Schema oracle | `python3 tests/reference/test_schema.py` | 87 passed, 0 failed |
 | 3b | Tooling tests | `python3 tests/tools/test_start.py` | all pass |
 | 4 | Metrics oracle | `python3 tests/reference/seed_and_query.py` | runs clean; matches `expected_metrics.json` once M7 lands |
 | 5 | Web build | `cd src/ReleaseMgmt.Web && npm ci && npm run build` | builds, no TypeScript errors |

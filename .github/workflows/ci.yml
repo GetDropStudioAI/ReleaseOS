@@ -40,7 +40,7 @@ jobs:
         run: dotnet build ReleaseMgmt.sln --configuration Release
       - name: Test
         run: dotnet test ReleaseMgmt.sln --configuration Release --no-build
-      - name: Schema reference suite (82 cases)
+      - name: Schema reference suite (87 cases)
         run: python tests/reference/test_schema.py
       - name: Tooling tests (start.py reset git logic)
         run: python tests/tools/test_start.py

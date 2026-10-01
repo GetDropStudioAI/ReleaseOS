@@ -4,7 +4,7 @@ import { buildPath, ROOT, type Route } from './route'
 import { displayZone, fmtDayTime, fmtHM, serverNow, zoneAbbr } from './time'
 
 /**
- * Screen "Calendar" (REOS-51, docs/UI.md row "Calendar", Q-051*): month and week grids of trains (target date, deployment window, gate due dates) with freeze
+ * Screen "Calendar" (REOS-51, docs/UI.md row "Calendar", Q-051*): month and week grids of trains (target date, deployment window, gate due dates, milestones) with freeze
  * and chill windows as tinted date ranges, and the "Subscribe" section for the ICS feed link.
  * Semantics: one role="grid" table (labelled by the month heading above it, column headers, gridcells) with a roving tabindex. Arrow keys move the day, Home/End the start/end of the week,
  * Page Up/Down the month (the week in week view), Enter opens the first train of the day; every entry is also a real button. Status is glyph + word +
@@ -13,7 +13,8 @@ import { displayZone, fmtDayTime, fmtHM, serverNow, zoneAbbr } from './time'
 export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null }
 export interface CalGate { id: string; name: string; class: string; status: string; dueOn: string; trainId: string; trainTitle: string; trainStatus: string }
 export interface CalFreeze { id: string; name: string; kind: 'Freeze' | 'Chill'; startsAt: string; endsAt: string; scope: string }
-interface CalendarPayload { from: string; to: string; trains: CalTrain[]; gates: CalGate[]; freezeWindows: CalFreeze[] }
+export interface CalMilestone { id: string; name: string; dueOn: string; done: boolean; trainId: string; trainTitle: string; trainStatus: string }
+interface CalendarPayload { from: string; to: string; trains: CalTrain[]; gates: CalGate[]; freezeWindows: CalFreeze[]; milestones?: CalMilestone[] }
 interface IcsTokenRow { id: string; createdAt: string; revokedAt: string | null; active: boolean; lastUsedAt: string | null }
 interface IcsIssued { id: string; token: string; path: string; scope: string; createdAt: string }
 
@@ -55,7 +56,7 @@ const trainSt = (s: string) => TRAIN[s] ?? { glyph: '○', cls: 'muted', word: s
 const gateSt = (s: string) => GATE[s] ?? { glyph: '○', cls: 'muted', word: s.toLowerCase() }
 const KIND = { Freeze: { glyph: '▲', cls: 'bad' }, Chill: { glyph: '◐', cls: 'warn' } } as const
 
-interface Entry { key: string; kind: 'target' | 'window' | 'gate'; trainId: string; gateId?: string; label: string; title: string; st?: { glyph: string; cls: string; word: string } }
+interface Entry { key: string; kind: 'target' | 'window' | 'gate' | 'milestone'; trainId: string; gateId?: string; label: string; title: string; st?: { glyph: string; cls: string; word: string } }
 
 const errText = (e: unknown) => (e instanceof ApiError ? (e.body?.message ?? e.message) : (e as Error).message)
 
@@ -100,8 +101,13 @@ export function Calendar({ onOpen }: { me: Me; onOpen?: (r: Partial<Route>) => v
       const st = gateSt(g.status)
       add(g.dueOn, { key: `g:${g.id}`, kind: 'gate', trainId: g.trainId, gateId: g.id, label: `${g.name} due · ${g.trainTitle}`, title: `${g.name} gate of ${g.trainTitle}, due, ${st.word}`, st })
     }
+    // Q-0844: milestones are ◆ entries; the state word says done, open or overdue (never a guard, so never "blocked").
+    for (const m of data?.milestones ?? []) {
+      const st = m.done ? { glyph: '✓', cls: 'ok', word: 'done' } : m.dueOn < today ? { glyph: '▲', cls: 'bad', word: 'overdue' } : { glyph: '○', cls: 'muted', word: 'open' }
+      add(m.dueOn, { key: `m:${m.id}`, kind: 'milestone', trainId: m.trainId, label: `◆ ${m.name} · ${m.trainTitle}`, title: `Milestone ${m.name} of ${m.trainTitle}, ${st.word}`, st })
+    }
     return m
-  }, [data])
+  }, [data, today])
 
   const freezeDays = useMemo(() => {
     const m = new Map<string, CalFreeze[]>()
@@ -240,7 +246,7 @@ function Subscribe() {
   const origin = window.location.origin
   const urls = (t: string) => [
     { key: 'all', label: 'All trains', url: `${origin}/api/v1/ics/${t}.ics` },
-    { key: 'mine', label: 'My work (my gates and steps)', url: `${origin}/api/v1/ics/${t}/mine.ics` },
+    { key: 'mine', label: 'My work (my gates, steps and milestones)', url: `${origin}/api/v1/ics/${t}/mine.ics` },
     { key: 'freezes', label: 'Freeze and chill windows', url: `${origin}/api/v1/ics/${t}/freezes.ics` },
     ...(trainId ? [{ key: 'train', label: 'One train', url: `${origin}/api/v1/ics/${t}/trains/${encodeURIComponent(trainId)}.ics` }] : []),
   ]
@@ -252,7 +258,7 @@ function Subscribe() {
   return (
     <section aria-labelledby="subscribe-h">
       <h2 id="subscribe-h" className="cap">Subscribe</h2>
-      <p className="muted">Add the calendar to Outlook, Apple Calendar or Google Calendar with a link. Anyone who has the link can see gate, window and freeze titles and times, so keep it private. You have one link; it works until you rotate or revoke it.</p>
+      <p className="muted">Add the calendar to Outlook, Apple Calendar or Google Calendar with a link. Anyone who has the link can see gate, milestone, window and freeze titles and times, so keep it private. You have one link; it works until you rotate or revoke it.</p>
       {error && <p className="bad" role="alert">✗ {error}</p>}
       {rows === null && !error && <p className="muted">Loading…</p>}
 

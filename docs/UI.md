@@ -30,7 +30,7 @@ Global failure banner (connector down, sync stalled) sits under the toolbar on *
 ## Screens (mockup file → what must be implemented)
 | Mockup | Must behave |
 |---|---|
-| `Main` / `MainDark` | "To reach Executing" line from `GET /trains/{id}/readiness` (same checks as the API); products table rollups; gate timeline SVG with business-day axis and a dashed "now" line; clicking a gate expands its checklist inline and opens it in the Inspector; certify disabled with reason and the eligible certifier named |
+| `Main` / `MainDark` | "To reach Executing" line from `GET /trains/{id}/readiness` (same checks as the API); products table rollups; gate timeline SVG with business-day axis and a dashed "now" line; clicking a gate expands its checklist inline and opens it in the Inspector; certify disabled with reason and the eligible certifier named; train milestones as ◆ in a lane under the gates plus a Milestones section (add, edit, done, remove inline; Q-0843) |
 | `Runbook` | clock, window countdown, forecast finish, time to rollback deadline, steps done; section headers; per-row bars on a window-scaled axis (planned grey, actual ink, running accent, forecast dashed, deadline red line); red alert when forecast crosses the rollback deadline; running-step drawer with count-up timer, instructions, notes, Done / Fail / Skip (Skip requires a note) |
 | `BulkParser` | line-numbered editor, error/warning glyphs in gutter, summary line, closest-match suggestions as buttons, preview table, disabled commit with reason; centre shows what will be added |
 | `Comms` | Message / Schedule / Sent log tabs; template source with token highlighting beside hydrated preview; "data as of hh:mm · train vN"; T-minus schedule with sent/late/ready states; Copy as rich text / Open in mail / Post to webhook |
@@ -49,7 +49,7 @@ Build these from the same patterns (table + Inspector, text actions, underlined 
 | Comm template library | M6 | as Comms drawer, full width |
 | Audit viewer | M4 | filter line (train, entity, actor, date range), dense event table, before/after JSON in Inspector, CSV export |
 | Notifications inbox, My work | M4 | two tables: items assigned to me by due date; notifications newest first, unread in semibold |
-| Calendar | M7 | month and week grids of trains (target date, window) with freeze windows as tinted date ranges; click opens the train |
+| Calendar | M7 | month and week grids of trains (target date, window, gate due dates, ◆ milestones) with freeze windows as tinted date ranges; click opens the train |
 
 ## Accessibility
 Real `<button>`/`<a>`/`<input>`+`<label>`; icon-only controls get `aria-label`; glyph status always has a word beside it; tokens meet WCAG AA (light status colours are darkened from Apple's system colours for 4.5:1 on white); keyboard: `j/k` moves rows in grids, `Enter` opens in Inspector, `Esc` closes the drawer (no global handlers that swallow typing in inputs).

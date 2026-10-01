@@ -213,5 +213,15 @@ check(db, "INSERT INTO IcsTokens(Id,UserId,TokenSha256,CreatedAt) VALUES('it2','
 check(db, "INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('dw1','t1','2026-10-30T06:00:00Z','2026-10-30T10:00:00Z')", True, "deployment window")
 check(db, "INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('dw2','t1','2026-10-31T06:00:00Z','2026-10-31T10:00:00Z')", False, "second window for a train (one per train in v1)", expect="UNIQUE")
 
+print("Train milestones (informational key dates)")
+db5 = db_fresh()
+db5.execute("INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Ops')")
+M = "INSERT INTO TrainMilestones(Id,ReleaseTrainId,Name,DueOn,OwnerUserId,OwnerTeamId,IsDone,DoneAt,DoneByUserId) VALUES(?,'t1',?,?,?,?,?,?,?)"
+check(db5, M, True, "milestone with no owner", ('m1','Code complete','2026-10-16',None,None,0,None,None))
+check(db5, M, False, "milestone owned by a user and a team", ('m2','UAT sign-off','2026-10-21','rte','tm1',0,None,None), expect="CHECK")
+check(db5, M, False, "milestone name over 200 characters", ('m3','x'*201,'2026-10-21',None,None,0,None,None), expect="CHECK")
+check(db5, M, False, "milestone due date that is not a date", ('m4','UAT sign-off','2026-10-32',None,None,0,None,None), expect="CHECK")
+check(db5, M, False, "done milestone without who and when", ('m5','UAT sign-off','2026-10-21',None,'tm1',1,None,None), expect="CHECK")
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

@@ -587,3 +587,20 @@ public class AuditEvents
     public string? BeforeJson { get; set; }
     public string? AfterJson { get; set; }
 }
+
+public class TrainMilestones
+{
+    public string Id { get; set; } = Ids.New();
+    public string ReleaseTrainId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public DateOnly DueOn { get; set; }
+    public string? OwnerUserId { get; set; }
+    public string? OwnerTeamId { get; set; }
+    public string? Note { get; set; }
+    public bool IsDone { get; set; } = false;
+    public DateTime? DoneAt { get; set; }
+    public string? DoneByUserId { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}

@@ -40,6 +40,7 @@ public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, A
         new("sync-alerts", "Sync alerts", "ITSM, backup, export and webhook failures", null, ["train"], "Read"),
         new("templates", "Train templates", "template names, status and review dates", null, [], "Read"),
         new("audit", "Audit log", "every change with before and after JSON", null, ["train", "entity", "entityId", "actor", "action", "from", "to"], "AuditRead"),
+        new("milestones", "Milestones", "named key dates per train, with owner and done state", null, ["train"], "Read"),   // export-only; import is Q-0845
     ];
 
     private static string Describe(string kind) => kind switch
@@ -92,6 +93,7 @@ public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, A
             "notifications" => await NotificationsAsync(db, info, filter, maxRows, ct),
             "sync-alerts" => await SyncAlertsAsync(db, info, filter, maxRows, ct),
             "templates" => await TemplatesAsync(db, info, maxRows, ct),
+            "milestones" => await MilestonesAsync(db, info, filter, maxRows, ct),
             _ => await AuditAsync(info, auditFilter ?? new AuditFilter(filter.Train), maxRows, ct),
         });
     }
@@ -177,6 +179,21 @@ public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, A
         var rows = (await db.Set<TrainTemplates>().AsNoTracking().ToListAsync(ct)).OrderBy(t => t.Name, StringComparer.Ordinal)
             .Select(t => new[] { N(t.Name), t.Status, t.DefaultRiskTier, Day(t.ReviewDueOn), t.Id, I(t.Version) });
         return Table(g, ["Name", "Status", "DefaultRiskTier", "ReviewDueOn", "#Id", "#Version"], rows, max);
+    }
+
+    /// <summary>Owner is an email or a team's <c>@handle</c>, as the import kinds write owners, so a later Milestones import kind can read this file back (Q-0845).</summary>
+    private static async Task<GridTable> MilestonesAsync(ReleaseDbContext db, GridInfo g, GridFilter f, int max, CancellationToken ct)
+    {
+        var q = db.Set<TrainMilestones>().AsNoTracking().AsQueryable();
+        if (!string.IsNullOrEmpty(f.Train)) q = q.Where(m => m.ReleaseTrainId == f.Train);
+        var trains = (await db.Set<ReleaseTrains>().AsNoTracking().Select(t => new { t.Id, t.Title }).ToListAsync(ct)).ToDictionary(t => t.Id, t => t.Title);
+        var users = (await db.Set<Users>().AsNoTracking().Select(u => new { u.Id, u.Email }).ToListAsync(ct)).ToDictionary(u => u.Id, u => u.Email);
+        var teams = (await db.Set<Teams>().AsNoTracking().Select(t => new { t.Id, t.Handle }).ToListAsync(ct)).ToDictionary(t => t.Id, t => "@" + t.Handle);
+        var rows = (await q.ToListAsync(ct)).OrderBy(m => trains.GetValueOrDefault(m.ReleaseTrainId, ""), StringComparer.Ordinal).ThenBy(m => m.DueOn).ThenBy(m => m.Name, StringComparer.Ordinal).ThenBy(m => m.Id, StringComparer.Ordinal)
+            .Select(m => new[] { trains.GetValueOrDefault(m.ReleaseTrainId, ""), N(m.Name), Day(m.DueOn),
+                m.OwnerUserId is not null ? users.GetValueOrDefault(m.OwnerUserId, "") : m.OwnerTeamId is not null ? teams.GetValueOrDefault(m.OwnerTeamId, "") : "",
+                N(m.Note), m.IsDone ? "Yes" : "No", Ts(m.DoneAt), m.DoneByUserId is not null ? users.GetValueOrDefault(m.DoneByUserId, "") : "", m.Id, I(m.Version) });
+        return Table(g, ["Train", "Name", "DueOn", "Owner", "Note", "Done", "DoneAt", "DoneBy", "#Id", "#Version"], rows, max);
     }
 
     private async Task<GridTable> AuditAsync(GridInfo g, AuditFilter f, int max, CancellationToken ct)

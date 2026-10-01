@@ -616,6 +616,27 @@ CREATE TABLE AuditEvents (
 );
 
 -- =====================================================================
+-- 9b. Train milestones (named key dates; informational only)
+-- =====================================================================
+CREATE TABLE TrainMilestones (                            -- "Code complete", "UAT sign-off": never certified, never block a gate or train move
+    Id TEXT PRIMARY KEY,
+    ReleaseTrainId TEXT NOT NULL REFERENCES ReleaseTrains(Id) ON DELETE CASCADE,
+    Name TEXT NOT NULL CHECK (length(trim(Name)) BETWEEN 1 AND 200),
+    DueOn TEXT NOT NULL CHECK (date(DueOn) IS DueOn),    -- a calendar date 'YYYY-MM-DD'
+    OwnerUserId TEXT REFERENCES Users(Id),                -- optional; at most one of user/team
+    OwnerTeamId TEXT REFERENCES Teams(Id),
+    Note TEXT CHECK (Note IS NULL OR length(Note) <= 2000),
+    IsDone INTEGER NOT NULL DEFAULT 0 CHECK (IsDone IN (0,1)),
+    DoneAt TEXT,
+    DoneByUserId TEXT REFERENCES Users(Id),
+    LastChangedByUserId TEXT REFERENCES Users(Id),
+    LastChangedAt TEXT,
+    Version INTEGER NOT NULL DEFAULT 1,
+    CHECK (OwnerUserId IS NULL OR OwnerTeamId IS NULL),
+    CHECK ((IsDone = 1) = (DoneAt IS NOT NULL AND DoneByUserId IS NOT NULL))
+);
+
+-- =====================================================================
 -- 10. Enforcement triggers
 -- =====================================================================
 -- Append-only tables
@@ -892,3 +913,4 @@ CREATE INDEX IX_Notif_User ON Notifications(UserId, ReadAt, CreatedAt);
 CREATE INDEX IX_Freeze_Range ON FreezeWindows(StartsAt, EndsAt);
 CREATE INDEX IX_Audit_Train ON AuditEvents(ReleaseTrainId, OccurredAt);
 CREATE INDEX IX_Audit_Entity ON AuditEvents(EntityType, EntityId);
+CREATE INDEX IX_Milestones_Train ON TrainMilestones(ReleaseTrainId, DueOn);

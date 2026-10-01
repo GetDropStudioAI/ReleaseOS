@@ -35,6 +35,8 @@ public class EndpointRoleMatrixTests
         ["Closeout"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],
         ["FreezeApprove"] = [Roles.ReleaseManager, Roles.GovernanceOfficer],
         ["Approvers"] = [Roles.ReleaseManager, Roles.GovernanceOfficer],
+        // Milestone done/undone (Q-0842): planners, or the owner; Viewers are refused even when they own it. Ownership is asserted in MilestoneTests.
+        ["OwnedNotViewer"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],
     };
 
     // Endpoints mapped only when the host environment is Development.
@@ -224,6 +226,12 @@ public class EndpointRoleMatrixTests
         PUT /api/v1/templates/{id}                               Admin
         PUT /api/v1/trains/{id}/change-record                    Plan
         PUT /api/v1/trains/{id}/window                           Plan
+        GET /api/v1/trains/{id}/milestones                       Read
+        POST /api/v1/trains/{id}/milestones                      Plan
+        PATCH /api/v1/milestones/{id}                            Plan
+        POST /api/v1/milestones/{id}:done                        OwnedNotViewer
+        POST /api/v1/milestones/{id}:undone                      OwnedNotViewer
+        DELETE /api/v1/milestones/{id}                           Plan
         """);
 
     private static Dictionary<string, string> Parse(string table) =>

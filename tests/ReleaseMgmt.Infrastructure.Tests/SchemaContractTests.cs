@@ -66,10 +66,33 @@ public sealed class SchemaContractTests : IDisposable
     {
         var migrated = Master(Migrated());
         var reference = Master(FromSchemaSql());
-        Assert.Equal(47, reference.Count(r => r.Type == "table"));
-        Assert.Equal(20, reference.Count(r => r.Type == "index"));
+        Assert.Equal(48, reference.Count(r => r.Type == "table"));   // 47 + TrainMilestones (Q-0840)
+        Assert.Equal(21, reference.Count(r => r.Type == "index"));   // 20 + IX_Milestones_Train
         Assert.Equal(reference.Select(r => (r.Type, r.Name)), migrated.Select(r => (r.Type, r.Name)));
         foreach (var (a, b) in reference.Zip(migrated)) Assert.Equal(a.Sql, b.Sql); // DDL text identical, incl. CHECKs
+    }
+
+    /// <summary>Q-0840: a database migrated before TrainMilestones existed (Schema + Triggers applied, no milestone table) gains the table and its index, with
+    /// the contract's DDL text, when the application migrates it at start-up.</summary>
+    [Fact]
+    public void A_database_from_before_milestones_gains_the_table_with_the_contract_DDL()
+    {
+        var path = Migrated();
+        using (var c = new SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            c.Open();
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = "DROP TABLE TrainMilestones; DELETE FROM __EFMigrationsHistory WHERE MigrationId LIKE '%_TrainMilestones';";
+            cmd.ExecuteNonQuery();
+        }
+        Assert.DoesNotContain(Master(path), r => r.Name is "TrainMilestones" or "IX_Milestones_Train");
+        using (var db = new ReleaseDbContext(new DbContextOptionsBuilder<ReleaseDbContext>()
+                   .UseSqlite($"Data Source={path};Pooling=False").AddInterceptors(new SqliteConnectionInterceptor()).Options))
+            db.Database.Migrate();
+        var reference = Master(FromSchemaSql());
+        var upgraded = Master(path);
+        Assert.Equal(reference.Select(r => (r.Type, r.Name)), upgraded.Select(r => (r.Type, r.Name)));
+        foreach (var (a, b) in reference.Zip(upgraded)) Assert.Equal(a.Sql, b.Sql);
     }
 
     [Fact]

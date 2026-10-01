@@ -53,7 +53,7 @@ Enforced by ASP.NET authorization policies on every endpoint; the database backs
 
 ## 3. Domain model
 
-A **ReleaseTrain** owns: `BundledProducts`, `StageGates` (→ `ChecklistTasks`, `GateWaivers`, `GateTransitions`), `RunbookSteps` (→ `StepDependencies`), `RunbookRuns` (→ `StepExecutions`), `Blockers`, `KnownIssues`, `ChangeRecords` (1:1), `AffectedCIs`, `DeploymentWindows`, `GoNoGoDecisions` (→ `GoNoGoConditions`), `PostImplementationReviews` (→ `PirActions`), `Baselines`, `ExternalLinks`, `CommTemplates` / `CommSchedule` / `CommDispatches`, `Attachments`.
+A **ReleaseTrain** owns: `BundledProducts`, `StageGates` (→ `ChecklistTasks`, `GateWaivers`, `GateTransitions`), `RunbookSteps` (→ `StepDependencies`), `RunbookRuns` (→ `StepExecutions`), `Blockers`, `KnownIssues`, `ChangeRecords` (1:1), `AffectedCIs`, `DeploymentWindows`, `GoNoGoDecisions` (→ `GoNoGoConditions`), `PostImplementationReviews` (→ `PirActions`), `Baselines`, `ExternalLinks`, `CommTemplates` / `CommSchedule` / `CommDispatches`, `Attachments`, `TrainMilestones` (named key dates; informational, never a guard).
 
 `TargetReleaseDate` is the scheduling anchor (the CERT date). Gate `DueOn` = target minus `OffsetDays` business days, skipping weekends and `Holidays`; recomputed whenever the target changes (and audited).
 
@@ -79,7 +79,7 @@ Plan (`RunbookSteps`) and actuals (`StepExecutions` per `RunbookRuns`) are separ
 
 ## 4. Schema
 
-`db/schema.sql` is the contract: 47 tables, 42 triggers, 20 indexes; `tests/reference/test_schema.py` (82 cases) must pass against it. Conventions: UUIDv7 TEXT ids; UTC ISO-8601 TEXT timestamps; 0/1 booleans with CHECK; `Version` on every mutable table.
+`db/schema.sql` is the contract: 48 tables, 42 triggers, 21 indexes; `tests/reference/test_schema.py` (87 cases) must pass against it. Conventions: UUIDv7 TEXT ids; UTC ISO-8601 TEXT timestamps; 0/1 booleans with CHECK; `Version` on every mutable table.
 
 Immutable by trigger: `AuditEvents`, `GateTransitions`, `Baselines`, `GoNoGoDecisions`, `CommDispatches` and `FreezeOverrides` (no update, no delete), and `Attachments` once locked (no update of any column, no delete).
 
@@ -154,6 +154,7 @@ REST under `/api/v1`. Mutations take `If-Match: <Version>`; 409 returns the curr
 | Runs | `POST /trains/{id}/runs {mode}`, `POST /runs/{id}/steps/{stepId}:start` `:done` `:fail` `:skip`, `POST /runs/{id}:end`, `GET /runs/{id}/forecast` |
 | Governance | `POST /trains/{id}/gonogo`, `POST /gonogo/{id}/conditions`, `POST /conditions/{id}:close`, `GET/POST /freezes`, `POST /freezes/{id}/overrides`, `GET/PATCH /trains/{id}/pir`, `/trains/{id}/known-issues` |
 | Blockers | `GET/POST /trains/{id}/blockers`, `POST /blockers/{id}:resolve` |
+| Milestones | `GET/POST /trains/{id}/milestones`, `PATCH/DELETE /milestones/{id}`, `POST /milestones/{id}:done` `:undone` (informational key dates; never a guard, Q-0840..Q-0846) |
 | Evidence | `POST /attachments` (multipart, 50 MB max, SHA-256 server-side), `GET /attachments/{id}` |
 | Integrations | `GET/POST /trains/{id}/links`, `GET /sync/health`, `GET /sync/alerts`, `POST /sync/alerts/{id}:resolve`, `POST /sync:run-now` |
 | Comms | `GET/POST /trains/{id}/comms`, `POST /comms/{id}:preview`, `POST /comms/{id}:dispatch {channel}`, `GET /trains/{id}/comm-schedule` |
@@ -232,7 +233,7 @@ Rules (all enforced in code): UTF-8 (BOM ok), RFC 4180, header required, case-in
 | Post-release scorecard | PDF | planned vs actual, on-time, churn, variance, incidents/rollback, PIR |
 | Analytics workbook | XLSX | one sheet per metric, parameters sheet first |
 | Audit log | CSV | filtered events with before/after JSON |
-| Calendar | ICS | gate due dates, windows, freezes; stable UIDs; per-user revocable token; titles and times only |
+| Calendar | ICS | gate due dates, milestones, windows, freezes; stable UIDs; per-user revocable token; titles and times only |
 
 Mechanics: PDFs are `ExportJobs` background jobs; footer = generated-at, generated-by, train `Version`, page n of m; PDF SHA-256 stored. Charts in PDFs are the client's ECharts SVG sent with the request; unattended exports use ECharts `renderToSVGString` in a small Node step. CSV/XLSX cells starting `= + - @`, tab or CR are prefixed with `'` (OWASP CSV injection). Evidence packs are regenerated on demand, never cached.
 

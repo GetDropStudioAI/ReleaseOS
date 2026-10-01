@@ -243,3 +243,11 @@ h2.aside-title { font-size: var(--text-drawer-title); letter-spacing: var(--trac
    same specificity and come later, which removed the accent rule (outline is none there), so a keyboard user saw no focus at all; and a date input did not
    match :focus-visible while one of its inner segments had focus (measured in Chromium), hence :focus-within. Restated last, with the same look. */
 input.line:focus, input.line:focus-within, textarea.line:focus, .inline-form input.line:focus, .inline-form textarea.line:focus, table.grid td input.line:focus, .an-filter input.line:focus { outline: none; border-bottom: 2px solid var(--accent); }
+
+/* Train milestones (Q-0843): a ◆ in its own lane under the gate timeline, joined to the axis by a dotted hairline. Words carry the state; colour repeats it. */
+.timeline .tl-ms-tick { stroke: var(--separator-strong); }
+.timeline .tl-ms-glyph { font-size: 12px; fill: var(--secondary); }
+.timeline .tl-ms-name { font-size: 11.5px; fill: var(--label); }
+.timeline text.tl-ms-glyph.ok, .timeline tspan.ok { fill: var(--ok); } .timeline text.tl-ms-glyph.bad, .timeline tspan.bad { fill: var(--bad); } .timeline tspan.muted { fill: var(--secondary); }
+.timeline tspan.tl-day { font-size: 11px; fill: var(--secondary); }
+table.milestones .ms-glyph { font-size: 11px; }

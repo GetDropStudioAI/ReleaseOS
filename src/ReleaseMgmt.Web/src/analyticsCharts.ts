@@ -64,12 +64,13 @@ export const BUILDERS: Record<string, OptionBuilder> = {
     const d = (v: unknown) => (n(v) === null ? null : Number(((v as number) / 24).toFixed(2)))
     return base(p, {
       legend: { ...legend(p), data: ['Median', 'p90'] },
-      grid: { left: 8, right: 44, top: 28, bottom: 8, containLabel: true },
+      grid: { left: 8, right: 78, top: 28, bottom: 8, containLabel: true },
       xAxis: valueAxis(p, 'days', { min: 0 }),
       yAxis: catAxis(p, rows.map(r => s(r.GateName)), { inverse: true, axisLabel: { color: p.label, fontSize: 12 } }),
+      // each bar is labelled with its series name as well as its value, so Median and p90 never differ by colour alone (WCAG 1.4.1)
       series: [
-        { name: 'Median', type: 'bar', barMaxWidth: 12, itemStyle: { color: p.accent }, label: barLabel(p, (x: { value: unknown }) => fmt(Number(x.value)), 'right'), data: rows.map(r => d(r.median_h)) },
-        { name: 'p90', type: 'bar', barMaxWidth: 12, itemStyle: { color: p.tertiary }, label: barLabel(p, (x: { value: unknown }) => fmt(Number(x.value)), 'right'), data: rows.map(r => d(r.p90_h)) },
+        { name: 'Median', type: 'bar', barMaxWidth: 12, itemStyle: { color: p.accent }, label: barLabel(p, (x: { value: unknown }) => `median ${fmt(Number(x.value))}`, 'right'), data: rows.map(r => d(r.median_h)) },
+        { name: 'p90', type: 'bar', barMaxWidth: 12, itemStyle: { color: p.tertiary }, label: barLabel(p, (x: { value: unknown }) => `p90 ${fmt(Number(x.value))}`, 'right'), data: rows.map(r => d(r.p90_h)) },
       ],
     })
   },

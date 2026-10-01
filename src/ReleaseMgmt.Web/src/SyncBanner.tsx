@@ -43,13 +43,17 @@ export function useSyncState(enabled = true) {
   return { state, error }
 }
 
-function headline(e: FailingEntry, c: ConnectorView | undefined): string {
+/** The alert sentence: nothing in it changes from one sync cycle to the next, so a screen reader hears it once (WCAG 4.1.3), not on every refetch. */
+function headline(e: FailingEntry): string {
   const name = SYSTEM_NAMES[e.source] ?? e.source
   if (e.scope === 'engine') return 'The sync engine has stalled: no cycle has completed for too long'
   if (e.kind === 'AuthFailed') return `${name} rejected our credentials`
   if (e.kind === 'Unreachable') return `${name} is unreachable`
-  return `${name} has failed ${c?.consecutiveFailures ?? 'several'} cycles in a row`
+  return `${name} is failing`
 }
+/** The ticking part, shown next to the alert but outside it. */
+const cycles = (e: FailingEntry, c: ConnectorView | undefined) =>
+  e.scope === 'engine' || !c || c.consecutiveFailures < 1 ? null : `${c.consecutiveFailures} failed cycle${c.consecutiveFailures === 1 ? '' : 's'} in a row.`
 
 function effect(e: FailingEntry): string {
   if (e.scope === 'engine') return 'Nothing from Jira or ServiceNow on any screen is current.'
@@ -61,13 +65,13 @@ export function SyncBanner({ sync, onOpen }: { sync: { state: SyncStateDto | nul
   const { state, error } = sync
   const failing = state?.connectorWide ? state.failing : []
   // The row is always in the DOM (the shell grid places the other regions around it) and has no height while there is nothing to say;
-  // only the messages are alerts, so a page with nothing wrong has no empty alert region.
+  // only the headlines are alerts, so a page with nothing wrong has no empty alert region, and the failure count ticking up does not re-announce it.
   return (
     <div className="sync-banner-row" data-testid="sync-banner">
       {failing.map(e => (
-        <p key={`${e.source}-${e.kind}`} className="sync-banner bad" role="alert">
-          <strong>{e.scope === 'engine' ? '▲' : '✗'} {headline(e, state?.connectors.find(c => c.source === e.source))}{e.since ? ` since ${fmtDayTime(e.since)}` : ''}.</strong>
-          <span className="sync-banner-effect">{effect(e)}</span>
+        <p key={`${e.source}-${e.kind}`} className="sync-banner bad">
+          <strong role="alert"><span aria-hidden="true">{e.scope === 'engine' ? '▲' : '✗'}</span> {headline(e)}{e.since ? ` since ${fmtDayTime(e.since)}` : ''}.</strong>
+          <span className="sync-banner-effect">{cycles(e, state?.connectors.find(c => c.source === e.source))} {effect(e)}</span>
           <a href="/sync" onClick={ev => { ev.preventDefault(); onOpen() }}>Sync health</a>
         </p>
       ))}

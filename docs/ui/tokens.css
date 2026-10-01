@@ -17,6 +17,11 @@
   --separator-strong: #d1d1d6;  /* pane edges, table header rule */
   --separator: #e5e5ea;         /* row rules */
   --grid: #ececf0;              /* chart gridlines */
+  /* Fiserv Orange for main wording (design direction D). Exact #FF6600 is 2.94:1 on white, so light mode uses AA-safe shades:
+     --brand-title for titles and 2px indicators (4.79:1 on --bg, 4.64:1 on --panel: AA at any size), --brand-text for smaller wording (5.23:1). Dark mode uses exact Fiserv Orange. */
+  --brand: #ff6600;
+  --brand-title: #c24e00;
+  --brand-text: #b84a00;
   --accent: #0a64d8;
   --accent-hover: #084fad;
   --selection: #e6effc;         /* full-width selected-row tint */
@@ -59,6 +64,8 @@
     --separator-strong: #48484a;
     --separator: #343436;
     --grid: #2c2c2e;
+    --brand-title: #ff6600;
+    --brand-text: #ff7a1f;
     --accent: #4aa3ff;
     --accent-hover: #7cbcff;
     --selection: #17355c;
@@ -74,6 +81,7 @@
   --bg: #1e1e1e; --toolbar: rgba(30,30,30,.8); --sidebar: rgba(44,44,46,.72); --sidebar-fallback: #2c2c2e;
   --panel: #232325; --label: #f5f5f7; --secondary: #a1a1a6; --tertiary: #7c7c80;
   --separator-strong: #48484a; --separator: #343436; --grid: #2c2c2e;
+  --brand-title: #ff6600; --brand-text: #ff7a1f;
   --accent: #4aa3ff; --accent-hover: #7cbcff; --selection: #17355c; --running: #1b2a40;
   --ok: #34c759; --warn: #ffa33d; --bad: #ff6b62; --bad-tint: #3a1d1c; --warn-tint: #3a2a14;
 }

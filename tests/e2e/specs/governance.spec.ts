@@ -17,10 +17,13 @@ test('a Release Manager records Go with conditions inline; an RTE cannot; the ch
   await expect(go.locator('[role=alert]')).toContainText('expiry')                              // an empty expiry is refused, nothing recorded
   await go.locator('label:has-text("Expires") input').fill('2035-01-01T09:00')
   await go.locator('button:text-is("Record decision")').click()
+  await expect(go.locator('[role=group][aria-label="Confirm decision"]')).toContainText('with 1 condition')   // decisions are immutable: a summary + Confirm first
+  await go.locator('button:text-is("Confirm decision")').click()
   await expect(go).toContainText('Go with conditions')
   await expect(go.locator('tr', { hasText: 'Patch the payment gateway' })).toContainText('○ open')
 
   await go.locator('button:text-is("Close")').click()
+  await go.locator('button:text-is("Close condition")').click()                                // inline confirm
   await expect(go.locator('tr', { hasText: 'Patch the payment gateway' })).toContainText('✓ closed')
 
   // the change record

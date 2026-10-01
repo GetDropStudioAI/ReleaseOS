@@ -4,9 +4,11 @@ import {
   updateLibraryTemplate, updateTrainMessage,
   type CommPreview, type CommTarget, type CommToken, type LibraryTemplate, type Me, type StreamRow, type TrainMessage,
 } from './api'
+import { announce } from './announce'
 import { CommSchedule } from './CommSchedule'
 import { scan } from './commTokens'
 import { Conflict, isConflict } from './Conflict'
+import { useFocusWhen } from './focus'
 import { fmtHM } from './time'
 
 // REOS-43/44: the comm template library, full width (UI.md: "as Comms drawer, full width"; layout and copy from mockups/Comms.html).
@@ -27,14 +29,20 @@ const TARGETS: { value: CommTarget; label: string }[] = [
 /** The template source with allowlisted tokens in accent text and problems in the error colour, underlined so colour is never the only cue. */
 function TokenCheck({ text, allow, label }: { text: string; allow: string[]; label: string }) {
   const s = scan(text, allow)
+  const summary = s.problems.length === 0 ? `${s.known} ${s.known === 1 ? 'token' : 'tokens'} · all known ✓` : `✗ ${s.problems.length} ${s.problems.length === 1 ? 'problem' : 'problems'}: this cannot be sent until fixed`
+  // the count changes while typing: speak it once typing pauses, and only when it changed (WCAG 4.1.3); the first render is not announced
+  const said = useRef(summary)
+  useEffect(() => {
+    if (said.current === summary) return
+    const t = window.setTimeout(() => { said.current = summary; announce(`${label}: ${summary.replace(/ ?[✓✗] ?/g, ' ').trim()}`) }, 900)
+    return () => window.clearTimeout(t)
+  }, [summary, label])
   return (
     <div>
-      <p className="token-summary">
-        <span className="cap">{label}</span>{' '}
-        {s.problems.length === 0
-          ? <span className="ok small">{s.known} {s.known === 1 ? 'token' : 'tokens'} · all known ✓</span>
-          : <span className="bad small">✗ {s.problems.length} {s.problems.length === 1 ? 'problem' : 'problems'}: this cannot be sent until fixed</span>}
-      </p>
+      <div className="token-summary">
+        <h3 className="cap">{label}</h3>{' '}
+        <span className={s.problems.length === 0 ? 'ok small' : 'bad small'}>{summary}</span>
+      </div>
       <pre className="src" role="group" aria-label={`${label}, tokens marked`}>
         {s.segs.map((g, i) => g.kind === 'token' ? <span key={i} className="tk">{g.text}</span> : g.kind === 'bad' ? <span key={i} className="tkbad">{g.text}</span> : g.text)}
         {text === '' && <span className="muted">Nothing yet.</span>}
@@ -49,6 +57,7 @@ function Preview({ trainId, draft, onAsk }: { trainId: string; draft: Draft; onA
   const [p, setP] = useState<CommPreview | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [moved, setMoved] = useState<number | null>(null)
+  useEffect(() => { if (moved !== null) announce(`The train changed since this preview: now version ${moved}. Refresh the preview.`) }, [moved])
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -73,11 +82,11 @@ function Preview({ trainId, draft, onAsk }: { trainId: string; draft: Draft; onA
 
   return (
     <div>
-      <p className="token-summary">
-        <span className="cap">Preview</span>{' '}
+      <div className="token-summary">
+        <h3 className="cap">Preview</h3>{' '}
         {p && <span className="muted small">data as of {fmtHM(p.asOf)} · train v{p.trainVersion}</span>}{' '}
         <button type="button" className="text" onClick={() => { setTick(n => n + 1); onAsk?.() }}>Refresh</button>
-      </p>
+      </div>
       <p className="inline-form small">
         <label>Show as{' '}
           <select className="line" value={target} onChange={e => setTarget(e.target.value as CommTarget)}>
@@ -88,12 +97,12 @@ function Preview({ trainId, draft, onAsk }: { trainId: string; draft: Draft; onA
       {!trainId && <p className="muted">Choose a train above to preview this message with its live data.</p>}
       {problem && <p className="bad" role="alert">✗ {problem}</p>}
       {moved !== null && p && (
-        <p className="warn small" role="status">▲ The train changed since this preview (v{p.trainVersion}, now v{moved}). <button type="button" className="text" onClick={() => setTick(n => n + 1)}>Refresh the preview</button></p>
+        <p className="warn small">▲ The train changed since this preview (v{p.trainVersion}, now v{moved}). <button type="button" className="text" onClick={() => setTick(n => n + 1)}>Refresh the preview</button></p>
       )}
       {p && (
         <>
           {p.tokenErrors.length > 0 && <p className="bad small">✗ Cannot be sent: {p.tokenErrors.length} template {p.tokenErrors.length === 1 ? 'problem' : 'problems'} (see the source on the left).</p>}
-          {p.subject !== null && <p className="preview-subject"><span className="muted small">Subject</span><br /><strong>{p.subject || <span className="muted">Empty</span>}</strong></p>}
+          {p.subject !== null && <p className="preview-subject"><span className="muted small">Subject</span><span className="sr-only">:</span><br /><strong>{p.subject || <span className="muted">Empty</span>}</strong></p>}
           <pre className={target === 'PlainText' ? 'preview' : 'preview src'} role="group" aria-label="Hydrated message">{p.text || 'Empty'}</pre>
         </>
       )}
@@ -105,9 +114,9 @@ function Tokens({ tokens, onInsert, canInsert }: { tokens: CommToken[]; onInsert
   const [open, setOpen] = useState(false)
   return (
     <div>
-      <p><button type="button" className="text" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? 'Hide tokens' : 'Show the tokens you can use'}</button></p>
+      <p><button type="button" className="text" aria-expanded={open} aria-controls={open ? 'comm-token-list' : undefined} onClick={() => setOpen(o => !o)}>{open ? 'Hide tokens' : 'Show the tokens you can use'}</button></p>
       {open && (
-        <table className="grid">
+        <table className="grid" id="comm-token-list">
           <thead><tr><th>Token</th><th>What it prints</th><th><span className="sr-only">Insert</span></th></tr></thead>
           <tbody>
             {tokens.map(t => (
@@ -123,7 +132,8 @@ function Tokens({ tokens, onInsert, canInsert }: { tokens: CommToken[]; onInsert
   )
 }
 
-export function CommLibrary({ me }: { me: Me }) {
+/** `trainId`: the train the user is working on, when the caller knows it; preview and schedule default to it instead of the first train. */
+export function CommLibrary({ me, trainId: current }: { me: Me; trainId?: string | null }) {
   const canEdit = me.roles.includes('RTE') || me.roles.includes('ReleaseManager')
   const [tokens, setTokens] = useState<CommToken[]>([])
   const [library, setLibrary] = useState<LibraryTemplate[] | null>(null)
@@ -134,12 +144,13 @@ export function CommLibrary({ me }: { me: Me }) {
   const [draft, setDraft] = useState<Draft>(blank())
   const [source, setSource] = useState<{ version: number; draft: Draft } | null>(null)
   const [override, setOverride] = useState<number | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ApiError | null>(null)
   const [scheduleKey, setScheduleKey] = useState(0)
   const body = useRef<HTMLTextAreaElement>(null)
   const caret = useRef<number | null>(null)
+  const nameRef = useFocusWhen<HTMLInputElement>(sel?.kind === 'new')
 
   const allow = tokens.map(t => t.name)
   const inTrain = sel?.kind === 'train' ? messages.find(m => m.id === sel.id) : undefined
@@ -158,14 +169,21 @@ export function CommLibrary({ me }: { me: Me }) {
   useEffect(() => {
     void loadLibrary()
     getCommTokens().then(setTokens).catch(e => setProblem((e as Error).message))
-    getStream().then(r => { setTrains(r); setTrainId(t => t || r[0]?.id || '') }).catch(() => setTrains([]))
-  }, [loadLibrary])
+    getStream().then(r => { setTrains(r); setTrainId(t => t || (current && r.some(x => x.id === current) ? current : r[0]?.id) || '') }).catch(() => setTrains([]))
+  }, [loadLibrary]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setMessages([]); if (sel?.kind === 'train') { setSel(null); setSource(null) } void loadMessages(trainId) }, [trainId, loadMessages]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // put the caret back after a token was inserted
   useEffect(() => { if (caret.current !== null && body.current) { body.current.focus(); body.current.setSelectionRange(caret.current, caret.current); caret.current = null } }, [draft.markdownBody])
 
-  const choose = (s: Sel, d: Draft, version: number) => { setSel(s); setDraft(d); setSource({ version, draft: d }); setOverride(null); setProblem(null); setConflict(null) }
+  // the control that opened the editor (a row's name or New template), so Close can give focus back to it (WCAG 2.4.3)
+  const opener = useRef<HTMLElement | null>(null)
+  const choose = (s: Sel, d: Draft, version: number) => {
+    const a = document.activeElement as HTMLElement | null
+    if (a && a !== document.body && !document.getElementById('comm-editor')?.contains(a)) opener.current = a
+    setSel(s); setDraft(d); setSource({ version, draft: d }); setOverride(null); setProblem(null); setConflict(null)
+  }
+  const close = () => { setSel(null); setSource(null); setConflict(null); setProblem(null); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus() }) }
   const pickLibrary = (l: LibraryTemplate) => choose({ kind: 'library', id: l.id }, { name: l.name, templateType: l.templateType, audience: l.audience, subjectLine: l.subjectLine, markdownBody: l.markdownBody }, l.version)
   const pickMessage = (m: TrainMessage) => choose({ kind: 'train', id: m.id }, { name: m.libraryName ?? m.templateType, templateType: m.templateType, audience: m.audience, subjectLine: m.subjectLine, markdownBody: m.markdownBody }, m.version)
   const startNew = () => choose({ kind: 'new' }, blank(), 0)
@@ -174,9 +192,13 @@ export function CommLibrary({ me }: { me: Me }) {
     if (isConflict(e)) { setConflict(e); setProblem(null) }
     else { setConflict(null); setProblem(e instanceof ApiError ? (e.body?.message ?? e.message) : (e as Error).message) }
   }
-  const run = async (f: () => Promise<void>) => { setBusy(true); setProblem(null); setConflict(null); try { await f() } catch (e) { fail(e) } finally { setBusy(false) } }
+  const run = async (label: string, f: () => Promise<void>) => {
+    if (busy) return
+    setBusy(label); setProblem(null); setConflict(null)
+    try { await f() } catch (e) { fail(e) } finally { setBusy(null) }
+  }
 
-  const save = () => run(async () => {
+  const save = () => run(sel?.kind === 'new' ? 'Creating…' : 'Saving…', async () => {
     if (!sel || !source) return
     const version = override ?? source.version
     if (sel.kind === 'new') {
@@ -189,12 +211,14 @@ export function CommLibrary({ me }: { me: Me }) {
       const m = await updateTrainMessage(sel.id, { audience: draft.audience, subjectLine: draft.subjectLine, markdownBody: draft.markdownBody }, version)
       await loadMessages(trainId); pickMessage(m)
     }
+    announce(sel.kind === 'new' ? 'Template created.' : 'Changes saved.')
   })
 
-  const addToTrain = () => run(async () => {
+  const addToTrain = () => run('Adding…', async () => {
     if (sel?.kind !== 'library' || !trainId) return
     const m = await copyToTrain(trainId, sel.id)
     await Promise.all([loadMessages(trainId), loadLibrary()]); pickMessage(m)
+    announce(`Added to ${trainTitle ?? 'the train'}. Its own copy is open below.`)
   })
 
   const reload = async () => {
@@ -245,8 +269,8 @@ export function CommLibrary({ me }: { me: Me }) {
           {library?.map(l => {
             const on = sel?.kind === 'library' && sel.id === l.id
             return (
-              <tr key={l.id} className={on ? 'selected' : undefined} aria-selected={on} tabIndex={0} onClick={() => pickLibrary(l)} onKeyDown={e => { if (e.key === 'Enter') pickLibrary(l) }}>
-                <td>{l.name}</td><td className="mono">{l.templateType}</td><td>{l.audience}</td><td>{l.subjectLine}</td>
+              <tr key={l.id} className={on ? 'selected' : undefined}>
+                <td><button type="button" className="text plainlink" aria-expanded={on} aria-controls={on ? 'comm-editor' : undefined} onClick={() => pickLibrary(l)}>{l.name}</button></td><td className="mono">{l.templateType}</td><td>{l.audience}</td><td>{l.subjectLine}</td>
                 <td>{tokenState(l.valid, l.tokenErrors.length)}</td><td className="n">{l.trainCopies}</td><td className="n">{l.version}</td>
               </tr>
             )
@@ -256,14 +280,14 @@ export function CommLibrary({ me }: { me: Me }) {
       {library?.length === 0 && <p className="muted">The library is empty. {canEdit ? 'Create the first template.' : 'An RTE or Release Manager can add templates.'}</p>}
 
       {sel && source && (
-        <>
+        <div id="comm-editor">
           <div className="section-head">
             <h2 className="cap">
               {sel.kind === 'new' ? 'New library template' : sel.kind === 'library' ? `Edit ${source.draft.name}` : `${trainTitle ?? 'Train'} · ${inTrain?.libraryName ?? inTrain?.templateType ?? 'message'}`}
             </h2>
             <span className="muted small">{sel.kind === 'train' ? 'This train\'s own copy' : sel.kind === 'library' ? `Version ${source.version}` : ''}</span>
           </div>
-          {locked && <p className="warn" role="status">▲ Sent {inTrain!.dispatchCount} {inTrain!.dispatchCount === 1 ? 'time' : 'times'}, so this copy is read only. Copy the library template into the train again for a new message.</p>}
+          {locked && <p className="warn">▲ Sent {inTrain!.dispatchCount} {inTrain!.dispatchCount === 1 ? 'time' : 'times'}, so this copy is read only. Copy the library template into the train again for a new message.</p>}
           {!canEdit && <p className="muted">Only an RTE or Release Manager edits templates.</p>}
           {conflict && (
             <Conflict error={conflict} what={sel.kind === 'train' ? 'message' : 'template'}>
@@ -275,7 +299,7 @@ export function CommLibrary({ me }: { me: Me }) {
             <div>
               <div className="inline-form stack">
                 {sel.kind !== 'train' && (
-                  <label>Name <input className="line wide" value={draft.name} readOnly={!editable} onChange={e => set('name', e.target.value)} /></label>
+                  <label>Name <input ref={nameRef} className="line wide" value={draft.name} readOnly={!editable} onChange={e => set('name', e.target.value)} /></label>
                 )}
                 {sel.kind !== 'train' && (
                   <label>Type <input className="line" list="comm-types" value={draft.templateType} readOnly={!editable} onChange={e => set('templateType', e.target.value)} />
@@ -295,16 +319,17 @@ export function CommLibrary({ me }: { me: Me }) {
               <TokenCheck text={`Subject: ${draft.subjectLine}\n${draft.markdownBody}`} allow={allow} label="Template" />
               <Tokens tokens={tokens} onInsert={insert} canInsert={editable} />
               <p>
-                {editable && <button type="button" className="text strong" disabled={busy || !valid || (!dirty && sel.kind !== 'new')} onClick={save}>{sel.kind === 'new' ? 'Create template' : 'Save changes'}</button>}{' '}
+                {editable && <button type="button" className="text strong" disabled={!!busy || !valid || (!dirty && sel.kind !== 'new')} aria-describedby={!valid && editable ? 'comm-why' : undefined} onClick={() => void save()}>{busy === 'Creating…' || busy === 'Saving…' ? busy : sel.kind === 'new' ? 'Create template' : 'Save changes'}</button>}{' '}
                 {editable && dirty && sel.kind !== 'new' && <button type="button" className="text" onClick={() => { setDraft(source.draft); setConflict(null); setProblem(null) }}>Discard changes</button>}{' '}
-                {sel.kind === 'library' && canEdit && trainId && <button type="button" className="text" disabled={busy || dirty} title={dirty ? 'Save your changes first' : undefined} onClick={addToTrain}>Add to {trainTitle ?? 'the train'}</button>}{' '}
-                <button type="button" className="text" onClick={() => { setSel(null); setSource(null); setConflict(null); setProblem(null) }}>Close</button>
+                {sel.kind === 'library' && canEdit && trainId && <button type="button" className="text" disabled={!!busy || dirty} aria-describedby={dirty ? 'comm-add-why' : undefined} onClick={() => void addToTrain()}>{busy === 'Adding…' ? busy : `Add to ${trainTitle ?? 'the train'}`}</button>}{' '}
+                <button type="button" className="text" onClick={close}>Close</button>
               </p>
-              {sel.kind === 'library' && dirty && <p className="muted small">Add to train copies the saved version, not your unsaved changes.</p>}
+              {editable && !valid && <p id="comm-why" className="muted small">{sel.kind === 'train' ? 'Subject and body are required.' : 'Name, type, subject and body are required.'}</p>}
+              {sel.kind === 'library' && dirty && <p id="comm-add-why" className="muted small">Save your changes first: Add to train copies the saved version, not your unsaved changes.</p>}
             </div>
             <Preview trainId={trainId} draft={draft} />
           </div>
-        </>
+        </div>
       )}
 
       {trainId && (
@@ -316,8 +341,8 @@ export function CommLibrary({ me }: { me: Me }) {
               {messages.map(m => {
                 const on = sel?.kind === 'train' && sel.id === m.id
                 return (
-                  <tr key={m.id} className={on ? 'selected' : undefined} aria-selected={on} tabIndex={0} onClick={() => pickMessage(m)} onKeyDown={e => { if (e.key === 'Enter') pickMessage(m) }}>
-                    <td>{m.libraryName ?? m.templateType}</td><td>{m.audience}</td><td>{m.subjectLine}</td><td>{tokenState(m.valid, m.tokenErrors.length)}</td>
+                  <tr key={m.id} className={on ? 'selected' : undefined}>
+                    <td><button type="button" className="text plainlink" aria-expanded={on} aria-controls={on ? 'comm-editor' : undefined} onClick={() => pickMessage(m)}>{m.libraryName ?? m.templateType}</button></td><td>{m.audience}</td><td>{m.subjectLine}</td><td>{tokenState(m.valid, m.tokenErrors.length)}</td>
                     <td>{m.dispatched ? <span className="muted">● sent {m.dispatchCount}×, read only</span> : <span>○ editable</span>}</td>
                   </tr>
                 )

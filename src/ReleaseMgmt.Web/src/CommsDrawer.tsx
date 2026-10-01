@@ -1,6 +1,9 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, get, post } from './api'
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { ApiError, get, getTemplates, post, seedCommSchedule, type TemplateRow } from './api'
+import { announce } from './announce'
+import { useFocusWhen, useRestoreFocus } from './focus'
 import { errMsg } from './format'
+import { useAction } from './useAction'
 import { useDraft } from './session'
 import { fmtDayTime, fmtHM, utcToZonedInput } from './time'
 
@@ -50,13 +53,20 @@ function Source({ text, errors }: { text: string; errors: string[] }) {
     : <Fragment key={i}>{p}</Fragment>)}</>
 }
 
-/** A safe, tiny Markdown view of the preview: **bold** and "- " bullets only, everything else literal text (never innerHTML). */
+/** A safe, tiny Markdown view of the preview: **bold** and "- " bullets only, everything else literal text (never innerHTML). Runs of bullets are a real list. */
 function PreviewText({ text }: { text: string }) {
-  return <div className="preview-body">{text.split('\n').map((line, i) => {
-    const bullet = /^[-*•]\s+/.test(line)
-    const parts = line.replace(/^[-*•]\s+/, '').split(/(\*\*[^*]+\*\*)/g)
-    return <div key={i} className={line.trim() === '' ? 'gap' : undefined}>{bullet && '• '}{parts.map((p, j) => /^\*\*[^*]+\*\*$/.test(p) ? <strong key={j}>{p.slice(2, -2)}</strong> : <Fragment key={j}>{p}</Fragment>)}</div>
-  })}</div>
+  const BULLET = /^[-*•]\s+/
+  const inline = (line: string) => line.replace(BULLET, '').split(/(\*\*[^*]+\*\*)/g).map((p, j) => /^\*\*[^*]+\*\*$/.test(p) ? <strong key={j}>{p.slice(2, -2)}</strong> : <Fragment key={j}>{p}</Fragment>)
+  const out: ReactNode[] = []
+  let list: string[] = []
+  const flush = (k: number) => { if (list.length) out.push(<ul key={`l${k}`} className="plain" style={{ margin: 0 }}>{list.map((l, i) => <li key={i}><span aria-hidden="true">• </span>{inline(l)}</li>)}</ul>); list = [] }
+  text.split('\n').forEach((line, i) => {
+    if (BULLET.test(line)) { list.push(line); return }
+    flush(i)
+    out.push(<div key={i} className={line.trim() === '' ? 'gap' : undefined}>{inline(line)}</div>)
+  })
+  flush(-1)
+  return <div className="preview-body">{out}</div>
 }
 
 const OUTCOME: Record<string, { g: string; cls: string; word: string }> = {
@@ -74,8 +84,44 @@ function ScheduleState({ s }: { s: ScheduleItem }) {
   }
 }
 
-function ScheduleTable({ ctx, selectedId, onPick }: { ctx: DispatchContext; selectedId?: string; onPick: (s: ScheduleItem) => void }) {
-  if (ctx.schedule.length === 0) return <p className="muted">No T-minus schedule for this train yet.</p>
+/** The empty schedule's next action (UX review #16): seed it here from a train template's T-minus plan, the same call the Comm library makes. */
+function SeedSchedule({ trainId, canSeed, onSeeded }: { trainId: string; canSeed: boolean; onSeeded: () => void }) {
+  const [templates, setTemplates] = useState<TemplateRow[] | null>(null)
+  const [pick, setPick] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  const { run, pending } = useAction()
+  useEffect(() => {
+    if (!canSeed) return
+    let live = true
+    getTemplates().then(t => { if (!live) return; const usable = t.filter(x => x.status !== 'Retired' && x.scheduleCount > 0); setTemplates(usable); setPick(usable[0]?.id ?? '') })
+      .catch(e => live && setErr(errMsg(e, 'Could not load the train templates.')))
+    return () => { live = false }
+  }, [canSeed])
+  const seed = () => run('seed', async () => {
+    setErr(null)
+    try { await seedCommSchedule(trainId, pick); announce('Schedule created.'); onSeeded() } catch (e) { setErr(errMsg(e, 'Could not create the schedule.')) }
+  })
+  return (
+    <>
+      <p className="muted">No T-minus schedule for this train yet.{!canSeed && ' An RTE or Release Manager can create it from a train template.'}</p>
+      {canSeed && templates?.length === 0 && <p className="muted small">No train template has a T-minus plan to seed from. Add messages to a template&apos;s T-minus plan first.</p>}
+      {canSeed && !!templates?.length && (
+        <p className="inline-form">
+          <label>Seed from template{' '}
+            <select className="line" value={pick} onChange={e => setPick(e.target.value)}>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.scheduleCount} messages)</option>)}
+            </select>
+          </label>{' '}
+          <button type="button" className="text strong" disabled={!!pending || !pick} onClick={() => void seed()}>{pending ? 'Creating…' : 'Create schedule'}</button>
+        </p>
+      )}
+      {err && <p className="bad" role="alert">✗ {err}</p>}
+    </>
+  )
+}
+
+function ScheduleTable({ ctx, selectedId, onPick, empty }: { ctx: DispatchContext; selectedId?: string; onPick: (s: ScheduleItem) => void; empty: ReactNode }) {
+  if (ctx.schedule.length === 0) return <>{empty}</>
   return (
     <table className="grid comms-schedule">
       <thead><tr><th scope="col">When</th><th scope="col">Message</th><th scope="col">Due</th><th scope="col">State</th></tr></thead>
@@ -112,10 +158,11 @@ function SentLog({ trainId, refreshKey }: { trainId: string; refreshKey: number 
     getDispatch(open).then(d => live && setDetail(d)).catch(e => live && setErr(errMsg(e, 'Could not load that message.')))
     return () => { live = false }
   }, [open])
-  const more = async () => {
+  const { run, pending } = useAction()
+  const more = () => run('more', async () => {
     if (!next) return
     try { const p = await getDispatchLog(trainId, next); setRows(r => [...(r ?? []), ...p.items]); setNext(p.nextCursor) } catch (e) { setErr(errMsg(e, 'Could not load more.')) }
-  }
+  })
   if (err) return <p className="bad" role="alert">✗ {err}</p>
   if (!rows) return <p className="muted">Loading…</p>
   if (rows.length === 0) return <p className="muted">Nothing has been sent for this train yet. Each send stores the exact text, channel and time here, and cannot be edited or deleted.</p>
@@ -140,7 +187,7 @@ function SentLog({ trainId, refreshKey }: { trainId: string; refreshKey: number 
                   <tr><td colSpan={4}>
                     {!detail ? <span className="muted">Loading…</span> : (
                       <>
-                        <pre className="audit-json" aria-label="Stored message">{detail.body}</pre>
+                        <pre className="audit-json" role="group" aria-label="Stored message">{detail.body}</pre>
                         <p className="muted small">Stored exactly as sent · {detail.body.length.toLocaleString()} characters · sha256 <span className="mono">{short(detail.bodySha256)}…</span> · <a href={`/api/v1/comms/dispatches/${detail.id}/body`} target="_blank" rel="noreferrer">raw text</a></p>
                       </>
                     )}
@@ -151,7 +198,7 @@ function SentLog({ trainId, refreshKey }: { trainId: string; refreshKey: number 
           })}
         </tbody>
       </table>
-      {next && <p><button type="button" className="text" onClick={more}>Show older</button></p>}
+      {next && <p><button type="button" className="text" disabled={!!pending} onClick={() => void more()}>{pending ? 'Loading…' : 'Show older'}</button></p>}
     </>
   )
 }
@@ -187,11 +234,17 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
   const [body, setBody] = useState<CommPreview | null>(null)
   const [subject, setSubject] = useState<CommPreview | null>(null)
   const [previewErr, setPreviewErr] = useState<string | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
+  const { run, pending: busy } = useAction()
   const [err, setErr] = useState<string | null>(null)
   const [result, setResult] = useState<Dispatched | null>(null)
   const [fallback, setFallback] = useState<{ text: string; note: string } | null>(null)
   const fallbackRef = useRef<HTMLTextAreaElement>(null)
+  const ids = useId()
+  const headingId = `${ids}-title`, whyId = `${ids}-why`
+
+  // focus the drawer's heading when it opens, and give focus back to the opener ("Communicate") when it closes (WCAG 2.4.3)
+  useRestoreFocus('[data-comms-trigger]')   // first: it must record the opener before the heading takes focus
+  const headingRef = useFocusWhen<HTMLHeadingElement>(true)
 
   useEffect(() => {
     let live = true
@@ -200,19 +253,28 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
   }, [trainId, refreshKey, rev])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose() }
+    // Esc closes the drawer, but not while typing or choosing in a field (the key belongs to the field there)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.closest('input, select, textarea') || t.isContentEditable)) return
+      onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   useEffect(() => { if (fallback) { fallbackRef.current?.focus(); fallbackRef.current?.select() } }, [fallback])
 
   // The template in view: the draft's choice, else the schedule's next unsent item, else the first template.
+  const next = ctx?.schedule.find(s => !s.sentAt)
+  const chosen = ctx?.templates.find(t => t.id === d.templateId)
   const template = useMemo(() => {
     if (!ctx) return undefined
-    const next = ctx.schedule.find(s => !s.sentAt)
-    return ctx.templates.find(t => t.id === d.templateId) ?? ctx.templates.find(t => t.id === next?.commTemplateId) ?? ctx.templates[0]
-  }, [ctx, d.templateId])
+    return chosen ?? ctx.templates.find(t => t.id === next?.commTemplateId) ?? ctx.templates[0]
+  }, [ctx, chosen, next?.commTemplateId])
+  // The schedule item a send is logged against: the one picked, else the next unsent item when its template is the one in view by default (UX review #15).
   const item = ctx?.schedule.find(s => s.id === d.scheduleItemId && !s.sentAt && s.commTemplateId === template?.id)
+    ?? (!chosen && !d.scheduleItemId && next && next.commTemplateId === template?.id ? next : undefined)
 
   const loadPreview = useCallback(() => {
     if (!template) return () => {}
@@ -227,6 +289,7 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
 
   const errors = useMemo(() => [...new Set([...(body?.tokenErrors ?? []), ...(subject?.tokenErrors ?? [])])], [body, subject])
   const stale = !!(ctx && body && ctx.trainVersion !== body.trainVersion)
+  useEffect(() => { if (stale) announce('The train moved since this preview. Refresh the preview before sending.') }, [stale])
   const nTokens = template ? tokensOf(template.subjectLine + '\n' + template.markdownBody).length : 0
   const why = !canDispatch ? 'Only an RTE or Release Manager sends communications.'
     : !template ? 'This train has no communication templates.'
@@ -235,21 +298,28 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
     : errors.length > 0 ? `Unknown tokens block sending: ${errors.join('; ')}`
     : stale ? `The train moved to v${ctx!.trainVersion} since this preview (v${body.trainVersion}). Refresh the preview first.`
     : busy ? 'Sending…' : null
-  const whyWebhook = why ?? (ctx && ctx.webhookTargets.length === 0 ? 'No webhook destinations are approved yet; an administrator adds them in Admin.' : null)
+  const noHooks = !why && !!ctx && ctx.webhookTargets.length === 0
+  const whyWebhook = why ?? (noHooks ? 'No webhook destinations are approved yet; an administrator adds them to the allowlist on Sync health.' : null)
   const webhook = ctx?.webhookTargets.find(w => w.id === d.webhookId) ?? ctx?.webhookTargets[0]
+  const toSync = (e: MouseEvent<HTMLAnchorElement>) => {
+    // client-side navigation: the router listens to popstate (route.ts)
+    e.preventDefault(); window.history.pushState(null, '', '/sync'); window.dispatchEvent(new PopStateEvent('popstate'))
+  }
 
   const afterSend = () => { setLogRev(n => n + 1); setRev(n => n + 1); onChanged() }
   const request = (b: Omit<DispatchBody, 'templateId' | 'scheduleItemId'>): DispatchBody => ({ ...b, templateId: template!.id, scheduleItemId: item?.id })
 
-  const send = async (label: string, run: (v: number) => Promise<void>) => {
+  // one send at a time: `run` ignores a second click while the first is in flight (and calls `fn` synchronously, so the clipboard keeps the click's gesture)
+  const send = (label: string, fn: (v: number) => Promise<void>) => run(label, async () => {
     if (!body || why) return
-    setErr(null); setResult(null); setFallback(null); setBusy(label)
-    try { await run(body.trainVersion) }
+    setErr(null); setResult(null); setFallback(null)
+    try { await fn(body.trainVersion) }
     catch (e) {
       if (e instanceof ApiError && e.status === 409) { setErr('The train changed since this preview, so nothing was sent. The preview is refreshed: check it and send again.'); setRev(n => n + 1) }
       else setErr(errMsg(e, 'Could not send.'))
-    } finally { setBusy(null) }
-  }
+    }
+  })
+  const done = (x: Dispatched) => { setResult(x); afterSend(); announce(resultText(x)) }
 
   const copy = (format: 'RichText' | 'Markdown') => send(format === 'RichText' ? 'Copy rich text' : 'Copy Markdown', async v => {
     // The dispatch runs inside the click's clipboard gesture: the promise is handed to the clipboard, which waits for it.
@@ -258,13 +328,13 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
     let clipboardFailed = false
     try { await (format === 'RichText' ? copyLater('html', text, text.then(htmlToText)) : copyLater('text', text)) } catch { clipboardFailed = true }
     const x = await sent   // a dispatch failure surfaces here (and rejected the clipboard write above)
-    setResult(x); afterSend()
+    done(x)
     if (clipboardFailed) setFallback({ text: x.body, note: 'The browser blocked the clipboard. The message is recorded as sent; select the text below and copy it yourself.' })
   })
 
   const mail = () => send('Open mail', async v => {
     const x = await dispatchComm(trainId, request({ channel: 'Mailto' }), v)
-    setResult(x); afterSend()
+    done(x)
     const href = mailtoHref(x.subject, x.body)
     if (href.length > 1800) setFallback({ text: x.body, note: 'This message is long and some mail apps cut long links. It is recorded in full; if the mail is incomplete, copy the text below.' })
     window.location.href = href
@@ -273,27 +343,29 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
   const post_ = () => send('Post to webhook', async v => {
     if (!webhook) return
     const x = await dispatchComm(trainId, request({ channel: 'Webhook', webhookDestinationId: webhook.id }), v)
-    setResult(x); afterSend()
+    done(x)
   })
 
   const pick = (s: ScheduleItem) => set({ templateId: s.commTemplateId, scheduleItemId: s.sentAt ? undefined : s.id })
+  const seed = <SeedSchedule trainId={trainId} canSeed={canDispatch} onSeeded={() => { setRev(n => n + 1); onChanged() }} />
+  const label = (name: string, text: string, busyText: string) => (busy === name ? busyText : text)
 
   return (
-    <div className="comms-drawer">
-      <div className="section-head"><span className="cap">Drawer · communicate</span>
+    <section className="comms-drawer" aria-labelledby={headingId}>
+      <div className="section-head"><span className="cap" aria-hidden="true">Drawer · communicate</span>
         <span><button type="button" className="text quiet" onClick={onClose}>Close</button></span></div>
-      <h2>{template ? `${template.templateType}` : 'Communications'}</h2>
+      <h2 id={headingId} ref={headingRef} tabIndex={-1}>{template ? `${template.templateType}` : 'Communications'}</h2>
       {template && <div className="muted">{template.audience}{item ? ` · for ${tMinusLabel(ctx!.targetReleaseDate, item.dueAt)}, due ${fmtDayTime(item.dueAt)}` : ''}</div>}
       {ctxErr && <p className="bad" role="alert">✗ {ctxErr}</p>}
       {!ctx && !ctxErr && <p className="muted">Loading…</p>}
 
       {ctx && (
         <>
-          <nav className="tabs comms-tabs" aria-label="Drawer sections">
+          <div className="tabs comms-tabs" role="group" aria-label="Drawer sections">
             {(['message', 'schedule', 'log'] as const).map(t => (
               <button key={t} type="button" className="choice" aria-pressed={tab === t} onClick={() => set({ tab: t })}>{t === 'message' ? 'Message' : t === 'schedule' ? 'Schedule' : 'Sent log'}</button>
             ))}
-          </nav>
+          </div>
 
           {tab === 'message' && (
             <div className="tab-body">
@@ -303,63 +375,59 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
                     {ctx.templates.map(t => <option key={t.id} value={t.id}>{t.templateType} · {t.audience}</option>)}</select></label></p>
                   <div className="comms-cols">
                     <div>
-                      <div className="header-line"><span className="cap">Template</span>
+                      <div className="header-line"><h3 className="cap">Template</h3>
                         {errors.length > 0 ? <span className="bad small">✗ {errors.length} unknown {errors.length === 1 ? 'token' : 'tokens'}</span>
                           : body ? <span className="ok small">{nTokens} tokens · all known ✓</span> : <span className="muted small">{nTokens} tokens</span>}</div>
-                      <div className="src comms-rule" aria-label="Template source">{template && <>Subject: <Source text={template.subjectLine} errors={errors} />{'\n\n'}<Source text={template.markdownBody} errors={errors} /></>}</div>
+                      <div className="src comms-rule" role="group" aria-label="Template source">{template && <>Subject: <Source text={template.subjectLine} errors={errors} />{'\n\n'}<Source text={template.markdownBody} errors={errors} /></>}</div>
                       <div className="muted small">An unknown token, such as a typo, blocks sending. Empty lists print “None”.</div>
                     </div>
                     <div>
-                      <div className="header-line"><span className="cap">Preview</span>
+                      <div className="header-line"><h3 className="cap">Preview</h3>
                         <span className="muted small">{body ? <>data as of <span className="mono">{fmtHM(body.asOf)}</span> · train <span className="mono">v{body.trainVersion}</span></> : '—'}</span></div>
-                      <div className="comms-rule" aria-label="Hydrated preview">
-                        {previewErr && <p className="bad" role="alert">✗ {previewErr}</p>}
-                        {subject && <div className="preview-subject">{subject.text}</div>}
+                      {previewErr && <p className="bad" role="alert">✗ {previewErr}</p>}
+                      <div className="comms-rule" role="group" aria-label="Hydrated preview">
+                        {subject && <div className="preview-subject"><span className="sr-only">Subject: </span>{subject.text}</div>}
                         {body && <PreviewText text={body.text} />}
                         {errors.length > 0 && <ul className="plain bad small">{errors.map((e, i) => <li key={i}>✗ {e}</li>)}</ul>}
                       </div>
-                      {stale && <p className="warn small" role="status">▲ The train moved to <span className="mono">v{ctx.trainVersion}</span> since this preview. <button type="button" className="text" onClick={() => setRev(n => n + 1)}>Refresh preview</button></p>}
+                      {stale && <p className="warn small">▲ The train moved to <span className="mono">v{ctx.trainVersion}</span> since this preview. <button type="button" className="text" onClick={() => setRev(n => n + 1)}>Refresh preview</button></p>}
                     </div>
                   </div>
                 </>
               )}
 
               <div className="comms-block">
-                <div className="cap">T−minus schedule for {ctx.trainTitle}</div>
-                <ScheduleTable ctx={ctx} selectedId={item?.id} onPick={pick} />
+                <h3 className="cap">T−minus schedule for {ctx.trainTitle}</h3>
+                <ScheduleTable ctx={ctx} selectedId={item?.id} onPick={pick} empty={seed} />
               </div>
 
               <div className="comms-block">
+                <h3 className="cap">Send</h3>
                 <div className="comms-send">
-                  <span className="cap">Send</span>
-                  <button type="button" className="text" disabled={!!why} onClick={() => copy('RichText')}>Copy rich text</button>
-                  <button type="button" className="text" disabled={!!why} onClick={() => copy('Markdown')}>Copy Markdown</button>
-                  <button type="button" className="text" disabled={!!why} onClick={mail}>Open mailto</button>
+                  <button type="button" className="text" disabled={!!why} aria-describedby={why ? whyId : undefined} onClick={() => void copy('RichText')}>{label('Copy rich text', 'Copy rich text', 'Copying…')}</button>
+                  <button type="button" className="text" disabled={!!why} aria-describedby={why ? whyId : undefined} onClick={() => void copy('Markdown')}>{label('Copy Markdown', 'Copy Markdown', 'Copying…')}</button>
+                  <button type="button" className="text" disabled={!!why} aria-describedby={why ? whyId : undefined} onClick={() => void mail()}>{label('Open mail', 'Open mailto', 'Opening mail…')}</button>
                   <span className="inline-form">
                     <label className="sr-only" htmlFor="comms-hook">Webhook destination</label>
                     <select id="comms-hook" className="line" value={webhook?.id ?? ''} disabled={!ctx.webhookTargets.length} onChange={e => set({ webhookId: e.target.value })}>
                       {ctx.webhookTargets.length === 0 ? <option value="">no destinations</option> : ctx.webhookTargets.map(w => <option key={w.id} value={w.id}>{w.name} ({w.host})</option>)}
                     </select>
-                    <button type="button" className="text" disabled={!!whyWebhook} onClick={post_}>{webhook ? `Post to ${webhook.name}` : 'Post to webhook'}</button>
+                    <button type="button" className="text" disabled={!!whyWebhook} aria-describedby={whyWebhook ? whyId : undefined} onClick={() => void post_()}>{label('Post to webhook', webhook ? `Post to ${webhook.name}` : 'Post to webhook', 'Posting…')}</button>
                   </span>
                 </div>
-                {(why || whyWebhook) && canDispatch && <div className="muted small">{why ?? whyWebhook}</div>}
-                {!canDispatch && <div className="muted small">{why}</div>}
+                {whyWebhook && <div id={whyId} className="muted small">{whyWebhook}{noHooks && <> <a href="/sync" onClick={toSync}>Open Sync health</a></>}</div>}
                 <div className="muted small">Each send stores the exact text, channel and time in the sent log. Webhooks go only to admin-approved https destinations{item ? '; sending marks this schedule item sent' : ''}.</div>
-                {busy && <p className="muted" role="status">{busy}…</p>}
                 {err && <p className="bad" role="alert">✗ {err}</p>}
                 {result && (
-                  <p role="status" className={OUTCOME[result.outcome].cls}>
-                    {OUTCOME[result.outcome].g} {result.channel === 'Webhook' ? `Webhook ${result.webhookName}: ${OUTCOME[result.outcome].word}` : result.channel === 'Mailto' ? 'Recorded as sent by mail' : result.format === 'Markdown' ? 'Markdown copied and recorded' : 'Rich text copied and recorded'}
-                    {result.outcome === 'Failed' && `: ${result.failureReason ?? 'delivery failed'}. It is recorded in the sent log and raised as a sync alert.`}
-                    {result.outcome !== 'Failed' && result.sentAt && result.dueAt && (result.late ? ' · sent late' : ' · on time')}
+                  <p className={OUTCOME[result.outcome].cls} data-testid="comms-result">
+                    {OUTCOME[result.outcome].g} {resultText(result)}
                   </p>
                 )}
                 {fallback && (
-                  <div role="alert">
-                    <p className="warn">▲ {fallback.note}</p>
+                  <>
+                    <p className="warn" role="alert">▲ {fallback.note}</p>
                     <textarea ref={fallbackRef} className="bulk-text" readOnly rows={8} value={fallback.text} aria-label="Sent message text" onFocus={e => e.currentTarget.select()} />
-                  </div>
+                  </>
                 )}
               </div>
             </div>
@@ -367,15 +435,23 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
 
           {tab === 'schedule' && (
             <div className="tab-body">
-              <div className="cap">T−minus schedule for {ctx.trainTitle}</div>
-              <ScheduleTable ctx={ctx} selectedId={item?.id} onPick={s => set({ tab: 'message', templateId: s.commTemplateId, scheduleItemId: s.sentAt ? undefined : s.id })} />
-              <p className="muted small">Choose a row to write and send it. Sent and late come from the recorded send time against the due time.</p>
+              <h3 className="cap">T−minus schedule for {ctx.trainTitle}</h3>
+              <ScheduleTable ctx={ctx} selectedId={item?.id} onPick={s => set({ tab: 'message', templateId: s.commTemplateId, scheduleItemId: s.sentAt ? undefined : s.id })} empty={seed} />
+              {ctx.schedule.length > 0 && <p className="muted small">Choose a row to write and send it. Sent and late come from the recorded send time against the due time.</p>}
             </div>
           )}
 
           {tab === 'log' && <div className="tab-body"><SentLog trainId={trainId} refreshKey={logRev + refreshKey} /></div>}
         </>
       )}
-    </div>
+    </section>
   )
+}
+
+/** The one sentence a send reports, shown under the actions and spoken through the app's live region. */
+function resultText(r: Dispatched): string {
+  const o = OUTCOME[r.outcome] ?? OUTCOME.Handed
+  const what = r.channel === 'Webhook' ? `Webhook ${r.webhookName}: ${o.word}` : r.channel === 'Mailto' ? 'Recorded as sent by mail' : r.format === 'Markdown' ? 'Markdown copied and recorded' : 'Rich text copied and recorded'
+  if (r.outcome === 'Failed') return `${what}: ${r.failureReason ?? 'delivery failed'}. It is recorded in the sent log and raised as a sync alert.`
+  return `${what}${r.sentAt && r.dueAt ? (r.late ? ' · sent late' : ' · on time') : ''}`
 }

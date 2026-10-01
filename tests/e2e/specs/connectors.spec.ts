@@ -18,7 +18,7 @@ test('an RTE configures a connector; the secret is never shown back and a failed
   for (const th of await page.locator('table.grid th').all()) expect((await th.innerText()).trim().length).toBeGreaterThan(0)   // non-empty headers
 
   await jira.click()
-  await expect(jira).toHaveAttribute('aria-selected', 'true')
+  await expect(jira.locator('[data-rownav]')).toHaveAttribute('aria-current', 'true')
   const detail = page.locator('aside[aria-label="Jira connector"]')
   await expect(detail.locator('h2')).toHaveText('Jira')
   await expect(detail.locator('button:text-is("Test connection")')).toBeDisabled()
@@ -43,10 +43,11 @@ test('an RTE configures a connector; the secret is never shown back and a failed
   expect(await page.evaluate(async () => await (await fetch('/api/v1/connectors')).text())).not.toContain('e2e-Secret-Token')
 
   await detail.locator('button:text-is("Test connection")').click()
-  await expect(detail.locator('[role=status]', { hasText: '✗' })).toBeVisible({ timeout: 30_000 })   // unreachable: the reason is inline, not a modal, not an alert
+  await expect(detail.getByTestId('test-result')).toContainText('✗', { timeout: 30_000 })   // unreachable: the reason is inline (and announced), not a modal, not an alert
 
   // remove the credentials inline (two steps), the row goes back to "No credentials"
   await detail.locator('button:text-is("Remove credentials")').click()
+  await expect(detail.locator('button:text-is("Confirm remove")')).toBeFocused()   // the inline confirm takes focus
   await detail.locator('button:text-is("Confirm remove")').click()
   await expect(jira).toContainText('▲ No credentials')
 

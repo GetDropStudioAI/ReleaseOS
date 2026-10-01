@@ -15,6 +15,8 @@ No checkboxes, toggle switches, pills, badges or bordered boxes anywhere. That m
 ## Look (D23)
 macOS feel: system font, soft greys, translucent toolbar and Stream (backdrop blur; flat fallback), hairline separators, system-blue accent, full dark mode following `prefers-color-scheme` with a manual override (`data-theme` on `<html>`) in the user menu. On Windows the same CSS yields Segoe UI Variable, Cascadia Mono and a Mica-like translucent sidebar. Built against macOS 26 conventions; macOS 27 specifics are unverified, and a change is a token edit.
 
+**Brand (direction D, chosen 2026-09-30):** Fiserv Orange carries the main wording in both themes: page titles, drawer and inspector titles, section heads, the app name and the current-tab underline (`--brand-title` for titles and indicators, `--brand-text` for smaller wording; light mode uses the AA-safe shades `#C24E00` / `#B84A00` because exact `#FF6600` is 2.94:1 on white, and both meet 4.5:1 at any size; dark mode uses exact `#FF6600`). Blue (`--accent`) stays the colour of everything clickable and of the focus ring. Mockups: the "D · Command" page of the design canvas. A toolbar "Jump to" field (Ctrl/Cmd+K) opens any train or page by typing.
+
 Type: 13 px body, 12 px captions and group headers (sentence case), 22 px drawer titles, 28 px page titles, semibold, -0.02em tracking. Every time, count, version and id is monospaced with tabular figures.
 
 ## Layout

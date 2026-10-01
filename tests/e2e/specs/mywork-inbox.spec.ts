@@ -40,9 +40,14 @@ test('My work keyboard: j moves the row selection, Enter opens the train', async
   await page.goto('/work')
   const rows = page.locator('tbody tr')
   await expect(rows.first()).toBeVisible()
-  await page.locator('h1').click()          // focus is on the page, not in a control
+  await page.locator('h1').click()          // focus is on the page, not in the table: j is not a global shortcut (WCAG 2.1.4)
   await page.keyboard.press('j')
-  await expect(rows.first()).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('tbody [aria-current="true"]')).toHaveCount(0)
+  const first = rows.first().locator('[data-rownav]')
+  await first.focus()                        // in the table: k on the first row keeps it, selects it and keeps focus on its button
+  await page.keyboard.press('k')
+  await expect(first).toHaveAttribute('aria-current', 'true')
+  await expect(first).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}`))
 })
@@ -59,15 +64,17 @@ test('Inbox: unread notice is semibold with words, nav shows the count, opening 
   await expect(nav(page).getByRole('link', { name: /^Inbox \(\d+\)$/ })).toBeVisible()
   await scan(page, 'Inbox')
 
-  // j moves down to the drill's notice, Enter opens its train's live run and marks it read. The notice is not always the newest row: in a full run
-  // an earlier spec's failing connector keeps notifying every RTE (sync alerts, which have no train to open), so walk to it rather than assume row 1.
-  await page.locator('h1').click()
+  // In the table, j / k move the selection and Enter opens the selected notice's train (live run) and marks it read. The drill's notice is not always
+  // the newest row: in a full run an earlier spec's failing connector keeps notifying every RTE (sync alerts, which have no train to open), so walk to it.
   const rows = page.locator('tbody tr')
   const target = await rows.evaluateAll(trs => trs.findIndex(tr => tr.textContent?.includes('Step R-002 started')))
   expect(target).toBeGreaterThanOrEqual(0)
-  for (let i = 0; i <= target; i++) await page.keyboard.press('j')
-  await expect(rows.nth(target)).toHaveAttribute('aria-selected', 'true')
-  await expect(rows.nth(target)).toContainText('Step R-002 started')
+  const drillRow = rows.nth(target).locator('[data-rownav]')
+  await drillRow.focus()
+  await page.keyboard.press('k')
+  if (target > 0) await page.keyboard.press('j')   // k moved up one; j comes back, so the selection arrived by keyboard either way
+  await expect(drillRow).toHaveAttribute('aria-current', 'true')
+  await expect(drillRow).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}/live`))
 

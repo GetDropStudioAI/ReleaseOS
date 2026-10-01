@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { announce } from './announce'
+import { ConfirmInline } from './ConfirmInline'
 import { ApiError, getCommSchedule, getTemplates, markCommSent, seedCommSchedule, type Me, type ScheduleItem, type TemplateRow } from './api'
 import { Conflict, isConflict } from './Conflict'
 import { fmtDay, fmtDayTime, fmtHM, serverNow, zoneAbbr } from './time'
@@ -37,8 +39,8 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
   const [items, setItems] = useState<ScheduleItem[] | null>(null)
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [pick, setPick] = useState('')
-  const [confirming, setConfirming] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const focusId = useRef<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ApiError | null>(null)
   const [now, setNow] = useState(serverNow())
@@ -46,7 +48,9 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
   const load = useCallback(async () => {
     try { setItems(await getCommSchedule(trainId)); setProblem(null) } catch (e) { setProblem((e as Error).message) }
   }, [trainId])
-  useEffect(() => { setItems(null); setConfirming(null); setConflict(null); void load() }, [load, refreshKey])
+  useEffect(() => { setItems(null); setConflict(null); void load() }, [load, refreshKey])
+  // "Mark sent" is replaced by the sent time once recorded: focus that status cell so focus is not lost to the page (WCAG 2.4.3)
+  useEffect(() => { const id = focusId.current; if (id && items?.some(i => i.id === id)) { focusId.current = null; document.getElementById(`cs-status-${id}`)?.focus() } }, [items])
   useEffect(() => {
     if (!canEdit) return
     getTemplates().then(t => { const usable = t.filter(x => x.status !== 'Retired' && x.scheduleCount > 0); setTemplates(usable); setPick(p => p || usable[0]?.id || '') }).catch(() => setTemplates([]))
@@ -57,10 +61,18 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
     if (isConflict(e)) { setConflict(e); setProblem(null) }
     else { setConflict(null); setProblem(e instanceof ApiError ? (e.body?.message ?? e.message) : (e as Error).message) }
   }
-  const run = async (f: () => Promise<unknown>) => {
+  const run = async (f: () => Promise<unknown>, done?: string) => {
+    if (busy) return
     setBusy(true); setProblem(null); setConflict(null)
-    try { await f(); setConfirming(null); await load(); onChanged?.() } catch (e) { fail(e) } finally { setBusy(false) }
+    try { await f(); await load(); onChanged?.(); if (done) announce(done) } catch (e) { focusId.current = null; fail(e) } finally { setBusy(false) }
   }
+  const markSent = (i: ScheduleItem) => run(async () => { focusId.current = i.id; await markCommSent(i.id, i.version) }, `${i.label} ${i.name} recorded as sent.`)
+  const overdue = items?.filter(i => !i.sentAt && i.state === 'Overdue') ?? []
+  const markAllOverdue = () => run(async () => {
+    // one at a time, each with its own version: a conflict stops the run and says which item moved
+    focusId.current = overdue[0]?.id ?? null
+    try { for (const i of overdue) await markCommSent(i.id, i.version) } catch (e) { focusId.current = null; await load(); throw e }   // show what did get recorded
+  }, `${overdue.length} overdue ${overdue.length === 1 ? 'message' : 'messages'} recorded as sent.`)
 
   return (
     <div>
@@ -79,7 +91,7 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
                     {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.scheduleCount} messages)</option>)}
                   </select>
                 </label>
-                <button type="button" className="text strong" disabled={busy || !pick} onClick={() => run(() => seedCommSchedule(trainId, pick))}>Create schedule</button>
+                <button type="button" className="text strong" disabled={busy || !pick} onClick={() => run(() => seedCommSchedule(trainId, pick), 'Schedule created.')}>{busy ? 'Creating…' : 'Create schedule'}</button>
               </p>
             ))}
         </div>
@@ -95,22 +107,21 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
                   <td>{i.name}</td>
                   <td>{i.audience}</td>
                   <td className="mono">{fmtDayTime(i.dueAt)}</td>
-                  <td><StatusText item={i} now={now} /></td>
+                  <td id={`cs-status-${i.id}`} tabIndex={-1}><StatusText item={i} now={now} /></td>
                   <td>
-                    {canEdit && !i.sentAt && (confirming === i.id
-                      ? (
-                        <span>
-                          Record as sent now?{' '}
-                          <button type="button" className="text strong" disabled={busy} onClick={() => run(() => markCommSent(i.id, i.version))}>Confirm</button>{' '}
-                          <button type="button" className="text" onClick={() => setConfirming(null)}>Cancel</button>
-                        </span>
-                      )
-                      : <button type="button" className="text" aria-label={`Mark ${i.label} ${i.name} as sent`} onClick={() => setConfirming(i.id)}>Mark sent</button>)}
+                    {canEdit && !i.sentAt && (
+                      <ConfirmInline label="Mark sent" triggerLabel={`Mark sent: ${i.label} ${i.name}`} question="Record as sent now?" confirmLabel="Confirm" pendingLabel="Recording…"
+                        destructive={false} disabled={busy} onConfirm={() => markSent(i)} />
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {canEdit && overdue.length > 1 && (
+            <p><ConfirmInline label={`Mark all ${overdue.length} overdue sent`} question={`Record ${overdue.length} overdue messages as sent now? Each counts as late.`} confirmLabel="Confirm" pendingLabel="Recording…"
+              destructive={false} disabled={busy} onConfirm={markAllOverdue} /></p>
+          )}
           <p className="muted small">Due times are business days before the target date, in {zoneAbbr()}. A message counts as on time when it is sent at or before its due time.</p>
         </>
       )}

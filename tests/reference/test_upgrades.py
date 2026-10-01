@@ -7,6 +7,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASELINE = ROOT / "db/upgrades/baseline/schema-20260929.sql"
 SCRIPTS = sorted((ROOT / "db/upgrades").glob("[0-9][0-9][0-9]_*.sql"))
 OLD_MIGRATIONS = ("20260929110130_Schema", "20260929110136_Triggers")
+# Tables a script cannot convert because the change needs the app's key ring: the app converts them at its next start (002: WebhookDestinations,
+# WebhookUrlProtectionUpgrade). Here they must still be in the shape the app expects to convert; UpgradePathTests boots the app and checks the end result.
+APP_CONVERTED = {"WebhookDestinations": "Url"}
 
 
 def normalise(sql):
@@ -17,12 +20,12 @@ def normalise(sql):
 
 def shape(db):
     rows = db.execute("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__EFMigrationsHistory' ORDER BY type, name")
-    return {(t, n): (tbl, normalise(s)) for t, n, tbl, s in rows}
+    return {(t, n): (tbl, normalise(s)) for t, n, tbl, s in rows if tbl not in APP_CONVERTED}
 
 
 def columns(db):
     tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> '__EFMigrationsHistory'")]
-    return {t: [tuple(c[1:]) for c in db.execute(f"PRAGMA table_xinfo({t})")] for t in tables}
+    return {t: [tuple(c[1:]) for c in db.execute(f"PRAGMA table_xinfo({t})")] for t in tables if t not in APP_CONVERTED}
 
 
 def baseline_db():
@@ -54,6 +57,8 @@ for s in SCRIPTS:
 check(shape(db) == shape(expected), "upgraded database has exactly db/schema.sql's tables, indexes and triggers (normalised SQL)")
 for k in sorted(set(shape(db)) ^ set(shape(expected))): print("     differs:", k)
 for k in sorted(k for k in set(shape(db)) & set(shape(expected)) if shape(db)[k] != shape(expected)[k]): print("     differs:", k)
+for t, legacy in APP_CONVERTED.items():
+    check(legacy in [c[1] for c in db.execute(f"PRAGMA table_xinfo({t})")], f"{t} left in the shape the app converts at start (has {legacy})")
 check(columns(db) == columns(expected), "every table has the same columns, in the same order, with the same types and defaults")
 check(db.execute("SELECT Id, Email, Role, Handle, IsActive, Version, IdpIssuer, IdpSubject FROM Users ORDER BY Id").fetchall()
       == [("u1", "gov@corp.example", "GovernanceOfficer", "gov", 1, 1, None, None), ("u2", "old@corp.example", "Viewer", None, 0, 4, None, None)],

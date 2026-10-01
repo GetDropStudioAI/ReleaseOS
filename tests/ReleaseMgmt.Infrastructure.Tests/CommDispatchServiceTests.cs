@@ -40,7 +40,7 @@ public sealed class CommDispatchServiceTests(TriggerSuiteFixture fx) : IClassFix
             TriggerSuiteFixture.Run(c, @"
                 INSERT INTO CommTemplates(Id,ReleaseTrainId,TemplateType,Audience,SubjectLine,MarkdownBody) VALUES('c1','t1','GoNoGo','All','Subject','Body');
                 INSERT INTO CommSchedule(Id,ReleaseTrainId,CommTemplateId,DueAt) VALUES('s1','t1','c1','2026-10-30T06:00:00Z');
-                INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w1','ops','https://hooks.example.test/T/SECRET','Slack');");
+                INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind) VALUES('w1','ops','hooks.example.test','CfDJ8-protected-by-the-vault','" + new string('0', 64) + "','Slack');");
         var sender = new Sender(send ?? (() => new CommWebhookResult(true, "hooks.example.test", null)));
         var alerts = withAlerts ? new SyncAlertWriter(db, time, NullLogger<SyncAlertWriter>.Instance) : null;
         return (path, time, new CommDispatchService(db, time, new Renderer(render ?? ((t, _) => Good(t))), sender, alerts), sender);

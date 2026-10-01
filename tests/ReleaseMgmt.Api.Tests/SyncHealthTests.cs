@@ -337,7 +337,10 @@ public class SyncHealthTests
         Assert.Equal("hooks.slack.com", body.GetProperty("host").GetString());
         Assert.Equal("Slack", body.GetProperty("kind").GetString());          // inferred from the host
         Assert.Equal("https://hooks.slack.com/…", body.GetProperty("displayUrl").GetString());
-        Assert.Equal($"https://hooks.slack.com/services/T0/B0/{Secret}", Scalar(f, "SELECT Url FROM WebhookDestinations"));   // stored normalised: lower-case host, default port dropped
+        var stored = Scalar(f, "SELECT ProtectedUrl FROM WebhookDestinations");   // Q-053e: encrypted at rest ...
+        Assert.DoesNotContain(Secret, stored);
+        Assert.Equal($"https://hooks.slack.com/services/T0/B0/{Secret}", WebhookTestRows.Vault(f.Services).Unprotect(stored));   // ... normalised: lower-case host, default port dropped
+        Assert.Equal("hooks.slack.com", Scalar(f, "SELECT Host FROM WebhookDestinations"));
 
         var listText = await (await rte.GetAsync("/api/v1/sync/webhook-allowlist")).Content.ReadAsStringAsync();
         Assert.DoesNotContain(Secret, listText);

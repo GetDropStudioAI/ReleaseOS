@@ -115,7 +115,7 @@ Detail, evidence and reproduction tests for each are in the per-area reports: [a
 | SEC-B8 | An unverified email signed in as the existing account | Medium | Partly fixed (subject binding needs a schema change) |
 | SEC-B9 | Every IdP identity became a Viewer | Medium | Fixed (refused unless `Auth:DefaultRole=Viewer`) |
 | SEC-B11 | A Development copy of a backup could mint Production sessions | Medium | Fixed |
-| SEC-B12 | Key ring readable by every local account | Medium | Fixed (Linux/macOS) |
+| SEC-B12 | Key ring readable by every local account | Medium | Fixed (Linux/macOS permissions; encrypted at rest on every OS since 2026-09-30, D37) |
 | SEC-B13 | API calls without a session got an IdP redirect (or 500), not 401 | Medium | Fixed |
 | SEC-C1 | IPv6 forms carrying a private IPv4 address passed the SSRF check | Medium | Fixed |
 | SEC-C3 | Webhook responses read without a cap; a slow 200 was re-sent | Medium | Fixed |
@@ -133,7 +133,7 @@ Detail, evidence and reproduction tests for each are in the per-area reports: [a
 | SEC-C2 | Unicode-digit host names hid IP literals at save time | Low | Fixed |
 | SEC-C5 | CR/LF in an OAuth token reached the wire as a header | Low | Fixed |
 | SEC-D5 | Log injection through a webhook channel name | Low | Fixed |
-| SEC-D8 | Export jobs could be queued without bound | Low | Fixed (retention still open, Q-050c) |
+| SEC-D8 | Export jobs could be queued without bound | Low | Fixed (files kept 365 days since 2026-09-30, D35) |
 | SEC-D9 | Stored previews unbounded per user and never purged | Low | Fixed |
 | SEC-D10 | Calendar-feed brake behind a proxy that sends no client address | Low | Fixed (REOS-67: a valid token is always served; only failed lookups are braked, Q-SEC-D5) |
 | SEC-E2 | `start.py` control channel accepted any Host | Low | Fixed |
@@ -149,6 +149,11 @@ feed-link expiry, IdP subject binding, unmapped users), Q-SEC-C1 to C3 (NAT64 pr
 (per-field limits, export retention, the feed brake), Q-SEC-E1 to E3 (production `AllowedHosts`, keeping action pins current, inline style in the CSP).
 The most important: **Q-SEC-E1** (production must set `AllowedHosts`), **Q-SEC-B1** (never run a pilot in Development) and **Q-SEC-C3** (restrict
 connectors to the real Atlassian and ServiceNow hosts).
+
+**Decided 2026-09-30 by John** (DECISIONS D34 to D40): Viewers keep seeing emails (Q-SEC-A5 b, no change); export files kept 365 days (Q-050c, built);
+webhook URLs encrypted at rest (Q-053e, built, schema change); key ring encrypted at rest (Q-052e, built); connectors limited to Atlassian Cloud and
+ServiceNow on 443 by default outside Development (Q-SEC-C3, built); no Dependabot, pins moved by hand (Q-SEC-E2); operator NAT64 prefixes
+(Q-SEC-C1, built).
 
 ## 6. Verification
 

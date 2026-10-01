@@ -228,11 +228,11 @@ public class AuthzScanTests
         (await a.PostAsJsonAsync("/auth/dev-login", new { email = "rte@x.com", name = "rte", role = Roles.RTE })).EnsureSuccessStatusCode();
         var b = web.CreateClient();
         (await b.PostAsJsonAsync("/auth/dev-login", new { email = "rm@x.com", name = "rm", role = Roles.ReleaseManager })).EnsureSuccessStatusCode();
-        Sql(root, @"
+        Sql(root, $@"
             INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('t1','R26.24','2026-10-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z');
             INSERT INTO CommTemplates(Id,ReleaseTrainId,TemplateType,Audience,SubjectLine,MarkdownBody) VALUES('c1','t1','GoNoGo','All','Go/No-Go','Release is go');
             INSERT INTO CommSchedule(Id,ReleaseTrainId,CommTemplateId,DueAt) VALUES('s1','t1','c1','2026-10-29T17:00:00Z');
-            INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w1','release-ops','https://hooks.example.test/services/T0/B0/x','Teams');");
+            INSERT INTO {WebhookTestRows.Into} VALUES {WebhookTestRows.Row(web.Services, "w1", "release-ops", "https://hooks.example.test/services/T0/B0/x", "Teams")};");
 
         var body = new { scheduleItemId = "s1", channel = "Webhook", webhookDestinationId = "w1" };
         var results = await Task.WhenAll(a.PostAsJsonAsync("/api/v1/trains/t1/comms:dispatch", body), b.PostAsJsonAsync("/api/v1/trains/t1/comms:dispatch", body));

@@ -14,12 +14,15 @@ namespace ReleaseMgmt.Infrastructure.Exports;
 /// OUTSIDE wwwroot, SHA-256 computed over the FINAL bytes on disk, file moved into its id-named place, job marked Done with hash and size. ANY exception marks the job Failed
 /// with a readable message and raises Export/ExportFailed (see <see cref="ExportService.FailAsync"/>); the partial and final files are removed, so a failure leaves no orphan.
 /// A job left Running by a crash is recovered (requeued, or failed visibly once out of attempts) at startup and whenever it is older than Exports:StaleRunningSeconds.
+/// Retention (REOS-72): at startup and then every <see cref="ExportOptions.PurgeInterval"/>, files older than Exports:RetentionDays are deleted and their jobs marked
+/// expired (<see cref="ExportService.PurgeExpiredAsync"/>); a failing pass raises Export/ExportFailed like any worker failure.
 /// </summary>
 public sealed class ExportWorker(ExportService jobs, ExportModelLoader loader, MetricSnapshotService snapshots, AttachmentService attachments, ExportOptions options, TimeProvider time, ILogger<ExportWorker> log)
     : BackgroundService
 {
     private DateTime Now { get { var t = time.GetUtcNow().UtcDateTime; return new DateTime(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc); } }
     private string TempDir => Path.Combine(options.Directory, ".tmp");
+    private DateTime? _lastPurge;
 
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
@@ -32,6 +35,7 @@ public sealed class ExportWorker(ExportService jobs, ExportModelLoader loader, M
         }
         catch (OperationCanceledException) { return; }
         catch (Exception ex) { await WorkerFailedAsync("startup recovery", ex); }
+        await PurgeIfDueAsync(stop);
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.PollSeconds), time);
         try
@@ -41,6 +45,7 @@ public sealed class ExportWorker(ExportService jobs, ExportModelLoader loader, M
                 try { await RunOnceAsync(stop); }
                 catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
                 catch (Exception ex) { await WorkerFailedAsync("export pass", ex); }
+                await PurgeIfDueAsync(stop);
             }
         }
         catch (OperationCanceledException) { /* shutting down: a Running job is recovered at the next start */ }
@@ -57,6 +62,17 @@ public sealed class ExportWorker(ExportService jobs, ExportModelLoader loader, M
             ran++;
         }
         return ran;
+    }
+
+    /// <summary>Runs the retention purge when it has not run within <see cref="ExportOptions.PurgeInterval"/> (by the injected clock). Never throws: a failure is an alert.</summary>
+    public async Task PurgeIfDueAsync(CancellationToken ct = default)
+    {
+        var now = time.GetUtcNow().UtcDateTime;
+        if (_lastPurge is DateTime last && now - last < ExportOptions.PurgeInterval) return;
+        _lastPurge = now;
+        try { await jobs.PurgeExpiredAsync(ct); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex) { await WorkerFailedAsync("retention purge", ex); }
     }
 
     private async Task WorkerFailedAsync(string what, Exception ex)

@@ -11,7 +11,7 @@ namespace ReleaseMgmt.Api.Auth;
 /// SEC-B12: the Data Protection key ring encrypts the connector credentials and signs every session cookie: whoever can read it can mint a cookie for any
 /// user and role. On Linux and macOS the framework creates <c>keys/</c> as 0755 and each key as 0644 (readable by every local account). This keeps the
 /// directory at 0700 and every key file at 0600, for the ring that exists at start-up and for each key the framework adds later (it rotates about every
-/// 90 days). Windows is left to the service account's ACLs (runbook section 5). The ring is still plain XML (Q-052e).
+/// 90 days). Windows is left to the service account's ACLs (runbook section 5). The keys themselves are encrypted by <see cref="KeyRingEncryption"/> (Q-052e).
 /// </summary>
 public sealed class KeyRingPermissions(ILogger<KeyRingPermissions> log) : IPostConfigureOptions<KeyManagementOptions>
 {

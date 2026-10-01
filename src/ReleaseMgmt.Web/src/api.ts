@@ -243,6 +243,8 @@ export interface ExportJob {
   id: string; kind: string; label: string; format: 'pdf' | 'zip'; trainId: string | null; trainTitle: string | null; status: 'Queued' | 'Running' | 'Done' | 'Failed'
   fileName: string; sha256: string | null; sizeBytes: number | null; contentType: string | null; error: string | null; attempts: number; ref: string
   requestedByUserId: string; requestedByName: string | null; createdAt: string; startedAt: string | null; completedAt: string | null; version: number
+  /** REOS-72: set when the file was deleted after Exports:RetentionDays; the record and its SHA-256 stay, the download answers 410. */
+  expiredAt?: string | null
 }
 export const listExportJobs = (trainId: string) => get<ExportJob[]>(`/api/v1/export-jobs?trainId=${encodeURIComponent(trainId)}`)
 export const createExportJob = (trainId: string, kind: ExportKind, format: 'pdf' | 'zip' = 'pdf') => post<ExportJob>(`/api/v1/trains/${trainId}/export-jobs`, { kind, format })

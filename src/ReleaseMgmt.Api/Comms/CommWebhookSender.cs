@@ -13,18 +13,20 @@ namespace ReleaseMgmt.Api.Endpoints;
 /// message a person chose to send can post it twice). The URL is a secret: it is never logged or returned; only the destination name, host and a reason are.
 /// Never throws for delivery problems: returns a failed result.
 /// </summary>
-public sealed class CommWebhookSender(IHttpClientFactory http, IConfiguration config, ILogger<CommWebhookSender> log) : ICommWebhookSender
+public sealed class CommWebhookSender(IHttpClientFactory http, IConfiguration config, ILogger<CommWebhookSender> log, IWebhookUrlVault urlVault, OutboundAddressPolicy addressPolicy) : ICommWebhookSender
 {
     public const string ClientName = "comm-webhook";
     public const double DefaultTimeoutSeconds = 10;
 
     public async Task<CommWebhookResult> SendAsync(CommWebhookTarget target, string jsonBody, CancellationToken ct)
     {
-        string host = "";
+        var host = target.Host;
         try
         {
-            if (!Uri.TryCreate(target.Url, UriKind.Absolute, out var uri)) return new(false, host, "the destination is not a valid absolute URL");
-            host = uri.Host;
+            string url;
+            try { url = urlVault.Unprotect(target.ProtectedUrl); }   // Q-053e: the address exists in clear only here, for this call
+            catch (WebhookUrlUnreadableException ex) { return new(false, host, ex.Message); }
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return new(false, host, "the destination is not a valid absolute URL");
             if (uri.Scheme != Uri.UriSchemeHttps) return new(false, host, "only https destinations are allowed");
             if (!string.IsNullOrEmpty(uri.UserInfo)) return new(false, host, "credentials in the URL are not allowed");
             if (!config.GetValue("Comms:Webhooks:AllowPrivateTargets", false))
@@ -43,7 +45,7 @@ public sealed class CommWebhookSender(IHttpClientFactory http, IConfiguration co
         }
     }
 
-    private static async Task<string?> BlockedAsync(Uri uri, CancellationToken ct)
+    private async Task<string?> BlockedAsync(Uri uri, CancellationToken ct)
     {
         IPAddress[] addrs;
         if (IPAddress.TryParse(uri.Host.Trim('[', ']'), out var literal)) addrs = [literal];
@@ -52,7 +54,7 @@ public sealed class CommWebhookSender(IHttpClientFactory http, IConfiguration co
             try { addrs = await Dns.GetHostAddressesAsync(uri.Host, ct); }
             catch (SocketException) { return "the host name does not resolve"; }
         }
-        return addrs.Length == 0 || addrs.Any(WebhookAddressPolicy.IsBlocked)
+        return addrs.Length == 0 || addrs.Any(addressPolicy.IsBlocked)
             ? "the destination is a private or local address (Comms:Webhooks:AllowPrivateTargets allows it)" : null;
     }
 

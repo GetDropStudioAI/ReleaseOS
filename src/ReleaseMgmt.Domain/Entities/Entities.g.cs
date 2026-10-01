@@ -431,7 +431,9 @@ public class WebhookDestinations
 {
     public string Id { get; set; } = Ids.New();
     public string Name { get; set; } = "";
-    public string Url { get; set; } = "";
+    public string Host { get; set; } = "";
+    public string ProtectedUrl { get; set; } = "";
+    public string UrlHmac { get; set; } = "";
     public string Kind { get; set; } = "";
     public int Version { get; set; } = 1;
 }

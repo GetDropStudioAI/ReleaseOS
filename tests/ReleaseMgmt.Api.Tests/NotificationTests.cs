@@ -281,7 +281,7 @@ public class NotificationTests
         var f = new ApiFactory();
         _ = f.Server;                                               // boot: migrations run
         Sql(f, $@"INSERT INTO Users(Id,Email,DisplayName,Role) VALUES('rte1','rte1@x.com','Rae','RTE');
-                  INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w1','Platform channel','{url}','{kind}');
+                  INSERT INTO {WebhookTestRows.Into} VALUES {WebhookTestRows.Row(f.Services, "w1", "Platform channel", url, kind)};
                   INSERT INTO Teams(Id,Handle,Name,WebhookDestinationId) VALUES('tm1','platform','Platform','w1'),('tm2','quiet','Quiet',NULL);
                   INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('t1','R26.10','2026-10-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')");
         var dbf = f.Services.GetRequiredService<IDbContextFactory<ReleaseDbContext>>();
@@ -290,7 +290,8 @@ public class NotificationTests
         var http = new StubHandler(respond);
         var config = new ConfigurationBuilder().AddInMemoryCollection(cfg ?? []).AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:Webhooks:RetryDelayMs"] = "0" }).Build();
         var writer = new SyncAlertWriter(dbf, time, NullLogger<SyncAlertWriter>.Instance, f.Services.GetRequiredService<INotifier>());
-        return (new TeamWebhookSender(dbf, time, new StubFactory(http), writer, sink, config, new DevEnv(env), NullLogger<TeamWebhookSender>.Instance), http, sink, f);
+        return (new TeamWebhookSender(dbf, time, new StubFactory(http), writer, sink, config, new DevEnv(env), NullLogger<TeamWebhookSender>.Instance,
+            WebhookTestRows.Vault(f.Services), OutboundAddressPolicy.Default), http, sink, f);
     }
 
     private static WebhookNotice Notice(string team = "tm1") => new(team, "GateOverdue", "StageGate", "g1", 1, "Gate 'Code Freeze' is overdue", "t1");

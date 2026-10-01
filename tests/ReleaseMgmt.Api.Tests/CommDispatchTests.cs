@@ -112,9 +112,9 @@ public class CommDispatchTests
             INSERT INTO CommTemplates(Id,ReleaseTrainId,TemplateType,Audience,SubjectLine,MarkdownBody) VALUES('c2','t2','Readiness','All','Readiness','x');
             INSERT INTO CommSchedule(Id,ReleaseTrainId,CommTemplateId,DueAt) VALUES('s1','t1','c1','2026-10-29T17:00:00Z');
             INSERT INTO CommSchedule(Id,ReleaseTrainId,CommTemplateId,DueAt) VALUES('s0','t1','c1','2026-10-27T09:00:00Z');
-            INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w1','release-ops','" + HookUrl + @"','Teams');
-            INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w2','private','https://127.0.0.1/hook','Generic');
-            INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w3','generic','https://generic.example.test/in/" + Secret + @"','Generic');");
+            INSERT INTO " + WebhookTestRows.Into + " VALUES " + WebhookTestRows.Row(web.Services, "w1", "release-ops", HookUrl, "Teams") + @";
+            INSERT INTO " + WebhookTestRows.Into + " VALUES " + WebhookTestRows.Row(web.Services, "w2", "private", "https://127.0.0.1/hook", "Generic") + @";
+            INSERT INTO " + WebhookTestRows.Into + " VALUES " + WebhookTestRows.Row(web.Services, "w3", "generic", "https://generic.example.test/in/" + Secret, "Generic") + @";");
         return new Env { Root = root, Web = web, Renderer = renderer, Handler = handler, Clock = clock, Rte = rte, Rm = rm, Viewer = viewer, Gov = gov };
     }
 
@@ -523,7 +523,7 @@ public class CommDispatchTests
         Assert.Contains("CHECK", Assert.Throws<SqliteException>(() => Sql(e.Root, Row("Webhook", null))).Message);          // a webhook needs a destination
         Assert.Contains("CHECK", Assert.Throws<SqliteException>(() => Sql(e.Root, Row("Copy", "w1"))).Message);             // and only a webhook has one
         Assert.Contains("FOREIGN KEY", Assert.Throws<SqliteException>(() => Sql(e.Root, "PRAGMA foreign_keys=ON; " + Row("Webhook", "not-on-allowlist"))).Message);   // the allowlist is a foreign key
-        Assert.Contains("CHECK", Assert.Throws<SqliteException>(() => Sql(e.Root, "INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('wh','plain','http://hooks.example.test/x','Generic')")).Message);   // https only
+        Assert.Contains("CHECK", Assert.Throws<SqliteException>(() => Sql(e.Root, $"INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind) VALUES('wh','plain','hooks.example.test','https://hooks.example.test/x','{new string('a', 64)}','Generic')")).Message);   // never stored in clear (Q-053e)
         Assert.Contains("CHECK", Assert.Throws<SqliteException>(() => Sql(e.Root, Row("Copy", null).Replace("'Handed'", "'Sent'"))).Message);
         Assert.Equal(0, e.Count("CommDispatches"));
         Sql(e.Root, Row("Webhook", "w1"));   // a valid row goes in (the triggers guard update and delete, not insert)

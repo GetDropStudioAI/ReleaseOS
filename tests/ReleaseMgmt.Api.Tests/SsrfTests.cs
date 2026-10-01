@@ -269,7 +269,7 @@ public class SsrfTests
     {
         using var f = new ApiFactory();
         _ = f.Server;
-        Sql(f, @"INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w1','Platform channel','https://93.184.216.34/services/T0/B0/SECRET','Teams');
+        Sql(f, $@"INSERT INTO {WebhookTestRows.Into} VALUES {WebhookTestRows.Row(f.Services, "w1", "Platform channel", "https://93.184.216.34/services/T0/B0/SECRET", "Teams")};
                  INSERT INTO Teams(Id,Handle,Name,WebhookDestinationId) VALUES('tm1','platform','Platform','w1');
                  INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('t1','R26.10','2026-10-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')");
         var dbf = f.Services.GetRequiredService<IDbContextFactory<ReleaseDbContext>>();
@@ -279,7 +279,8 @@ public class SsrfTests
         }).Build();
         var hook = new HostileWebhook();
         var writer = new SyncAlertWriter(dbf, TimeProvider.System, NullLogger<SyncAlertWriter>.Instance, f.Services.GetRequiredService<INotifier>());
-        var sender = new TeamWebhookSender(dbf, TimeProvider.System, new StubFactory(hook), writer, new NoSink(), config, f.Services.GetRequiredService<IHostEnvironment>(), NullLogger<TeamWebhookSender>.Instance);
+        var sender = new TeamWebhookSender(dbf, TimeProvider.System, new StubFactory(hook), writer, new NoSink(), config, f.Services.GetRequiredService<IHostEnvironment>(), NullLogger<TeamWebhookSender>.Instance,
+            WebhookTestRows.Vault(f.Services), OutboundAddressPolicy.Default);
 
         var delivered = await sender.SendAsync(new WebhookNotice("tm1", "GateOverdue", "StageGate", "g1", 1, "Gate 'Code Freeze' is overdue", "t1"));
 
@@ -294,9 +295,10 @@ public class SsrfTests
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Comms:Webhooks:TimeoutSeconds"] = "1" }).Build();
         var hook = new HostileWebhook();
-        var sender = new CommWebhookSender(new StubFactory(hook), config, NullLogger<CommWebhookSender>.Instance);
+        var vault = WebhookTestRows.Ephemeral();
+        var sender = new CommWebhookSender(new StubFactory(hook), config, NullLogger<CommWebhookSender>.Instance, vault, OutboundAddressPolicy.Default);
 
-        var r = await sender.SendAsync(new CommWebhookTarget("w1", "release-ops", "https://93.184.216.34/services/T0/B0/SECRET", "Teams"), """{"text":"hello"}""", default);
+        var r = await sender.SendAsync(new CommWebhookTarget("w1", "release-ops", "93.184.216.34", vault.Protect("https://93.184.216.34/services/T0/B0/SECRET").ProtectedUrl, "Teams"), """{"text":"hello"}""", default);
 
         Assert.True(r.Delivered, r.Reason);
         Assert.Equal(1, hook.Calls);

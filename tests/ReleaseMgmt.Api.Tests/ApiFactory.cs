@@ -32,6 +32,8 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         // REOS-68: outside Development the app refuses to start unless AllowedHosts names its host. The test server's own host is localhost;
         // releases.example.com is the deployment name the proxy tests send. Any other Host is still refused with 400.
         if (environment != "Development") builder.UseSetting("AllowedHosts", TestHosts);
+        // REOS-74: outside Development an unencrypted key ring refuses to start; tests that boot Production opt in (KeyRingEncryptionTests cover the refusal).
+        builder.UseSetting("DataProtection:AllowUnprotectedKeys", "true");
     }
 
     protected override void Dispose(bool disposing)

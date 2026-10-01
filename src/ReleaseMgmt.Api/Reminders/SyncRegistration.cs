@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ReleaseMgmt.Domain.Sync;
+using ReleaseMgmt.Infrastructure.Comms;
 using ReleaseMgmt.Infrastructure.Reminders;
 using ReleaseMgmt.Infrastructure.Sync;
 
@@ -15,21 +16,23 @@ public static class SyncRegistration
     /// connectors, the poller and watchdog (hosted), and the Connectors service. Needs TimeProvider, IAlertSink and the DbContext factory registered first;
     /// SyncAlertWriter is added here if AddNotificationScheduling has not already added it.
     /// Config: Sync:PollSeconds, Sync:WindowPollSeconds, Sync:TimeoutSeconds, Sync:MaxResponseBytes, Sync:BackoffBaseSeconds, Sync:WatchdogSeconds, Sync:StartDelaySeconds,
-    /// Sync:Enabled, Sync:AllowPrivateTargets, Sync:AllowedHosts, Sync:WindowToleranceMinutes, Sync:Credentials:Directory (default: "secrets" beside the database),
+    /// Sync:Enabled, Sync:AllowPrivateTargets, Sync:AllowedHosts (outside Development default *.atlassian.net, *.service-now.com on 443), Sync:Nat64Prefixes, Sync:WindowToleranceMinutes, Sync:Credentials:Directory (default: "secrets" beside the database),
     /// DataProtection:KeysDirectory (default: "keys" beside the database; back it up, D12), Connectors:{Jira|ServiceNow}:BaseUrl, Connectors:ServiceNow:TokenPath.
     /// </summary>
-    public static IServiceCollection AddSyncEngine(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddSyncEngine(this IServiceCollection services, IConfiguration config, bool isDevelopment)
     {
         var dbDir = Path.GetDirectoryName(Path.GetFullPath(config["Db:Path"] ?? "data/releasemgmt.db"))!;
-        var options = SyncOptions.From(config, Path.Combine(dbDir, "secrets"));
+        var options = SyncOptions.From(config, Path.Combine(dbDir, "secrets"), isDevelopment);   // REOS-75: outside Development the host list defaults to Atlassian Cloud and ServiceNow
         services.AddSingleton(options);
+        services.TryAddSingleton(OutboundAddressPolicy.From(config));   // REOS-77: Sync:Nat64Prefixes, validated now (a bad value stops the start)
+        services.AddSingleton<IWebhookUrlVault, DataProtectionWebhookUrlVault>();   // REOS-73: webhook addresses encrypted at rest (Q-053e)
 
         services.AddDataProtection().SetApplicationName("ReleaseMgmt")
             .PersistKeysToFileSystem(new DirectoryInfo(config["DataProtection:KeysDirectory"] ?? Path.Combine(dbDir, "keys")));
 
         services.AddHttpClient(ConnectorHttp.ClientName)
             .ConfigureHttpClient(c => c.Timeout = Timeout.InfiniteTimeSpan)   // ConnectorHttp bounds every call itself (Sync:TimeoutSeconds)
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            .ConfigurePrimaryHttpMessageHandler(sp => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,                       // a redirect is a second, unchecked destination
                 UseProxy = false,                                // the connect callback below is the SSRF check, and a proxy would bypass it
@@ -38,7 +41,8 @@ public static class SyncRegistration
                 {
                     // Resolve and vet here, at connect time, so the address that is checked is the address that is used.
                     var addrs = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct);
-                    var ok = addrs.Where(a => options.AllowPrivateTargets || !WebhookAddressPolicy.IsBlocked(a)).ToArray();
+                    var policy = sp.GetRequiredService<OutboundAddressPolicy>();
+                    var ok = addrs.Where(a => options.AllowPrivateTargets || !policy.IsBlocked(a)).ToArray();
                     if (ok.Length == 0) throw new HttpRequestException("The connector host resolves only to blocked addresses");
                     var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
                     try { await socket.ConnectAsync(ok, ctx.DnsEndPoint.Port, ct); return new NetworkStream(socket, ownsSocket: true); }
@@ -49,7 +53,7 @@ public static class SyncRegistration
         services.TryAddSingleton<SyncAlertWriter>();
         services.AddSingleton<ICredentialStore, DataProtectionCredentialStore>();
         services.AddSingleton<IConnectorFactory>(sp => new ConnectorFactory(sp.GetRequiredService<IHttpClientFactory>(), sp.GetRequiredService<ICredentialStore>(), options,
-            sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<IHostEnvironment>(), sp.GetRequiredService<IConfiguration>(), WebhookAddressPolicy.IsBlocked));
+            sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<IHostEnvironment>(), sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<OutboundAddressPolicy>().IsBlocked));
         services.AddSingleton<SyncCycleWriter>();
         services.AddSingleton<SyncPollerService>();
         services.AddHostedService(sp => sp.GetRequiredService<SyncPollerService>());
@@ -57,7 +61,7 @@ public static class SyncRegistration
         services.AddHostedService(sp => sp.GetRequiredService<SyncWatchdogService>());
         services.AddSingleton(sp => new ConnectorService(sp.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<ReleaseMgmt.Infrastructure.Persistence.ReleaseDbContext>>(),
             sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ICredentialStore>(), sp.GetRequiredService<IConnectorFactory>(), sp.GetRequiredService<SyncAlertWriter>(),
-            options, sp.GetRequiredService<IHostEnvironment>(), WebhookAddressPolicy.IsBlocked, sp.GetService<ReleaseMgmt.Domain.Services.IRealtimePublisher>()));
+            options, sp.GetRequiredService<IHostEnvironment>(), sp.GetRequiredService<OutboundAddressPolicy>().IsBlocked, sp.GetService<ReleaseMgmt.Domain.Services.IRealtimePublisher>()));
         return services;
     }
 }

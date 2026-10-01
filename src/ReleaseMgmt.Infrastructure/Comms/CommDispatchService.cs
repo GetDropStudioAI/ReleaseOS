@@ -42,7 +42,7 @@ public sealed record DispatchContext(DateTime AsOf, int TrainVersion, string Tra
 /// (Outcome 'Failed'), raises Webhook/DeliveryFailed and is returned to the caller: never swallowed.
 /// </summary>
 public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, ICommDispatchRenderer renderer, ICommWebhookSender webhooks,
-    SyncAlertWriter? syncAlerts = null, IRealtimePublisher? realtime = null, ILogger<CommDispatchService>? log = null) : ServiceBase(dbf, time, realtime)
+    SyncAlertWriter? syncAlerts = null, IRealtimePublisher? realtime = null, ILogger<CommDispatchService>? log = null, IWebhookUrlVault? urlVault = null) : ServiceBase(dbf, time, realtime)
 {
     public const string Copy = "Copy", Mailto = "Mailto", Webhook = "Webhook";
     public const string RichText = "RichText", Markdown = "Markdown";
@@ -145,12 +145,12 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
         if (dest is not null)
         {
             CommWebhookResult sent;
-            try { sent = await webhooks.SendAsync(new CommWebhookTarget(dest.Id, dest.Name, dest.Url, dest.Kind), stored, ct); }
+            try { sent = await webhooks.SendAsync(new CommWebhookTarget(dest.Id, dest.Name, dest.Host, dest.ProtectedUrl, dest.Kind), stored, ct); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // A sender that throws is a bug; the exception message could carry the URL, so only its type is kept.
                 log?.LogError("Comm webhook sender threw {Type} for destination {Destination}", ex.GetType().Name, dest.Name);
-                sent = new CommWebhookResult(false, HostOf(dest.Url), "the sender failed: " + ex.GetType().Name);
+                sent = new CommWebhookResult(false, dest.Host, "the sender failed: " + ex.GetType().Name);
             }
             host = sent.Host;
             outcome = sent.Delivered ? "Delivered" : "Failed";
@@ -195,7 +195,7 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
                 actor.UserId, actorName, now, row.IsRehearsal, outcome, failureReason, item?.Id, dueAt, sentAt, late, body.AsOf, body.TrainVersion));
         }, ct);
 
-        if (result.IsOk && outcome == "Failed" && dest is not null) await RaiseFailureAsync(dest, host ?? HostOf(dest.Url), failureReason!, trainId, ct);
+        if (result.IsOk && outcome == "Failed" && dest is not null) await RaiseFailureAsync(dest, host ?? dest.Host, failureReason!, trainId, ct);
         return result;
     }
 
@@ -212,7 +212,7 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
         }
     }
 
-    private static async Task<(WebhookDestinations? Dest, GuardFailure? Failure)> ResolveDestinationAsync(ReleaseDbContext db, DispatchRequest req, CancellationToken ct)
+    private async Task<(WebhookDestinations? Dest, GuardFailure? Failure)> ResolveDestinationAsync(ReleaseDbContext db, DispatchRequest req, CancellationToken ct)
     {
         if ((req.WebhookDestinationId is null) == (req.WebhookUrl is null))
             return (null, new GuardFailure(CommGuards.WebhookNotAllowed, "Choose one allowlisted webhook destination"));
@@ -222,15 +222,12 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
             if (!Uri.TryCreate(req.WebhookUrl.Trim(), UriKind.Absolute, out var u) || u.Scheme != Uri.UriSchemeHttps)
                 return (null, new GuardFailure(CommGuards.WebhookNotHttps, "A webhook target must be an https URL"));
         }
-        var url = req.WebhookUrl?.Trim();
+        // An address is matched through its keyed hash (Q-053e): nothing is decrypted here. The sender decrypts it, and re-checks https and credentials, when it posts.
+        var hmac = req.WebhookUrl is null || urlVault is null ? null : urlVault.Hmac(req.WebhookUrl.Trim());
         var d = req.WebhookDestinationId is not null
             ? await db.Set<WebhookDestinations>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == req.WebhookDestinationId, ct)
-            : await db.Set<WebhookDestinations>().AsNoTracking().SingleOrDefaultAsync(x => x.Url == url, ct);
+            : hmac is null ? null : await db.Set<WebhookDestinations>().AsNoTracking().SingleOrDefaultAsync(x => x.UrlHmac == hmac, ct);
         if (d is null) return (null, new GuardFailure(CommGuards.WebhookNotAllowed, "That webhook target is not on the allowlist; an administrator adds destinations"));
-        if (!Uri.TryCreate(d.Url, UriKind.Absolute, out var du) || du.Scheme != Uri.UriSchemeHttps)
-            return (null, new GuardFailure(CommGuards.WebhookNotHttps, $"Destination '{d.Name}' is not an https URL and cannot be used"));
-        if (!string.IsNullOrEmpty(du.UserInfo))
-            return (null, new GuardFailure(CommGuards.WebhookNotAllowed, $"Destination '{d.Name}' carries credentials in its URL and cannot be used"));
         return (d, null);
     }
 
@@ -262,7 +259,6 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
         catch (EncoderFallbackException) { return "The rendered message is not valid Unicode (an unpaired surrogate) and cannot be stored exactly"; }
     }
 
-    private static string HostOf(string url) => Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.Host : "";
     private static ServiceResult<DispatchView> Fail(string guard, string message) => ServiceResult<DispatchView>.Fail(new GuardFailure(guard, message));
 
     // ---- reads --------------------------------------------------------------------------------------------------------
@@ -344,6 +340,6 @@ public sealed class CommDispatchService(IDbContextFactory<ReleaseDbContext> dbf,
         var dests = await db.Set<WebhookDestinations>().AsNoTracking().OrderBy(d => d.Name).ToListAsync(ct);
         return new DispatchContext(now, train.Version, train.Title, train.TargetReleaseDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             [.. templates.Select(t => new CommTemplateRow(t.Id, t.TemplateType, t.Audience, t.SubjectLine, t.MarkdownBody, t.Version))], schedule,
-            [.. dests.Where(d => Uri.TryCreate(d.Url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps).Select(d => new CommWebhookTargetRow(d.Id, d.Name, d.Kind, HostOf(d.Url)))]);
+            [.. dests.Select(d => new CommWebhookTargetRow(d.Id, d.Name, d.Kind, d.Host))]);
     }
 }

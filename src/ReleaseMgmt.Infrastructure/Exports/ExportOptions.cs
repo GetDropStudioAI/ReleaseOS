@@ -7,11 +7,17 @@ namespace ReleaseMgmt.Infrastructure.Exports;
 /// REOS-50 settings. Config keys: <c>Exports:Directory</c> (default: <c>exports</c> beside the database, i.e. data/exports; never under wwwroot),
 /// <c>Exports:PollSeconds</c> (5), <c>Exports:StaleRunningSeconds</c> (300: a job left Running longer than this is retried), <c>Exports:MaxAttempts</c> (2),
 /// <c>Exports:AuditRowLimit</c> (5000 audit events in the pack's extract), <c>Exports:MaxOpenJobsPerUser</c> (10), <c>Pdf:QuestPdfLicense</c> (OI-2: Community | Professional | Enterprise; never committed, never defaulted),
-/// <c>Pdf:PdfA</c> (OI-8 spike: unset/false = off (default); true or 2b = PDF/A-2b; 3b = PDF/A-3b; see docs/PDFA_SPIKE.md).
+/// <c>Pdf:PdfA</c> (OI-8 spike: unset/false = off (default); true or 2b = PDF/A-2b; 3b = PDF/A-3b; see docs/PDFA_SPIKE.md),
+/// <c>Exports:RetentionDays</c> (365, REOS-72: a generated file is deleted that many days after it was completed; the job row and its audit trail stay).
 /// </summary>
 public sealed record ExportOptions(string Directory, string? License, bool AllowEvaluationLicense, int PollSeconds, TimeSpan StaleAfter, int MaxAttempts, int AuditRowLimit, string? PdfA, bool UseSystemFonts = true,
-    int MaxOpenJobsPerUser = ExportOptions.DefaultMaxOpenJobsPerUser)
+    int MaxOpenJobsPerUser = ExportOptions.DefaultMaxOpenJobsPerUser, int RetentionDays = ExportOptions.DefaultRetentionDays)
 {
+    /// <summary>Default for <c>Exports:RetentionDays</c> (REOS-72, Q-050c, decided 2026-09-30 by John): every generated file, evidence packs and ZIPs included, is kept 365 days.</summary>
+    public const int DefaultRetentionDays = 365;
+    /// <summary>How often the worker looks for files past retention (at start-up, then this often).</summary>
+    public static readonly TimeSpan PurgeInterval = TimeSpan.FromHours(1);
+
     public const string DefaultLicenseKey = "Pdf:QuestPdfLicense";
     /// <summary>Default for <c>Exports:MaxOpenJobsPerUser</c> (security review SEC-D8, Q-SEC-D3): Queued plus Running jobs one requester may have at a time.</summary>
     public const int DefaultMaxOpenJobsPerUser = 10;
@@ -27,7 +33,17 @@ public sealed record ExportOptions(string Directory, string? License, bool Allow
             Int(config["Exports:MaxAttempts"], 2, 1), Int(config["Exports:AuditRowLimit"], 5000, 1),
             config["Pdf:PdfA"],
             !bool.TryParse(config["Pdf:UseSystemFonts"], out var usf) || usf,
-            Int(config["Exports:MaxOpenJobsPerUser"], DefaultMaxOpenJobsPerUser, 1));
+            Int(config["Exports:MaxOpenJobsPerUser"], DefaultMaxOpenJobsPerUser, 1),
+            ReadRetentionDays(config));
+    }
+
+    /// <summary><c>Exports:RetentionDays</c>: a whole number of days, at least 1. A value that is not one stops the start-up naming the key (fail fast: a typo must not delete evidence early).</summary>
+    private static int ReadRetentionDays(IConfiguration config)
+    {
+        var raw = config["Exports:RetentionDays"];
+        if (string.IsNullOrWhiteSpace(raw)) return DefaultRetentionDays;
+        return int.TryParse(raw.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var d) && d >= 1
+            ? d : throw new InvalidOperationException($"Exports:RetentionDays is '{raw}'. Use a whole number of days, 1 or more (default {DefaultRetentionDays}).");
     }
 
     /// <summary>The licence problem in words, or null when a valid tier is configured. Evaluation is refused outside Development ("not permitted in production").</summary>

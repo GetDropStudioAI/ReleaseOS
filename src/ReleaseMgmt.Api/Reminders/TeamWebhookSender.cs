@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
+using ReleaseMgmt.Infrastructure.Comms;
 using ReleaseMgmt.Infrastructure.Reminders;
 using ReleaseMgmt.Infrastructure.Persistence;
 
@@ -14,12 +15,22 @@ namespace ReleaseMgmt.Api.Reminders;
 /// Which addresses a webhook or connector may never reach (SSRF): loopback, private, link-local, CGNAT, multicast, reserved, unspecified.
 /// IPv6 forms that carry an IPv4 address a translator or tunnel can deliver to (IPv4-mapped, IPv4-compatible, SIIT, NAT64 64:ff9b::/96, 6to4) are judged
 /// by that IPv4 address; the NAT64 local-use prefix 64:ff9b:1::/48, discard-only 100::/64 and documentation 2001:db8::/32 are always blocked (SEC-C1).
+/// The operator's own NAT64 /96 prefixes (<c>Sync:Nat64Prefixes</c>, REOS-77) are judged the same way through <see cref="OutboundAddressPolicy"/>.
 /// </summary>
 public static class WebhookAddressPolicy
 {
-    public static bool IsBlocked(IPAddress ip)
+    public static bool IsBlocked(IPAddress ip) => IsBlocked(ip, []);
+
+    /// <param name="nat64Prefixes">The first 12 bytes of each operator NAT64 /96 prefix: an address inside one is judged by its last 32 bits (RFC 6052), before any other IPv6 rule.</param>
+    public static bool IsBlocked(IPAddress ip, IReadOnlyList<byte[]> nat64Prefixes)
     {
         if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6 && nat64Prefixes.Count > 0)
+        {
+            var a = ip.GetAddressBytes();
+            foreach (var p in nat64Prefixes)
+                if (a.AsSpan(0, 12).SequenceEqual(p)) return IsBlocked(new IPAddress(a.AsSpan(12, 4)), []);
+        }
         if (IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any) || ip.Equals(IPAddress.IPv6None)) return true;
         if (ip.AddressFamily == AddressFamily.InterNetworkV6)
         {
@@ -61,21 +72,21 @@ public static class WebhookAddressPolicy
 /// A failure raises an alert (IAlertSink + SyncAlerts, source Webhook) and returns false; success is audited.
 /// </summary>
 public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IHttpClientFactory http, SyncAlertWriter syncAlerts,
-    IAlertSink alerts, IConfiguration config, IHostEnvironment env, ILogger<TeamWebhookSender> log) : ITeamWebhookSender
+    IAlertSink alerts, IConfiguration config, IHostEnvironment env, ILogger<TeamWebhookSender> log, IWebhookUrlVault urlVault, OutboundAddressPolicy addressPolicy) : ITeamWebhookSender
 {
     public const string ClientName = "team-webhook";
 
     public async Task<bool> SendAsync(WebhookNotice n, CancellationToken ct = default)
     {
         await using var db = await dbf.CreateDbContextAsync(ct);
-        var dest = await (from t in db.Set<Teams>().AsNoTracking() join d in db.Set<WebhookDestinations>() on t.WebhookDestinationId equals d.Id where t.Id == n.TeamId select new { d.Id, d.Name, d.Url, d.Kind }).SingleOrDefaultAsync(ct);
+        var dest = await (from t in db.Set<Teams>().AsNoTracking() join d in db.Set<WebhookDestinations>() on t.WebhookDestinationId equals d.Id where t.Id == n.TeamId select new { d.Id, d.Name, d.Host, d.ProtectedUrl, d.Kind }).SingleOrDefaultAsync(ct);
         if (dest is null) return false;   // the team has no channel: nothing to do, not an error
 
         var label = $"Webhook '{dest.Name}'";
-        string? host = null;
+        string? host = dest.Host;
         try
         {
-            var uri = Validate(dest.Url);
+            var uri = Validate(urlVault.Unprotect(dest.ProtectedUrl));   // Q-053e: decrypted here, for this call only
             host = uri.Host;
             if (!config.GetValue("Notifications:Webhooks:AllowPrivateTargets", false)) await EnsurePublicAsync(uri, ct);
             var error = await PostAsync(uri, dest.Kind, n, ct);
@@ -90,6 +101,10 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
                 return true;
             }
             await FailAsync(dest.Id, $"{label} ({host}) failed: {error}", n.TrainId, ct);
+        }
+        catch (WebhookUrlUnreadableException ex)
+        {
+            await FailAsync(dest.Id, $"{label} ({host}) refused: {ex.Message}", n.TrainId, ct);
         }
         catch (WebhookRefused ex)
         {
@@ -113,7 +128,7 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
         return uri;
     }
 
-    private static async Task EnsurePublicAsync(Uri uri, CancellationToken ct)
+    private async Task EnsurePublicAsync(Uri uri, CancellationToken ct)
     {
         IPAddress[] addrs;
         if (IPAddress.TryParse(uri.Host.Trim('[', ']'), out var literal)) addrs = [literal];
@@ -122,7 +137,7 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
             try { addrs = await Dns.GetHostAddressesAsync(uri.Host, ct); }
             catch (SocketException) { throw new WebhookRefused("the host name does not resolve"); }
         }
-        if (addrs.Length == 0 || addrs.Any(WebhookAddressPolicy.IsBlocked))
+        if (addrs.Length == 0 || addrs.Any(addressPolicy.IsBlocked))
             throw new WebhookRefused("the destination is a private or local address (set Notifications:Webhooks:AllowPrivateTargets to allow it)");
     }
 

@@ -220,6 +220,7 @@ public class EndpointRoleMatrixTests
         POST /api/v1/trains/{id}/steps                           Plan
         POST /api/v1/trains/{id}/tasks:commit                    Plan
         POST /api/v1/trains/{id}/tasks:parse                     Plan
+        POST /api/v1/users                                       Admin
         POST /api/v1/waivers/{id}:approve                        GovernanceOfficer
         POST /auth/dev-login                                     Anonymous
         POST /auth/logout                                        Anonymous

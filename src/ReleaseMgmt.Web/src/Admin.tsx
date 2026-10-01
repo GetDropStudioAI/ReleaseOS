@@ -3,6 +3,7 @@ import { ApiError, del, get, patch, post, type HolidayRow, type TeamRow, type Us
 import { useAction } from './useAction'
 import { ConfirmInline } from './ConfirmInline'
 import { announce } from './announce'
+import { AddUser } from './AddUser'
 
 type Tab = 'users' | 'teams' | 'holidays'
 const TABS: { key: Tab; label: string }[] = [{ key: 'users', label: 'Users' }, { key: 'teams', label: 'Teams' }, { key: 'holidays', label: 'Holidays' }]
@@ -53,6 +54,7 @@ function UsersTable({ canEdit }: { canEdit: boolean }) {
     <div className="split">
       <div>
         <Problem error={error ?? problem} />
+        {canEdit && <AddUser onAdded={reload} />}
         <table className="grid">
           <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Handle</th><th>State</th></tr></thead>
           <tbody>

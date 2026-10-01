@@ -80,6 +80,7 @@ builder.Services.AddSingleton<TemplateService>();   // REOS-38
 builder.Services.AddSingleton<TrainCreationService>();   // REOS-80 new train: blank, from template, clone
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
+builder.Services.AddSingleton<UserCreationService>();   // REOS-83 add users ahead of their first sign-in
 // REOS-35 evidence attachments: stored outside wwwroot (Attachments:Directory), capped at Attachments:MaxBytes (never above the 50 MB schema CHECK)
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
 builder.Services.AddSingleton<AttachmentService>();
@@ -208,6 +209,7 @@ api.MapRuns();
 api.MapParser();
 api.MapAdmin();
 api.MapConnectors();   // REOS-39
+api.MapUserCreation();   // REOS-83
 api.MapAttachments();
 api.MapNotifications();
 api.MapTemplates();   // REOS-38

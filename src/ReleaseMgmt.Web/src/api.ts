@@ -279,3 +279,18 @@ export const getGateDefinition = (id: string) => get<GateDefinition>(`/api/v1/ga
 export const addGate = (trainId: string, g: GateInput) => post<GateSaved>(`/api/v1/trains/${trainId}/gates`, g)
 export const patchGate = (id: string, g: GateInput, version: number) => patch<GateSaved>(`/api/v1/gates/${id}`, g, version)
 export const removeGate = (id: string, version: number) => delIfMatch<GateSaved>(`/api/v1/gates/${id}`, version)
+
+// REOS-82 external links on a train (keys, states and dates only, OI-12). Remove sends the link's Version (If-Match).
+export type LinkEntityType = 'Train' | 'Product' | 'Gate' | 'RunbookStep' | 'Blocker' | 'KnownIssue'
+export interface LinkWarning { rule: string; message: string; since: string }
+export interface ExternalLinkRow {
+  id: string; trainId: string; entityType: LinkEntityType; entityId: string; sourceSystem: 'Jira' | 'ServiceNow'; externalKey: string
+  expectedStatus: string | null; lastSyncedStatus: string | null; lastSyncedAt: string | null; syncState: string; stale: boolean; version: number; warnings: LinkWarning[]
+}
+export const getLinks = (trainId: string) => get<ExternalLinkRow[]>(`/api/v1/trains/${trainId}/links`)
+export const addLink = (trainId: string, body: { entityType: LinkEntityType; entityId: string; sourceSystem: string; externalKey: string }) =>
+  post<ExternalLinkRow>(`/api/v1/trains/${trainId}/links`, body)
+export const removeLink = (id: string, version: number) => call<boolean>('DELETE', `/api/v1/links/${id}`, undefined, version)
+
+// REOS-83 add a user ahead of their first sign-in (admin). The role is provisional: sign-in replaces it with the identity provider's.
+export const createUser = (body: { email: string; displayName: string; role: string; handle?: string }) => post<UserRow>('/api/v1/users', body)

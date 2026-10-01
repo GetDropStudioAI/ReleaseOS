@@ -127,8 +127,8 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
           {r.ready && <span className="ok">✓ Ready for {t.nextStatus}</span>}
         </section>
       )}
-      <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} />
-      <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} />
+      <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} canPlan={canPlan} trainStatus={t.status} onChanged={onChanged} />
+      <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} trainId={t.id} trainStatus={t.status} canPlan={canPlan} onChanged={onChanged} />
       {checklistGate && <Checklist gateId={checklistGate.id} trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
       <GoNoGo trainId={t.id} trainVersion={t.version} canDecide={canDecide} refreshKey={refreshKey} onChanged={onChanged} />
       <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />

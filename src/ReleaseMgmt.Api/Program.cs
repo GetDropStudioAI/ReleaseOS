@@ -59,6 +59,7 @@ builder.Services.AddSingleton<ScheduleService>();
 builder.Services.AddSingleton<WindowService>();
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<RunbookService>();
+builder.Services.AddSingleton<PlanStructureService>();   // REOS-81
 builder.Services.AddSingleton<RunService>();
 builder.Services.AddSingleton<ForecastService>();
 builder.Services.AddSingleton<TaskParserService>();
@@ -195,6 +196,7 @@ api.MapGet("/config", (IConfiguration c) => Results.Ok(new { displayTimeZone = c
 if (devTools) api.MapDev();
 api.MapSession();
 api.MapRunbook();
+api.MapPlanStructure();   // REOS-81
 api.MapRuns();
 api.MapParser();
 api.MapAdmin();

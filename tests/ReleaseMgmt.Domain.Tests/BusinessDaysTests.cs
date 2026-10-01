@@ -22,4 +22,24 @@ public class BusinessDaysTests
         var due = BusinessDays.SubtractBusinessDays(target, n, hol);
         Assert.Equal(n, BusinessDays.Between(due, target, hol));
     }
+
+    // REOS-81: a gate given a due date stores the offset that lands on it
+    [Theory]
+    [InlineData(0)] [InlineData(1)] [InlineData(4)] [InlineData(5)] [InlineData(13)]
+    public void OffsetOf_inverts_SubtractBusinessDays(int n)
+    {
+        var hol = new HashSet<DateOnly> { D("2026-10-12"), D("2026-10-28") };
+        foreach (var target in new[] { D("2026-10-30"), D("2026-10-31"), D("2026-10-28") })   // a Friday, a Saturday and a holiday as the target
+            Assert.Equal(n, BusinessDays.OffsetOf(target, BusinessDays.SubtractBusinessDays(target, n, hol), hol, 500));
+    }
+
+    [Fact] public void OffsetOf_refuses_weekends_holidays_later_dates_and_out_of_range()
+    {
+        var hol = new HashSet<DateOnly> { D("2026-10-12") };
+        Assert.Null(BusinessDays.OffsetOf(D("2026-10-30"), D("2026-10-25"), hol, 500));   // Sunday
+        Assert.Null(BusinessDays.OffsetOf(D("2026-10-30"), D("2026-10-12"), hol, 500));   // holiday
+        Assert.Null(BusinessDays.OffsetOf(D("2026-10-30"), D("2026-11-02"), hol, 500));   // after the target
+        Assert.Null(BusinessDays.OffsetOf(D("2026-10-30"), D("2026-10-23"), hol, 4));     // 5 business days back, cap 4
+        Assert.Equal(0, BusinessDays.OffsetOf(D("2026-10-31"), D("2026-10-31"), hol, 500));   // the target itself, even on a Saturday
+    }
 }

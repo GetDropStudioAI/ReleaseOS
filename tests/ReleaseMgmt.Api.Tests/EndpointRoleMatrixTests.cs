@@ -49,8 +49,10 @@ public class EndpointRoleMatrixTests
         DELETE /api/v1/attachments/{id}                          Uploaders
         DELETE /api/v1/connectors/{source}/credentials           Admin
         DELETE /api/v1/export-jobs/{id}                          Read
+        DELETE /api/v1/gates/{id}                                Plan
         DELETE /api/v1/holidays/{day}                            Admin
         DELETE /api/v1/links/{id}                                Admin
+        DELETE /api/v1/products/{id}                             Plan
         DELETE /api/v1/sync/webhook-allowlist/{id}               Admin
         DELETE /api/v1/trains/{id}/cis/{ciId}                    Plan
         GET {*path:nonfile}                                      Anonymous
@@ -134,7 +136,9 @@ public class EndpointRoleMatrixTests
         GET /api/v1/users                                        Read
         GET /auth/config                                         Anonymous
         GET /healthz                                             Anonymous
+        PATCH /api/v1/gates/{id}                                 Plan
         PATCH /api/v1/pir-actions/{id}                           Closeout
+        PATCH /api/v1/products/{id}                              Plan
         PATCH /api/v1/steps/{id}                                 Plan
         PATCH /api/v1/teams/{id}                                 Admin
         PATCH /api/v1/trains/{id}                                Plan
@@ -196,6 +200,7 @@ public class EndpointRoleMatrixTests
         POST /api/v1/trains/{id}/comms                           Plan
         POST /api/v1/trains/{id}/comms:dispatch                  Plan
         POST /api/v1/trains/{id}/comms:preview                   Read
+        POST /api/v1/trains/{id}/gates                           Plan
         POST /api/v1/trains/{id}/export-jobs                     Read
         POST /api/v1/trains/{id}/gonogo                          ReleaseManager
         POST /api/v1/trains/{id}/known-issues                    Closeout
@@ -208,6 +213,7 @@ public class EndpointRoleMatrixTests
         POST /api/v1/trains/{id}/pir:hold                        Closeout
         POST /api/v1/trains/{id}/pir:schedule                    Closeout
         POST /api/v1/trains/{id}/pir/actions                     Closeout
+        POST /api/v1/trains/{id}/products                        Plan
         POST /api/v1/trains/{id}/runs                            Plan
         POST /api/v1/trains/{id}/steps                           Plan
         POST /api/v1/trains/{id}/tasks:commit                    Plan

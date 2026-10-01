@@ -19,6 +19,7 @@ import { Inspector } from './Planning'
 import { LiveRun, RunStepDrawer, useRun } from './LiveRun'
 import { BulkDrawer, bulkKey, type BulkDraft } from './Bulk'
 import { CommsDrawer, commsKey, type CommsDraft } from './CommsDrawer'
+import { NewTrainDrawer, emptyNewTrain, newTrainKey, type NewTrainDraft } from './NewTrain'
 import { getTrain, getUnreadCount, type TrainDetail } from './api'
 import { useDraft } from './session'
 import { parsePath, ROOT, useRoute, type Route } from './route'
@@ -175,6 +176,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const runData = useRun(selected, mode, rev)
   const [bulk, setBulk] = useDraft<BulkDraft>(bulkKey(selected ?? ''))
   const [comms, setComms] = useDraft<CommsDraft>(commsKey(selected ?? ''))   // REOS-45
+  const [newTrain, setNewTrain] = useDraft<NewTrainDraft>(newTrainKey)   // REOS-80: the New train drawer wins the right-hand column while open
   const [gates, setGates] = useState<TrainDetail['gates']>([])
   // The train last opened in the Stream: the default for one-train pickers on other pages, so it is never picked twice (UX review #19).
   const [lastTrain, setLastTrain] = useState<string | null>(selected)
@@ -262,7 +264,8 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </header>
       <SyncBanner sync={sync} onOpen={() => to({ view: 'sync' })} />
       <aside className="stream" aria-label="Stream">
-        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: rows?.find(r => r.id === id)?.status === 'Executing' ? mode : 'plan' })} />
+        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: rows?.find(r => r.id === id)?.status === 'Executing' ? mode : 'plan' })}
+          onNew={canAdmin ? () => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); if (view !== 'trains') go({ ...route, view: 'trains' }) } : undefined} />
         <FreezeFooter refreshKey={rev} />
       </aside>
       <main id="workspace" ref={mainRef} tabIndex={-1} className={view !== 'trains' ? 'workspace wide' : 'workspace'}>
@@ -271,7 +274,10 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">
-          {selected && comms?.open
+          {newTrain?.open && canAdmin
+            ? <NewTrainDrawer trains={rows ?? []}
+                onCreated={t => { reload(); go({ view: 'trains', trainId: t.id, selection: null, mode: 'plan' }) }} />
+            : selected && comms?.open
             ? <CommsDrawer trainId={selected} canDispatch={canAdmin} refreshKey={rev} onClose={() => setComms(undefined)} onChanged={refetch} />
             : selected && bulk?.open && canAdmin
             ? <BulkDrawer trainId={selected} gates={gates} onClose={() => setBulk(bulk && bulk.text ? { ...bulk, open: false } : undefined)} onChanged={refetch} />

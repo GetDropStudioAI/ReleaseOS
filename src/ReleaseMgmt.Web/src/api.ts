@@ -197,6 +197,12 @@ export const getLibraryOptions = () => get<LibraryOption[]>('/api/v1/templates/l
 export const createTemplate = (b: TemplateInput) => post<TemplateDetail>('/api/v1/templates', b)
 export const updateTemplate = (id: string, b: TemplateInput, version: number) => call<TemplateDetail>('PUT', `/api/v1/templates/${id}`, b, version)
 export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
+// REOS-80 new train: blank, from an Approved template, or a copy of a prior train
+export interface NewTrainBody { title: string; targetReleaseDate: string; riskTier?: string | null; templateId?: string | null; windowStartsAt?: string | null; windowEndsAt?: string | null; products?: { productName: string; versionTag: string; projectCode: string }[] }
+export interface CreatedTrain { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; source: 'Blank' | 'Template' | 'Clone'; templateId: string | null; clonedFromTrainId: string | null; version: number
+  created: { products: number; gates: number; tasks: number; steps: number; dependencies: number; commTemplates: number; commSchedule: number; window: boolean }; notes: string[] }
+export const createTrain = (b: NewTrainBody) => post<CreatedTrain>('/api/v1/trains', b)
+export const cloneTrain = (sourceId: string, b: { title: string; targetReleaseDate: string; riskTier?: string | null }) => post<CreatedTrain>(`/api/v1/trains/${encodeURIComponent(sourceId)}:clone`, b)
 
 // REOS-42: DELETE with If-Match (webhook allowlist rows carry a Version)
 export const delIfMatch = <T,>(url: string, ifMatch: number) => call<T>('DELETE', url, undefined, ifMatch)

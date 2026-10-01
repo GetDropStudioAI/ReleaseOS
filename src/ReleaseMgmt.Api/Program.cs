@@ -76,6 +76,7 @@ builder.Services.AddSingleton<CloseoutService>();
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.SessionStateJanitor>();
 builder.Services.AddSingleton<AdminService>();
 builder.Services.AddSingleton<TemplateService>();   // REOS-38
+builder.Services.AddSingleton<TrainCreationService>();   // REOS-80 new train: blank, from template, clone
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
 // REOS-35 evidence attachments: stored outside wwwroot (Attachments:Directory), capped at Attachments:MaxBytes (never above the 50 MB schema CHECK)
@@ -208,6 +209,7 @@ api.MapConnectors();   // REOS-39
 api.MapAttachments();
 api.MapNotifications();
 api.MapTemplates();   // REOS-38
+api.MapTrainCreation();   // REOS-80
 api.MapAudit();
 api.MapAnalytics();   // REOS-46
 api.MapAnalyticsExport();   // REOS-47

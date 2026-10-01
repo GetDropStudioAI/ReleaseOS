@@ -101,7 +101,8 @@ public class AuditTests
         Assert.Equal(["Decertified", "Uploaded"], await Actions("train=t2"));
         Assert.Equal(["Uploaded"], await Actions("entity=Attachment"));
         Assert.Equal(["Certified"], await Actions("entityId=g2"));
-        Assert.Equal(["Uploaded", "Certified"], await Actions($"actor={govId}"));
+        Assert.Equal(["Uploaded", "Certified"], (await Actions($"actor={govId}")).Where(a => a != "SignInCreate"));   // REOS-64: their sign-in is audited too
+        Assert.Contains("SignInCreate", await Actions($"actor={govId}"));
         Assert.Equal(["Decertified", "Certified"], await Actions("action=CERTIF"));           // contains, case-insensitive
         Assert.Equal(["Decertified"], await Actions("action=decert&train=t2&entity=StageGate")); // combined
         Assert.Empty(await Actions("train=t1&entity=Attachment"));

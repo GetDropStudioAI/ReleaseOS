@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
+import { signInMessage, withoutSignInReason } from './signinReason'
 import Admin from './Admin'
 import { MyWork } from './MyWork'
 import { Inbox } from './Inbox'
@@ -109,6 +110,11 @@ function SignIn({ onDone }: { onDone: () => void }) {
   const [role, setRole] = useState('RTE')
   const [error, setError] = useState<string | null>(null)
   const [cfg, setCfg] = useState<AuthConfig | null>(null)
+  // REOS-65: a refused organisation sign-in comes back as /?signin=<reason>; show it in words, then drop it from the address so a reload is clean
+  const [refused] = useState(() => signInMessage(window.location.search))
+  useEffect(() => {
+    if (refused) window.history.replaceState(null, '', window.location.pathname + withoutSignInReason(window.location.search) + window.location.hash)
+  }, [refused])
   useEffect(() => { getAuthConfig().then(setCfg) }, [])
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -119,6 +125,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
   return (
     <main className="signin">
       <h1>Release Management</h1>
+      {refused && <p className="bad" role="alert">✗ {refused}</p>}
       <form onSubmit={submit}>
         <p><label>Email <input className="line" type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label></p>
         <p><label>Role <select className="line" value={role} onChange={e => setRole(e.target.value)}>

@@ -44,6 +44,8 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, ReleaseMgmt.Api.Realtime.UidUserIdProvider>();
 builder.Services.AddSingleton<IRealtimePublisher, ReleaseMgmt.Api.Realtime.SignalRPublisher>();   // services take it as an optional ctor argument
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.ServerTimeBroadcaster>();
+builder.Services.AddSingleton<ReleaseMgmt.Api.Realtime.HubConnections>();   // REOS-63: live connections by user and session
+builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.HubSessionMonitor>();   // REOS-63: Realtime:SessionRecheckSeconds (default 30)
 builder.Services.AddSingleton<INotifier, Notifier>();
 builder.Services.AddSingleton<UserProvisioner>();
 builder.Services.AddSingleton<SessionValidator>();   // REOS-53
@@ -136,6 +138,7 @@ if (authority is not null)
         o.GetClaimsFromUserInfoEndpoint = true;
         o.Scope.Add("profile"); o.Scope.Add("email");
         o.Events.OnTokenValidated = ctx => OidcSignIn.OnTokenValidated(ctx, roleMap, defaultRole);   // SEC-B7/B8/B9
+        o.Events.OnRemoteFailure = OidcSignIn.OnRemoteFailure;   // REOS-65: a refused or failed sign-in goes back to the sign-in page with a reason code, never a 500
     });
 }
 builder.Services.AddAuthorization(Policies.Configure);
@@ -240,7 +243,7 @@ app.MapGet("/auth/config", [AllowAnonymous] () => Results.Ok(new { organisationS
 app.MapPost("/auth/logout", [AllowAnonymous] async (HttpContext http, SessionLifetime sessions) =>
 {
     var session = await http.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    sessions.SignedOut(session.Properties);   // SEC-B5: copies of this cookie die too
+    sessions.SignedOut(session.Properties, session.Principal);   // SEC-B5: copies of this cookie die too; REOS-63: so do its live connections
     if (session.Succeeded) SecurityEvents.SignedOut(http, session.Principal);   // SEC-E4
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok();

@@ -77,9 +77,10 @@ public sealed class SecurityHeaders(RequestDelegate next)
 
 /// <summary>
 /// REOS-53 (Q-053c): a session cookie outlives a deactivated (or deleted) user. Every cookie-authenticated request re-checks that the <c>uid</c> claim still
-/// names an active user, at most every <c>Auth:SessionRecheckSeconds</c> (default 10) per user; otherwise the cookie is rejected and the next request is 401.
+/// names an active user, at most every <c>Auth:SessionRecheckSeconds</c> (default 10) per user; otherwise the cookie is rejected and the next request is 401,
+/// and every live connection of that user is closed (REOS-63).
 /// </summary>
-public sealed class SessionValidator(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config)
+public sealed class SessionValidator(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config, Realtime.HubConnections hubs)
 {
     private readonly ConcurrentDictionary<string, (bool Active, DateTime At)> _seen = new();
     private TimeSpan Ttl => TimeSpan.FromSeconds(Math.Max(0, config.GetValue("Auth:SessionRecheckSeconds", 10)));
@@ -97,6 +98,7 @@ public sealed class SessionValidator(IDbContextFactory<ReleaseDbContext> dbf, Ti
         }
         if (s.Active) return;
         SecurityEvents.SessionEndedForInactiveUser(ctx.HttpContext, uid);   // SEC-E4
+        hubs.AbortUser(uid, "the user is deactivated or deleted");   // REOS-63: their live connections close with the session
         ctx.RejectPrincipal();
         await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     }

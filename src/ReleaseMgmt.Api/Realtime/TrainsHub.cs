@@ -11,7 +11,7 @@ namespace ReleaseMgmt.Api.Realtime;
 /// ServerTime(iso) every 10 s. Payloads are hints: clients refetch through the normal, authorised API.
 /// </summary>
 [Authorize(Policy = Policies.Read)]
-public sealed class TrainsHub(TimeProvider time) : Hub
+public sealed class TrainsHub(TimeProvider time, HubConnections connections) : Hub
 {
     public const string Path = "/hub/trains";
     public const string TrainChanged = "TrainChanged";
@@ -23,8 +23,15 @@ public sealed class TrainsHub(TimeProvider time) : Hub
     /// <summary>A new connection gets the server clock straight away, so countdowns are right from the first second (the 10 s timer keeps them honest).</summary>
     public override async Task OnConnectedAsync()
     {
+        connections.Add(Context);   // REOS-63: closed on sign-out, refused session, deactivation, and by the periodic re-check
         await Clients.Caller.SendAsync(ServerTime, time.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
         await base.OnConnectedAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        connections.Remove(Context.ConnectionId);
+        return base.OnDisconnectedAsync(exception);
     }
 }
 

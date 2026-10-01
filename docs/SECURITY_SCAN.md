@@ -124,8 +124,8 @@ Detail, evidence and reproduction tests for each are in the per-area reports: [a
 | SEC-D3 | Import width and error list unbounded | Medium | Fixed |
 | SEC-D4 | Checklist paste: unbounded line length | Medium | Fixed |
 | SEC-D6 | Slack/Teams markup injection (`<!channel>`, links) | Medium | Fixed |
-| SEC-D7 | No request-body limit below ~30 MB | Medium | Partly fixed (1 MiB global; per-field limits open) |
-| SEC-E1 | DNS rebinding reached the Development app | Medium | Fixed |
+| SEC-D7 | No request-body limit below ~30 MB | Medium | Fixed (1 MiB global; per-field limits on every JSON body since REOS-66, Q-SEC-D1) |
+| SEC-E1 | DNS rebinding reached the Development app | Medium | Fixed (outside Development the app refuses to start while `AllowedHosts` is `*` or empty, REOS-68) |
 | SEC-E4 | Sign-in, sign-out and access-denied events not logged | Medium | Fixed |
 | SEC-E5 | Forwarded headers ignored behind the proxy; no HSTS | Medium | Fixed |
 | SEC-A4 | Race: one schedule item could post to the channel twice | Low | Fixed |
@@ -135,7 +135,7 @@ Detail, evidence and reproduction tests for each are in the per-area reports: [a
 | SEC-D5 | Log injection through a webhook channel name | Low | Fixed |
 | SEC-D8 | Export jobs could be queued without bound | Low | Fixed (retention still open, Q-050c) |
 | SEC-D9 | Stored previews unbounded per user and never purged | Low | Fixed |
-| SEC-D10 | Calendar-feed brake behind a proxy that sends no client address | Low | Not fixed (Q-SEC-D5; forwarded headers fix the usual case) |
+| SEC-D10 | Calendar-feed brake behind a proxy that sends no client address | Low | Fixed (REOS-67: a valid token is always served; only failed lookups are braked, Q-SEC-D5) |
 | SEC-E2 | `start.py` control channel accepted any Host | Low | Fixed |
 | SEC-E3 | CI token default permissions; actions on mutable tags | Low | Fixed (keeping pins current: Q-SEC-E2) |
 | SEC-E7 | Backups failed with "database is locked" under write load (no busy timeout, no retry) | Low | Fixed |

@@ -434,6 +434,14 @@ public class CalendarTests
         Assert.Equal(HttpStatusCode.NotFound, (await Anon(c.F, "/api/v1/ics/whatever-is-not-a-token-at-all/mine.ics")).StatusCode);
     }
 
+    /// <summary>The ICS brake counts failures per clock minute (Q-051e). A test that needs one burst inside one minute waits for a fresh one when fewer than
+    /// 30 seconds are left, so a minute boundary cannot split the burst on a slow machine.</summary>
+    internal static async Task FreshMinute()
+    {
+        var now = DateTime.UtcNow;
+        if (now.Second >= 30) await Task.Delay(TimeSpan.FromSeconds(60 - now.Second) - TimeSpan.FromMilliseconds(now.Millisecond) + TimeSpan.FromMilliseconds(50));
+    }
+
     [Fact]
     public async Task Repeated_bad_tokens_are_throttled_with_429()
     {
@@ -442,6 +450,7 @@ public class CalendarTests
         var tok = await NewToken(rte);
         using var c = f.CreateClient();
         HttpStatusCode last = 0;
+        await FreshMinute();
         for (var i = 0; i < 70; i++) last = (await c.GetAsync($"/api/v1/ics/{new string('B', 43)}.ics")).StatusCode;
         Assert.Equal(HttpStatusCode.TooManyRequests, last);
     }

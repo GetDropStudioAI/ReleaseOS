@@ -10,16 +10,8 @@ using static ReleaseMgmt.Api.Tests.LifecycleContractTests;
 
 namespace ReleaseMgmt.Api.Tests;
 
-/// <summary>
-/// Tests that read the Serilog log file. <c>UseSerilog</c> (Program.cs) routes every in-process host through the static <c>Log.Logger</c>, which the last host
-/// built replaces and a disposed host resets, so while other test hosts start and stop in parallel an event can land in another host's file. These tests
-/// therefore run alone, after the parallel ones.
-/// </summary>
-[CollectionDefinition(Name, DisableParallelization = true)]
-public sealed class LogFileCollection { public const string Name = "Log file (not parallel)"; }
-
-/// <summary>Security review SEC-D5 (docs/security/scan-resources-injection.md): a logged value cannot forge a log entry.</summary>
-[Collection(LogFileCollection.Name)]
+/// <summary>Security review SEC-D5 (docs/security/scan-resources-injection.md): a logged value cannot forge a log entry. Reads this host's own log file:
+/// since REOS-70 every host has its own Serilog logger (Program.cs, preserveStaticLogger), so these tests run in parallel with the rest.</summary>
 public class LogInjectionTests
 {
     private static async Task<JsonElement> Json(HttpResponseMessage r) => JsonDocument.Parse(await r.Content.ReadAsStringAsync()).RootElement;

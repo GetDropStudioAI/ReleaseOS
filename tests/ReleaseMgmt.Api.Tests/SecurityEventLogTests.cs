@@ -10,7 +10,6 @@ namespace ReleaseMgmt.Api.Tests;
 /// hid the framework's "Authorization failed" lines, and nothing logged a successful sign-in or a sign-out, so a burst of refused calls or a session that
 /// should not exist left no trace.
 /// </summary>
-[Collection(LogFileCollection.Name)]
 public class SecurityEventLogTests
 {
     private static string ReadShared(string path)

@@ -26,13 +26,17 @@ if (args is ["restore", var backupFile, var targetDb])
 }
 
 var builder = WebApplication.CreateBuilder(args);
+// REOS-70: preserveStaticLogger gives each host its own logger (disposed with the host) and leaves the static Log.Logger alone, so hosts in one process
+// (the in-process test servers) never write to each other's file. One production host behaves as before: same configuration, enrichers and file sink.
 builder.Host.UseSerilog((ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.With<IcsTokenRedactor>()   // SEC-B10: feed tokens never reach a sink, whatever the levels or the format
     .Enrich.With<LogSanitizer>()   // security review SEC-D5: one event is one line, whatever a logged value holds
-    .WriteTo.File(ctx.Configuration["Logging:File"] ?? "logs/releasemgmt-.log", rollingInterval: RollingInterval.Day));
+    .WriteTo.File(ctx.Configuration["Logging:File"] ?? "logs/releasemgmt-.log", rollingInterval: RollingInterval.Day),
+    preserveStaticLogger: true);
 
 var config = builder.Configuration;
+AllowedHostsGuard.Enforce(builder.Environment, config);   // REOS-68: outside Development, AllowedHosts must name the host (fail fast)
 var dbPath = config["Db:Path"] ?? "data/releasemgmt.db";
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
 var connectionString = $"Data Source={dbPath}";
@@ -167,23 +171,13 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/healthz", [AllowAnonymous] async (IDbContextFactory<ReleaseDbContext> dbf, BackupService backup, CancellationToken ct) =>
-{
-    string db;
-    try
-    {
-        await using var ctx = await dbf.CreateDbContextAsync(ct);
-        await ctx.Database.ExecuteSqlRawAsync("SELECT 1", ct);
-        db = "ok";
-    }
-    catch (Exception ex) { app.Logger.LogError(ex, "healthz DB check failed"); db = "failed"; }
-    var body = new { status = db == "ok" ? "Healthy" : "Unhealthy", db, backup = backup.LastSuccessUtc, poller = "notConfigured", watchdog = "notConfigured" };
-    return db == "ok" ? Results.Ok(body) : Results.Json(body, statusCode: 503);
-});
+app.MapGet("/healthz", [AllowAnonymous] (IDbContextFactory<ReleaseDbContext> dbf, BackupService backup,
+    ReleaseMgmt.Infrastructure.Sync.SyncPollerService poller, ReleaseMgmt.Infrastructure.Sync.SyncWatchdogService watchdog, CancellationToken ct) =>
+    Health.CheckAsync(dbf, backup, poller.Heartbeat, watchdog.Heartbeat, app.Logger, ct));   // REOS-69: real poller and watchdog state; 503 when one has stalled
 
 var devTools = DevSignIn.Enabled(app.Environment, config, app.Logger);   // SEC-B1: Development, and not beside organisation sign-in unless opted in
 app.MapHub<ReleaseMgmt.Api.Realtime.TrainsHub>(ReleaseMgmt.Api.Realtime.TrainsHub.Path);
-var api = app.MapGroup("/api/v1");
+var api = app.MapGroup("/api/v1").AddEndpointFilterFactory(FieldLimits.Filter);   // REOS-66: per-field length limits on every JSON body (Q-SEC-D1)
 api.MapGet("/me", (ClaimsPrincipal u) => new
 {
     id = u.FindFirstValue("uid"),
@@ -238,7 +232,7 @@ if (devTools)
 var resetUrl = config["Auth:PasswordResetUrl"];
 if (!string.IsNullOrWhiteSpace(resetUrl) && !(Uri.TryCreate(resetUrl, UriKind.Absolute, out var ru) && ru.Scheme == Uri.UriSchemeHttps))
 {
-    Log.Warning("Auth:PasswordResetUrl must be an absolute https URL; ignoring it");
+    app.Logger.LogWarning("Auth:PasswordResetUrl must be an absolute https URL; ignoring it");   // the host's logger: the static Log.Logger is not this host's (REOS-70)
     resetUrl = null;
 }
 app.MapGet("/auth/config", [AllowAnonymous] () => Results.Ok(new { organisationSignIn = authority is not null, passwordResetUrl = string.IsNullOrWhiteSpace(resetUrl) ? null : resetUrl }));

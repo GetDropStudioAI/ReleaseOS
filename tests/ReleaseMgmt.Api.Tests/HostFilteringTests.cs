@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
 
 namespace ReleaseMgmt.Api.Tests;
 
@@ -38,5 +39,55 @@ public class HostFilteringTests
         using var f = new ApiFactory();
         var r = await f.CreateClient().SendAsync(DevLogin(host));
         Assert.True(r.IsSuccessStatusCode, $"{host}: {(int)r.StatusCode}");
+    }
+    // ---- REOS-68 (Q-SEC-E1 option b): outside Development the app does not start until AllowedHosts names its host --------------------------------
+
+    [Theory]
+    [InlineData("*", "\"*\"")]
+    [InlineData("localhost;*", "\"*\"")]
+    [InlineData("", "empty")]
+    [InlineData(" ; ", "empty")]
+    public void Outside_Development_a_wildcard_or_empty_AllowedHosts_stops_start_up_with_a_message_naming_the_key(string value, string says)
+    {
+        using var root = new ApiFactory("Production");
+        using var f = root.WithWebHostBuilder(b => b.UseSetting("AllowedHosts", value));
+        var ex = Assert.ThrowsAny<Exception>(() => f.CreateClient());
+        var inner = ex as InvalidOperationException ?? ex.InnerException as InvalidOperationException ?? ex.GetBaseException() as InvalidOperationException;
+        Assert.NotNull(inner);
+        Assert.StartsWith("AllowedHosts is ", inner.Message);
+        Assert.Contains(says, inner.Message);
+    }
+
+    [Fact]
+    public void The_shipped_configuration_does_not_start_outside_Development()
+    {
+        // appsettings.json no longer carries AllowedHosts; a Production host started without setting it is refused.
+        using var root = new ApiFactory("Production");
+        using var f = root.WithWebHostBuilder(b => b.UseSetting("AllowedHosts", null));
+        var ex = Assert.ThrowsAny<Exception>(() => f.CreateClient());
+        Assert.Contains("AllowedHosts is empty", ex.GetBaseException().Message);
+    }
+
+    [Fact]
+    public async Task Outside_Development_a_named_host_starts_and_every_other_host_is_refused_400()
+    {
+        using var root = new ApiFactory("Production");
+        using var f = root.WithWebHostBuilder(b => b.UseSetting("AllowedHosts", "releases.example.com"));
+        var c = f.CreateClient();
+        var ok = new HttpRequestMessage(HttpMethod.Get, "/healthz") { Headers = { Host = "releases.example.com" } };
+        Assert.Equal(HttpStatusCode.OK, (await c.SendAsync(ok)).StatusCode);
+        foreach (var host in new[] { "attacker.example", "localhost", "127.0.0.1:6080", "releases.example.com.attacker.example" })
+        {
+            var bad = new HttpRequestMessage(HttpMethod.Get, "/healthz") { Headers = { Host = host } };
+            Assert.Equal(HttpStatusCode.BadRequest, (await c.SendAsync(bad)).StatusCode);
+        }
+    }
+
+    [Fact]
+    public void Development_is_not_checked_so_start_py_keeps_working()
+    {
+        using var root = new ApiFactory();
+        using var f = root.WithWebHostBuilder(b => b.UseSetting("AllowedHosts", "*"));
+        f.CreateClient();   // starts
     }
 }

@@ -51,13 +51,19 @@ public sealed class SyncPollerService : BackgroundService
         SyncCycleWriter writer, SyncOptions options, IConfiguration config, ILogger<SyncPollerService> log)
     {
         _dbf = dbf; _time = time; _factory = factory; _alerts = alerts; _sink = sink; _writer = writer; _o = options; _config = config; _log = log;
+        // REOS-69: stalled after 3 slow intervals without a finished pass (the watchdog's own rule for a connector); the first pass is due after the start delay.
+        Heartbeat = new ServiceHeartbeat(time, options.Enabled, SyncIntervals.StallIntervals * options.Poll, options.StartDelay);
     }
+
+    /// <summary>The loop's liveness for <c>/healthz</c> (REOS-69). Only the timer loop beats; "sync now" does not prove the loop is alive.</summary>
+    public ServiceHeartbeat Heartbeat { get; }
 
     private DateTime Now { get { var t = _time.GetUtcNow().UtcDateTime; return new DateTime(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc); } }
 
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
         if (!_o.Enabled) { _log.LogWarning("Sync:Enabled is false; the sync poller is not running"); return; }
+        Heartbeat.Started();
         try
         {
             if (_o.StartDelay > TimeSpan.Zero) await Task.Delay(_o.StartDelay, _time, stop);
@@ -65,11 +71,16 @@ public sealed class SyncPollerService : BackgroundService
             {
                 try { await RunOnceAsync(stop); }
                 catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogError(ex, "The sync poller's cycle failed"); }
+                Heartbeat.Beat();
                 var open = await SyncSupport.WindowOpenSinceAsync(_dbf, Now, stop) is not null;
                 await Task.Delay(SyncIntervals.PollInterval(open, _o.Poll, _o.WindowPoll), _time, stop);
             }
         }
         catch (OperationCanceledException) { /* shutting down */ }
+        finally
+        {
+            if (!stop.IsCancellationRequested) { Heartbeat.Exited(); _log.LogError("The sync poller's loop ended while the app is running; /healthz reports it stalled"); }
+        }
     }
 
     /// <summary>One pass over every enabled connector (Jira, then ServiceNow). Serialised: a "sync now" during a cycle waits for it.</summary>

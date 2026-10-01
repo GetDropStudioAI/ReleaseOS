@@ -107,7 +107,8 @@ public class SecurityDecisionsTests
             var keys = Path.Combine(dir, "keys");
             var (pfx, password) = TestCertificate(dir);
 
-            // 1. a pilot that ran with plain keys protects a value
+            // 1. a pilot that ran without a certificate protects a value (plain keys on Linux and macOS; on Windows the app protects keys with DPAPI
+            //    whenever no certificate is configured, so that key is already encrypted, by DPAPI rather than the certificate)
             string payload;
             using (var plainRoot = new ApiFactory("Production"))
             using (var plain = With(plainRoot, ("DataProtection:KeysDirectory", keys)))
@@ -117,7 +118,8 @@ public class SecurityDecisionsTests
             }
             var before = KeyFiles(keys);
             Assert.Single(before);
-            Assert.DoesNotContain("encryptedSecret", File.ReadAllText(before[0]));
+            if (OperatingSystem.IsWindows()) Assert.Contains("DpapiXmlDecryptor", File.ReadAllText(before[0]));   // CI run 92 (windows-latest)
+            else Assert.DoesNotContain("encryptedSecret", File.ReadAllText(before[0]));
 
             // 2. the certificate is configured: the old key still reads, and a new key is encrypted with the certificate
             using (var certRoot = new ApiFactory("Production"))

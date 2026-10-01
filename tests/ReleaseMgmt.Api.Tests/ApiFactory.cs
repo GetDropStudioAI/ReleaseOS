@@ -38,6 +38,29 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
     {
         base.Dispose(disposing);
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        KeepLogOfUnhandledException();
         try { Directory.Delete(_dir, true); } catch (IOException) { }
+    }
+
+    /// <summary>
+    /// CI run 90 (macOS): a request answered 500 and the cause was lost with this host's temporary directory. A host log that records an unhandled
+    /// exception is copied to <c>logs/api-tests/</c> at the repository root, which CI uploads when a step fails. Tests that provoke errors on purpose
+    /// log them as handled errors, not unhandled exceptions, so they are not copied.
+    /// </summary>
+    private void KeepLogOfUnhandledException()
+    {
+        try
+        {
+            var root = new DirectoryInfo(AppContext.BaseDirectory);
+            while (root != null && !File.Exists(Path.Combine(root.FullName, "db", "schema.sql"))) root = root.Parent;
+            if (root is null || !Directory.Exists(_dir)) return;
+            foreach (var log in Directory.GetFiles(_dir, "log-*.txt"))
+            {
+                if (!File.ReadAllText(log).Contains("An unhandled exception has occurred", StringComparison.Ordinal)) continue;
+                var keep = Directory.CreateDirectory(Path.Combine(root.FullName, "logs", "api-tests")).FullName;
+                File.Copy(log, Path.Combine(keep, $"{Path.GetFileName(_dir)}-{Path.GetFileName(log)}"), overwrite: true);
+            }
+        }
+        catch (IOException) { }   // best effort: never turn a passing test into a failure over a diagnostic copy
     }
 }

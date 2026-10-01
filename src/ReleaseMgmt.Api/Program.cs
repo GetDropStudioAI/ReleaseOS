@@ -46,6 +46,7 @@ builder.Services.AddSingleton<IRealtimePublisher, ReleaseMgmt.Api.Realtime.Signa
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.ServerTimeBroadcaster>();
 builder.Services.AddSingleton<INotifier, Notifier>();
 builder.Services.AddSingleton<UserProvisioner>();
+builder.Services.AddSingleton<IdpIdentityBinder>();   // SEC-B8: organisation sign-in matches the IdP issuer + subject (Q-SEC-B8)
 builder.Services.AddSingleton<SessionValidator>();   // REOS-53
 builder.Services.AddSingleton<SessionLifetime>();    // SEC-B4/B5: idle and absolute limits, server-side sign-out
 builder.Services.AddSingleton<Microsoft.Extensions.Options.IPostConfigureOptions<Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions>, KeyRingPermissions>();   // SEC-B12
@@ -240,7 +241,7 @@ app.MapGet("/auth/config", [AllowAnonymous] () => Results.Ok(new { organisationS
 app.MapPost("/auth/logout", [AllowAnonymous] async (HttpContext http, SessionLifetime sessions) =>
 {
     var session = await http.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    sessions.SignedOut(session.Properties);   // SEC-B5: copies of this cookie die too
+    await sessions.SignedOutAsync(session.Properties, session.Principal?.FindFirst("uid")?.Value, http.RequestAborted);   // SEC-B5: copies of this cookie die too, also after a restart (REOS-62)
     if (session.Succeeded) SecurityEvents.SignedOut(http, session.Principal);   // SEC-E4
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok();

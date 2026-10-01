@@ -53,6 +53,7 @@ public static class ModelMap
         b.Entity<ExportJobs>(e => { e.ToTable("ExportJobs"); e.HasKey(e => e.Id);  });
         b.Entity<MetricSnapshots>(e => { e.ToTable("MetricSnapshots"); e.HasKey(e => e.Id); e.Property(e => e.Id).ValueGeneratedOnAdd(); });
         b.Entity<IcsTokens>(e => { e.ToTable("IcsTokens"); e.HasKey(e => e.Id);  });
+        b.Entity<SessionRevocations>(e => { e.ToTable("SessionRevocations"); e.HasKey(e => e.SessionId);  });
         b.Entity<ParsePreviews>(e => { e.ToTable("ParsePreviews"); e.HasKey(e => e.Id);  });
         b.Entity<ConnectorState>(e => { e.ToTable("ConnectorState"); e.HasKey(e => e.SourceSystem);  });
         b.Entity<AuditEvents>(e => { e.ToTable("AuditEvents"); e.HasKey(e => e.Id); e.Property(e => e.Id).ValueGeneratedOnAdd(); });
@@ -149,6 +150,7 @@ public static class ModelMap
         b.Entity<MetricSnapshots>().HasOne<ExportJobs>().WithMany().HasForeignKey(e => e.ExportJobId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<MetricSnapshots>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<IcsTokens>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<SessionRevocations>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ParsePreviews>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ParsePreviews>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
     }

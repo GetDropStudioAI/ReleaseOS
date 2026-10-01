@@ -12,10 +12,10 @@ Method: read `Program.cs`, `src/ReleaseMgmt.Api/Auth/*`, the calendar (ICS) endp
 | SEC-B2 | dev-login answered any caller and any Host name: another machine, or a web page through DNS rebinding | A07, API2; ASVS V6.3 | Medium | Fixed (Q-SEC-B1) |
 | SEC-B3 | Session cookie not `Secure` behind the runbook's TLS-terminating proxy; no `__Host-` prefix | A04, A07; ASVS V7.1, V3.3.1 | Medium | Fixed |
 | SEC-B4 | No absolute session lifetime; 14-day sliding idle timeout, so an active user was never sent back to the identity provider | A07; ASVS V7.3.1, V7.3.2 | Medium | Fixed (Q-SEC-B4) |
-| SEC-B5 | Sign-out did not end the session on the server; a copy of the cookie kept working | A07; ASVS V7.4.1 | Medium | Fixed in memory (Q-SEC-B5) |
+| SEC-B5 | Sign-out did not end the session on the server; a copy of the cookie kept working | A07; ASVS V7.4.1 | Medium | Fixed; durable since REOS-62 (Q-SEC-B5) |
 | SEC-B6 | A deactivated user's calendar feed kept working | A07, API2; ASVS V7.4.2 | Medium | Fixed (Q-SEC-B6) |
 | SEC-B7 | Role claims issued by the identity provider bypassed `Auth:RoleMap` | A07, A01; ASVS V10.3 | Medium | Fixed (Q-SEC-B7) |
-| SEC-B8 | An email the identity provider marks unverified signed in as the account with that email | A07; ASVS V10.5 | Medium | Partly fixed; binding by subject needs a schema change (Q-SEC-B8) |
+| SEC-B8 | An email the identity provider marks unverified signed in as the account with that email | A07; ASVS V10.5 | Medium | Fixed: bound to issuer + subject since REOS-61 (Q-SEC-B8, Q-SEC-B8m) |
 | SEC-B9 | Every identity the IdP authenticated became a Viewer and was provisioned | A07, A01; ASVS V6, V8.1 | Medium | Fixed, safest default behind `Auth:DefaultRole` (Q-SEC-B9) |
 | SEC-B10 | Calendar feed tokens written to the log when request logging is raised (or by any property-printing format) | A09, A04; ASVS V16.2, V14.2 | Low | Fixed |
 | SEC-B11 | A session cookie minted by a Development copy of a restored backup was accepted by the Production instance | A07, A04; ASVS V9.1 | Medium | Fixed |
@@ -55,7 +55,7 @@ Severity is rated for the pilot deployment the runbook describes (one internal h
 
 - **Evidence:** `Program.cs:223-227` (c9a1180): logout only sent a cookie deletion; the ticket is self-contained, so any copy (a shared browser profile, a proxy or HAR file, malware) stayed valid for up to 14 days, sliding.
 - **Reproduction:** `SEC_B5_signing_out_ends_the_session_for_every_copy_of_the_cookie` (the copy answered 200 after logout).
-- **Fix:** each sign-in gets a random session id in the ticket; logout records it and `SessionLifetime.ValidateAsync` refuses it until the session's absolute lifetime would have ended. **Limits (Q-SEC-B5):** the list is in memory, so after a restart a copied cookie works again until its absolute lifetime (at most `Auth:Session:AbsoluteHours`); a durable list needs a table. Signing out does not end the IdP session (no RP-initiated logout).
+- **Fix:** each sign-in gets a random session id in the ticket; logout records it and `SessionLifetime.ValidateAsync` refuses it until the session's absolute lifetime would have ended. **REOS-62:** the list is stored in `SessionRevocations` (pruned once a row's session could no longer be alive) and cached in memory, so a restart no longer revives a copied cookie (`SEC_B5_a_signed_out_cookie_stays_refused_after_the_host_restarts_on_the_same_database`). **Limit (Q-SEC-B5):** signing out does not end the IdP session (no RP-initiated logout).
 
 ### SEC-B6 · A deactivated user's calendar feed kept working (Medium)
 
@@ -69,11 +69,11 @@ Severity is rated for the pilot deployment the runbook describes (one internal h
 - **Reproduction:** `SEC_B7_a_role_claim_from_the_identity_provider_does_not_bypass_the_role_map` (identity got `GovernanceOfficer, Viewer`), `SEC_B7_identity_provider_roles_are_mapped_through_the_role_map_like_groups` (threw `DbUpdateException`).
 - **Fix:** `RoleMapper.AddRoles` removes every IdP role claim (`ClaimTypes.Role`, `roles`, `role`, the identity's role type) and uses the values as map keys like groups, as the runbook already described ("groups or roles"). Q-SEC-B7.
 
-### SEC-B8 · Account linked through an unverified email (Medium, partly fixed)
+### SEC-B8 · Account linked through an unverified email (Medium)
 
 - **Evidence:** `Program.cs:120` (c9a1180) and `UserProvisioner.UpsertAsync` key the account by email (`email`, else `preferred_username`) and never looked at `email_verified`, so a token for a different person carrying the same address signed in as the existing user: their gate and task ownership, audit identity and SoD history (the role comes from the new token).
 - **Reproduction:** `SEC_B8_an_email_the_identity_provider_marks_unverified...` (sign-in succeeded as the Governance Officer's row).
-- **Fix:** a token with `email_verified=false` is refused and logged. **Not fixed:** binding users to the IdP's issuer and subject needs a `Users` column (schema change, not made; Q-SEC-B8). Until then the IdP must only send verified, tenant-owned addresses.
+- **Fix:** a token with `email_verified=false` is refused and logged. **REOS-61:** users are bound to the IdP's issuer and subject (`Users.IdpIssuer`, `Users.IdpSubject`); sign-in matches on them and email follows the IdP. A user who existed before is bound on first sign-in only with `email_verified=true`; a second identity with a bound user's email is refused and logged (`SEC_B8_a_second_identity_carrying_the_email_of_a_bound_user_is_refused`, `..._the_same_subject_signs_in_after_its_email_changes...`, `..._first_sign_in_binds_a_pre_existing_unbound_user...`). Open points (Entra and `email_verified`, upgrading an existing database): Q-SEC-B8, Q-SEC-B8m.
 
 ### SEC-B9 · Every IdP identity became a Viewer (Medium)
 
@@ -132,7 +132,6 @@ Severity is rated for the pilot deployment the runbook describes (one internal h
 - Browser behaviour for `__Host-`/`Secure` cookies and the DNS-rebinding scenario in a real browser (the headers were asserted over the in-process server).
 - Windows: key ring ACLs, and `start.py` environment pass-through on Windows (the test ran on Linux).
 - Reverse-proxy logging of feed paths (runbook instruction only).
-- Behaviour after a restart for signed-out cookies (in-memory by design, Q-SEC-B5).
 - The Playwright e2e suite (no browser in the review environment). It signs in through dev-login at `http://127.0.0.1:6273` (the Vite proxy keeps that Host and connects from 127.0.0.1), which the SEC-B2 rule allows; a real Kestrel process was checked by hand: loopback 200, a rebinding Host 403, `keys/` 700 and key files 600, no dev-login in Production.
 
 ## 5. Test results (this change)

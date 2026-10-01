@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Tests;
 
 /// <summary>
-/// Port of tests/reference/test_schema.py: same 82 cases, same order, same expected messages, run against the
+/// Port of tests/reference/test_schema.py: same 88 cases, same order, same expected messages, run against the
 /// EF-migrated database (not schema.sql directly). The Python oracle stays and must keep passing.
 /// Sections that share a database in the oracle share one in-order scenario here.
 /// </summary>
@@ -289,6 +289,14 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         Check(db, "INSERT INTO IcsTokens(Id,UserId,TokenSha256,CreatedAt) VALUES('it2','rte',?,?)", false, "second active ICS token for a user", [new string('c', 64), Now], "UNIQUE");
         Check(db, "INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('dw1','t1','2026-10-30T06:00:00Z','2026-10-30T10:00:00Z')", true, "deployment window");
         Check(db, "INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('dw2','t1','2026-10-31T06:00:00Z','2026-10-31T10:00:00Z')", false, "second window for a train (one per train in v1)", expect: "UNIQUE");
+
+        // Identity binding and sign-out (Q-SEC-B8, Q-SEC-B5)
+        Check(db, "UPDATE Users SET IdpIssuer='https://idp.example/',IdpSubject='sub-rte' WHERE Id='rte'", true, "bind a user to an IdP issuer + subject");
+        Check(db, "UPDATE Users SET IdpIssuer='https://idp.example/',IdpSubject='sub-rte' WHERE Id='rm'", false, "same issuer + subject bound to a second user", expect: "UNIQUE");
+        Check(db, "UPDATE Users SET IdpIssuer='https://other.example/',IdpSubject='sub-rte' WHERE Id='rm'", true, "same subject at another issuer is another identity");
+        Check(db, "UPDATE Users SET IdpIssuer='https://idp.example/' WHERE Id='dev'", false, "issuer without subject", expect: "CHECK");
+        Check(db, "INSERT INTO SessionRevocations(SessionId,UserId,RevokedAt,ExpiresAt) VALUES('ab12','rte',?,'2026-10-21T02:00:00Z')", true, "record a signed-out session", [Now]);
+        Check(db, "INSERT INTO SessionRevocations(SessionId,UserId,RevokedAt,ExpiresAt) VALUES('ab12','rte',?,'2026-10-21T02:00:00Z')", false, "same session revoked twice", [Now], "UNIQUE");
     }
 
     [Fact]

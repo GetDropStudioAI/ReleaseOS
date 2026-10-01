@@ -12,6 +12,8 @@ public class Users
     public string Role { get; set; } = "";
     public string? Handle { get; set; }
     public bool IsActive { get; set; } = true;
+    public string? IdpIssuer { get; set; }
+    public string? IdpSubject { get; set; }
     public int Version { get; set; } = 1;
 }
 
@@ -548,6 +550,14 @@ public class IcsTokens
     public string TokenSha256 { get; set; } = "";
     public DateTime CreatedAt { get; set; }
     public DateTime? RevokedAt { get; set; }
+}
+
+public class SessionRevocations
+{
+    public string SessionId { get; set; } = "";
+    public string? UserId { get; set; }
+    public DateTime RevokedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
 }
 
 public class ParsePreviews

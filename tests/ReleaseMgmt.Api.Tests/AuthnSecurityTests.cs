@@ -250,6 +250,47 @@ public class AuthnSecurityTests
         Assert.Equal(HttpStatusCode.OK, (await raw.SendAsync(WithCookie(HttpMethod.Get, "/api/v1/me", other))).StatusCode);
     }
 
+    [Fact]
+    public async Task SEC_B5_a_signed_out_cookie_stays_refused_after_the_host_restarts_on_the_same_database()
+    {
+        using var root = new ApiFactory();   // owns the database directory (and keys/ beside it) for both hosts
+        string signedOut, stillIn;
+        using (var first = With(root))
+        {
+            var raw = first.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+            signedOut = SessionCookie(await DevLogin(raw, "out@x.com", Roles.ReleaseManager));
+            stillIn = SessionCookie(await DevLogin(raw, "in@x.com", Roles.RTE));
+            Assert.Equal(HttpStatusCode.OK, (await raw.SendAsync(WithCookie(HttpMethod.Post, "/auth/logout", signedOut))).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await raw.SendAsync(WithCookie(HttpMethod.Get, "/api/v1/me", signedOut))).StatusCode);
+        }
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        Assert.Equal("1", Scalar(root, "SELECT COUNT(*) FROM SessionRevocations"));
+        Assert.Equal("1", Scalar(root, $"SELECT COUNT(*) FROM AuditEvents WHERE EntityType='Session' AND Action='SignedOut' AND ActorUserId='{UserId(root, "out@x.com")}'"));
+
+        using var second = With(root);   // a new process on the same database and key ring
+        var client = second.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(WithCookie(HttpMethod.Get, "/api/v1/me", stillIn))).StatusCode);   // the restart alone ends nothing
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(WithCookie(HttpMethod.Get, "/api/v1/me", signedOut))).StatusCode);
+    }
+
+    [Fact]
+    public async Task SEC_B5_revocations_are_pruned_once_their_session_could_no_longer_be_alive()
+    {
+        using var root = new ApiFactory();
+        var (f, clock) = Clocked(root, ("Auth:Session:AbsoluteHours", "2"));
+        using var _ = f;
+        var raw = f.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var early = SessionCookie(await DevLogin(raw, "early@x.com", Roles.Viewer));
+        (await raw.SendAsync(WithCookie(HttpMethod.Post, "/auth/logout", early))).EnsureSuccessStatusCode();
+        Assert.Equal("2026-10-05T10:00:00Z", Scalar(root, "SELECT ExpiresAt FROM SessionRevocations"));   // sign-in + Auth:Session:AbsoluteHours
+
+        clock.Advance(TimeSpan.FromHours(2) + TimeSpan.FromMinutes(1));
+        var late = SessionCookie(await DevLogin(raw, "late@x.com", Roles.Viewer));
+        (await raw.SendAsync(WithCookie(HttpMethod.Post, "/auth/logout", late))).EnsureSuccessStatusCode();
+        Assert.Equal("late@x.com", Scalar(root, "SELECT u.Email FROM SessionRevocations r JOIN Users u ON u.Id = r.UserId"));   // only the live one is kept
+        Assert.Equal(HttpStatusCode.Unauthorized, (await raw.SendAsync(WithCookie(HttpMethod.Get, "/api/v1/me", early))).StatusCode);   // and the old one is dead anyway
+    }
+
     // ------------------------------------------------------------------ SEC-B6: calendar feed of a deactivated user
 
     [Fact]
@@ -290,13 +331,18 @@ public class AuthnSecurityTests
 
     private static string[] AppRoles(ClaimsIdentity id) => [.. id.FindAll(ClaimTypes.Role).Select(c => c.Value).Order()];
 
+    private const string Issuer = "https://idp.example.test/";
+
+    /// <summary>The token's subject as the handler hands it over: "sub" inbound-mapped to NameIdentifier, issued by the validated issuer.</summary>
+    private static Claim Sub(string subject, string issuer = Issuer) => new(ClaimTypes.NameIdentifier, subject, ClaimValueTypes.String, issuer);
+
     [Fact]
     public async Task SEC_B7_a_role_claim_from_the_identity_provider_does_not_bypass_the_role_map()
     {
         using var root = new ApiFactory();
         using var f = OidcHost(root, ("Auth:RoleMap:grp-rte", Roles.RTE), ("Auth:DefaultRole", Roles.Viewer));
         // An IdP "roles" claim (inbound-mapped to ClaimTypes.Role by the handler) that happens to be spelled like an app role, and no mapped group.
-        var (ctx, id) = await OidcSignIn(f, new Claim(ClaimTypes.Email, "someone@corp.example"), new Claim(ClaimTypes.Role, Roles.GovernanceOfficer), new Claim("groups", "grp-other"));
+        var (ctx, id) = await OidcSignIn(f, Sub("sub-someone@corp.example"), new Claim(ClaimTypes.Email, "someone@corp.example"), new Claim(ClaimTypes.Role, Roles.GovernanceOfficer), new Claim("groups", "grp-other"));
         Assert.Null(ctx.Result?.Failure);
         Assert.Equal([Roles.Viewer], AppRoles(id));
         Assert.Equal(Roles.Viewer, Scalar(root, "SELECT Role FROM Users WHERE Email='someone@corp.example'"));
@@ -307,7 +353,7 @@ public class AuthnSecurityTests
     {
         using var root = new ApiFactory();
         using var f = OidcHost(root, ("Auth:RoleMap:ReleaseMgmt.RM", Roles.ReleaseManager));
-        var (ctx, id) = await OidcSignIn(f, new Claim(ClaimTypes.Email, "rm@corp.example"), new Claim(ClaimTypes.Role, "ReleaseMgmt.RM"));
+        var (ctx, id) = await OidcSignIn(f, Sub("sub-rm@corp.example"), new Claim(ClaimTypes.Email, "rm@corp.example"), new Claim(ClaimTypes.Role, "ReleaseMgmt.RM"));
         Assert.Null(ctx.Result?.Failure);
         Assert.Equal([Roles.ReleaseManager], AppRoles(id));
         Assert.Equal(Roles.ReleaseManager, Scalar(root, "SELECT Role FROM Users WHERE Email='rm@corp.example'"));
@@ -319,14 +365,109 @@ public class AuthnSecurityTests
         using var root = new ApiFactory();
         using var f = OidcHost(root, ("Auth:RoleMap:grp-staff", Roles.Viewer));
         var gov = await As(root, Roles.GovernanceOfficer, "gov@corp.example");   // the real account (made through dev-login on the unconfigured host)
-        var (ctx, id) = await OidcSignIn(f, new Claim(ClaimTypes.Email, "gov@corp.example"), new Claim("email_verified", "false"), new Claim("groups", "grp-staff"));
+        var (ctx, id) = await OidcSignIn(f, Sub("sub-gov@corp.example"), new Claim(ClaimTypes.Email, "gov@corp.example"), new Claim("email_verified", "false"), new Claim("groups", "grp-staff"));
         Assert.NotNull(ctx.Result?.Failure);
         Assert.Null(id.FindFirst("uid"));
         Assert.Equal(Roles.GovernanceOfficer, Scalar(root, "SELECT Role FROM Users WHERE Email='gov@corp.example'"));   // not overwritten
         // a verified one (or an IdP that does not send the claim at all) signs in as before
-        var (ok, okId) = await OidcSignIn(f, new Claim(ClaimTypes.Email, "new@corp.example"), new Claim("email_verified", "true"), new Claim("groups", "grp-staff"));
+        var (ok, okId) = await OidcSignIn(f, Sub("sub-new@corp.example"), new Claim(ClaimTypes.Email, "new@corp.example"), new Claim("email_verified", "true"), new Claim("groups", "grp-staff"));
         Assert.Null(ok.Result?.Failure);
         Assert.NotNull(okId.FindFirst("uid"));
+    }
+
+    // REOS-61 (SEC-B8 completed): users are bound to the identity provider's issuer + subject; email is display data.
+
+    private static Claim[] Staff(string subject, string email, bool? verified = true, string issuer = Issuer, string? name = null) =>
+        [Sub(subject, issuer), new Claim(ClaimTypes.Email, email), new Claim("name", name ?? email.Split('@')[0]), new Claim("groups", "grp-staff"),
+         .. verified is bool v ? [new Claim("email_verified", v ? "true" : "false")] : Array.Empty<Claim>()];
+
+    [Fact]
+    public async Task SEC_B8_a_second_identity_carrying_the_email_of_a_bound_user_is_refused()
+    {
+        using var root = new ApiFactory();
+        using var f = OidcHost(root, ("Auth:RoleMap:grp-staff", Roles.RTE));
+        var (first, firstId) = await OidcSignIn(f, Staff("sub-alice", "alice@corp.example"));
+        Assert.Null(first.Result?.Failure);
+        var aliceId = firstId.FindFirst("uid")!.Value;
+        var version = Scalar(root, $"SELECT Version FROM Users WHERE Id='{aliceId}'");
+
+        // another person at the IdP (a guest, a recycled mailbox, another tenant) whose token carries the same, even verified, address
+        foreach (var claims in new[] { Staff("sub-mallory", "alice@corp.example"), Staff("sub-alice", "alice@corp.example", issuer: "https://other-tenant.example.test/") })
+        {
+            var (ctx, id) = await OidcSignIn(f, claims);
+            Assert.NotNull(ctx.Result?.Failure);
+            Assert.Null(id.FindFirst("uid"));
+        }
+        Assert.Equal(version, Scalar(root, $"SELECT Version FROM Users WHERE Id='{aliceId}'"));   // alice's row is untouched
+        Assert.Equal("sub-alice", Scalar(root, $"SELECT IdpSubject FROM Users WHERE Id='{aliceId}'"));
+        Assert.Equal("1", Scalar(root, "SELECT COUNT(*) FROM Users WHERE Email='alice@corp.example'"));
+
+        var (again, againId) = await OidcSignIn(f, Staff("sub-alice", "alice@corp.example"));   // the real alice still signs in
+        Assert.Null(again.Result?.Failure);
+        Assert.Equal(aliceId, againId.FindFirst("uid")!.Value);
+    }
+
+    [Fact]
+    public async Task SEC_B8_the_same_subject_signs_in_after_its_email_changes_and_the_users_email_follows()
+    {
+        using var root = new ApiFactory();
+        using var f = OidcHost(root, ("Auth:RoleMap:grp-staff", Roles.ReleaseManager));
+        var (_, before) = await OidcSignIn(f, Staff("sub-bob", "bob.smith@corp.example", name: "Bob"));
+        var bobId = before.FindFirst("uid")!.Value;
+        var version = int.Parse(Scalar(root, $"SELECT Version FROM Users WHERE Id='{bobId}'"));
+
+        var (ctx, after) = await OidcSignIn(f, Staff("sub-bob", "bob.jones@corp.example", verified: null, name: "Bob"));   // renamed at the IdP; no email_verified needed once bound
+        Assert.Null(ctx.Result?.Failure);
+        Assert.Equal(bobId, after.FindFirst("uid")!.Value);
+        Assert.Equal("bob.jones@corp.example", Scalar(root, $"SELECT Email FROM Users WHERE Id='{bobId}'"));
+        Assert.Equal("0", Scalar(root, "SELECT COUNT(*) FROM Users WHERE Email='bob.smith@corp.example'"));
+        Assert.Equal((version + 1).ToString(), Scalar(root, $"SELECT Version FROM Users WHERE Id='{bobId}'"));
+        Assert.Equal("1", Scalar(root, $"SELECT COUNT(*) FROM AuditEvents WHERE EntityType='User' AND EntityId='{bobId}' AND Action='EmailChanged' AND ActorUserId='{bobId}'"));
+
+        // an email already held by another account is not taken over: sign-in is refused and both rows stay as they are
+        await OidcSignIn(f, Staff("sub-carol", "carol@corp.example"));
+        var (clash, clashId) = await OidcSignIn(f, Staff("sub-bob", "carol@corp.example", name: "Bob"));
+        Assert.NotNull(clash.Result?.Failure);
+        Assert.Null(clashId.FindFirst("uid"));
+        Assert.Equal("bob.jones@corp.example", Scalar(root, $"SELECT Email FROM Users WHERE Id='{bobId}'"));
+    }
+
+    [Fact]
+    public async Task SEC_B8_first_sign_in_binds_a_pre_existing_unbound_user_only_when_the_email_is_verified()
+    {
+        using var root = new ApiFactory();
+        using var f = OidcHost(root, ("Auth:RoleMap:grp-staff", Roles.GovernanceOfficer));
+        await As(root, Roles.GovernanceOfficer, "gov@corp.example");   // made before binding existed (here: dev-login on the unconfigured host)
+        var govId = UserId(root, "gov@corp.example");
+        var version = int.Parse(Scalar(root, $"SELECT Version FROM Users WHERE Id='{govId}'"));
+
+        var (unverified, unverifiedId) = await OidcSignIn(f, Staff("sub-gov", "gov@corp.example", verified: null));   // the IdP does not vouch for the address
+        Assert.NotNull(unverified.Result?.Failure);
+        Assert.Null(unverifiedId.FindFirst("uid"));
+        Assert.Equal("", Scalar(root, $"SELECT COALESCE(IdpSubject,'') FROM Users WHERE Id='{govId}'"));
+
+        var (ctx, id) = await OidcSignIn(f, Staff("sub-gov", "gov@corp.example"));
+        Assert.Null(ctx.Result?.Failure);
+        Assert.Equal(govId, id.FindFirst("uid")!.Value);
+        Assert.Equal(Issuer + "|sub-gov", Scalar(root, $"SELECT IdpIssuer || '|' || IdpSubject FROM Users WHERE Id='{govId}'"));
+        Assert.Equal((version + 1).ToString(), Scalar(root, $"SELECT Version FROM Users WHERE Id='{govId}'"));
+        Assert.Equal("1", Scalar(root, $"SELECT COUNT(*) FROM AuditEvents WHERE EntityType='User' AND EntityId='{govId}' AND Action='IdentityBound' AND ActorUserId='{govId}'"));
+
+        // a brand-new user is bound at creation
+        var (fresh, freshId) = await OidcSignIn(f, Staff("sub-new", "new@corp.example", verified: null));
+        Assert.Null(fresh.Result?.Failure);
+        Assert.Equal("sub-new", Scalar(root, $"SELECT IdpSubject FROM Users WHERE Id='{freshId.FindFirst("uid")!.Value}'"));
+    }
+
+    [Fact]
+    public async Task SEC_B8_a_token_without_a_subject_is_refused()
+    {
+        using var root = new ApiFactory();
+        using var f = OidcHost(root, ("Auth:RoleMap:grp-staff", Roles.Viewer));
+        var (ctx, id) = await OidcSignIn(f, new Claim(ClaimTypes.Email, "nosub@corp.example"), new Claim("email_verified", "true"), new Claim("groups", "grp-staff"));
+        Assert.NotNull(ctx.Result?.Failure);
+        Assert.Null(id.FindFirst("uid"));
+        Assert.Equal("0", Scalar(root, "SELECT COUNT(*) FROM Users WHERE Email='nosub@corp.example'"));
     }
 
     [Fact]
@@ -335,14 +476,14 @@ public class AuthnSecurityTests
         using var root = new ApiFactory();
         using (var f = OidcHost(root, ("Auth:RoleMap:grp-rm", Roles.ReleaseManager)))
         {
-            var (ctx, id) = await OidcSignIn(f, new Claim(ClaimTypes.Email, "guest@elsewhere.example"), new Claim("groups", "all-staff"));
+            var (ctx, id) = await OidcSignIn(f, Sub("sub-guest@elsewhere.example"), new Claim(ClaimTypes.Email, "guest@elsewhere.example"), new Claim("groups", "all-staff"));
             Assert.NotNull(ctx.Result?.Failure);
             Assert.Null(id.FindFirst("uid"));
             Assert.Equal("0", Scalar(root, "SELECT COUNT(*) FROM Users WHERE Email='guest@elsewhere.example'"));   // nobody is provisioned
         }
         using (var f = OidcHost(root, ("Auth:RoleMap:grp-rm", Roles.ReleaseManager), ("Auth:DefaultRole", Roles.Viewer)))
         {
-            var (ctx, id) = await OidcSignIn(f, new Claim(ClaimTypes.Email, "staff@corp.example"), new Claim("groups", "all-staff"));
+            var (ctx, id) = await OidcSignIn(f, Sub("sub-staff@corp.example"), new Claim(ClaimTypes.Email, "staff@corp.example"), new Claim("groups", "all-staff"));
             Assert.Null(ctx.Result?.Failure);
             Assert.Equal([Roles.Viewer], AppRoles(id));
         }

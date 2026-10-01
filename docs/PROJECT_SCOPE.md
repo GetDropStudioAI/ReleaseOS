@@ -79,7 +79,7 @@ Plan (`RunbookSteps`) and actuals (`StepExecutions` per `RunbookRuns`) are separ
 
 ## 4. Schema
 
-`db/schema.sql` is the contract: 47 tables, 42 triggers, 20 indexes; `tests/reference/test_schema.py` (82 cases) must pass against it. Conventions: UUIDv7 TEXT ids; UTC ISO-8601 TEXT timestamps; 0/1 booleans with CHECK; `Version` on every mutable table.
+`db/schema.sql` is the contract: 48 tables, 42 triggers, 22 indexes; `tests/reference/test_schema.py` (88 cases) must pass against it. Conventions: UUIDv7 TEXT ids; UTC ISO-8601 TEXT timestamps; 0/1 booleans with CHECK; `Version` on every mutable table.
 
 Immutable by trigger: `AuditEvents`, `GateTransitions`, `Baselines`, `GoNoGoDecisions`, `CommDispatches` and `FreezeOverrides` (no update, no delete), and `Attachments` once locked (no update of any column, no delete).
 

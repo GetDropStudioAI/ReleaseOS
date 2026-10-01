@@ -145,6 +145,7 @@ public class ResourceInjectionTests
         var (f, _, viewer) = await World(); using var _f = f;
         var path = (await Json(await viewer.PostAsJsonAsync("/api/v1/me/ics-tokens", new { scope = "all" }))).GetProperty("path").GetString()!;
         var anon = f.CreateClient();   // the test server gives every client the same (empty) address, as a reverse proxy without forwarded headers does
+        await CalendarTests.FreshMinute();   // the brake counts per clock minute: start the 62 requests early in one
         for (var i = 0; i < 61; i++) Assert.Equal(HttpStatusCode.NotFound, (await anon.GetAsync($"/api/v1/ics/{new string('A', 43)}.ics")).StatusCode);
         Assert.Equal(HttpStatusCode.TooManyRequests, (await anon.GetAsync($"/api/v1/ics/{new string('A', 43)}.ics")).StatusCode);   // the brake still holds for failures
         Assert.Equal(HttpStatusCode.OK, (await anon.GetAsync(path)).StatusCode);   // before REOS-67: 429 for everyone behind that address for the rest of the minute

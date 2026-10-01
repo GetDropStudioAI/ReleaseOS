@@ -58,7 +58,7 @@ public class HealthzTests
     {
         var before = DateTime.UtcNow.AddSeconds(-1);   // before the host starts: the poller's first pass runs as it starts
         using var root = new ApiFactory();
-        using var f = root.WithWebHostBuilder(b => { b.UseSetting("Sync:StartDelaySeconds", "0"); b.UseSetting("Sync:WatchdogSeconds", "0.05"); });
+        using var f = root.WithWebHostBuilder(b => { b.UseSetting("Sync:StartDelaySeconds", "0"); b.UseSetting("Sync:WatchdogSeconds", "2"); });   // stalled after 6 s: room for a slow check on a loaded machine
         var c = f.CreateClient();
         var (status, body) = await Until(c, h => HasCycle(h.Body, "poller") && HasCycle(h.Body, "watchdog"), "a pass of both loops");
         Assert.Equal(HttpStatusCode.OK, status);

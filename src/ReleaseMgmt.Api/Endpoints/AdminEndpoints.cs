@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ReleaseMgmt.Api.Auth;
+using ReleaseMgmt.Api.Realtime;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Services;
 
@@ -18,8 +19,12 @@ public static class AdminEndpoints
     public static void MapAdmin(this RouteGroupBuilder api)
     {
         api.MapGet("/users", (AdminService s, CancellationToken ct) => s.ListUsersAsync(ct)).RequireAuthorization(Policies.Read);
-        api.MapPatch("/users/{id}", async (string id, PatchUser b, ClaimsPrincipal u, HttpRequest r, AdminService s, CancellationToken ct) =>
-            (await s.PatchUserAsync(id, b.Handle, b.IsActive, ActorOf(u), r.IfMatch(), ct)).ToHttp()).RequireAuthorization(Policies.Admin);
+        api.MapPatch("/users/{id}", async (string id, PatchUser b, ClaimsPrincipal u, HttpRequest r, AdminService s, HubConnections hubs, CancellationToken ct) =>
+        {
+            var result = await s.PatchUserAsync(id, b.Handle, b.IsActive, ActorOf(u), r.IfMatch(), ct);
+            if (result.IsOk && b.IsActive == false) hubs.AbortUser(id, "the user was deactivated");   // REOS-63: after the commit, so a reconnect is refused
+            return result.ToHttp();
+        }).RequireAuthorization(Policies.Admin);
 
         api.MapGet("/teams", (AdminService s, CancellationToken ct) => s.ListTeamsAsync(ct)).RequireAuthorization(Policies.Read);
         api.MapPost("/teams", async (TeamBody b, ClaimsPrincipal u, AdminService s, CancellationToken ct) =>

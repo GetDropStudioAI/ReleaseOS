@@ -23,7 +23,7 @@ public class ResourceBoundsTests
         Assert.False(p.IsValid);
         Assert.True(p.Errors.Count <= 101, $"{p.Errors.Count} errors kept for one template");
         Assert.Contains(p.Errors, e => e.Message.Contains("more problems", StringComparison.Ordinal));   // the cut is said, not silent
-        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2), $"parsing took {sw.Elapsed}");
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"parsing took {sw.Elapsed}");   // ~0.2 s alone; the quadratic code takes minutes. 2 s failed under a loaded parallel run
         Assert.Equal(text, string.Concat(p.Segments.OfType<TemplateSegment.Literal>().Select(l => l.Text)));   // errored text still stays literal
     }
 

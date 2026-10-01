@@ -135,8 +135,16 @@ Recovery point: at most 15 minutes of changes are lost (the backup interval). Re
 1. Announce a short window; take a fresh backup (copy the newest file from `Backup:Directory`, or trigger by restarting is not needed) and copy `keys/` and `secrets/`.
 2. Stop the service; keep the previous `publish` directory.
 3. Replace the app directory with the new `publish` output (the data directories are elsewhere, so they are untouched).
-4. Start the service. Schema migrations run automatically at startup; a failed migration stops the app with the error in the log, and nothing half-applied is served.
-5. Verify `/healthz`, sign in, open a train.
+4. If the release notes list a script in `db/upgrades/` that is newer than the database (Q-SEC-B8m), run each such script, in number order, with the
+   service still stopped: `sqlite3 <Database path> < db/upgrades/NNN_name.sql`. Each script is one transaction, refuses to run against the wrong
+   version, and ends by printing `PRAGMA foreign_key_check` (expect no rows) and `PRAGMA integrity_check` (expect `ok`). Anything else: restore the
+   backup from step 1 and stop. If a script is missed, the app refuses to start and the log names the migrations it found ("created by an older build").
+5. Start the service. Schema migrations run automatically at startup; a failed migration stops the app with the error in the log, and nothing half-applied is served.
+6. Verify `/healthz`, sign in, open a train.
+
+| Script | Brings a database from | Change |
+|---|---|---|
+| `001_idp_identity_and_session_revocations.sql` | migrations `20260929110130_Schema` + `20260929110136_Triggers` | REOS-61/62: `Users.IdpIssuer`/`IdpSubject` (rebuilds `Users`), `SessionRevocations` |
 
 Rollback: stop, put the previous `publish` directory back, restore the pre-upgrade database backup (section 7 step 3, because a newer schema may not run on an older build), start.
 

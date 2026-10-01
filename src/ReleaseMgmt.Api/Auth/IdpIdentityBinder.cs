@@ -19,8 +19,8 @@ namespace ReleaseMgmt.Api.Auth;
 /// </summary>
 public sealed class IdpIdentityBinder(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, ILogger<IdpIdentityBinder> log)
 {
-    /// <summary>Before provisioning: resolves the identity. Returns null when sign-in may continue, else the reason it is refused (already logged).</summary>
-    public async Task<string?> PrepareAsync(string issuer, string subject, string email, bool emailVerified, CancellationToken ct = default)
+    /// <summary>Before provisioning: resolves the identity. Returns null when sign-in may continue, else the refusal with its reason code (already logged).</summary>
+    public async Task<OidcSignIn.SignInRefused?> PrepareAsync(string issuer, string subject, string email, bool emailVerified, CancellationToken ct = default)
     {
         await using var db = await dbf.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -31,7 +31,7 @@ public sealed class IdpIdentityBinder(IDbContextFactory<ReleaseDbContext> dbf, T
             if (await db.Set<Users>().AnyAsync(u => u.Email == email && u.Id != bound.Id, ct))   // Email is COLLATE NOCASE in the schema
             {
                 log.LogWarning("Organisation sign-in refused for user {UserId}: the identity provider now gives them the email of another account", bound.Id);
-                return "Your email address at the identity provider belongs to another account in this app. Ask an administrator.";
+                return new(OidcSignIn.Reasons.IdentityConflict, "Your email address at the identity provider belongs to another account in this app. Ask an administrator.");
             }
             var before = bound.Email;
             bound.Email = email; bound.Version++;
@@ -46,12 +46,12 @@ public sealed class IdpIdentityBinder(IDbContextFactory<ReleaseDbContext> dbf, T
         if (byEmail.IdpSubject is not null)
         {
             log.LogWarning("Organisation sign-in refused for {Email}: user {UserId} is bound to a different identity-provider subject", email, byEmail.Id);
-            return "This email address belongs to another identity in this app. Ask an administrator.";
+            return new(OidcSignIn.Reasons.IdentityConflict, "This email address belongs to another identity in this app. Ask an administrator.");
         }
         if (!emailVerified)
         {
             log.LogWarning("Organisation sign-in refused for {Email}: user {UserId} has no identity bound yet and the identity provider does not say the email is verified", email, byEmail.Id);
-            return "Your identity provider does not confirm this email address, so it cannot be linked to the existing account. Ask an administrator.";
+            return new(OidcSignIn.Reasons.EmailUnverified, "Your identity provider does not confirm this email address, so it cannot be linked to the existing account. Ask an administrator.");
         }
         Bind(db, byEmail, issuer, subject);
         await db.SaveChangesAsync(ct);

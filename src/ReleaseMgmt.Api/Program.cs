@@ -44,6 +44,8 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, ReleaseMgmt.Api.Realtime.UidUserIdProvider>();
 builder.Services.AddSingleton<IRealtimePublisher, ReleaseMgmt.Api.Realtime.SignalRPublisher>();   // services take it as an optional ctor argument
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.ServerTimeBroadcaster>();
+builder.Services.AddSingleton<ReleaseMgmt.Api.Realtime.HubConnections>();   // REOS-63: live connections by user and session
+builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.HubSessionMonitor>();   // REOS-63: Realtime:SessionRecheckSeconds (default 30)
 builder.Services.AddSingleton<INotifier, Notifier>();
 builder.Services.AddSingleton<UserProvisioner>();
 builder.Services.AddSingleton<IdpIdentityBinder>();   // SEC-B8: organisation sign-in matches the IdP issuer + subject (Q-SEC-B8)
@@ -137,6 +139,7 @@ if (authority is not null)
         o.GetClaimsFromUserInfoEndpoint = true;
         o.Scope.Add("profile"); o.Scope.Add("email");
         o.Events.OnTokenValidated = ctx => OidcSignIn.OnTokenValidated(ctx, roleMap, defaultRole);   // SEC-B7/B8/B9
+        o.Events.OnRemoteFailure = OidcSignIn.OnRemoteFailure;   // REOS-65: a refused or failed sign-in goes back to the sign-in page with a reason code, never a 500
     });
 }
 builder.Services.AddAuthorization(Policies.Configure);
@@ -145,6 +148,7 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     await using var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<ReleaseDbContext>>().CreateDbContextAsync();
+    await UpgradeGuard.EnsureNoManualUpgradePendingAsync(db);   // Q-SEC-B8m: an older database needs its db/upgrades script first
     await db.Database.MigrateAsync();
     var seed = scope.ServiceProvider.GetRequiredService<SeedService>();
     await seed.SeedReferenceDataAsync();
@@ -241,7 +245,7 @@ app.MapGet("/auth/config", [AllowAnonymous] () => Results.Ok(new { organisationS
 app.MapPost("/auth/logout", [AllowAnonymous] async (HttpContext http, SessionLifetime sessions) =>
 {
     var session = await http.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    await sessions.SignedOutAsync(session.Properties, session.Principal?.FindFirst("uid")?.Value, http.RequestAborted);   // SEC-B5: copies of this cookie die too, also after a restart (REOS-62)
+    await sessions.SignedOutAsync(session.Properties, session.Principal, http.RequestAborted);   // SEC-B5: copies of this cookie die too, also after a restart (REOS-62); REOS-63: so do its live connections
     if (session.Succeeded) SecurityEvents.SignedOut(http, session.Principal);   // SEC-E4
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Ok();

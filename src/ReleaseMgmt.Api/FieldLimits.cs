@@ -119,6 +119,8 @@ public static class FieldLimits
         // Train templates (REOS-38)
         [typeof(TemplateInput)] = new() { ["Name"] = Name, ["DefaultRiskTier"] = Code },   // Gates, Steps, Schedule: their rows below
         [typeof(TemplateGateInput)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerTeamId"] = Id },
+        // REOS-83: add a user ahead of first sign-in (email as Users.Email, import limit)
+        [typeof(UserCreationEndpoints.NewUser)] = new() { ["Email"] = UserCreationService.MaxEmailLength, ["DisplayName"] = UserCreationService.MaxNameLength, ["Role"] = Code, ["Handle"] = Handle },
         // REOS-81: a train's products and gates
         [typeof(PlanStructureEndpoints.ProductBody)] = new() { ["Name"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag },
         [typeof(PlanStructureEndpoints.NewGateBody)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id },

@@ -75,7 +75,7 @@ public class UserCreationTests
         var rte = await As(f, Roles.RTE, "rte@x.com");
         Assert.Equal("InvalidInput", await Guard(await rte.PostAsJsonAsync("/api/v1/users", new { email, displayName = name, role, handle })));
         Assert.Equal("1", Scalar(f, "SELECT COUNT(*) FROM Users"));
-        Assert.Equal("0", Scalar(f, "SELECT COUNT(*) FROM AuditEvents WHERE EntityType='User'"));
+        Assert.Equal("0", Scalar(f, "SELECT COUNT(*) FROM AuditEvents WHERE EntityType='User' AND Action='Create'"));   // the RTE's own sign-in is audited as SignInCreate (REOS-64)
     }
 
     [Fact]

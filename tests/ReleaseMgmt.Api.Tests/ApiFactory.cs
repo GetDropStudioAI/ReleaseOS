@@ -28,6 +28,8 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         builder.UseSetting("Notifications:ScanSeconds", "3600");   // the scheduler is driven by its own tests; keep it quiet here
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
         builder.UseSetting("Logging:File", Path.Combine(_dir, "log-.txt"));
+        // REOS-74: outside Development an unencrypted key ring refuses to start; tests that boot Production opt in (KeyRingEncryptionTests cover the refusal).
+        builder.UseSetting("DataProtection:AllowUnprotectedKeys", "true");
     }
 
     protected override void Dispose(bool disposing)

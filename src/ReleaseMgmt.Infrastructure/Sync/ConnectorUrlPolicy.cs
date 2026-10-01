@@ -4,7 +4,8 @@ namespace ReleaseMgmt.Infrastructure.Sync;
 
 /// <summary>
 /// Which base URLs a connector may call (SSRF, like the team webhooks): absolute, at most 2048 characters with no whitespace or control character,
-/// https outside Development, no user-info, query or fragment, host on <c>Sync:AllowedHosts</c> when that list is set, and no literal
+/// https outside Development, no user-info, query or fragment, host and port on <c>Sync:AllowedHosts</c> (see <see cref="SyncOptions"/>; outside Development it
+/// defaults to Atlassian Cloud and ServiceNow on 443), and no literal
 /// private/loopback address unless <c>Sync:AllowPrivateTargets</c>. The host is judged in the form the HTTP handler connects to (<see cref="Uri.IdnHost"/>),
 /// so fullwidth or enclosed digits cannot dress an address up as a name (SEC-C2).
 /// A host name is vetted again when the socket connects (see AddSyncEngine), so a DNS change cannot slip past.
@@ -24,9 +25,13 @@ public static class ConnectorUrlPolicy
         if (uri.Scheme != Uri.UriSchemeHttps && !(isDevelopment && uri.Scheme == Uri.UriSchemeHttp)) return "The base URL must use https";
         if (!string.IsNullOrEmpty(uri.UserInfo)) return "The base URL must not contain credentials";
         if (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment)) return "The base URL must not contain a query or fragment";
-        if (o.AllowedHosts.Length > 0 && !o.AllowedHosts.Any(p => HostMatches(uri.IdnHost, p))) return $"The host {uri.IdnHost} is not on the allowed list (Sync:AllowedHosts)";
+        // A private literal says so first (the more specific reason); then the host list.
         if (!o.AllowPrivateTargets && isBlockedAddress is not null && LiteralAddress(uri) is { } ip && isBlockedAddress(ip))
             return "The base URL is a private or local address (set Sync:AllowPrivateTargets to allow it)";
+        if (o.AllowedHosts.Length > 0 && !o.AllowedHosts.Any(p => EntryMatches(uri, p)))
+            return o.AllowedHosts.Any(p => HostMatches(uri.IdnHost, SplitEntry(p).Host))
+                ? $"Port {uri.Port} of {uri.IdnHost} is not on the allowed list (Sync:AllowedHosts: {string.Join(", ", o.AllowedHosts)}). Add \"{uri.IdnHost}:{uri.Port}\" to Sync:AllowedHosts to allow it"
+                : $"The host {uri.IdnHost} is not on the allowed list (Sync:AllowedHosts: {string.Join(", ", o.AllowedHosts)}). Ask the administrator to add it to Sync:AllowedHosts";
         return null;
     }
 
@@ -44,6 +49,20 @@ public static class ConnectorUrlPolicy
             if (IPAddress.TryParse(s, out var ip)) return ip;
         }
         return null;
+    }
+
+    /// <summary>An allowlist entry: host or <c>*.suffix</c>, optionally <c>:port</c>; without a port it allows the scheme's default port only.</summary>
+    public static bool EntryMatches(Uri uri, string entry)
+    {
+        var (host, port) = SplitEntry(entry);
+        return HostMatches(uri.IdnHost, host) && (port is int p ? uri.Port == p : uri.IsDefaultPort);
+    }
+
+    public static (string Host, int? Port) SplitEntry(string entry)
+    {
+        var colon = entry.LastIndexOf(':');
+        return colon > 0 && !entry.EndsWith(']') && int.TryParse(entry[(colon + 1)..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var port)
+            ? (entry[..colon], port) : (entry, null);
     }
 
     public static bool HostMatches(string host, string pattern) =>

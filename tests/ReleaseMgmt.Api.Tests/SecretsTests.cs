@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
@@ -16,7 +17,7 @@ namespace ReleaseMgmt.Api.Tests;
 /// <summary>
 /// REOS-53 secrets review. Plants recognisable secrets (connector credentials, a webhook address whose path is the token, an ICS feed token), drives the
 /// features that touch them, then looks for them everywhere they must not be: every GET response, every SQLite table and file, audit rows, alerts, logs,
-/// committed configuration. The one deliberate at-rest exception (the webhook address, WebhookDestinations.Url) is pinned so it cannot spread.
+/// committed configuration. The webhook address is stored only encrypted (WebhookDestinations.ProtectedUrl, Q-053e decided 2026-09-30): never in clear anywhere.
 /// </summary>
 public class SecretsTests
 {
@@ -155,7 +156,7 @@ public class SecretsTests
         Assert.True(rows.Count > 100);
         foreach (var s in new[] { User, Secret, icsToken, Convert.ToBase64String(Encoding.UTF8.GetBytes($"{User}:{Secret}")) })
             Assert.Empty(rows.Where(r => r.Value.Contains(s, StringComparison.Ordinal)).Select(r => r.Where));
-        // the webhook token: nowhere but the allowlist row itself (documented exception, Q-053e), and gone from the row once the destination is removed
+        // the webhook token: nowhere in clear, not even in its own allowlist row (Q-053e), nor once the destination is removed
         Assert.Empty(rows.Where(r => r.Value.Contains(Hook, StringComparison.Ordinal)).Select(r => r.Where));   // it was removed above
         var audits = rows.Where(r => r.Where.StartsWith("AuditEvents.")).ToList();
         Assert.Contains(audits, r => r.Value.Contains("ConnectorCredentials", StringComparison.Ordinal));      // the credential change *was* audited ...
@@ -169,7 +170,7 @@ public class SecretsTests
         foreach (var file in Directory.GetFiles(dir, "app.db*"))
         {
             var bytes = ReadShared(file);
-            foreach (var s in new[] { User, Secret, icsToken }) Assert.False(Has(bytes, s), $"{Path.GetFileName(file)} holds a secret");
+            foreach (var s in new[] { User, Secret, Hook, icsToken }) Assert.False(Has(bytes, s), $"{Path.GetFileName(file)} holds a secret");
         }
         var cred = Path.Combine(dir, "secrets", "ServiceNow.cred");
         Assert.True(File.Exists(cred));
@@ -177,7 +178,7 @@ public class SecretsTests
 
         // ---- backups are copies of the database: they inherit its cleanliness, but check one exists and is clean ------------------------------
         foreach (var file in Directory.EnumerateFiles(Path.Combine(dir, "bk"), "*", SearchOption.AllDirectories))
-            foreach (var s in new[] { User, Secret, icsToken }) Assert.False(Has(ReadShared(file), s), $"{file} holds a secret");
+            foreach (var s in new[] { User, Secret, Hook, icsToken }) Assert.False(Has(ReadShared(file), s), $"{file} holds a secret");
 
         // ---- logs -----------------------------------------------------------------------------------------------------------------------------
         var logs = Directory.GetFiles(dir, "log-*.txt");
@@ -188,7 +189,7 @@ public class SecretsTests
     }
 
     [Fact]
-    public async Task A_webhook_address_is_kept_only_in_its_allowlist_row()
+    public async Task A_webhook_address_is_never_stored_in_clear_and_only_the_senders_can_read_it_back()
     {
         using var f = new ApiFactory();
         var rm = await As(f, Roles.ReleaseManager, "rm@x.com");
@@ -197,8 +198,17 @@ public class SecretsTests
         Assert.DoesNotContain(Hook, body);
         Assert.DoesNotContain(Hook, await (await rm.GetAsync("/api/v1/sync/webhook-allowlist")).Content.ReadAsStringAsync());
         Assert.DoesNotContain(Hook, await (await rm.GetAsync("/api/v1/audit?limit=500")).Content.ReadAsStringAsync());
-        var where = DumpDatabase(f.DbPath).Where(r => r.Value.Contains(Hook, StringComparison.Ordinal)).Select(r => r.Where).Distinct().ToList();
-        Assert.Equal(["WebhookDestinations.Url"], where);   // Q-053e: at rest in SQLite (and so in backups) by design; must not appear anywhere else
+        var rows = DumpDatabase(f.DbPath);
+        Assert.Empty(rows.Where(r => r.Value.Contains(Hook, StringComparison.Ordinal) || r.Value.Contains("hooks.slack.com/services", StringComparison.Ordinal)).Select(r => r.Where));   // Q-053e: never in clear
+        foreach (var file in Directory.GetFiles(Path.GetDirectoryName(f.DbPath)!, "app.db*").Where(p => !p.EndsWith("-shm", StringComparison.Ordinal) && File.Exists(p)))   // -shm is the WAL index (no row data) and comes and goes
+            Assert.False(Has(ReadShared(file), Hook), $"{Path.GetFileName(file)} holds the webhook token");
+        var stored = Assert.Single(rows, r => r.Where == "WebhookDestinations.ProtectedUrl").Value;
+        Assert.StartsWith("CfDJ8", stored);   // a Data Protection payload (purpose ReleaseMgmt.WebhookDestinations.Url.v1) ...
+        Assert.Equal(HookUrl, f.Services.GetRequiredService<ReleaseMgmt.Infrastructure.Comms.IWebhookUrlVault>().Unprotect(stored));   // ... that the key ring reads back
+        Assert.Throws<System.Security.Cryptography.CryptographicException>(() =>   // and only under its own purpose: another table's protector cannot open it
+            f.Services.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>().CreateProtector(DataProtectionCredentialStore.Purpose).Unprotect(stored));
+        Assert.Matches("^[0-9a-f]{64}$", Assert.Single(rows, r => r.Where == "WebhookDestinations.UrlHmac").Value);   // a keyed hash, not a plain SHA-256 of the URL
+        Assert.NotEqual(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(HookUrl))), rows.Single(r => r.Where == "WebhookDestinations.UrlHmac").Value);
     }
 
     [Fact]

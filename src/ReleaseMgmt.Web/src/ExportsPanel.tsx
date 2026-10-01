@@ -80,11 +80,13 @@ export function ExportsPanel({ trainId, refreshKey = 0 }: { trainId: string; ref
                   <td className="nowrap"><span className="muted">{j.requestedByName ?? '—'}</span> <span className="mono">{fmtDayTime(j.createdAt)}</span></td>
                   <td className="mono nowrap" title={j.sha256 ?? undefined}>{j.sha256 ? `${j.sha256.slice(0, 12)}…` : <span className="muted">—</span>}</td>
                   <td className="mono n nowrap">{j.sizeBytes != null ? fmtSize(j.sizeBytes) : ''}</td>
-                  <td className="nowrap">{j.status === 'Done' && <a className="text" href={exportJobFileUrl(j.id)} download={j.fileName} aria-label={`Download ${j.label} ${j.ref}`}>Download</a>}</td>
+                  <td className="nowrap">{j.status === 'Done' && (j.expiredAt
+                    ? <span className="muted" title={`The file was deleted on ${fmtDayTime(j.expiredAt)} after the retention period; generate it again`}>File deleted (retention)</span>
+                    : <a className="text" href={exportJobFileUrl(j.id)} download={j.fileName} aria-label={`Download ${j.label} ${j.ref}`}>Download</a>)}</td>
                 </tr>))}
             </tbody>
           </table>)}
-      <p className="muted">Records are kept: an export is never deleted. The evidence pack is regenerated on demand, never cached.</p>
+      <p className="muted">Records are kept: an export is never deleted, and its file is kept for the retention period (365 days unless configured otherwise). The evidence pack is regenerated on demand, never cached.</p>
     </section>
   )
 }

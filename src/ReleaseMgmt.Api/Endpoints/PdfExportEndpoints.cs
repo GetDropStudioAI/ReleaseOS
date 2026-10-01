@@ -47,6 +47,8 @@ public static class PdfExportEndpoints
             if (j is null) return Results.NotFound(new { message = "export job not found" });
             if (ExportKinds.NeedsAuditRead(j.Kind) && !await CanAuditAsync(auth, u)) return Results.Forbid();
             var r = await svc.FindFileAsync(id, ct);
+            if (r.Failures is [{ Guard: ExportGuards.Expired } gone, ..])   // REOS-72: past Exports:RetentionDays; the job and its audit trail remain
+                return Results.Json(new { guard = gone.Guard, message = gone.Message }, statusCode: StatusCodes.Status410Gone);
             if (!r.IsOk) return r.ToHttp();
             var f = r.Value!;
             http.Response.Headers.XContentTypeOptions = "nosniff";

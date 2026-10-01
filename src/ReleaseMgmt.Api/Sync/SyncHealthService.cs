@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Api.Reminders;
+using ReleaseMgmt.Infrastructure.Comms;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Persistence;
@@ -35,7 +36,7 @@ public static class WebhookUrlPolicy
     public const int MaxUrlLength = 2048;
     private static readonly string[] InternalSuffixes = [".localhost", ".local", ".internal", ".localdomain", ".home.arpa", ".lan", ".intranet", ".corp"];
 
-    public static ServiceResult<CheckedWebhookUrl> Check(string? raw, bool allowPrivate)
+    public static ServiceResult<CheckedWebhookUrl> Check(string? raw, bool allowPrivate, OutboundAddressPolicy? addresses = null)
     {
         static ServiceResult<CheckedWebhookUrl> Bad(string guard, string message) => ServiceResult<CheckedWebhookUrl>.Fail(new GuardFailure(guard, message));
         raw = raw?.Trim();
@@ -49,17 +50,17 @@ public static class WebhookUrlPolicy
         if (uri.Fragment.Length > 0) return Bad(SyncGuards.WebhookInvalidUrl, "Remove the #fragment; it is never sent to the server");
 
         var host = uri.IdnHost.ToLowerInvariant();
-        if (!allowPrivate && IsInternal(uri, host))
+        if (!allowPrivate && IsInternal(uri, host, addresses ?? OutboundAddressPolicy.Default))
             return Bad(SyncGuards.WebhookPrivateTarget, $"{host} is a loopback, private, link-local or internal address. Set Notifications:Webhooks:AllowPrivateTargets to allow one deliberately");
         var shownHost = uri.HostNameType == UriHostNameType.IPv6 && !host.StartsWith('[') ? $"[{host}]" : host;
         var port = uri.IsDefaultPort ? "" : $":{uri.Port}";
         return ServiceResult<CheckedWebhookUrl>.Ok(new CheckedWebhookUrl($"https://{shownHost}{port}{uri.PathAndQuery}", shownHost + port));
     }
 
-    private static bool IsInternal(Uri uri, string host)
+    private static bool IsInternal(Uri uri, string host, OutboundAddressPolicy addresses)
     {
         // Any host that is an address in the form the handler connects to, whatever Uri.HostNameType says ("１２７.０.０.１" is a "Dns" name; SEC-C2)
-        if (ReleaseMgmt.Infrastructure.Sync.ConnectorUrlPolicy.LiteralAddress(uri) is { } ip) return WebhookAddressPolicy.IsBlocked(ip);
+        if (ReleaseMgmt.Infrastructure.Sync.ConnectorUrlPolicy.LiteralAddress(uri) is { } ip) return addresses.IsBlocked(ip);
         if (host == "localhost" || InternalSuffixes.Any(host.EndsWith)) return true;
         return !host.Contains('.');   // a single-label name only resolves inside the network (or a search domain)
     }
@@ -99,7 +100,8 @@ public sealed record WebhookRow(string Id, string Name, string Kind, string Host
 /// transaction with one AuditEvents row (rules 2-4); the clock is the injected TimeProvider. The connector, poller and watchdog code that
 /// WRITES ConnectorState and raises alerts belongs to REOS-39..41; this only reads them.
 /// </summary>
-public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config, ILogger<SyncHealthService> log, IRealtimePublisher? realtime = null)
+public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config, ILogger<SyncHealthService> log, IWebhookUrlVault urlVault,
+    OutboundAddressPolicy addressPolicy, IRealtimePublisher? realtime = null)
     : ServiceBase(dbf, time, realtime)
 {
     private readonly IDbContextFactory<ReleaseDbContext> _dbf = dbf;
@@ -243,16 +245,16 @@ public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, T
 
     private bool AllowPrivate => config.GetValue("Notifications:Webhooks:AllowPrivateTargets", false);
 
-    private static string Show(string url) => $"https://{new Uri(url).Authority}/…";   // the path carries the secret token (Teams, Slack): never sent back, not even to an admin
+    private static string Show(string host) => $"https://{host}/…";   // the path carries the secret token (Teams, Slack): never sent back, not even to an admin; it is stored encrypted (Q-053e)
 
-    /// <summary>The allowlist as the screen shows it. The stored URL is a secret, so rows carry the host and an elided address only.</summary>
+    /// <summary>The allowlist as the screen shows it. The stored URL is a secret (kept encrypted, never decrypted here), so rows carry the host and an elided address only.</summary>
     public async Task<IReadOnlyList<WebhookRow>> ListWebhooksAsync(CancellationToken ct = default)
     {
         await using var db = await _dbf.CreateDbContextAsync(ct);
         var rows = await db.Set<WebhookDestinations>().AsNoTracking().OrderBy(w => w.Name).ToListAsync(ct);
         var teams = await db.Set<Teams>().AsNoTracking().Where(t => t.WebhookDestinationId != null).GroupBy(t => t.WebhookDestinationId!).Select(g => new { Id = g.Key, N = g.Count() }).ToListAsync(ct);
         var sent = await db.Set<CommDispatches>().AsNoTracking().Where(d => d.WebhookDestinationId != null).GroupBy(d => d.WebhookDestinationId!).Select(g => new { Id = g.Key, N = g.Count() }).ToListAsync(ct);
-        return [.. rows.Select(w => new WebhookRow(w.Id, w.Name, w.Kind, new Uri(w.Url).Authority, Show(w.Url), w.Version,
+        return [.. rows.Select(w => new WebhookRow(w.Id, w.Name, w.Kind, w.Host, Show(w.Host), w.Version,
             teams.FirstOrDefault(t => t.Id == w.Id)?.N ?? 0, sent.FirstOrDefault(t => t.Id == w.Id)?.N ?? 0))];
     }
 
@@ -262,14 +264,15 @@ public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, T
             static ServiceResult<WebhookRow> Bad(string guard, string message) => ServiceResult<WebhookRow>.Fail(new GuardFailure(guard, message));
             name = name?.Trim();
             if (string.IsNullOrEmpty(name) || name.Length > 80) return Bad(SyncGuards.WebhookInvalidInput, "Give the channel a name of 1 to 80 characters, for example #release-ops");
-            var checkedUrl = WebhookUrlPolicy.Check(url, AllowPrivate);
+            var checkedUrl = WebhookUrlPolicy.Check(url, AllowPrivate, addressPolicy);
             if (!checkedUrl.IsOk) return ServiceResult<WebhookRow>.Fail(checkedUrl.Failures);
             var norm = checkedUrl.Value!;
             var k = string.IsNullOrWhiteSpace(kind) ? WebhookUrlPolicy.InferKind(norm.Host) : kind.Trim();
             if (k is not ("Teams" or "Slack" or "Generic")) return Bad(SyncGuards.WebhookInvalidInput, "Kind is Teams, Slack or Generic");
             var dup = $"{norm.Host} with that exact address is already on the allowlist";
-            if (await db.Set<WebhookDestinations>().AnyAsync(w => w.Url == norm.Normalised, ct)) return Bad(SyncGuards.WebhookDuplicate, dup);
-            var w = new WebhookDestinations { Name = name, Url = norm.Normalised, Kind = k };
+            var stored = urlVault.Protect(norm.Normalised);   // Q-053e: encrypted at rest; the keyed hash finds a duplicate without decrypting anything
+            if (await db.Set<WebhookDestinations>().AnyAsync(w => w.UrlHmac == stored.UrlHmac, ct)) return Bad(SyncGuards.WebhookDuplicate, dup);
+            var w = new WebhookDestinations { Name = name, Host = norm.Host, ProtectedUrl = stored.ProtectedUrl, UrlHmac = stored.UrlHmac, Kind = k };
             db.Set<WebhookDestinations>().Add(w);
             Audit(db, actor, null, "WebhookDestination", w.Id, "Create", null, new { w.Name, w.Kind, norm.Host });   // the URL is a secret: host only
             try { await db.SaveChangesAsync(ct); }
@@ -277,7 +280,7 @@ public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, T
             {
                 return Bad(SyncGuards.WebhookDuplicate, dup);   // lost a race with another admin; the unique index caught it
             }
-            return ServiceResult<WebhookRow>.Ok(new WebhookRow(w.Id, w.Name, w.Kind, norm.Host, Show(w.Url), w.Version, 0, 0));
+            return ServiceResult<WebhookRow>.Ok(new WebhookRow(w.Id, w.Name, w.Kind, w.Host, Show(w.Host), w.Version, 0, 0));
         }, ct);
 
     public Task<ServiceResult<WebhookRow>> RemoveWebhookAsync(string id, Actor actor, int? expectedVersion, CancellationToken ct = default) =>
@@ -291,10 +294,10 @@ public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, T
             if (teams + sent > 0)
                 return ServiceResult<WebhookRow>.Fail(new GuardFailure(SyncGuards.WebhookInUse,
                     $"{w.Name} is used by {teams} team{(teams == 1 ? "" : "s")} and {sent} recorded dispatch{(sent == 1 ? "" : "es")}. Dispatch records are permanent, so a used destination cannot be removed"));
-            var host = new Uri(w.Url).Authority;
+            var host = w.Host;
             db.Set<WebhookDestinations>().Remove(w);
             Audit(db, actor, null, "WebhookDestination", w.Id, "Delete", new { w.Name, w.Kind, Host = host });
             await db.SaveChangesAsync(ct);
-            return ServiceResult<WebhookRow>.Ok(new WebhookRow(w.Id, w.Name, w.Kind, host, Show(w.Url), w.Version, 0, 0));
+            return ServiceResult<WebhookRow>.Ok(new WebhookRow(w.Id, w.Name, w.Kind, host, Show(host), w.Version, 0, 0));
         }, ct);
 }

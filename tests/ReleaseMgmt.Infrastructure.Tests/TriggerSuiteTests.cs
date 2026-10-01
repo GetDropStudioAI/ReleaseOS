@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Tests;
 
 /// <summary>
-/// Port of tests/reference/test_schema.py: same 82 cases, same order, same expected messages, run against the
+/// Port of tests/reference/test_schema.py: same 83 cases, same order, same expected messages, run against the
 /// EF-migrated database (not schema.sql directly). The Python oracle stays and must keep passing.
 /// Sections that share a database in the oracle share one in-order scenario here.
 /// </summary>
@@ -278,7 +278,9 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         Check(db, "DELETE FROM CommDispatches", false, "delete a sent message", expect: "immutable");
         Exec(db, "INSERT INTO ImportJobs(Id,Kind,FileName,Sha256,RowCount,ErrorCount,ErrorsJson,Status,UploadedByUserId,CreatedAt) VALUES('i1','Tasks','t.csv','x',40,2,'[{\"row\":7,\"column\":\"Owner\",\"message\":\"unknown @ops-db\"}]','Previewed','rte',?)", Now);
         Check(db, "UPDATE ImportJobs SET Status='Committed' WHERE Id='i1'", false, "commit import with row errors", expect: "row errors");
-        Check(db, "INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('h1','x','http://internal','Generic')", false, "non-HTTPS webhook", expect: "CHECK");
+        Check(db, "INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind) VALUES('h1','x','hooks.example.com','https://hooks.example.com/T/B/secret',?,'Generic')", false, "webhook URL stored in clear", [new string('a', 64)], "CHECK");
+        Exec(db, "INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind) VALUES('h2','x','hooks.example.com','CfDJ8AAAA',?,'Generic')", new string('b', 64));
+        Check(db, "INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind) VALUES('h3','y','hooks.example.com','CfDJ8BBBB',?,'Generic')", false, "same webhook address twice (keyed hash)", [new string('b', 64)], "UNIQUE");
         Check(db, "INSERT INTO UserSessionState(UserId,ClientId,SchemaVersion,UIStateJson,LastActivityAt) VALUES('rte','c1',1,'{bad',?)", false, "invalid UI state JSON", [Now], "CHECK");
         const string Alert = "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt) VALUES('{0}','{1}','{2}','{3}','{4}',?,?)";
         Check(db, string.Format(Alert, "x1", "Jira", "AuthFailed", "fp1", "401"), true, "open sync alert", [Now, Now]);

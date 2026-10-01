@@ -15,13 +15,21 @@ public static class ExportGuards
 {
     public const string Licence = "ExportLicence", Config = "ExportConfig", Role = "ExportRole", BadKind = "ExportKind", NotReady = "ExportNotReady", Terminal = "ExportJobFinished";
     public const string QueueFull = "ExportQueueFull";
+    /// <summary>The job is Done but its file was deleted after <c>Exports:RetentionDays</c> (REOS-72): the download answers 410 Gone.</summary>
+    public const string Expired = "ExportExpired";
 }
 
 /// <summary>What is kept in <c>ExportJobs.Parameters</c> (the schema has no columns for these; Q-050a).</summary>
-public sealed record ExportJobParams(string Format = ExportKinds.Pdf, string? ContentType = null, long? SizeBytes = null, string? Error = null, int Attempts = 0, DateTime? StartedAt = null, int? Pages = null);
+/// <param name="ExpiredAt">Set when the retention purge deleted the file (REOS-72). The Status stays Done (the schema has no other value for it): the export was produced; only its file is gone.</param>
+public sealed record ExportJobParams(string Format = ExportKinds.Pdf, string? ContentType = null, long? SizeBytes = null, string? Error = null, int Attempts = 0, DateTime? StartedAt = null, int? Pages = null,
+    DateTime? ExpiredAt = null);
 
 public sealed record ExportJobView(string Id, string Kind, string Label, string Format, string? TrainId, string? TrainTitle, string Status, string FileName, string? Sha256, long? SizeBytes,
-    string? ContentType, string? Error, int Attempts, string Ref, string RequestedByUserId, string? RequestedByName, DateTime CreatedAt, DateTime? StartedAt, DateTime? CompletedAt, int Version);
+    string? ContentType, string? Error, int Attempts, string Ref, string RequestedByUserId, string? RequestedByName, DateTime CreatedAt, DateTime? StartedAt, DateTime? CompletedAt, int Version,
+    DateTime? ExpiredAt = null);
+
+/// <summary>Outcome of one retention pass: files deleted (jobs marked expired) and files that could not be deleted (each also raised as an alert).</summary>
+public sealed record PurgeResult(IReadOnlyList<string> Expired, IReadOnlyList<string> Failed);
 
 public sealed record ExportFile(ExportJobs Job, ExportJobParams Params, string FullPath);
 
@@ -119,7 +127,7 @@ public sealed class ExportService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         var title = j.ReleaseTrainId is null ? null : await db.Set<ReleaseTrains>().Where(t => t.Id == j.ReleaseTrainId).Select(t => t.Title).SingleOrDefaultAsync(ct);
         var by = await db.Set<Users>().Where(u => u.Id == j.RequestedByUserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct);
         return new ExportJobView(j.Id, j.Kind, ExportKinds.Label(j.Kind), p.Format, j.ReleaseTrainId, title, j.Status, j.FileName, j.Sha256, p.SizeBytes, p.ContentType, p.Error, p.Attempts,
-            ExportSupport.JobRef(j.Id), j.RequestedByUserId, by, j.CreatedAt, p.StartedAt, j.CompletedAt, j.Version);
+            ExportSupport.JobRef(j.Id), j.RequestedByUserId, by, j.CreatedAt, p.StartedAt, j.CompletedAt, j.Version, p.ExpiredAt);
     }
 
     /// <summary>
@@ -133,6 +141,10 @@ public sealed class ExportService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         if (j is null) return ServiceResult<ExportFile>.NotFound("export job");
         if (j.Status != "Done") return ServiceResult<ExportFile>.Fail(new GuardFailure(ExportGuards.NotReady, j.Status == "Failed" ? "This export failed; there is no file. Generate it again" : "This export is not finished yet"));
         var p = ParamsOf(j);
+        if (p.ExpiredAt is DateTime expired)
+            return ServiceResult<ExportFile>.Fail(new GuardFailure(ExportGuards.Expired,
+                $"This export's file was deleted on {expired:yyyy-MM-dd} because it was more than {options.RetentionDays} days old (Exports:RetentionDays). "
+                + "The record of the export and its audit trail are kept; generate the export again to get a current file"));
         var path = j.StoragePath is null ? null : Resolve(j.StoragePath);
         if (path is null || !File.Exists(path))
         {
@@ -259,6 +271,55 @@ public sealed class ExportService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             await RaiseAsync(j ?? new ExportJobs { Id = id, FileName = id }, "job", $"Export {ExportSupport.JobRef(id)} failed: {msg}", ct);
         }
         return new RecoveryResult(requeued, failed.Select(f => f.Id).ToList());
+    }
+
+    // ---- retention (REOS-72) ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Deletes the file of every Done job completed more than <see cref="ExportOptions.RetentionDays"/> days ago (by the injected clock) and marks the job expired:
+    /// <c>StoragePath</c> cleared, <c>Parameters.expiredAt</c> set, Version bumped, one <c>ExportJob</c>/<c>Expire</c> audit row, all in one transaction per job. The row,
+    /// its hash and every earlier audit row stay (D22). The file is deleted first, so a crash in between leaves a job whose file is missing (a download reports it)
+    /// and the next pass finishes it. A file that cannot be deleted keeps its job as it is and raises Export/ExportFailed (rule 8).
+    /// </summary>
+    public async Task<PurgeResult> PurgeExpiredAsync(CancellationToken ct = default)
+    {
+        var cutoff = Now.AddDays(-options.RetentionDays);
+        List<ExportJobs> due;
+        await using (var db = await OpenAsync(ct))
+            due = await db.Set<ExportJobs>().AsNoTracking().Where(j => j.Status == "Done" && j.StoragePath != null && j.CompletedAt != null && j.CompletedAt < cutoff)
+                .OrderBy(j => j.CompletedAt).ThenBy(j => j.Id).ToListAsync(ct);
+        var expired = new List<string>(); var failed = new List<string>();
+        foreach (var j in due)
+        {
+            var path = Resolve(j.StoragePath!);
+            var problem = path is null ? $"its stored path '{j.StoragePath}' is outside the exports directory" : ExportFiles.TryDelete(path);
+            if (problem is not null)
+            {
+                failed.Add(j.Id);
+                await RaiseAsync(j, "purge", $"Export {ExportSupport.JobRef(j.Id)} ({j.FileName}) is past its {options.RetentionDays}-day retention but its file could not be deleted: {problem}", ct);
+                continue;
+            }
+            var r = await RunAsync<bool>(async db =>
+            {
+                var job = await db.Set<ExportJobs>().SingleOrDefaultAsync(x => x.Id == j.Id, ct);
+                if (job is null || job.StoragePath is null) return ServiceResult<bool>.Ok(false);
+                var p = ParamsOf(job);
+                var now = Now;
+                job.StoragePath = null; job.Version++;
+                job.Parameters = Pack(p with { ExpiredAt = now });
+                Audit(db, null, job.ReleaseTrainId, "ExportJob", job.Id, "Expire", new { storagePath = j.StoragePath }, new
+                {
+                    job.FileName, job.Sha256, completedAt = job.CompletedAt, retentionDays = options.RetentionDays, reason = "file deleted after the retention period (Exports:RetentionDays)",
+                });
+                await db.SaveChangesAsync(ct);
+                return ServiceResult<bool>.Ok(true);
+            }, ct);
+            if (!r.IsOk) throw new InvalidOperationException($"Could not mark export {ExportSupport.JobRef(j.Id)} expired: " + Describe(r));
+            if (r.Value) expired.Add(j.Id);
+        }
+        if (expired.Count + failed.Count > 0)
+            log.LogInformation("Export retention ({Days} days): {Expired} file(s) deleted, {Failed} could not be deleted", options.RetentionDays, expired.Count, failed.Count);
+        return new PurgeResult(expired, failed);
     }
 
     /// <summary>The worker itself failed (not one job): recorded as an Export/ExportFailed alert with key "worker" so it reaches the banner and SignalR.</summary>

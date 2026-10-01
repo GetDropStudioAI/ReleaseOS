@@ -212,7 +212,7 @@ public sealed class SyncConnectorTests
     [InlineData("https://10.1.2.3", false, "private")]
     public void Base_urls_are_vetted(string url, bool dev, string? expectedProblemWord)
     {
-        var p = ConnectorUrlPolicy.Validate(url, dev, SyncOptions.From(new Cfg(new())), ip => IPAddress.IsLoopback(ip) || ip.ToString().StartsWith("10.") || ip.ToString().StartsWith("169.254."));
+        var p = ConnectorUrlPolicy.Validate(url, dev, SyncOptions.From(new Cfg(new()), isDevelopment: dev), ip => IPAddress.IsLoopback(ip) || ip.ToString().StartsWith("10.") || ip.ToString().StartsWith("169.254."));
         if (expectedProblemWord is null) Assert.Null(p); else Assert.Contains(expectedProblemWord, p);
     }
 
@@ -225,7 +225,7 @@ public sealed class SyncConnectorTests
         Assert.Contains("allowed list", ConnectorUrlPolicy.Validate("https://evil.example", false, o));
         Assert.Contains("allowed list", ConnectorUrlPolicy.Validate("https://atlassian.net.evil.example", false, o));
         Assert.Contains("allowed list", ConnectorUrlPolicy.Validate("https://atlassian.net", false, o));   // "*.x" means a subdomain
-        var priv = SyncOptions.From(new Cfg(new() { ["Sync:AllowPrivateTargets"] = "true" }));
+        var priv = SyncOptions.From(new Cfg(new() { ["Sync:AllowPrivateTargets"] = "true", ["Sync:AllowedHosts"] = "*" }));
         Assert.Null(ConnectorUrlPolicy.Validate("https://10.1.2.3", false, priv, _ => true));
     }
 }

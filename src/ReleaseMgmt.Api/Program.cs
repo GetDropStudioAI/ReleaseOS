@@ -79,7 +79,9 @@ builder.Services.AddSingleton<AnalyticsService>();   // REOS-46 analytics M1-M15
 builder.Services.AddSingleton<IAnalyticsConnectionFactory>(new SqliteAnalyticsConnectionFactory(connectionString));
 builder.Services.AddSingleton<ReleaseMgmt.Api.Sync.SyncHealthService>();   // REOS-42 sync health, connector-wide banner state, webhook allowlist
 builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration
-builder.Services.AddSyncEngine(config);   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
+builder.Services.AddSyncEngine(config, builder.Environment.IsDevelopment());   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
+// REOS-74 (Q-052e): the key ring is encrypted at rest (certificate, or DPAPI on Windows); outside Development an unprotected ring refuses to start unless opted in.
+var keyRing = KeyRingEncryption.Configure(builder.Services.AddDataProtection(), config, builder.Environment);
 builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
 builder.Services.AddPdfExports(config, builder.Environment.IsDevelopment());   // REOS-50: PDF export jobs + worker (QuestPDF)
 builder.Services.AddProxyHeaders(config);   // SEC-E5: X-Forwarded-For/Proto from trusted proxies only
@@ -141,10 +143,15 @@ if (authority is not null)
 builder.Services.AddAuthorization(Policies.Configure);
 
 var app = builder.Build();
+if (keyRing.Warning is { } keyRingWarning) app.Logger.LogWarning("{Warning}", keyRingWarning);   // every start, until the ring is protected (REOS-74)
+else app.Logger.LogInformation("Data Protection key ring protection: {Protector}", keyRing.Protector);
 await using (var scope = app.Services.CreateAsyncScope())
 {
     await using var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<ReleaseDbContext>>().CreateDbContextAsync();
     await db.Database.MigrateAsync();
+    // REOS-73 (Q-053e): webhook addresses stored before the change are encrypted now; idempotent, and before anything reads WebhookDestinations.
+    await ReleaseMgmt.Infrastructure.Comms.WebhookUrlProtectionUpgrade.RunAsync(connectionString, scope.ServiceProvider.GetRequiredService<ReleaseMgmt.Infrastructure.Comms.IWebhookUrlVault>(),
+        app.Services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime, app.Logger);
     var seed = scope.ServiceProvider.GetRequiredService<SeedService>();
     await seed.SeedReferenceDataAsync();
     if (config.GetValue("Seed:Demo", app.Environment.IsDevelopment())) await seed.SeedDemoDataAsync(); // demo trains only when asked (default: Development)

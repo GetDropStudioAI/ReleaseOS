@@ -35,8 +35,9 @@ public sealed class FailClosedCommRenderer(TimeProvider time) : ICommDispatchRen
         Task.FromResult(new RenderedComm("", [Message], time.GetUtcNow().UtcDateTime, 0));
 }
 
-/// <summary>A webhook destination as the sender needs it. <see cref="Url"/> is a secret (Slack and Teams put the token in the path): never log it.</summary>
-public sealed record CommWebhookTarget(string Id, string Name, string Url, string Kind);
+/// <summary>An allowlisted destination as the sender receives it: <see cref="ProtectedUrl"/> is the stored Data Protection payload, decrypted only inside the sender (Q-053e);
+/// <see cref="Host"/> is what a result or alert may show.</summary>
+public sealed record CommWebhookTarget(string Id, string Name, string Host, string ProtectedUrl, string Kind);
 
 /// <summary>Outcome of one send. <see cref="Reason"/> never contains the URL; <see cref="Host"/> is the only part of it that may be shown.</summary>
 public sealed record CommWebhookResult(bool Delivered, string Host, string? Reason);

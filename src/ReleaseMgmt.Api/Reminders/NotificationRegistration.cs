@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ReleaseMgmt.Infrastructure.Reminders;
 
 namespace ReleaseMgmt.Api.Reminders;
@@ -11,8 +12,9 @@ public static class NotificationRegistration
     public static IServiceCollection AddNotificationScheduling(this IServiceCollection services, IConfiguration config)
     {
         var allowPrivate = config.GetValue("Notifications:Webhooks:AllowPrivateTargets", false);
+        services.TryAddSingleton(OutboundAddressPolicy.From(config));   // REOS-77: Sync:Nat64Prefixes apply to webhooks too (one address policy)
         services.AddHttpClient(TeamWebhookSender.ClientName)
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            .ConfigurePrimaryHttpMessageHandler(sp => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,                       // a redirect is a second, unchecked destination
                 UseProxy = false,
@@ -21,7 +23,8 @@ public static class NotificationRegistration
                 {
                     // Resolve and vet here, at connect time, so the address that is checked is the address that is used.
                     var addrs = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct);
-                    var ok = addrs.Where(a => allowPrivate || !WebhookAddressPolicy.IsBlocked(a)).ToArray();
+                    var policy = sp.GetRequiredService<OutboundAddressPolicy>();
+                    var ok = addrs.Where(a => allowPrivate || !policy.IsBlocked(a)).ToArray();
                     if (ok.Length == 0) throw new HttpRequestException("The webhook target resolves only to blocked addresses");
                     var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
                     try { await socket.ConnectAsync(ok, ctx.DnsEndPoint.Port, ct); return new NetworkStream(socket, ownsSocket: true); }

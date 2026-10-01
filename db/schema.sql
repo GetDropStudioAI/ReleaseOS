@@ -457,10 +457,12 @@ CREATE TABLE SyncAlerts (
 );
 CREATE UNIQUE INDEX UX_SyncAlerts_OpenFingerprint ON SyncAlerts(Fingerprint) WHERE IsResolved = 0;
 
-CREATE TABLE WebhookDestinations (
+CREATE TABLE WebhookDestinations (                       -- the URL's path is its token (Teams, Slack): never stored in clear (Q-053e)
     Id TEXT PRIMARY KEY,
     Name TEXT NOT NULL,
-    Url TEXT NOT NULL UNIQUE CHECK (Url LIKE 'https://%'),
+    Host TEXT NOT NULL CHECK (length(Host) BETWEEN 1 AND 300 AND Host NOT GLOB '*[/?#@ ]*'),   -- host[:port] only: what screens, alerts and audit rows show
+    ProtectedUrl TEXT NOT NULL CHECK (ProtectedUrl LIKE 'CfDJ8%'),   -- ASP.NET Data Protection payload of the https URL; decrypted only by the senders
+    UrlHmac TEXT NOT NULL UNIQUE CHECK (length(UrlHmac) = 64 AND UrlHmac NOT GLOB '*[^0-9a-f]*'),   -- HMAC-SHA256 (hex) of the normalised URL: one row per address
     Kind TEXT NOT NULL CHECK (Kind IN ('Teams','Slack','Generic')),
     Version INTEGER NOT NULL DEFAULT 1
 );

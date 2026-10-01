@@ -52,7 +52,7 @@ public class ChatMarkupInjectionTests
         Sql(root, $@"
             INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('t1','{Evil}','2026-10-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z');
             INSERT INTO CommTemplates(Id,ReleaseTrainId,TemplateType,Audience,SubjectLine,MarkdownBody) VALUES('c1','t1','GoNoGo','All','{{ReleaseTitle}}','Update for {{ReleaseTitle}}, see <https://wiki.example/runbook|the runbook>');
-            INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('ws','slack','https://hooks.example.test/services/T/B/S','Slack'),('wt','teams','https://teams.example.test/webhook/T','Teams');");
+            INSERT INTO {WebhookTestRows.Into} VALUES {WebhookTestRows.Row(web.Services, "ws", "slack", "https://hooks.example.test/services/T/B/S", "Slack")},{WebhookTestRows.Row(web.Services, "wt", "teams", "https://teams.example.test/webhook/T", "Teams")};");
 
         foreach (var dest in new[] { "ws", "wt" })
         {
@@ -90,13 +90,14 @@ public class ChatMarkupInjectionTests
     {
         using var f = new ApiFactory();
         _ = f.Server;
-        Sql(f, $@"INSERT INTO WebhookDestinations(Id,Name,Url,Kind) VALUES('w1','channel','https://93.184.216.34/services/T/B/X','{kind}');
+        Sql(f, $@"INSERT INTO {WebhookTestRows.Into} VALUES {WebhookTestRows.Row(f.Services, "w1", "channel", "https://93.184.216.34/services/T/B/X", kind)};
                   INSERT INTO Teams(Id,Handle,Name,WebhookDestinationId) VALUES('tm1','platform','Platform','w1');");
         var dbf = f.Services.GetRequiredService<IDbContextFactory<ReleaseDbContext>>();
         var capture = new Capture();
         var writer = new SyncAlertWriter(dbf, TimeProvider.System, NullLogger<SyncAlertWriter>.Instance, f.Services.GetRequiredService<INotifier>());
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:Webhooks:AllowPrivateTargets"] = "true" }).Build();
-        var sender = new TeamWebhookSender(dbf, TimeProvider.System, new Factory(capture), writer, new NoAlerts(), config, new Env(), NullLogger<TeamWebhookSender>.Instance);
+        var sender = new TeamWebhookSender(dbf, TimeProvider.System, new Factory(capture), writer, new NoAlerts(), config, new Env(), NullLogger<TeamWebhookSender>.Instance,
+            WebhookTestRows.Vault(f.Services), OutboundAddressPolicy.Default);
 
         Assert.True(await sender.SendAsync(new WebhookNotice("tm1", "StepLate", "RunbookStep", "s1", 1, "Step <!channel> <https://evil.example|Reset> [Sign in](https://evil.example) & co is late", null)));
         Assert.Equal(expected, JsonDocument.Parse(Assert.Single(capture.Bodies)).RootElement.GetProperty("text").GetString());

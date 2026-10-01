@@ -119,6 +119,10 @@ public static class FieldLimits
         // Train templates (REOS-38)
         [typeof(TemplateInput)] = new() { ["Name"] = Name, ["DefaultRiskTier"] = Code },   // Gates, Steps, Schedule: their rows below
         [typeof(TemplateGateInput)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerTeamId"] = Id },
+        // REOS-81: a train's products and gates
+        [typeof(PlanStructureEndpoints.ProductBody)] = new() { ["Name"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag },
+        [typeof(PlanStructureEndpoints.NewGateBody)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id },
+        [typeof(PlanStructureEndpoints.PatchGateBody)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Status"] = Code },
         // REOS-80: new train (blank, from template, copy). Dates and timestamps are ISO strings, well under Code.
         [typeof(NewTrainInput)] = new() { ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code, ["TemplateId"] = Id, ["WindowStartsAt"] = Code, ["WindowEndsAt"] = Code },
         [typeof(NewProductInput)] = new() { ["ProductName"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag },

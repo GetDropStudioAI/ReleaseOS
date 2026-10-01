@@ -106,7 +106,7 @@ public class PlanStructureTests
 
         Assert.Equal((HttpStatusCode.UnprocessableEntity, "InvalidProduct"), Drop(await Add(new { name = " ", versionTag = "1.0" })));
         Assert.Equal((HttpStatusCode.UnprocessableEntity, "InvalidProduct"), Drop(await Add(new { name = "Ledger" })));
-        Assert.Equal((HttpStatusCode.UnprocessableEntity, "InvalidProduct"), Drop(await Add(new { name = new string('x', 201), versionTag = "1.0" })));
+        Assert.Equal((HttpStatusCode.UnprocessableEntity, "FieldTooLong"), Drop(await Add(new { name = new string('x', 201), versionTag = "1.0" })));   // REOS-66's filter answers before the service (which still checks)
         Assert.Equal(HttpStatusCode.OK, (await c.PostAsJsonAsync("/api/v1/trains/t1/products", new { name = "Ledger", versionTag = "1.0" })).StatusCode);
         var dup = await Add(new { name = "LEDGER", versionTag = "2.0" });   // case-insensitive: the parser's [Product] lookup is
         Assert.Equal((HttpStatusCode.UnprocessableEntity, "DuplicateProduct"), Drop(dup));

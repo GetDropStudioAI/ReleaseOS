@@ -9,7 +9,7 @@
 -- dates are 'YYYY-MM-DD'; booleans are INTEGER 0/1 with CHECK; every user-editable table has Version.
 -- Version-exempt: append-only/immutable tables (AuditEvents, GateTransitions, Baselines, GoNoGoDecisions,
 -- CommDispatches, FreezeOverrides, MetricSnapshots, TeamMembers) and system-owned rows with last-write-wins
--- by design (UserSessionState per tab, ParsePreviews, IcsTokens).
+-- by design (UserSessionState per tab, ParsePreviews, IcsTokens, SessionRevocations).
 -- Trigger ORDER matters: SQLite fires same-event triggers newest-first. Apply them in file order.
 -- Triggers are the backstop; the domain service is the primary enforcement point.
 
@@ -18,13 +18,17 @@
 -- =====================================================================
 CREATE TABLE Users (
     Id TEXT PRIMARY KEY,
-    Email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    Email TEXT NOT NULL UNIQUE COLLATE NOCASE,          -- contact and display data; organisation sign-in matches IdpIssuer + IdpSubject
     DisplayName TEXT NOT NULL,
     Role TEXT NOT NULL CHECK (Role IN ('Viewer','ReleaseManager','RTE','GovernanceOfficer')),
     Handle TEXT UNIQUE COLLATE NOCASE,                   -- optional @handle for the bulk parser
     IsActive INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
-    Version INTEGER NOT NULL DEFAULT 1
+    IdpIssuer TEXT,                                      -- OIDC 'iss' of the bound identity; NULL until the first organisation sign-in (Q-SEC-B8)
+    IdpSubject TEXT,                                     -- OIDC 'sub' at that issuer: who the person is (email can change or be reissued)
+    Version INTEGER NOT NULL DEFAULT 1,
+    CHECK ((IdpIssuer IS NULL) = (IdpSubject IS NULL))
 );
+CREATE UNIQUE INDEX UX_Users_IdpIdentity ON Users(IdpIssuer, IdpSubject) WHERE IdpSubject IS NOT NULL;
 
 CREATE TABLE Teams (
     Id TEXT PRIMARY KEY,
@@ -578,6 +582,14 @@ CREATE TABLE IcsTokens (                                  -- per-user calendar f
     RevokedAt TEXT
 );
 CREATE UNIQUE INDEX UX_IcsTokens_ActivePerUser ON IcsTokens(UserId) WHERE RevokedAt IS NULL;
+
+CREATE TABLE SessionRevocations (                         -- signed-out session ids, refused until the session would have ended anyway (Q-SEC-B5)
+    SessionId TEXT PRIMARY KEY,                           -- random id stamped in the cookie ticket at sign-in
+    UserId TEXT REFERENCES Users(Id) ON DELETE CASCADE,
+    RevokedAt TEXT NOT NULL,
+    ExpiresAt TEXT NOT NULL                               -- sign-in time + Auth:Session:AbsoluteHours; the row is pruned after it
+);
+CREATE INDEX IX_SessionRevocations_Expiry ON SessionRevocations(ExpiresAt);
 
 CREATE TABLE ParsePreviews (                              -- bulk-parser previews, valid 30 min
     Id TEXT PRIMARY KEY,

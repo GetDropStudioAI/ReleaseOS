@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20260929110136_Triggers")]
+    [Migration("20260930234616_Triggers")]
     partial class Triggers
     {
         /// <inheritdoc />
@@ -1510,6 +1510,31 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.SessionRevocations", b =>
+                {
+                    b.Property<string>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExpiresAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RevokedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("SessionId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("SessionRevocations", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.StageGates", b =>
                 {
                     b.Property<string>("Id")
@@ -1949,6 +1974,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Handle")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IdpIssuer")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IdpSubject")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
@@ -2469,6 +2500,14 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .HasForeignKey("ReleaseTrainId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.SessionRevocations", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.StageGates", b =>

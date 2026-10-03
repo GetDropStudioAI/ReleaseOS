@@ -19,10 +19,12 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -37,6 +39,8 @@ ROOT = Path(__file__).resolve().parent
 API_DIR = ROOT / "src" / "ReleaseMgmt.Api"
 WEB_DIR = ROOT / "src" / "ReleaseMgmt.Web"
 LOG_DIR = ROOT / "logs"
+UPGRADES_DIR = ROOT / "db" / "upgrades"
+MIGRATIONS_DIR = ROOT / "src" / "ReleaseMgmt.Infrastructure" / "Migrations"
 STATE_FILE = ROOT / ".start-control.json"   # port + token of the running instance (gitignored)
 BRANCH = "main"
 API_PORT, WEB_PORT, CONTROL_PORT = 6080, 6273, 5099
@@ -183,6 +187,88 @@ def install_frontend_deps(npm: str, web_dir: Path = WEB_DIR, run=subprocess.run)
     (web_dir / "node_modules" / LOCK_MARKER).write_text(digest + "\n")
 
 
+# ----------------------------------------------------------------------------- database upgrade
+
+def database_path(api_dir: Path = API_DIR) -> Path:
+    """The SQLite file the backend will open: Db__Path if set (relative paths resolve against the API project, the backend's working directory),
+    else the default data/releasemgmt.db there (Program.cs)."""
+    p = Path(os.environ.get("Db__Path") or "data/releasemgmt.db")
+    return p if p.is_absolute() else api_dir / p
+
+
+def build_migrations(migrations_dir: Path = MIGRATIONS_DIR) -> list[str]:
+    """The migration ids this checkout's build will apply (the files the backend is compiled from)."""
+    return sorted(f.stem for f in migrations_dir.glob("*.cs") if re.fullmatch(r"\d{14}_(Schema|Triggers)", f.stem))
+
+
+def upgrade_scripts(upgrades_dir: Path = UPGRADES_DIR) -> dict[tuple[str, ...], tuple[Path, tuple[str, ...]]]:
+    """Each db/upgrades script, keyed by the migration history its guard requires, with the history it leaves behind (Q-SEC-B8m)."""
+    out = {}
+    for f in sorted(upgrades_dir.glob("[0-9][0-9][0-9]_*.sql")):
+        text = f.read_text(encoding="utf-8")
+        frm = re.search(r"=\s*'([^']+)';", text)
+        to = re.search(r"INSERT INTO __EFMigrationsHistory[^;]*?VALUES(.*?);", text, re.S)
+        if frm and to:
+            out[tuple(sorted(frm.group(1).split(",")))] = (f, tuple(sorted(re.findall(r"\('(\d{14}_\w+)'", to.group(1)))))
+    return out
+
+
+def recorded_migrations(db: Path) -> list[str] | None:
+    """The migration ids recorded in the database, or None when there is nothing to check (no file yet, or EF has not created its history)."""
+    if not db.exists():
+        return None
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory'").fetchone():
+            return None
+        return sorted(r[0] for r in c.execute("SELECT MigrationId FROM __EFMigrationsHistory"))
+    finally:
+        c.close()
+
+
+def upgrade_database(db: Path | None = None, upgrades_dir: Path = UPGRADES_DIR, migrations_dir: Path = MIGRATIONS_DIR,
+                     say=lambda message: None, now=time.gmtime) -> Path | None:
+    """Brings a local database created by an older build up to this build before the backend starts, so a pull that changed the schema does not end
+    in "the backend did not become ready" (the backend's UpgradeGuard refuses such a database). Takes a backup first and returns its path; returns None
+    when nothing had to be done. A database whose history matches no chain of scripts is left untouched and stops the start with what to do."""
+    db = db or database_path()
+    have, want = recorded_migrations(db), build_migrations(migrations_dir)
+    if have is None or set(have) <= set(want):
+        return None   # new, empty, current, or only missing migrations EF applies itself
+    scripts, chain, at = upgrade_scripts(upgrades_dir), [], tuple(have)
+    while set(at) != set(want):
+        if at not in scripts or len(chain) > len(scripts):
+            raise RuntimeError(f"The database at {db} was created by a build this checkout cannot upgrade (migrations {', '.join(have)}). "
+                               "Nothing was changed. Move the file aside to start with a fresh database, or upgrade it by hand (docs/RUNBOOK_OPERATIONS.md section 8).")
+        script, at = scripts[at]
+        chain.append(script)
+    backup = db.with_name(f"{db.stem}.pre-upgrade-{time.strftime('%Y%m%dT%H%M%SZ', now())}{db.suffix}")
+    say(f"The database was created by an older build: backing it up to {backup.name}")
+    src = sqlite3.connect(db)
+    try:
+        dst = sqlite3.connect(backup)
+        try:
+            src.backup(dst)   # online backup: includes what is still in the -wal file
+        finally:
+            dst.close()
+    finally:
+        src.close()
+    c = sqlite3.connect(db, isolation_level=None)
+    try:
+        for script in chain:
+            say(f"Upgrading the database: {script.name}")
+            try:
+                c.executescript(script.read_text(encoding="utf-8"))   # each script is one transaction and checks the history it expects
+            except sqlite3.Error as e:
+                raise RuntimeError(f"Upgrade {script.name} failed ({e}); that script changed nothing. The database as it was before any upgrade is {backup}.") from e
+        if c.execute("PRAGMA foreign_key_check").fetchall() or c.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise RuntimeError(f"The upgraded database failed its integrity checks. The database as it was before the upgrade is {backup}.")
+    finally:
+        c.close()
+    say(f"Database upgraded ({len(chain)} script{'s' if len(chain) != 1 else ''}); the backup is {backup.name}")
+    return backup
+
+
 # ----------------------------------------------------------------------------- supervisor
 
 class Supervisor:
@@ -219,6 +305,7 @@ class Supervisor:
         if not frontend_deps_current():
             self.set("starting", "Installing frontend packages (package-lock.json changed since the last install)")
             install_frontend_deps(npm)
+        upgrade_database(say=lambda m: self.set("starting", m))   # before the backend opens the file (Q-SEC-B8m)
         env = backend_environment()
         api = Child("api", [dotnet, "run", "--no-launch-profile"], API_DIR,
                     {"ASPNETCORE_ENVIRONMENT": env, "ASPNETCORE_URLS": API_URL, "DOTNET_CLI_TELEMETRY_OPTOUT": "1"})

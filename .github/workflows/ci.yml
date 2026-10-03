@@ -44,7 +44,7 @@ jobs:
         run: python tests/reference/test_schema.py
       - name: Manual upgrade scripts reach db/schema.sql
         run: python tests/reference/test_upgrades.py
-      - name: Tooling tests (start.py reset git logic)
+      - name: Tooling tests (start.py: reset, control channel, database upgrade)
         run: python tests/tools/test_start.py
       - name: Install e2e dependencies
         working-directory: tests/e2e

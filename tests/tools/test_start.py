@@ -1,4 +1,4 @@
-"""Tests for the git logic behind `start.py reset`. Run: python3 tests/tools/test_start.py
+"""Tests for start.py: the git logic behind `reset`, the control channel, frontend packages and the local database upgrade. Run: python3 tests/tools/test_start.py
 Uses throwaway local repos; needs only git and python."""
 import subprocess, sys, tempfile, unittest
 from pathlib import Path
@@ -156,6 +156,102 @@ class BackendEnvironment(unittest.TestCase):
     def test_the_backend_is_always_bound_to_loopback(self):
         self.assertEqual(self.backend_env(ASPNETCORE_URLS="http://0.0.0.0:6080")["ASPNETCORE_URLS"], start.API_URL)
         self.assertTrue(start.API_URL.startswith("http://127.0.0.1:"))
+
+
+class DatabaseUpgrade(unittest.TestCase):
+    """Q-SEC-B8m: a pull that changed the schema left local databases unstartable ("the backend did not become ready"). start.py now finds the
+    db/upgrades chain from the migrations a database records, backs the file up and applies it before the backend opens it."""
+    ROOT = Path(__file__).resolve().parents[2]
+    FIRST = ("20260929110130_Schema", "20260929110136_Triggers")
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.db = self.dir / "releasemgmt.db"
+        self.said = []
+
+    def make(self, history, schema=None):
+        import sqlite3
+        c = sqlite3.connect(self.db)
+        c.executescript((schema or self.ROOT / "db/upgrades/baseline/schema-20260929.sql").read_text())
+        c.execute("CREATE TABLE __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL)")
+        c.executemany("INSERT INTO __EFMigrationsHistory VALUES (?, '10.0.12')", [(m,) for m in history])
+        c.execute("INSERT INTO Users (Id, Email, DisplayName, Role) VALUES ('u1', 'rte@x.com', 'Rte', 'RTE')")
+        c.commit(); c.close()
+
+    def upgrade(self):
+        return start.upgrade_database(self.db, say=self.said.append)
+
+    def query(self, sql):
+        import sqlite3
+        c = sqlite3.connect(self.db)
+        try: return c.execute(sql).fetchall()
+        finally: c.close()
+
+    def test_a_first_release_database_is_backed_up_and_brought_to_this_build(self):
+        self.make(self.FIRST)
+        backup = self.upgrade()
+        self.assertTrue(backup and backup.exists() and backup.name.startswith("releasemgmt.pre-upgrade-"))
+        self.assertEqual([r[0] for r in self.query("SELECT MigrationId FROM __EFMigrationsHistory ORDER BY 1")], start.build_migrations())
+        self.assertEqual(self.query("SELECT Id, Email FROM Users"), [("u1", "rte@x.com")])                                   # rows kept
+        self.assertEqual(self.query("SELECT count(*) FROM sqlite_master WHERE name IN ('SessionRevocations','TrainMilestones')"), [(2,)])
+        import sqlite3
+        b = sqlite3.connect(backup)
+        self.assertEqual(sorted(r[0] for r in b.execute("SELECT MigrationId FROM __EFMigrationsHistory")), list(self.FIRST))   # the backup is the old one
+        b.close()
+        self.assertTrue(any("001_" in m for m in self.said) and any("003_" in m for m in self.said))
+
+    def test_a_partly_upgraded_database_runs_only_the_scripts_it_still_needs(self):
+        self.make(self.FIRST)
+        import sqlite3
+        c = sqlite3.connect(self.db, isolation_level=None)
+        c.executescript((self.ROOT / "db/upgrades/001_idp_identity_and_session_revocations.sql").read_text()); c.close()
+        self.upgrade()
+        self.assertFalse(any("001_" in m for m in self.said))
+        self.assertTrue(any("002_" in m for m in self.said) and any("003_" in m for m in self.said))
+        self.assertEqual([r[0] for r in self.query("SELECT MigrationId FROM __EFMigrationsHistory ORDER BY 1")], start.build_migrations())
+
+    def test_a_current_missing_or_empty_database_is_left_alone(self):
+        self.assertIsNone(self.upgrade())                       # no file yet: the backend creates it
+        import sqlite3
+        sqlite3.connect(self.db).close()
+        self.assertIsNone(self.upgrade())                       # empty file: EF creates everything
+        self.db.unlink()
+        self.make(start.build_migrations(), schema=self.ROOT / "db/schema.sql")
+        self.assertIsNone(self.upgrade())                       # already this build
+        self.assertEqual(list(self.dir.glob("*.pre-upgrade-*")), [])
+
+    def test_an_unknown_history_stops_the_start_and_changes_nothing(self):
+        self.make(("20250101000000_Schema", "20250101000001_Triggers"))
+        before = self.db.read_bytes()
+        with self.assertRaises(RuntimeError) as e:
+            self.upgrade()
+        self.assertIn("cannot upgrade", str(e.exception))
+        self.assertEqual(self.db.read_bytes(), before)
+        self.assertEqual(list(self.dir.glob("*.pre-upgrade-*")), [])
+
+    def test_launch_upgrades_before_the_backend_starts(self):
+        import os
+        from unittest import mock
+        order = []
+
+        class FakeChild:
+            def __init__(self, name, cmd, cwd, env): self.name = name
+            def start(self): order.append(self.name)
+            def alive(self): return True
+            def stop(self): pass
+
+        with mock.patch.multiple(start, Child=FakeChild, free=lambda port: True, which=lambda name: name, frontend_deps_current=lambda *a: True,
+                                 wait_for=lambda *a, **k: None, upgrade_database=lambda **k: order.append("upgrade")):
+            start.Supervisor(open_browser=False).launch()
+        self.assertEqual(order, ["upgrade", "api", "web"])
+
+    def test_the_database_path_follows_Db__Path_like_the_backend(self):
+        import os
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"Db__Path": ""}):
+            self.assertEqual(start.database_path(), start.API_DIR / "data" / "releasemgmt.db")
+        with mock.patch.dict(os.environ, {"Db__Path": str(self.db)}):
+            self.assertEqual(start.database_path(), self.db)
 
 
 if __name__ == "__main__":

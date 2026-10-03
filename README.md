@@ -45,3 +45,5 @@ python start.py reset      # pull the latest from origin/main, restart both, the
 python start.py stop       # stop both and exit
 ```
 Needs Python 3.9+, the .NET 10 SDK and Node 22. In the app, **Reset** and **Sign out and exit** appear in the toolbar while it runs under `start.py`.
+
+If a pull changed the database schema, `start.py` upgrades your local database before the backend starts: it saves a copy next to it (`data/releasemgmt.pre-upgrade-<time>.db`) and runs the scripts in `db/upgrades/` that it needs. A database it cannot place is left untouched and the start stops with what to do.

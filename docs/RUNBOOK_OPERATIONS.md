@@ -156,7 +156,7 @@ Recovery point: at most 15 minutes of changes are lost (the backup interval). Re
 4. If the release notes list a script in `db/upgrades/` that is newer than the database (Q-SEC-B8m), run each such script, in number order, with the
    service still stopped: `sqlite3 <Database path> < db/upgrades/NNN_name.sql`. Each script is one transaction, refuses to run against the wrong
    version, and ends by printing `PRAGMA foreign_key_check` (expect no rows) and `PRAGMA integrity_check` (expect `ok`). Anything else: restore the
-   backup from step 1 and stop. If a script is missed, the app refuses to start and the log names the migrations it found ("created by an older build").
+   backup from step 1 and stop. If a script is missed, the app refuses to start and the log names the migrations it found ("created by an older build"). On a developer machine `start.py` does this step itself (backup first, then the scripts the database needs); on a server, run the scripts by hand as above.
 5. Start the service. Schema migrations run automatically at startup; a failed migration stops the app with the error in the log, and nothing half-applied is served.
 6. Verify `/healthz`, sign in, open a train.
 

@@ -54,6 +54,7 @@ tests/reference/   Python oracle tests; must keep passing against db/schema.sql
 dotnet build
 dotnet test
 python3 tests/reference/test_schema.py          # 94 cases, must stay green
+python3 tests/tools/test_workflows.py           # after editing .github/workflows: an invalid workflow never runs, so CI cannot report it
 python3 tests/reference/seed_and_query.py       # seeds history through the triggers, runs all 15 metrics
 python3 tests/reference/seed_and_query.py --write   # regenerates fixtures/seed.db + expected_metrics.json (only if schema/analytics change)
 python3 tools/gen_entities.py                   # regenerate Domain entities + EF model map after any db/schema.sql change

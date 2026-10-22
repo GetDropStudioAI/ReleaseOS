@@ -66,8 +66,10 @@ export function SyncBanner({ sync, onOpen }: { sync: { state: SyncStateDto | nul
   const failing = state?.connectorWide ? state.failing : []
   // The row is always in the DOM (the shell grid places the other regions around it) and has no height while there is nothing to say;
   // only the headlines are alerts, so a page with nothing wrong has no empty alert region, and the failure count ticking up does not re-announce it.
+  // While it says something it is a named region, so its effect line and link sit in a landmark like the rest of the page (axe "region").
+  const speaking = failing.length > 0 || !!error
   return (
-    <div className="sync-banner-row" data-testid="sync-banner">
+    <div className="sync-banner-row" data-testid="sync-banner" {...(speaking ? { role: 'region', 'aria-label': 'Sync problems' } : {})}>
       {failing.map(e => (
         <p key={`${e.source}-${e.kind}`} className="sync-banner bad">
           <strong role="alert"><span aria-hidden="true">{e.scope === 'engine' ? '▲' : '✗'}</span> {headline(e)}{e.since ? ` since ${fmtDayTime(e.since)}` : ''}.</strong>

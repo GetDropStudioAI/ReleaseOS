@@ -68,6 +68,8 @@ for (const scheme of ['light', 'dark'] as const) {
         await expect(b.locator('.stream-row').first()).toBeVisible()                                              // the regions below the banner are still laid out
         await b.goto('/')
         await expect(banner).toContainText('ServiceNow rejected our credentials')                                 // another screen again, after a reload
+        // everything on the page sits in a landmark while the banner speaks (it once did not: CI run 105, governance.spec on macOS)
+        expect((await new AxeBuilder({ page: b }).withRules(['region']).analyze()).violations.map(v => v.nodes[0]?.html)).toEqual([])
         // the banner is words and a glyph on a tinted line: no box, no pill
         await expect(banner.locator('p').first()).toContainText('✗')
         expect(await banner.locator('p').first().evaluate(el => getComputedStyle(el).borderRadius)).toBe('0px')

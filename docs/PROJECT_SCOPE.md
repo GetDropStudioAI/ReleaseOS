@@ -143,7 +143,7 @@ REST under `/api/v1`. Mutations take `If-Match: <Version>`; 409 returns the curr
 | Area | Endpoints |
 |---|---|
 | Trains | `GET/POST /trains`, `GET/PATCH /trains/{id}`, `POST /trains/{id}:clone`, `:archive`, `GET/PUT /trains/{id}/window`, `GET /trains/{id}/readiness` (guard list used by the "To reach Executing" line; same checks as `:advance`) |
-| Lifecycle | `POST /trains/{id}:advance {to}`, `:abort`, `:complete {closeCode, notes}`, `:rehearsed-rollback`, `:capture-baseline` |
+| Lifecycle | `POST /trains/{id}:advance {to}`, `:abort {reason}` (Q-LC1), `:complete {closeCode, notes}`, `:rehearsed-rollback`, `:capture-baseline` |
 | Change record | `GET/PUT /trains/{id}/change-record`, `GET/POST/DELETE /trains/{id}/cis` |
 | Products | `GET/POST /trains/{id}/products`, `PATCH/DELETE /products/{id}` |
 | Gates | `GET/POST /trains/{id}/gates`, `PATCH /gates/{id}`, `POST /gates/{id}:start` `:certify` `:fail` `:reopen`, `GET /gates/{id}/transitions` |

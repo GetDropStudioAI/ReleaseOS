@@ -93,6 +93,7 @@ public static class FieldLimits
         // Lifecycle, gates, waivers, tasks
         [typeof(LifecycleEndpoints.AdvanceRequest)] = new() { ["To"] = Code },
         [typeof(LifecycleEndpoints.CompleteRequest)] = new() { ["CloseCode"] = Code, ["Notes"] = Text },
+        [typeof(LifecycleEndpoints.AbortRequest)] = new() { ["Reason"] = Text },
         [typeof(LifecycleEndpoints.RehearsedRequest)] = new() { ["RunId"] = Id, ["Note"] = Text },
         [typeof(LifecycleEndpoints.WaiverRequestBody)] = new() { ["Reason"] = Text },
         [typeof(LifecycleEndpoints.AddTaskRequest)] = new() { ["Description"] = Text, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id },

@@ -14,6 +14,7 @@ public static class LifecycleEndpoints
 {
     public sealed record AdvanceRequest(string To);
     public sealed record CompleteRequest(string CloseCode, string? Notes);
+    public sealed record AbortRequest(string? Reason);
     public sealed record RehearsedRequest(string? RunId, string? Note);
     public sealed record PatchTrainRequest(DateOnly? TargetReleaseDate);
     public sealed record WaiverRequestBody(string Reason);
@@ -27,8 +28,9 @@ public static class LifecycleEndpoints
             (await s.GetAsync(id, target ?? "Executing", ct)).ToHttp()).RequireAuthorization(Policies.Read);
         api.MapPost("/trains/{id}:advance", (string id, AdvanceRequest body, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
             s.AdvanceAsync(id, body.To, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
-        api.MapPost("/trains/{id}:abort", (string id, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
-            s.AbortAsync(id, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
+        // Q-LC1: the reason is required (422 AbortReasonRequired when it is missing or blank) and kept only in the Abort audit row.
+        api.MapPost("/trains/{id}:abort", (string id, AbortRequest? body, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
+            s.AbortAsync(id, body?.Reason, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapPost("/trains/{id}:complete", (string id, CompleteRequest body, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>
             s.CompleteAsync(id, body.CloseCode, body.Notes, ActorOf(u), req.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapPost("/trains/{id}:rehearsed-rollback", (string id, RehearsedRequest? body, ClaimsPrincipal u, HttpRequest req, TrainLifecycleService s, CancellationToken ct) =>

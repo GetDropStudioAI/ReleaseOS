@@ -17,6 +17,7 @@ function describe(current: Record<string, unknown> | undefined): string {
   if (typeof current.startsAt === 'string' && typeof current.endsAt === 'string') return `The window is now ${zoneTime(current.startsAt)} to ${zoneTime(current.endsAt)} (version ${current.version}).`
   if (typeof current.status === 'string') return `It is now ${current.status} (version ${current.version}).`
   if (typeof current.isCompleted === 'boolean') return `The task is now ${current.isCompleted ? 'done' : 'open'} (version ${current.version}).`
+  if (typeof current.currentStatus === 'string' && typeof current.targetReleaseDate === 'string') return `The train is now ${current.currentStatus}, target ${day(current.targetReleaseDate.slice(0, 10))} (version ${current.version}).`
   if (typeof current.targetReleaseDate === 'string') return `The target is now ${day(current.targetReleaseDate.slice(0, 10))} (version ${current.version}).`
   return `It is now at version ${current.version}.`
 }

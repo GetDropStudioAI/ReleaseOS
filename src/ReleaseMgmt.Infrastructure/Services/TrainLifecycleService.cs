@@ -11,7 +11,8 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
     public static readonly string[] CloseCodes = ["Successful", "SuccessfulWithIssues", "Unsuccessful"];
 
     /// <summary>Guards for moving a train to <paramref name="to"/>. Also drives GET /trains/{id}/readiness (M2), so both agree by construction.</summary>
-    public async Task<List<GuardFailure>> EvaluateAsync(ReleaseDbContext db, ReleaseTrains t, string to, string? closeCode = null)
+    /// <remarks><paramref name="abortReason"/> is needed to move to Aborted (Q-LC1); it has no column and is kept in the Abort audit row.</remarks>
+    public async Task<List<GuardFailure>> EvaluateAsync(ReleaseDbContext db, ReleaseTrains t, string to, string? closeCode = null, string? abortReason = null)
     {
         var failures = new List<GuardFailure>();
         if (!Transitions.TrainLegal(t.CurrentStatus, to))
@@ -46,6 +47,8 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
         }
         if (to == "Complete" && (closeCode is null || !CloseCodes.Contains(closeCode)))
             failures.Add(new(Guards.CloseCodeRequired, "Complete requires a close code", CloseCodes));
+        if (to == "Aborted" && string.IsNullOrWhiteSpace(abortReason))
+            failures.Add(new(Guards.AbortReasonRequired, "Aborting a train needs a reason"));
         return failures;
     }
 
@@ -102,21 +105,22 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
     }
 
     public Task<ServiceResult<ReleaseTrains>> AdvanceAsync(string trainId, string to, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
-        ChangeStatusAsync(trainId, to, actor, expectedVersion, closeCode: null, notes: null, "Advance", ct);
+        ChangeStatusAsync(trainId, to, actor, expectedVersion, closeCode: null, notes: null, reason: null, "Advance", ct);   // to Aborted: refused, no reason (use AbortAsync)
 
-    public Task<ServiceResult<ReleaseTrains>> AbortAsync(string trainId, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
-        ChangeStatusAsync(trainId, "Aborted", actor, expectedVersion, null, null, "Abort", ct);
+    /// <summary>Aborts a Planning, Gated or Executing train. The reason is required and recorded only in the Abort audit row (Q-LC1).</summary>
+    public Task<ServiceResult<ReleaseTrains>> AbortAsync(string trainId, string? reason, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
+        ChangeStatusAsync(trainId, "Aborted", actor, expectedVersion, null, null, reason?.Trim(), "Abort", ct);
 
     public Task<ServiceResult<ReleaseTrains>> CompleteAsync(string trainId, string closeCode, string? notes, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
-        ChangeStatusAsync(trainId, "Complete", actor, expectedVersion, closeCode, notes, "Complete", ct);
+        ChangeStatusAsync(trainId, "Complete", actor, expectedVersion, closeCode, notes, null, "Complete", ct);
 
-    private Task<ServiceResult<ReleaseTrains>> ChangeStatusAsync(string trainId, string to, Actor actor, int? expectedVersion, string? closeCode, string? notes, string action, CancellationToken ct) =>
+    private Task<ServiceResult<ReleaseTrains>> ChangeStatusAsync(string trainId, string to, Actor actor, int? expectedVersion, string? closeCode, string? notes, string? reason, string action, CancellationToken ct) =>
         RunAsync(async db =>
         {
             var t = await db.Set<ReleaseTrains>().SingleOrDefaultAsync(x => x.Id == trainId, ct);
             if (t is null) return ServiceResult<ReleaseTrains>.NotFound("train");
             if (VersionMismatch(expectedVersion, t.Version)) return ServiceResult<ReleaseTrains>.Conflict(t);
-            var failures = await EvaluateAsync(db, t, to, closeCode);
+            var failures = await EvaluateAsync(db, t, to, closeCode, reason);
             if (failures.Count > 0) return ServiceResult<ReleaseTrains>.Fail(failures);
 
             var before = new { status = t.CurrentStatus, version = t.Version };
@@ -125,7 +129,8 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
             if (to == "Complete") { t.CloseCode = closeCode; t.CloseNotes = notes; t.ActualEndAt = now; }
             t.CurrentStatus = to;
             Stamp(t, actor, now);
-            Audit(db, actor, t.Id, "ReleaseTrain", t.Id, action, before, new { status = t.CurrentStatus, version = t.Version, closeCode });
+            Audit(db, actor, t.Id, "ReleaseTrain", t.Id, action, before,
+                to == "Aborted" ? new { status = t.CurrentStatus, version = t.Version, reason } : new { status = t.CurrentStatus, version = t.Version, closeCode });
             await db.SaveChangesAsync(ct);
             await db.Entry(t).ReloadAsync(ct);
             return ServiceResult<ReleaseTrains>.Ok(t);

@@ -21,15 +21,19 @@ export interface GoNoGoDraft { decision: string; notes: string; newTarget: strin
 export const goNoGoKey = (trainId: string) => `gonogo:${trainId}`
 export const emptyGoNoGo = (): GoNoGoDraft => ({ decision: 'Go', notes: '', newTarget: '', conditions: [] })
 
-/** A one-of choice as underlined text (docs/UI.md), exposed as a named radio group: arrow keys move, only the chosen one is in the tab order. */
-export function RadioChoice<T extends string>({ label, options, value, onChange, groupRef }: { label: string; options: { key: T; word: string }[]; value: T; onChange: (v: T) => void; groupRef?: Ref<HTMLSpanElement> }) {
+/**
+ * A one-of choice as underlined text (docs/UI.md), exposed as a named radio group: arrow keys move, only the chosen one is in the tab order.
+ * `value` may match no option (nothing chosen yet, e.g. a close code): then the first option takes the tab stop, as in the ARIA radio group pattern.
+ */
+export function RadioChoice<T extends string>({ label, options, value, onChange, groupRef }: { label: string; options: { key: T; word: string }[]; value: T | ''; onChange: (v: T) => void; groupRef?: Ref<HTMLSpanElement> }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([])
-  const move = (by: number) => { const n = (options.findIndex(o => o.key === value) + by + options.length) % options.length; onChange(options[n].key); refs.current[n]?.focus() }
+  const at = options.findIndex(o => o.key === value)
+  const move = (by: number) => { const n = at < 0 ? (by > 0 ? 0 : options.length - 1) : (at + by + options.length) % options.length; onChange(options[n].key); refs.current[n]?.focus() }
   return (
     <span role="radiogroup" aria-label={label} ref={groupRef} onKeyDown={e => {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); move(1) } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); move(-1) }
     }}>
-      {options.map((o, i) => <span key={o.key}><button ref={el => { refs.current[i] = el }} type="button" role="radio" aria-checked={value === o.key} tabIndex={value === o.key ? 0 : -1}
+      {options.map((o, i) => <span key={o.key}><button ref={el => { refs.current[i] = el }} type="button" role="radio" aria-checked={value === o.key} tabIndex={value === o.key || (at < 0 && i === 0) ? 0 : -1}
         className={value === o.key ? 'text strong' : 'text'} onClick={() => onChange(o.key)}><span aria-hidden="true">{value === o.key ? '● ' : '○ '}</span>{o.word}</button>{' '}</span>)}
     </span>)
 }

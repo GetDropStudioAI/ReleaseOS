@@ -2,6 +2,8 @@
 
 Tokens: `docs/ui/tokens.css` (import it as the base stylesheet). Mockups: `docs/ui/mockups/*.html` (open in a browser; fonts resolve to your OS) and `*.png` renders. Mockup data is illustrative; match layout, density, copy and behaviour.
 
+Figma: [ReleaseOS — UI](https://www.figma.com/design/nlfpTZHvRakSyUGpZ3N0Xr) holds the same tokens as variables (Color: Light/Dark, Layout), the text styles, the core components (Text button, Status, Tab, Line input, Stream row, Gate dot, Section head, Inspector field) and the Main train workspace in light and dark. `tokens.css` stays the source of truth; a token change is made there first and mirrored in Figma. Figma uses Inter and Roboto Mono as stand-ins because SF Pro / SF Mono are not served to its renderer; the app still uses the OS fonts (rule 10). See `docs/QUESTIONS.md` Q-085.
+
 ## The rule
 No checkboxes, toggle switches, pills, badges or bordered boxes anywhere. That means:
 - **Status** is a word plus glyph plus colour: `✓ Certified`, `◐ In progress`, `○ Pending`, `✗ Failed`, `▲ 2 blockers`, `● in sync`, `◆ mismatch`.

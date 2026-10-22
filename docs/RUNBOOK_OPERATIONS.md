@@ -31,6 +31,17 @@ Why the key ring matters: connector credentials and webhook addresses are stored
 
 Time: keep the server clock correct (NTP). Every timestamp is UTC; the screens show times in `Display:TimeZone` (default `America/Chicago`, an IANA id; on Windows .NET maps it).
 
+Installing the runtime (the server needs only the ASP.NET Core runtime, x64 or arm64; the build machine needs the SDK and Node). These are the vendors' standard commands; they have not been run on your servers (section 12):
+
+| Server | Install | Check |
+|---|---|---|
+| Windows Server 2019 or later | `winget install Microsoft.DotNet.AspNetCore.10`, or the "ASP.NET Core Runtime 10.0" installer from https://dotnet.microsoft.com/download/dotnet/10.0 (the Hosting Bundle is only needed behind IIS) | `dotnet --list-runtimes` lists `Microsoft.AspNetCore.App 10.0.x` |
+| Ubuntu / Debian | `sudo apt-get install -y aspnetcore-runtime-10.0 fonts-dejavu-core` (Ubuntu's own feed, or Microsoft's package feed on releases that lack it) | same |
+| RHEL / Rocky / Alma | `sudo dnf install -y aspnetcore-runtime-10.0 dejavu-sans-mono-fonts` | same |
+| macOS 13 or later | the "ASP.NET Core Runtime 10.0" `.pkg` installer (Arm64 for Apple silicon) from the same page; it installs `/usr/local/share/dotnet/dotnet` | same |
+
+Fonts: PDFs use the operating system's fonts (Q-050b). Windows and macOS have the monospace fonts the exports look for; a minimal Linux server may have none, which is why the commands above add DejaVu Sans Mono. Without it, hashes and times in the PDFs print in the body font (still correct, less legible).
+
 ## 3. Build and publish
 
 From a clean checkout of `main`:
@@ -49,6 +60,8 @@ Configuration comes from, in order of precedence: environment variables, `appset
 
 **Secrets never go in `appsettings*.json` in git.** Supply `Auth:Oidc:ClientSecret` from an environment variable or the OS secret store. Connector credentials are entered in the app (Connectors screen) and stored encrypted, never in configuration.
 
+Where the non-secret settings live: the publish output contains `appsettings.json` and `appsettings.Development.json` only, and an upgrade replaces the whole app directory (section 8). Do not edit the shipped `appsettings.json`. Put your settings either in the service's environment (section 5) or in an `appsettings.Production.json` whose master copy you keep **outside** the app directory (`/etc/releasemgmt/`, `C:\ReleaseMgmt\config\`) and copy into the app directory at every upgrade. Use the JSON file for `Auth:RoleMap` when a group name or id contains a character other than letters, digits and `_` (an Entra ID group object id has `-`): systemd ignores environment variable names like that, so the mapping would silently be missing and those people would be refused at sign-in.
+
 Minimum for production:
 
 | Key | Purpose |
@@ -63,6 +76,7 @@ Minimum for production:
 | `Auth:DefaultRole` | empty (default): an identity in no mapped group or role is refused at sign-in. `Viewer`: such identities may sign in read-only (with Entra ID's default "assignment required: no", that is every member and guest of the tenant) |
 | `Auth:PasswordResetUrl` | optional; absolute `https` URL of the identity provider's self-service reset page |
 | `Display:TimeZone` | IANA zone for the screens |
+| `Pdf:QuestPdfLicense` | **required for every PDF and the evidence pack** (OI-2, Q-050b): `Community`, `Professional` or `Enterprise`, whichever QuestPDF licence your organisation qualifies for (Community: under USD 1M annual revenue and not a public or government body; D17). There is no default. While it is unset, "Export" answers 422 `ExportLicence` naming this key and no pack can be generated, so set it before the pilot |
 | `AllowedHosts` | **required outside Development.** The host name(s) users type, e.g. `releases.example.com` (`;`-separated; `*.example.com` is allowed). Any other `Host` header is answered 400, so a DNS-rebinding page cannot reach the app under its own name (SEC-E1). Nothing is shipped for it: while it is unset, empty or `*` the app **refuses to start** and logs `AllowedHosts is empty` / `AllowedHosts is "*"` (REOS-68, Q-SEC-E1). Development allows loopback names only (`appsettings.Development.json`) and is not checked |
 | **Key ring protection** (D37, REOS-74) | required outside Development, or the app refuses to start and names these keys. **Linux / macOS:** `DataProtection:Certificate:Path` (a PKCS#12 file with an RSA key, readable only by the service account) and `DataProtection:Certificate:Password` **from the environment** (`DataProtection__Certificate__Password` in the service's environment file, or the OS secret store; a password found in an `appsettings*.json` file stops the start), or `DataProtection:Certificate:Thumbprint` (a certificate with its private key in the service account's CurrentUser `My` store, or LocalMachine `My`). **Windows:** nothing to set: DPAPI with the service account's **user** scope is used (only that account on that machine can read the keys); set a certificate as above instead if you need to restore onto another machine (recommended, see section 7), or `DataProtection:Dpapi:Scope=Machine` if several accounts must run the app. A pilot that accepts plain keys may set `DataProtection:AllowUnprotectedKeys=true`: the app then logs a Warning at every start |
 | `Sync:AllowedHosts` | connector hosts (D38, REOS-75). Unset outside Development = `*.atlassian.net, *.service-now.com` on port 443 only. Setting it **replaces** that list: on-prem Jira Data Center or a ServiceNow custom domain must be listed (`jira.example.com:8443` for a port other than 443; `*.example.com` for subdomains). `*` alone allows any public host and port. Saving a connector on another host answers "not on the allowed list (Sync:AllowedHosts ...)" |
@@ -77,7 +91,42 @@ The first start creates the database, applies the migrations and seeds reference
 
 The app does not host itself as a Windows service or a systemd unit; run the published `ReleaseMgmt.Api` under a service manager. The commands below are standard for each platform; they have not been exercised on real servers yet (section 12).
 
-**Linux (systemd)** - `/etc/systemd/system/releasemgmt.service`:
+**Linux (systemd).** Once, as root: a system account, the directories (app and data apart, so an upgrade never touches the data), then the environment file and the unit.
+
+```
+sudo useradd --system --home-dir /var/lib/releasemgmt --shell /usr/sbin/nologin releasemgmt
+sudo install -d -o root -g root -m 755 /opt/releasemgmt /opt/releasemgmt/app          # copy publish/ here (section 3)
+sudo install -d -o releasemgmt -g releasemgmt -m 750 /var/lib/releasemgmt /var/lib/releasemgmt/backups \
+     /var/lib/releasemgmt/attachments /var/lib/releasemgmt/exports /var/log/releasemgmt
+sudo install -d -o releasemgmt -g releasemgmt -m 700 /var/lib/releasemgmt/keys /var/lib/releasemgmt/secrets
+sudo install -d -o root -g releasemgmt -m 750 /etc/releasemgmt                   # configuration: the service reads it, never writes it
+```
+
+`/etc/releasemgmt/env` (owned by root, mode 600; systemd reads it before dropping to the service account):
+
+```
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://127.0.0.1:6080
+AllowedHosts=releases.example.com
+Db__Path=/var/lib/releasemgmt/releasemgmt.db
+Backup__Directory=/var/lib/releasemgmt/backups
+DataProtection__KeysDirectory=/var/lib/releasemgmt/keys
+Sync__Credentials__Directory=/var/lib/releasemgmt/secrets
+Attachments__Directory=/var/lib/releasemgmt/attachments
+Exports__Directory=/var/lib/releasemgmt/exports
+Logging__File=/var/log/releasemgmt/releasemgmt-.log
+Display__TimeZone=America/Chicago
+Pdf__QuestPdfLicense=Community
+Auth__Oidc__Authority=https://login.microsoftonline.com/<tenant-id>/v2.0
+Auth__Oidc__ClientId=<client-id>
+Auth__Oidc__ClientSecret=<client-secret>
+DataProtection__Certificate__Path=/etc/releasemgmt/keyring.pfx
+DataProtection__Certificate__Password=<the PFX password>
+```
+
+`Auth:RoleMap` goes in `/etc/releasemgmt/appsettings.Production.json`, copied into the app directory (section 4), for example `{"Auth":{"RoleMap":{"<RTE group id>":"RTE","<Release Managers group id>":"ReleaseManager","<Governance group id>":"GovernanceOfficer","<Viewers group id>":"Viewer"}}}`.
+
+`/etc/systemd/system/releasemgmt.service`:
 
 ```
 [Unit]
@@ -90,29 +139,111 @@ ExecStart=/usr/bin/dotnet /opt/releasemgmt/app/ReleaseMgmt.Api.dll
 Restart=on-failure
 User=releasemgmt
 EnvironmentFile=/etc/releasemgmt/env
-# env file holds ASPNETCORE_ENVIRONMENT=Production, ASPNETCORE_URLS, Db__Path=/var/lib/releasemgmt/releasemgmt.db, ...
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-`sudo systemctl enable --now releasemgmt`. The `releasemgmt` user must own the data directories and nobody else should read `keys/` and `secrets/` (mode 700).
+Create the key-ring certificate (below) before the first start, then `sudo systemctl daemon-reload && sudo systemctl enable --now releasemgmt`, and follow the log with `journalctl -u releasemgmt -f` (startup refusals, such as a missing `AllowedHosts`, are printed there). The `releasemgmt` user must own the data directories and nobody else should read `keys/` and `secrets/` (mode 700).
 
 Key-ring certificate on Linux or macOS (once, before the first start; D37). A self-signed certificate is enough, it is only used to encrypt the keys:
 
 ```
-sudo -u releasemgmt openssl req -x509 -newkey rsa:3072 -sha256 -days 3650 -nodes -subj "/CN=ReleaseMgmt key ring" \
+sudo openssl req -x509 -newkey rsa:3072 -sha256 -days 3650 -nodes -subj "/CN=ReleaseMgmt key ring" \
      -keyout /etc/releasemgmt/keyring.key -out /etc/releasemgmt/keyring.crt
-sudo -u releasemgmt openssl pkcs12 -export -inkey /etc/releasemgmt/keyring.key -in /etc/releasemgmt/keyring.crt \
+sudo openssl pkcs12 -export -inkey /etc/releasemgmt/keyring.key -in /etc/releasemgmt/keyring.crt \
      -out /etc/releasemgmt/keyring.pfx            # prompts for the export password
-sudo shred -u /etc/releasemgmt/keyring.key; sudo chmod 600 /etc/releasemgmt/keyring.pfx
+sudo shred -u /etc/releasemgmt/keyring.key
+sudo chown root:releasemgmt /etc/releasemgmt/keyring.pfx; sudo chmod 640 /etc/releasemgmt/keyring.pfx   # the service reads it
 ```
 
-then in the environment file (mode 600, root and `releasemgmt` only): `DataProtection__Certificate__Path=/etc/releasemgmt/keyring.pfx` and `DataProtection__Certificate__Password=<the password>`. Copy `keyring.pfx` and its password to the place you keep recovery secrets (not next to the `keys/` backup). The first start logs `Data Protection key ring protection: certificate CN=ReleaseMgmt key ring (...)`; keys written before this step stay readable, every new key is encrypted.
+then in the environment file (owned by root, mode 600): `DataProtection__Certificate__Path=/etc/releasemgmt/keyring.pfx` and `DataProtection__Certificate__Password=<the password>`. Copy `keyring.pfx` and its password to the place you keep recovery secrets (not next to the `keys/` backup). The first start logs `Data Protection key ring protection: certificate CN=ReleaseMgmt key ring (...)`; keys written before this step stay readable, every new key is encrypted.
 
 **Windows Server** - use a service wrapper (WinSW or NSSM) around `dotnet.exe ReleaseMgmt.Api.dll` (or `ReleaseMgmt.Api.exe`), set the environment variables in the wrapper's configuration, run it as a dedicated service account, and restrict the data directories' ACLs to that account and administrators. The key ring is encrypted with DPAPI for that service account (D37): the account needs a loaded user profile (WinSW and NSSM services running as a real account have one; a virtual or managed service account also works). If you want to be able to restore onto another machine, import a key-ring certificate (with private key) into the service account's `Cert:\CurrentUser\My` store and set `DataProtection:Certificate:Thumbprint` instead; export it (with its private key, password protected) to your recovery-secrets store.
 
-**macOS** - a `launchd` plist in `/Library/LaunchDaemons` running `dotnet ReleaseMgmt.Api.dll` with the environment variables in `EnvironmentVariables`. Developers on a laptop can use `python start.py` instead (see the README); that is not a production mode.
+In an elevated PowerShell, once (the account `CORP\svc-releasemgmt` and the drive letters are examples):
+
+```
+New-Item -ItemType Directory C:\ReleaseMgmt\app, C:\ReleaseMgmt\config, D:\ReleaseMgmt\data\backups, D:\ReleaseMgmt\data\keys, `
+  D:\ReleaseMgmt\data\secrets, D:\ReleaseMgmt\data\attachments, D:\ReleaseMgmt\data\exports, D:\ReleaseMgmt\logs
+icacls D:\ReleaseMgmt /inheritance:r /grant:r "CORP\svc-releasemgmt:(OI)(CI)M" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F"
+icacls C:\ReleaseMgmt\config /inheritance:r /grant:r "CORP\svc-releasemgmt:(OI)(CI)RX" "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F"
+```
+
+Copy `publish\` into `C:\ReleaseMgmt\app`, and WinSW (`WinSW-x64.exe`, renamed `releasemgmt.exe`) with this `releasemgmt.xml` beside it in `C:\ReleaseMgmt\config` (the file holds the OIDC client secret, so the ACL above, Administrators and the service account only, is what protects it):
+
+```
+<service>
+  <id>releasemgmt</id>
+  <name>Release Management</name>
+  <description>Release Management app (ReleaseMgmt.Api)</description>
+  <executable>C:\Program Files\dotnet\dotnet.exe</executable>
+  <arguments>C:\ReleaseMgmt\app\ReleaseMgmt.Api.dll</arguments>
+  <workingdirectory>C:\ReleaseMgmt\app</workingdirectory>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="10 sec"/>
+  <env name="ASPNETCORE_ENVIRONMENT" value="Production"/>
+  <env name="ASPNETCORE_URLS" value="http://127.0.0.1:6080"/>
+  <env name="AllowedHosts" value="releases.example.com"/>
+  <env name="Db__Path" value="D:\ReleaseMgmt\data\releasemgmt.db"/>
+  <env name="Backup__Directory" value="D:\ReleaseMgmt\data\backups"/>
+  <env name="DataProtection__KeysDirectory" value="D:\ReleaseMgmt\data\keys"/>
+  <env name="Sync__Credentials__Directory" value="D:\ReleaseMgmt\data\secrets"/>
+  <env name="Attachments__Directory" value="D:\ReleaseMgmt\data\attachments"/>
+  <env name="Exports__Directory" value="D:\ReleaseMgmt\data\exports"/>
+  <env name="Logging__File" value="D:\ReleaseMgmt\logs\releasemgmt-.log"/>
+  <env name="Display__TimeZone" value="America/Chicago"/>
+  <env name="Pdf__QuestPdfLicense" value="Community"/>
+  <env name="Auth__Oidc__Authority" value="https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0"/>
+  <env name="Auth__Oidc__ClientId" value="&lt;client-id&gt;"/>
+  <env name="Auth__Oidc__ClientSecret" value="&lt;client-secret&gt;"/>
+  <logpath>D:\ReleaseMgmt\logs</logpath>
+  <log mode="roll-by-size"/>
+</service>
+```
+
+Then `C:\ReleaseMgmt\config\releasemgmt.exe install`, set the log-on account (Services console, Log On tab, `CORP\svc-releasemgmt`; Windows grants it "Log on as a service"), and `Start-Service releasemgmt`. Put `Auth:RoleMap` in `C:\ReleaseMgmt\config\appsettings.Production.json` and copy it into `C:\ReleaseMgmt\app` (section 4). The wrapper writes its own log and the app's console output to `D:\ReleaseMgmt\logs` too (`<logpath>`; the service account cannot write to the config folder): look there first when the service will not start.
+
+**macOS** - a `launchd` daemon. Developers on a laptop can use `python start.py` instead (see the README); that is not a production mode. Create a dedicated standard account with no login shell for the service (`_releasemgmt` below; use your Mac administrator's usual method for service accounts), the directories as on Linux under `/usr/local/releasemgmt/` (app) and `/Library/Application Support/ReleaseMgmt/` (data, owned by `_releasemgmt`, `keys` and `secrets` mode 700), and the key-ring certificate with the same `openssl` commands as on Linux, written to `/Library/Application Support/ReleaseMgmt/keyring.pfx` (owner root, group of `_releasemgmt`, mode 640). Then `/Library/LaunchDaemons/com.example.releasemgmt.plist`:
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.example.releasemgmt</string>
+  <key>ProgramArguments</key>
+  <array><string>/usr/local/share/dotnet/dotnet</string><string>/usr/local/releasemgmt/app/ReleaseMgmt.Api.dll</string></array>
+  <key>WorkingDirectory</key><string>/usr/local/releasemgmt/app</string>
+  <key>UserName</key><string>_releasemgmt</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>StandardErrorPath</key><string>/Library/Application Support/ReleaseMgmt/logs/stderr.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ASPNETCORE_ENVIRONMENT</key><string>Production</string>
+    <key>ASPNETCORE_URLS</key><string>http://127.0.0.1:6080</string>
+    <key>AllowedHosts</key><string>releases.example.com</string>
+    <key>Db__Path</key><string>/Library/Application Support/ReleaseMgmt/releasemgmt.db</string>
+    <key>Backup__Directory</key><string>/Library/Application Support/ReleaseMgmt/backups</string>
+    <key>DataProtection__KeysDirectory</key><string>/Library/Application Support/ReleaseMgmt/keys</string>
+    <key>Sync__Credentials__Directory</key><string>/Library/Application Support/ReleaseMgmt/secrets</string>
+    <key>Attachments__Directory</key><string>/Library/Application Support/ReleaseMgmt/attachments</string>
+    <key>Exports__Directory</key><string>/Library/Application Support/ReleaseMgmt/exports</string>
+    <key>Logging__File</key><string>/Library/Application Support/ReleaseMgmt/logs/releasemgmt-.log</string>
+    <key>Display__TimeZone</key><string>America/Chicago</string>
+    <key>Pdf__QuestPdfLicense</key><string>Community</string>
+    <key>Auth__Oidc__Authority</key><string>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</string>
+    <key>Auth__Oidc__ClientId</key><string>&lt;client-id&gt;</string>
+    <key>Auth__Oidc__ClientSecret</key><string>&lt;client-secret&gt;</string>
+    <key>DataProtection__Certificate__Path</key><string>/Library/Application Support/ReleaseMgmt/keyring.pfx</string>
+    <key>DataProtection__Certificate__Password</key><string>&lt;the PFX password&gt;</string>
+  </dict>
+</dict>
+</plist>
+```
+
+The plist holds secrets: `sudo chown root:wheel` it and `sudo chmod 600` it. Start with `sudo launchctl bootstrap system /Library/LaunchDaemons/com.example.releasemgmt.plist`, restart with `sudo launchctl kickstart -k system/com.example.releasemgmt`, stop with `sudo launchctl bootout system/com.example.releasemgmt`. `KeepAlive` restarts the app when it exits with an error, as `Restart=on-failure` does on Linux.
 
 **Reverse proxy and TLS.** Terminate HTTPS at a reverse proxy (or configure a Kestrel certificate). The proxy must pass WebSocket upgrades for `/hub/trains`. **The proxy must not log request paths under `/api/v1/ics/`**: calendar feed tokens are carried in that path. The app itself keeps them out of its own logs.
 
@@ -148,11 +279,22 @@ Assume the machine is lost. On a replacement host with the app installed and con
 
 Recovery point: at most 15 minutes of changes are lost (the backup interval). Recovery time: measured by the timed drill in [DR_DRILL.md](DR_DRILL.md) (target: under 30 minutes for the whole procedure). Measured on a 4-core shared container: 3.6 s at 200 trains / 100k audit rows, 13.5 s for a 360 MB database plus 1 GB of attachments. Not measured on the pilot host: repeat it there. The drill also showed that nothing in the app backs up `keys/`, `secrets/` or `attachments/`; copy the database first, then attachments, and re-copy keys and secrets after any rotation or credential change.
 
+The drill times only the part a script can do: from an empty host with the files already on it to the first healthy `/healthz` (Q-052d). The 30-minute target is for the whole procedure, so budget the parts around it too, and write your own measured figures into this table after the drill on the pilot host:
+
+| Part of the restore | Budget | What makes it fit |
+|---|---|---|
+| Someone decides to restore and the operator starts | 5 min | an on-call rota that names who decides |
+| A replacement host with the .NET runtime and the app installed (section 2, 3, 5) | 10 min | a standby host or VM image prepared **in advance**; building a server from nothing does not fit in 30 minutes |
+| Fetch the newest backup and the `keys/`, `secrets/`, `attachments/` copies from off-box storage | 5 min | storage reachable from the replacement host; the time grows with the attachments' size, so measure it |
+| Restore command, copies, start (the drill) | 1 min | measured: 3.6 s to 13.5 s |
+| Checks in step 4 and 5 | 5 min | the sign-in account and the attachment to spot-check chosen beforehand |
+| **Total** | **26 min** | |
+
 ## 8. Upgrading
 
 1. Announce a short window; take a fresh backup (copy the newest file from `Backup:Directory`, or trigger by restarting is not needed) and copy `keys/` and `secrets/`.
 2. Stop the service; keep the previous `publish` directory.
-3. Replace the app directory with the new `publish` output (the data directories are elsewhere, so they are untouched).
+3. Replace the app directory with the new `publish` output (the data directories are elsewhere, so they are untouched), and copy your `appsettings.Production.json` back into it from its master copy if you use one (section 4).
 4. If the release notes list a script in `db/upgrades/` that is newer than the database (Q-SEC-B8m), run each such script, in number order, with the
    service still stopped: `sqlite3 <Database path> < db/upgrades/NNN_name.sql`. Each script is one transaction, refuses to run against the wrong
    version, and ends by printing `PRAGMA foreign_key_check` (expect no rows) and `PRAGMA integrity_check` (expect `ok`). Anything else: restore the
@@ -190,11 +332,11 @@ If a credential leaks: revoke it at the source first, then replace it as above. 
 - Notification failures, webhook failures (`Webhook/DeliveryFailed`), export failures (`Export/ExportFailed`, also when a file past its retention cannot be deleted) and backup failures are all alerts, never silent.
 - At every start the log names the key-ring protection (`Data Protection key ring protection: ...`), or logs a **Warning** while `DataProtection:AllowUnprotectedKeys=true` is in use: fix that before the pilot ends.
 - Security events are logged under the category `ReleaseMgmt.Security`: sign-in (who, role, method), sign-out, access denied (Warning: who, role, method, path) and sessions ended because the user was deactivated. A burst of `Access denied` lines from one user is worth a look.
-- Logs: `logs/`, daily files. Request lines for the ICS feeds are kept out; connector URLs and webhook URLs are never logged.
+- Logs: the `Logging:File` path, one file a day (default `logs/` under the working directory; section 5 sets `/var/log/releasemgmt/`, `D:\ReleaseMgmt\logs\` or `/Library/Application Support/ReleaseMgmt/logs/`). Request lines for the ICS feeds are kept out; connector URLs and webhook URLs are never logged.
 
 ## 11. Pilot checklist (human-led, with the pilot RTE)
 
-Not automatable; tick these with the pilot RTE and the Governance Officer for one real train:
+The pilot itself is run with people, step by step, from [PILOT_GUIDE.md](PILOT_GUIDE.md): how a team's spreadsheet maps onto the screens, who does what, the Governance Officer's acceptance checklist for the evidence pack, and the sign-off record. The same path is rehearsed by an automated test on every CI run (`PilotDressRehearsalTests`, section 12), so a failure in the software shows up before the pilot does. Tick these with the pilot RTE and the Governance Officer for one real train:
 
 - [ ] Users sign in with the organisation identity; roles are correct (RTE, Release Manager, Governance Officer, Viewer).
 - [ ] Train created with its products, gates and owners; gate dates match the calendar.
@@ -210,7 +352,7 @@ Not automatable; tick these with the pilot RTE and the Governance Officer for on
 
 ## 12. Verified and not verified
 
-Verified by automated tests in this repository: the backup and restore code paths (`BackupTests`, green on Windows and macOS in CI), credentials never stored in the database, the health endpoint, configuration keys listed above (as read by the code), and the timed restore drill (see DR_DRILL.md).
+Verified by automated tests in this repository: the pilot's whole path for one release through the HTTP API with If-Match required (`PilotDressRehearsalTests`, REOS-54: template approval, train from template, change record, runbook, pasted checklists, four gates with segregation of duties, rehearsal and rollback attestation, Go/No-Go with a condition, live run, three messages, completion, hypercare, PIR, and the evidence pack and ZIP verified by SHA-256), the backup and restore code paths (`BackupTests`, green on Windows and macOS in CI), credentials never stored in the database, the health endpoint, configuration keys listed above (as read by the code), and the timed restore drill (see DR_DRILL.md).
 
 Since 2026-09-30 also: export retention on a fake clock, the encrypted webhook addresses and the conversion of an older database, the key-ring certificate (a generated test certificate; on Windows the same test checks DPAPI), the connector host default and NAT64 prefixes. Run here on Linux; the same tests run on the Windows and macOS CI runners.
 

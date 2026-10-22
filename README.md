@@ -19,6 +19,8 @@ Scoping is complete. This folder is the seed of the repository: drop it in as th
 | `tests/reference/fixtures/r26-24-runbook.csv`, `r26-24-scenario.json` | M3's acceptance scenario: the runbook plan in CSV import format, plus setup, clock, actuals and the exact expected forecast |
 | `docs/research/` | The four research reports behind the scope |
 | `docs/QUESTIONS.md` | Where Claude Code parks questions instead of guessing |
+| `docs/RUNBOOK_OPERATIONS.md` | Installing (Windows Server, Linux, macOS), configuring, backing up, restoring and upgrading the app |
+| `docs/PILOT_GUIDE.md` | Running the M8 pilot: one real release without a spreadsheet, and the Governance Officer's evidence-pack acceptance |
 
 ## Before the first session
 1. Decide **open item 1** in `docs/DECISIONS.md`: is this the Internal Release Management Platform you already scoped? If yes, reconcile that decision record with this one first.

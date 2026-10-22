@@ -117,6 +117,7 @@ public class EndpointRoleMatrixTests
         GET /api/v1/templates/library-options                    Read
         GET /api/v1/trains                                       Read
         GET /api/v1/trains/{id}                                  Read
+        GET /api/v1/trains/{id}/advisories                       Read
         GET /api/v1/trains/{id}/attachments                      Read
         GET /api/v1/trains/{id}/attachments/manifest             Read
         GET /api/v1/trains/{id}/change-record                    Read

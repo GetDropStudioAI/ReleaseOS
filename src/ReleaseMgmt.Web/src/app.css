@@ -288,3 +288,6 @@ h2.cap, h3.cap, .section-head h2, .stream h2, .an-title, .cal-caption, .runtable
 .timeline text.tl-ms-glyph.ok, .timeline tspan.ok { fill: var(--ok); } .timeline text.tl-ms-glyph.bad, .timeline tspan.bad { fill: var(--bad); } .timeline tspan.muted { fill: var(--secondary); }
 .timeline tspan.tl-day { font-size: 11px; fill: var(--secondary); }
 table.milestones .ms-glyph { font-size: 11px; }
+/* REOS-86: Complete / Abort inline forms under the header line; REOS-88: the Runbook's contingency line under its heading */
+.train-close { margin: 6px 0 12px; } .train-close [role="radiogroup"] { margin-left: 6px; }
+p.contingency { margin: 2px 0 10px; }

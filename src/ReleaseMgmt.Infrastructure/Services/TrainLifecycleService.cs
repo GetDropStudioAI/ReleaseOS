@@ -105,7 +105,12 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
         ChangeStatusAsync(trainId, to, actor, expectedVersion, closeCode: null, notes: null, "Advance", ct);
 
     public Task<ServiceResult<ReleaseTrains>> AbortAsync(string trainId, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
-        ChangeStatusAsync(trainId, "Aborted", actor, expectedVersion, null, null, "Abort", ct);
+        AbortAsync(trainId, null, actor, expectedVersion, ct);
+
+    /// <summary>Abort with an optional reason (REOS-86), kept in the audit row since the train has no column for it. Aborting an Executing train
+    /// also requires its PIR (REOS-87, <see cref="PirDue"/>), created in the same transaction when the train has none.</summary>
+    public Task<ServiceResult<ReleaseTrains>> AbortAsync(string trainId, string? reason, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
+        ChangeStatusAsync(trainId, "Aborted", actor, expectedVersion, null, string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(), "Abort", ct);
 
     public Task<ServiceResult<ReleaseTrains>> CompleteAsync(string trainId, string closeCode, string? notes, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
         ChangeStatusAsync(trainId, "Complete", actor, expectedVersion, closeCode, notes, "Complete", ct);
@@ -120,12 +125,16 @@ public sealed class TrainLifecycleService(IDbContextFactory<ReleaseDbContext> db
             if (failures.Count > 0) return ServiceResult<ReleaseTrains>.Fail(failures);
 
             var before = new { status = t.CurrentStatus, version = t.Version };
+            var wasExecuting = t.CurrentStatus == "Executing";
             var now = Now;
             if (t.CurrentStatus == "Gated" && to == "Executing") t.ActualStartAt = now;
             if (to == "Complete") { t.CloseCode = closeCode; t.CloseNotes = notes; t.ActualEndAt = now; }
             t.CurrentStatus = to;
             Stamp(t, actor, now);
-            Audit(db, actor, t.Id, "ReleaseTrain", t.Id, action, before, new { status = t.CurrentStatus, version = t.Version, closeCode });
+            object after = to == "Aborted" ? new { status = t.CurrentStatus, version = t.Version, closeCode, reason = notes } : new { status = t.CurrentStatus, version = t.Version, closeCode };
+            Audit(db, actor, t.Id, "ReleaseTrain", t.Id, action, before, after);
+            if (to == "Aborted" && wasExecuting && await PirDue.CreateIfMissingAsync(db, t.Id, PirDue.Aborted, ct) is { } pir)
+                Audit(db, actor, t.Id, "PostImplementationReview", pir.Id, "AutoRequired", null, new { reason = pir.RequiredReason });
             await db.SaveChangesAsync(ct);
             await db.Entry(t).ReloadAsync(ct);
             return ServiceResult<ReleaseTrains>.Ok(t);

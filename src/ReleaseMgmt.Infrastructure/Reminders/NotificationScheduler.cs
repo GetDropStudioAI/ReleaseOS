@@ -16,7 +16,7 @@ namespace ReleaseMgmt.Infrastructure.Reminders;
 ///
 /// Rules: gate entered InProgress (owner) / 50% of entry-to-DueOn (owner) / overdue level 1 (Release Managers) / +1 business day level 2 (RTEs) /
 /// Live step not started 5 min (owner + RTEs, level 1) and 30 min (Release Managers, level 2) after its plan / Go/No-Go condition 1 h before expiry (owner) /
-/// open condition past expiry (owner + Release Managers).
+/// open condition past expiry (owner + Release Managers) / PIR required by a rollback or an abort and still not held after its due day (Release Managers, REOS-87).
 ///
 /// Idempotence: a notice is identified by (recipient, Kind, EntityType, EntityId, EscalationLevel), and the Notifications row itself is the record
 /// that it was sent, so a scan never repeats one, a restart forgets nothing, and a recipient added later still gets theirs. Team webhooks go out with
@@ -64,7 +64,7 @@ public sealed class NotificationScheduler : BackgroundService
         var fired = 0;
         var rules = new (string Name, Func<CancellationToken, Task<int>> Run)[]
         {
-            ("gates", GateRulesAsync), ("steps", StepRulesAsync), ("conditions", ConditionRulesAsync),
+            ("gates", GateRulesAsync), ("steps", StepRulesAsync), ("conditions", ConditionRulesAsync), ("reviews", ReviewRulesAsync),
         };
         foreach (var (name, run) in rules)
         {
@@ -197,6 +197,28 @@ public sealed class NotificationScheduler : BackgroundService
                 fired += await FireAsync(new("ConditionExpiring", "GoNoGoCondition", c.Id, 0,
                     $"Go/No-Go condition '{c.Text}' on {c.TrainTitle} expires at {c.ExpiresAt:yyyy-MM-dd HH:mm}Z (within the hour)", [c.OwnerUserId], null, c.TrainId), ct);
             }
+        }
+        return fired;
+    }
+
+    // ---- reviews after a rollback or an abort (REOS-87) -----------------------------------------------------------------------------------
+    private async Task<int> ReviewRulesAsync(CancellationToken ct)
+    {
+        await using var db = await _dbf.CreateDbContextAsync(ct);
+        var rows = await (from p in db.Set<PostImplementationReviews>()
+                          join t in db.Set<ReleaseTrains>() on p.ReleaseTrainId equals t.Id
+                          where (p.Status == "Required" || p.Status == "Scheduled") && (p.RequiredReason == PirDue.RollbackPerformed || p.RequiredReason == PirDue.Aborted) && t.ArchivedAt == null
+                          select new { Pir = p, TrainTitle = t.Title }).ToListAsync(ct);
+        if (rows.Count == 0) return 0;
+        var due = await PirDue.DueDatesAsync(db, [.. rows.Select(r => r.Pir)], Clock, PirDue.BusinessDaysFrom(_config), ct);
+        var today = Clock.LocalDate(Now);
+        var fired = 0;
+        foreach (var r in rows)
+        {
+            if (!due.TryGetValue(r.Pir.Id, out var d) || !PirDue.IsOverdue(r.Pir, d, today)) continue;
+            var why = r.Pir.RequiredReason == PirDue.Aborted ? "the train was aborted" : "a live run was rolled back";
+            fired += await FireAsync(new("PirOverdue", "PostImplementationReview", r.Pir.Id, 1,
+                $"The post-implementation review for {r.TrainTitle} ({why}) was due {d:yyyy-MM-dd} and is not held yet", await RoleRecipientsAsync(db, Roles.ReleaseManager, ct), null, r.Pir.ReleaseTrainId), ct);
         }
         return fired;
     }

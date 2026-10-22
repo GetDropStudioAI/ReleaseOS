@@ -140,6 +140,9 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
             var before = new { run.Version };
             run.EndedAt = Now; run.Outcome = outcome; run.Version++;
             Audit(db, actor, run.ReleaseTrainId, "RunbookRun", run.Id, "End", before, new { outcome, run.Version, run.Mode });
+            // REOS-87: a Live run rolled back requires the train's PIR, due within Pir:DueBusinessDays (PirDue); rehearsals never do.
+            if (outcome == "RolledBack" && run.Mode == "Live" && await PirDue.CreateIfMissingAsync(db, run.ReleaseTrainId, PirDue.RollbackPerformed, ct) is { } pir)
+                Audit(db, actor, run.ReleaseTrainId, "PostImplementationReview", pir.Id, "AutoRequired", null, new { reason = pir.RequiredReason });
             await db.SaveChangesAsync(ct);
             return ServiceResult<RunbookRuns>.Ok(run);
         }, ct);

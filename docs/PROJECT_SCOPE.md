@@ -65,7 +65,7 @@ Legal moves only: Planning→Gated, Planning→Aborted, Gated→Planning, Gated�
 | Planning → Gated | Every gate with `RequiredBeforeStatus='Gated'` is Certified or Waived |
 | Gated → Executing | Every gate required before Executing is Certified/Waived; latest Go/No-Go is Go or GoWithConditions; a Baseline exists; if RiskTier High/VeryHigh, `RollbackRehearsedAt` is set |
 | Gated → Executing (cont.) | no open Go/No-Go condition past its `ExpiresAt` (D29) |
-| Executing → Complete | every gate with `RequiredBeforeStatus='Complete'` is Certified/Waived; `CloseCode` set; if not Successful a PIR row is auto-created |
+| Executing → Complete | every gate with `RequiredBeforeStatus='Complete'` is Certified/Waived; `CloseCode` set; if not Successful a PIR row is auto-created. A Live run ended RolledBack, or an abort while Executing, also requires the PIR, due within `Pir:DueBusinessDays` (REOS-87, Q-0870) |
 
 ### Gate state machine (D26, trigger `trg_Gate_Transition`)
 Pending → InProgress → Certified | Failed | Waived. Failed → InProgress on reopen. Certified → InProgress on reopen, and automatically when a task is reopened or added. Certified → Failed is illegal (reopen first); Waived is terminal. Anything else: 422 `IllegalGateTransition`.
@@ -75,7 +75,7 @@ Certify requires: all tasks done; all earlier gates Certified/Waived; for Compli
 ### Runbook execution
 Plan (`RunbookSteps`) and actuals (`StepExecutions` per `RunbookRuns`) are separate. Live runs use absolute planned times; Rehearsal runs shift all planned times by (run start − earliest planned start of non-Rollback steps) (D28). Each train has exactly one `DeploymentWindows` row (D25). At most one open Live run per train; a Live run needs the train Executing; a step cannot start until dependencies are Done/Skipped in the same run; Skipped needs a note; a Deploy-section step cannot start inside a matching freeze window without an unexpired, second-person override.
 
-**Forecast** (computed server-side on every step event and pushed): for each not-yet-done step, forecast start = max(planned start, forecast end of all dependencies, now for the running step's successors); forecast end = start + planned duration (running step: actual start + planned duration, or now if already over). **Rollback deadline** = window end − total planned duration of Rollback-section steps. Alert when forecast finish > rollback deadline. **Late escalation:** warning when a step starts ≥5 min after plan (notify step owner + RTE), critical at ≥30 min (notify Release Manager).
+**Forecast** (computed server-side on every step event and pushed): for each not-yet-done step, forecast start = max(planned start, forecast end of all dependencies, now for the running step's successors); forecast end = start + planned duration (running step: actual start + planned duration, or now if already over). **Rollback deadline** = window end − total planned duration of Rollback-section steps. Alert when forecast finish > rollback deadline. Before any run, the same terms give the plan's **contingency** (spare time before the deadline ÷ planned execution time, advisory, minimum `Runbook:MinContingencyPct`; REOS-88, Q-0880); open trains whose windows overlap and share a CI or product are warned of on both (REOS-85, Q-0850; a warning, not a cross-train dependency). **Late escalation:** warning when a step starts ≥5 min after plan (notify step owner + RTE), critical at ≥30 min (notify Release Manager).
 
 ## 4. Schema
 

@@ -1,5 +1,7 @@
 # Gap analysis: "Comprehensive Guide to Release Management" vs ReleaseOS
 
+> **Status 2026-10-22:** the owner picked P0, P1, P3 (as P3a) and P4; they are built as REOS-86, REOS-88, REOS-87 and REOS-85 (docs/QUESTIONS.md Q-0850 to Q-0880). P2 and P5–P10 remain proposals.
+
 Baseline: `main@e90b24d` (2026-10-21). Read-only analysis; nothing in the repo was changed.
 Guide: "Comprehensive Guide to Release Management" (supplied by the product owner, 2026-10-21; not checked in) (§1 fundamentals, §2 runbook template, §3 ticket ownership, §4 tiers, §5 Option A).
 

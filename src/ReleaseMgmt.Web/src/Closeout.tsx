@@ -40,7 +40,7 @@ export function Closeout({ train, canPlan, refreshKey, onChanged }: { train: Tra
   return (
     <>
       {train.status !== 'Aborted' && <RollbackSection {...common} canPlan={canPlan} />}
-      {(train.status === 'Complete') && <PirSection {...common} canCloseout={canCloseout} meId={me?.id ?? null} />}
+      {(train.status === 'Complete' || train.status === 'Aborted' || train.status === 'Executing') && <PirSection {...common} canCloseout={canCloseout} meId={me?.id ?? null} />}
       {(train.status === 'Gated' || train.status === 'Executing' || train.status === 'Complete') && <IssuesSection {...common} canCloseout={canCloseout} canAccept={canAccept} canPlan={canPlan} />}
     </>
   )
@@ -64,6 +64,14 @@ function useDo(onChanged: () => void) {
   return { err, run, setErr, pending }
 }
 const later = (f: () => void) => requestAnimationFrame(f)
+
+/** Why the PIR is required, in words (RequiredReason is stored as a code). */
+export function pirReason(reason: string) {
+  if (reason === 'Manual') return 'started manually'
+  if (reason === 'RollbackPerformed') return 'a live run was rolled back'
+  if (reason === 'Aborted') return 'the train was aborted while Executing'
+  return reason.replace('CloseCode=', 'close code ')
+}
 
 // ---- rollback attestation --------------------------------------------------------------------------------------------
 function RollbackSection({ train, refreshKey, onChanged, name, canPlan }: SectionProps & { canPlan: boolean }) {
@@ -119,12 +127,13 @@ function PirSection({ train, refreshKey, onChanged, name, owners, canCloseout, m
   useEffect(() => { getPir(train.id).then(setD).catch(e => setErr(errMsg(e))) }, [train.id, refreshKey, setErr])
   if (!d) return <Errors err={err} />
   const pir = d.pir
+  if (!pir && train.status === 'Executing') return null   // an Executing train has a PIR only once a live run was rolled back (REOS-87)
   if (!pir) {
     return (
       <section aria-label="Post-implementation review">
         <div className="section-head"><h2 className="cap dark">Post-implementation review</h2>
           <span className="muted">{canCloseout && <button type="button" className="text" disabled={!!pending} onClick={() => run('Starting…', () => createPir(train.id), undefined, 'Post-implementation review started.')}>{pending ?? 'Start a PIR'}</button>}</span></div>
-        <p className="muted">No PIR. One is created automatically when a train closes with issues or unsuccessfully.</p>
+        <p className="muted">No PIR. One is created automatically when a train closes with issues or unsuccessfully, when a live run is rolled back, or when an Executing train is aborted.</p>
         <Errors err={err} />
       </section>)
   }
@@ -143,7 +152,10 @@ function PirSection({ train, refreshKey, onChanged, name, owners, canCloseout, m
               question={openActions > 0 ? `Close the review with ${plural(openActions, 'action')} still open?` : 'Close the review? It cannot be reopened.'}
               onConfirm={() => run('Closing…', () => pirAction(train.id, 'close', pir.version), undefined, 'PIR closed.')} />}
           </>)}</span></div>
-      <p><span className={s.cls}>{s.g} {s.word}</span> <span className="muted">· {pir.requiredReason === 'Manual' ? 'started manually' : pir.requiredReason.replace('CloseCode=', 'close code ')}{pir.heldAt ? ` · held ${fmtDayTime(pir.heldAt)}` : ''}</span>
+      <p><span className={s.cls}>{s.g} {s.word}</span> <span className="muted">· {pirReason(pir.requiredReason)}{pir.heldAt ? ` · held ${fmtDayTime(pir.heldAt)}` : ''}</span>
+        {d.dueOn && !closed && pir.status !== 'Held' && (d.overdue
+          ? <span className="bad"> · <span aria-hidden="true">▲ </span>overdue, was due {day(d.dueOn)}</span>
+          : <span className="muted"> · due <span className="mono">{day(d.dueOn)}</span></span>)}
         {canCloseout && pir.status === 'Held' && openActions > 0 && <span className="warn"> · <span aria-hidden="true">▲ </span>{plural(openActions, 'action')} still open</span>}</p>
       {summary !== null ? (
         <div className="inline-form stack">

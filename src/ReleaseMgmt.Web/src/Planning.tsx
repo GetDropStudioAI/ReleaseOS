@@ -11,7 +11,8 @@ import { day, errMsg, tMinus } from './format'
 import { fmtDay, fmtDayTime, fmtHM, utcToZonedInput, zonedInputToUtc, zoneAbbr } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
-import type { ApiError } from './api'
+import type { ApiError, WindowCollision } from './api'
+import { collisionText } from './Advisories'
 import { StepInspector } from './Runbook'
 import { Evidence } from './Evidence'
 import { WaiversPanel } from './Freezes'
@@ -36,7 +37,7 @@ export function windowText(w: WindowRow) {
   return same ? `${fmtHM(w.startsAt)}–${fmtHM(w.endsAt)} ${zoneAbbr(w.endsAt)}` : `${fmtDayTime(w.startsAt)} – ${fmtDayTime(w.endsAt)} ${zoneAbbr(w.endsAt)}`
 }
 
-export function WindowLine({ trainId, canEdit, refreshKey, onChanged }: { trainId: string; canEdit: boolean; refreshKey: number; onChanged: () => void }) {
+export function WindowLine({ trainId, canEdit, refreshKey, onChanged, collisions }: { trainId: string; canEdit: boolean; refreshKey: number; onChanged: () => void; collisions?: WindowCollision[] }) {
   const [win, setWin] = useState<WindowRow | null | undefined>(undefined)
   const [draft, setDraft] = useDraft<{ start: string; end: string }>(`window:${trainId}`)   // survives a closed tab (session engine)
   const [err, setErr] = useState<string | null>(null)
@@ -61,6 +62,7 @@ export function WindowLine({ trainId, canEdit, refreshKey, onChanged }: { trainI
   if (!editing) return (
     <span>Window {win ? <span className="mono">{windowText(win)}</span> : <span className="muted">not set</span>}
       {canEdit && <> <button ref={editBtn} type="button" className="text" onClick={open}>{win ? 'Edit window' : 'Set window'}</button></>}
+      {win && collisions?.map(c => <span key={c.otherTrainId} className="warn"> · <span aria-hidden="true">▲ </span>{collisionText(c)}</span>)}
       {err && <span className="bad" role="alert"> ✗ {err}</span>}</span>
   )
   return (

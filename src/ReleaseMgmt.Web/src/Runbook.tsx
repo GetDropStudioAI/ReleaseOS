@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { createStep, getOwners, getSteps, patchStep, SECTIONS, setStepDependencies, type Owner, type StepRow } from './api'
+import { createStep, getOwners, getSteps, patchStep, SECTIONS, setStepDependencies, type ContingencyView, type Owner, type StepRow } from './api'
+import { ContingencyLine } from './Advisories'
 import { errMsg } from './format'
 import { fmtDay, fmtHM, utcToZonedInput, zonedInputToUtc } from './time'
 import { Conflict, isConflict } from './Conflict'
@@ -15,7 +16,7 @@ type Field = 'title' | 'owner' | 'start' | 'minutes'
 const planned = (s: StepRow) => `${fmtDay(s.plannedStartAt)} ${hm(s.plannedStartAt)}–${hm(s.plannedEndAt)} · ${s.plannedDurationMin} min`
 
 // ---- The runbook: steps grouped by section, in planned order ---------------------------------------------------------------------------
-export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onChanged }: { trainId: string; canPlan: boolean; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void }) {
+export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onChanged, contingency = null }: { trainId: string; canPlan: boolean; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void; contingency?: ContingencyView | null }) {
   const [steps, setSteps] = useState<StepRow[] | null>(null)
   const [owners, setOwners] = useState<Owner[]>([])
   const [draft, setDraft] = useDraft<{ title: string; section: string; ownerId: string; start: string; minutes: string }>(`addStep:${trainId}`)   // survives a closed tab
@@ -57,6 +58,7 @@ export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onC
     <section aria-label="Runbook">
       <div className="section-head"><h2 className="cap dark">Runbook</h2>
         <span className="muted"><span className="mono label">{steps.length}</span> {steps.length === 1 ? 'step' : 'steps'}{canPlan && <> · <button ref={addBtn} type="button" className="text" aria-expanded={adding} onClick={toggleForm}>Add step</button></>}</span></div>
+      {contingency && steps.length > 0 && <ContingencyLine c={contingency} />}
       {adding && (
         <form onSubmit={add}><p className="inline-form">
           <label>Step <input ref={titleRef} className="line wide" value={d.title} onChange={e => setDraft({ ...d, ownerId, title: e.target.value })} placeholder="What happens" {...field('title')} /></label>{' '}

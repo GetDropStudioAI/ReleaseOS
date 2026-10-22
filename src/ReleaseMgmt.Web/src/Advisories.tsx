@@ -1,0 +1,34 @@
+import type { ContingencyView, WindowCollision } from './api'
+import { dur } from './format'
+import { fmtDayTime, fmtHM, zoneAbbr } from './time'
+
+/** What a collision shares, in words: "CI ledger-db, Payments API". */
+export const sharedText = (c: WindowCollision) => [...c.sharedCis.map(x => `CI ${x}`), ...c.sharedProducts].join(', ')
+export const collisionText = (c: WindowCollision) => `overlaps ${c.otherTitle} ${fmtHM(c.otherStartsAt)}–${fmtHM(c.otherEndsAt)} ${zoneAbbr(c.otherStartsAt)} · ${sharedText(c)}`
+
+/**
+ * REOS-88: the Runbook's contingency line. Spare time before the rollback deadline over the planned execution time, against the minimum
+ * (Runbook:MinContingencyPct). Advisory: it never disables an action. Status is a glyph, a word and colour (UI rule).
+ */
+export function ContingencyLine({ c }: { c: ContingencyView }) {
+  if (c.state === 'unknown') return <p className="muted contingency">Contingency not computed: {c.reason}.</p>
+  const details = <span className="muted"> · planned <span className="mono">{dur(c.plannedMin!)}</span> · rollback <span className="mono">{dur(c.rollbackMin)}</span> · rollback deadline <span className="mono">{fmtDayTime(c.rollbackDeadline!)} {zoneAbbr(c.rollbackDeadline!)}</span> · minimum {c.minPercent}%</span>
+  if (c.state === 'over') return <p className="contingency"><span className="bad">✗ The plan ends <span className="mono">{dur(-c.spareMin!)}</span> after the rollback deadline</span>{details}</p>
+  return (
+    <p className="contingency">
+      {c.state === 'low'
+        ? <span className="warn">▲ Contingency {c.percent}%, below the {c.minPercent}% minimum</span>
+        : <span className="ok">✓ Contingency {c.percent}%</span>}
+      <span className="muted"> · <span className="mono">{dur(c.spareMin!)}</span> spare</span>{details}
+    </p>)
+}
+
+/** The same advisories as readiness-line items, after the guards: ▲ in warning colour and the word "advisory", so they never read as blockers. */
+export function AdvisoryItems({ contingency, collisions }: { contingency: ContingencyView | null; collisions: WindowCollision[] }) {
+  return (
+    <>
+      {contingency?.state === 'low' && <span><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Contingency {contingency.percent}%, below {contingency.minPercent}% <span className="muted">(advisory)</span></span>}
+      {contingency?.state === 'over' && <span><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> The plan ends {dur(-contingency.spareMin!)} after the rollback deadline <span className="muted">(advisory)</span></span>}
+      {collisions.map(c => <span key={c.otherTrainId}><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Window {collisionText(c)} <span className="muted">(advisory)</span></span>)}
+    </>)
+}

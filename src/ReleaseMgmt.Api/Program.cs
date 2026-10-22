@@ -93,7 +93,7 @@ builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus sche
 builder.Services.AddSyncEngine(config, builder.Environment.IsDevelopment());   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
 // REOS-74 (Q-052e): the key ring is encrypted at rest (certificate, or DPAPI on Windows); outside Development an unprotected ring refuses to start unless opted in.
 var keyRing = KeyRingEncryption.Configure(builder.Services.AddDataProtection(), config, builder.Environment);
-builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
+builder.Services.AddSingleton<AdvisoryService>(); builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
 builder.Services.AddPdfExports(config, builder.Environment.IsDevelopment());   // REOS-50: PDF export jobs + worker (QuestPDF)
 builder.Services.AddProxyHeaders(config);   // SEC-E5: X-Forwarded-For/Proto from trusted proxies only
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();

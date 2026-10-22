@@ -91,6 +91,32 @@ public sealed class NotificationSchedulerTests(TriggerSuiteFixture fx) : IClassF
         return e;
     }
 
+    // ---- reviews after a rollback or an abort (REOS-87) -------------------------------------------------------------------------------
+    [Fact]
+    public async Task A_review_required_by_an_abort_tells_the_Release_Managers_once_after_its_due_day_and_never_once_held()
+    {
+        var e = NewEnv("2026-10-30T15:00:00Z", withGate: false);   // Friday
+        e.Sql(@"UPDATE ReleaseTrains SET CurrentStatus='Aborted' WHERE Id='t1';
+                INSERT INTO PostImplementationReviews(Id,ReleaseTrainId,RequiredReason,Status) VALUES('pir1','t1','Aborted','Required')");
+        e.Sql("INSERT INTO AuditEvents(OccurredAt,ActorUserId,ReleaseTrainId,EntityType,EntityId,Action) VALUES('2026-10-30T15:00:00Z','rte','t1','PostImplementationReview','pir1','AutoRequired')");
+        var s = e.Scheduler();
+        Assert.Equal(0, await s.ScanAsync());          // due Monday 2 Nov
+        e.At("2026-11-02T23:59:00Z");
+        Assert.Equal(0, await s.ScanAsync());          // still Monday
+        e.At("2026-11-03T00:01:00Z");
+        Assert.Equal(1, await s.ScanAsync());
+        Assert.Equal(["rm"], e.Who("PirOverdue", "pir1", 1));
+        Assert.Contains("was due 2026-11-02", (string)e.Query("SELECT Message FROM Notifications WHERE Kind='PirOverdue'")[0][0]!);
+        Assert.Equal(0, await s.ScanAsync());          // once
+
+        var f = NewEnv("2026-11-10T12:00:00Z", withGate: false);
+        f.Sql(@"INSERT INTO PostImplementationReviews(Id,ReleaseTrainId,RequiredReason,Status) VALUES('pir1','t1','RollbackPerformed','Held')");
+        f.Sql("INSERT INTO AuditEvents(OccurredAt,ActorUserId,ReleaseTrainId,EntityType,EntityId,Action) VALUES('2026-10-30T15:00:00Z','rte','t1','PostImplementationReview','pir1','AutoRequired')");
+        Assert.Equal(0, await f.Scheduler().ScanAsync());   // held: nothing to chase
+        f.Sql("UPDATE PostImplementationReviews SET Status='Required', RequiredReason='CloseCode=Unsuccessful'");
+        Assert.Equal(0, await f.Scheduler().ScanAsync());   // a close-code PIR has no due date
+    }
+
     // ---- gate entered ---------------------------------------------------------------------------------------------------------------
     [Fact]
     public async Task Gate_in_progress_notifies_its_owner_once_however_often_the_scan_runs()

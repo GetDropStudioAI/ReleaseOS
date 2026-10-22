@@ -12,7 +12,9 @@ import { ExportsPanel } from './ExportsPanel'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { scrollAndFocus } from './focus'
 import { MilestonesSection, milestoneState, useMilestones } from './Milestones'
-import { advanceTrain, getFreezesAhead, getReadiness, getStream, getTrain, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
+import { TrainCloseForm, type Closing } from './TrainClose'
+import { AdvisoryItems } from './Advisories'
+import { advanceTrain, getAdvisories, getFreezesAhead, getReadiness, getStream, getTrain, type Advisories, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
 
 // Aborted trains keep a group of their own (shown only when the list has any), so a train never silently vanishes from the Stream (UX review 26).
 const GROUPS: { label: string; status: string; hideEmpty?: boolean }[] = [
@@ -75,10 +77,12 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   const [t, setT] = useState<TrainDetail | null>(null)
   const [r, setR] = useState<Readiness | null>(null)
   const [rErr, setRErr] = useState<string | null>(null)
+  const [adv, setAdv] = useState<Advisories | null>(null)   // REOS-85/88: contingency and window collisions, shown beside readiness, never as guards
   const [tick, setTick] = useState(0)
   const [err, setErr] = useState<string | null>(null)
   const whyId = useId()
   const [busy, setBusy] = useState(false)
+  const [closing, setClosing] = useState<Closing | null>(null)   // REOS-86: the Complete or Abort inline form under the header line
   const [chosenGate, setChosenGate] = useState<string | null>(null)
   const [goDraft, setGoDraft] = useDraft<GoNoGoDraft>(goNoGoKey(id))   // the header button and the Go/No-Go section share one draft
   const [comms, setComms] = useDraft<CommsDraft>(commsKey(id))   // REOS-45: App swaps the right drawer to the Comms drawer while this is open
@@ -86,6 +90,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   useEffect(() => {
     let live = true
     setErr(null); setRErr(null)
+    getAdvisories(id).then(a => { if (live) setAdv(a) }).catch(() => { if (live) setAdv(null) })   // advisory: a failed load hides the warnings, it blocks nothing
     getTrain(id).then(async d => {
       if (!live) return
       setT(d)
@@ -106,6 +111,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
     finally { setBusy(false) }
   }
   const { id: relId, name } = splitId(t.title)
+  const open = t.status === 'Planning' || t.status === 'Gated' || t.status === 'Executing'
   const blockers = r?.blockers.length ?? 0
   const gatesBefore = t.nextStatus ? t.gates.filter(g => ORDER.indexOf(g.requiredBeforeStatus) <= ORDER.indexOf(t.nextStatus!)) : []
   const others = (r?.blockers ?? []).filter(b => b.failure.guard !== 'GateLockout')
@@ -133,12 +139,16 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
           }}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</button>}
           <button type="button" className="text" data-comms-trigger aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</button>
           <button type="button" className="text" onClick={() => scrollAndFocus(document.querySelector<HTMLElement>('#exports h2'))}>Export</button>
-          {t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} aria-describedby={blockers > 0 ? whyId : undefined} onClick={advance}>{busy ? 'Advancing…' : `Advance to ${t.nextStatus}`}</button>}
+          {canPlan && open && <button type="button" className="text destructive" aria-expanded={closing === 'abort'} onClick={() => setClosing(closing === 'abort' ? null : 'abort')}>Abort…</button>}
+          {t.nextStatus === 'Complete'
+            ? canPlan && <button type="button" className="text" disabled={blockers > 0} aria-expanded={closing === 'complete'} aria-describedby={blockers > 0 ? whyId : undefined} onClick={() => setClosing(closing === 'complete' ? null : 'complete')}>Complete…</button>
+            : t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} aria-describedby={blockers > 0 ? whyId : undefined} onClick={advance}>{busy ? 'Advancing…' : `Advance to ${t.nextStatus}`}</button>}
         </span>
       </div>
-      {t.nextStatus && blockers > 0 && <p id={whyId} className="muted small">Advance to {t.nextStatus} is off: {plural(blockers, 'guard')} not met, listed under “To reach {t.nextStatus}”.</p>}
+      {closing && open && <TrainCloseForm key={closing} kind={closing} trainId={t.id} version={t.version} status={t.status} onCancel={() => setClosing(null)} onDone={() => { setClosing(null); onChanged() }} />}
+      {t.nextStatus && blockers > 0 && <p id={whyId} className="muted small">{t.nextStatus === 'Complete' ? 'Complete' : `Advance to ${t.nextStatus}`} is off: {plural(blockers, 'guard')} not met, listed under “To reach {t.nextStatus}”.</p>}
       <h1>{relId ? `${relId} ${name}` : name}</h1>
-      <p className="muted">{t.status} · Target <strong className="label">{day(t.targetReleaseDate)} {t.targetReleaseDate.slice(0, 4)}</strong> · <span className="mono">{tMinus(t.daysToTarget)}</span> business days · <WindowLine trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} /></p>
+      <p className="muted">{t.status} · Target <strong className="label">{day(t.targetReleaseDate)} {t.targetReleaseDate.slice(0, 4)}</strong> · <span className="mono">{tMinus(t.daysToTarget)}</span> business days · <WindowLine trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} collisions={adv?.collisions} /></p>
       {err && <p className="bad" role="alert">✗ {err}</p>}
       {t.nextStatus && r && (
         <section className="readiness" aria-label="Readiness">
@@ -149,6 +159,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
           })}
           {others.map((b, i) => <span key={i}><span className="bad" aria-hidden="true">✗</span><span className="sr-only">Not met:</span> {b.failure.message}</span>)}
           {r.ready && <span className="ok">✓ Ready for {t.nextStatus}</span>}
+          {adv && <AdvisoryItems contingency={adv.contingency} collisions={adv.collisions} />}
         </section>
       )}
       {t.nextStatus && rErr && <p className="bad" role="alert">✗ The readiness for {t.nextStatus} could not be loaded: {rErr} <button type="button" className="text" onClick={retry}>Retry</button></p>}
@@ -161,7 +172,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
       <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <FreezesPanel trainId={t.id} refreshKey={refreshKey} onChanged={onChanged} />
       <Links key={t.id} trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
-      <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />
+      <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} contingency={adv?.contingency ?? null} />
       <Closeout train={t} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
       <ExportsPanel trainId={t.id} refreshKey={refreshKey} />
     </>

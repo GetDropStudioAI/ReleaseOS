@@ -285,4 +285,45 @@ public class CloseoutTests
         Assert.Equal((HttpStatusCode)428, (await Send(rte, HttpMethod.Post, "/api/v1/trains/t1:exit-hypercare")).StatusCode);
         Assert.Equal((HttpStatusCode)428, (await Send(rte, HttpMethod.Patch, "/api/v1/trains/t1/pir", new { summary = "x" })).StatusCode);
     }
+
+    // ---- REOS-86 / REOS-87: abort with a reason, and the review it requires ------------------------------------------------------------
+    [Fact]
+    public async Task Aborting_an_Executing_train_keeps_the_reason_and_requires_a_review_with_a_due_date_that_Release_Managers_see_in_My_work()
+    {
+        using var c = await Setup();
+        await Execute(c);
+        Assert.Equal(HttpStatusCode.OK, (await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", new { reason = "Smoke tests failed twice" }, c.V())).StatusCode);
+        Assert.Equal("Smoke tests failed twice", Scalar(c.F, "SELECT json_extract(AfterJson,'$.reason') FROM AuditEvents WHERE Action='Abort'"));
+
+        var pir = await Json(await c.Rte.GetAsync("/api/v1/trains/t1/pir"));
+        Assert.Equal("Aborted", pir.GetProperty("pir").GetProperty("requiredReason").GetString());
+        Assert.Matches(@"^\d{4}-\d{2}-\d{2}$", pir.GetProperty("dueOn").GetString()!);
+        Assert.False(pir.GetProperty("overdue").GetBoolean());
+
+        var work = await Json(await c.Rm.GetAsync("/api/v1/me/work"));
+        var review = Assert.Single(work.GetProperty("reviews").EnumerateArray());
+        Assert.Equal(("t1", "Aborted", pir.GetProperty("dueOn").GetString()), (review.GetProperty("trainId").GetString(), review.GetProperty("reason").GetString(), review.GetProperty("dueOn").GetString()));
+        Assert.Equal(1, work.GetProperty("counts").GetProperty("reviews").GetInt32());
+        Assert.Empty((await Json(await c.Viewer.GetAsync("/api/v1/me/work"))).GetProperty("reviews").EnumerateArray());   // only those who run the review
+
+        Assert.Equal(HttpStatusCode.OK, (await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1/pir:hold", new { summary = "Held" }, "1")).StatusCode);
+        Assert.Empty((await Json(await c.Rm.GetAsync("/api/v1/me/work"))).GetProperty("reviews").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Aborting_without_a_body_still_works_and_a_Gated_train_needs_no_review()
+    {
+        using var c = await Setup();
+        var tooLong = await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", new { reason = new string('x', 5000) }, c.V());
+        Assert.Equal("FieldTooLong", await Guard(tooLong));
+        Assert.Equal("Gated", Scalar(c.F, "SELECT CurrentStatus FROM ReleaseTrains WHERE Id='t1'"));
+        Assert.Equal(HttpStatusCode.OK, (await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", null, c.V())).StatusCode);
+        var row = (await Json(await c.Rte.GetAsync("/api/v1/trains"))).EnumerateArray().Single(r => r.GetProperty("id").GetString() == "t1");
+        Assert.Equal("Aborted", row.GetProperty("status").GetString());            // still in the Stream's Aborted group, dated by the abort
+        Assert.Matches(@"^\d{4}-\d{2}-\d{2}$", row.GetProperty("endedOn").GetString()!);
+        Sql(c.F, "UPDATE ReleaseTrains SET UpdatedAt='2020-01-01T00:00:00Z' WHERE Id='t1'");
+        Assert.DoesNotContain((await Json(await c.Rte.GetAsync("/api/v1/trains"))).EnumerateArray(), r => r.GetProperty("id").GetString() == "t1");   // after 30 days it drops off, like Complete
+        Assert.Equal(JsonValueKind.Null, (await Json(await c.Rte.GetAsync("/api/v1/trains/t1/pir"))).GetProperty("pir").ValueKind);
+        Assert.Equal(HttpStatusCode.OK, (await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1/pir")).StatusCode);   // an Aborted train may start one by hand
+    }
 }

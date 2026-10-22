@@ -6,7 +6,9 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 public sealed record CalWindow(string StartsAt, string EndsAt);
-public sealed record CalTrain(string Id, string Title, string Status, string RiskTier, string TargetDate, CalWindow? Window);
+/// <summary>REOS-85: another open train whose window overlaps this one's and that shares a CI or product (names of what is shared).</summary>
+public sealed record CalCollision(string TrainId, string Title, IReadOnlyList<string> Shared);
+public sealed record CalTrain(string Id, string Title, string Status, string RiskTier, string TargetDate, CalWindow? Window, IReadOnlyList<CalCollision> Collisions);
 public sealed record CalGate(string Id, string Name, string Class, string Status, string DueOn, string TrainId, string TrainTitle, string TrainStatus);
 public sealed record CalFreeze(string Id, string Name, string Kind, string StartsAt, string EndsAt, string Scope);
 public sealed record CalMilestone(string Id, string Name, string DueOn, bool Done, string TrainId, string TrainTitle, string TrainStatus);
@@ -17,7 +19,7 @@ public sealed record CalendarPayload(string From, string To, IReadOnlyList<CalTr
 /// instants are UTC ISO-8601. A train is listed when its target date or deployment window touches the range; a gate when its due date is in the range
 /// (it carries its train's id, title and status), and likewise a train milestone (Q-0844); a freeze or chill window when it overlaps the range. Archived trains are never listed. Read-only.
 /// </summary>
-public sealed class CalendarService(IDbContextFactory<ReleaseDbContext> dbf)
+public sealed class CalendarService(IDbContextFactory<ReleaseDbContext> dbf, AdvisoryService? advisories = null)
 {
     public const int MaxRangeDays = 400;
     private const string Iso = "yyyy-MM-dd'T'HH:mm:ss'Z'";
@@ -46,11 +48,14 @@ public sealed class CalendarService(IDbContextFactory<ReleaseDbContext> dbf)
         var milestones = (await db.Set<TrainMilestones>().AsNoTracking().Where(m => m.DueOn >= from && m.DueOn <= to).ToListAsync(ct)).Where(m => byId.ContainsKey(m.ReleaseTrainId));
         var freezes = (await db.Set<FreezeWindows>().AsNoTracking().ToListAsync(ct)).Where(w => w.StartsAt < end && w.EndsAt > start);
 
+        var collisions = advisories is null ? [] : await advisories.CollisionsAsync(db, null, ct);
+        IReadOnlyList<CalCollision> Clashes(string id) => collisions.TryGetValue(id, out var list)
+            ? [.. list.Select(c => new CalCollision(c.OtherTrainId, c.OtherTitle, [.. c.SharedCis.Select(x => $"CI {x}"), .. c.SharedProducts]))] : [];
         var calTrains = trains
             .Where(t => (t.TargetReleaseDate >= from && t.TargetReleaseDate <= to) || (windows.TryGetValue(t.Id, out var w) && w.StartsAt < end && w.EndsAt > start))
             .OrderBy(t => t.TargetReleaseDate).ThenBy(t => t.Title).ThenBy(t => t.Id)
             .Select(t => new CalTrain(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
-                windows.TryGetValue(t.Id, out var w) ? new CalWindow(w.StartsAt.ToString(Iso), w.EndsAt.ToString(Iso)) : null)).ToList();
+                windows.TryGetValue(t.Id, out var w) ? new CalWindow(w.StartsAt.ToString(Iso), w.EndsAt.ToString(Iso)) : null, Clashes(t.Id))).ToList();
         var calGates = gates.OrderBy(g => g.DueOn).ThenBy(g => g.SequenceOrder).ThenBy(g => g.Id)
             .Select(g => { var t = byId[g.ReleaseTrainId]; return new CalGate(g.Id, g.GateName, g.GateClass, g.Status, g.DueOn.ToString("yyyy-MM-dd"), t.Id, t.Title, t.CurrentStatus); }).ToList();
         var calFreezes = freezes.OrderBy(w => w.StartsAt).ThenBy(w => w.Id)

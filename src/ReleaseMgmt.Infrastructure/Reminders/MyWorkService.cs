@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Infrastructure.Persistence;
 
@@ -13,8 +14,10 @@ public sealed record WorkGate(string Id, string Name, string Status, DateOnly Du
 public sealed record WorkStep(string ExecutionId, string RunId, string RunMode, string StepId, string StepCode, string Title, string Section, string Status, DateTime PlannedStartAt, bool Late, string TrainId, string TrainTitle, WorkVia Via);
 public sealed record WorkCondition(string Id, string Text, DateTime ExpiresAt, bool Expired, string DecisionId, string TrainId, string TrainTitle);
 public sealed record WorkPirAction(string Id, string Text, DateOnly DueOn, bool Overdue, string PirId, string TrainId, string TrainTitle);
-public sealed record WorkCounts(int Tasks, int Gates, int Steps, int Conditions, int PirActions, int Total, int Overdue);
-public sealed record MyWork(WorkCounts Counts, IReadOnlyList<WorkTask> Tasks, IReadOnlyList<WorkGate> Gates, IReadOnlyList<WorkStep> Steps, IReadOnlyList<WorkCondition> Conditions, IReadOnlyList<WorkPirAction> PirActions);
+/// <summary>REOS-87: a review required by a rollback or an abort that is not held yet, with its due date. Listed for Release Managers and RTEs (who run the review).</summary>
+public sealed record WorkReview(string PirId, string Reason, string Status, DateOnly DueOn, bool Overdue, string TrainId, string TrainTitle);
+public sealed record WorkCounts(int Tasks, int Gates, int Steps, int Conditions, int PirActions, int Reviews, int Total, int Overdue);
+public sealed record MyWork(WorkCounts Counts, IReadOnlyList<WorkTask> Tasks, IReadOnlyList<WorkGate> Gates, IReadOnlyList<WorkStep> Steps, IReadOnlyList<WorkCondition> Conditions, IReadOnlyList<WorkPirAction> PirActions, IReadOnlyList<WorkReview> Reviews);
 
 /// <summary>
 /// The My work queue (GET /me/work): what is open and mine, with due dates, across open trains. "Mine" is owned by the user or by a team the user belongs to.
@@ -23,6 +26,7 @@ public sealed record MyWork(WorkCounts Counts, IReadOnlyList<WorkTask> Tasks, IR
 public sealed class MyWorkService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config)
 {
     private readonly DisplayClock _clock = DisplayClock.From(config);
+    private readonly int _pirDueDays = Services.PirDue.BusinessDaysFrom(config);
 
     public async Task<MyWork> GetAsync(string userId, CancellationToken ct = default)
     {
@@ -85,8 +89,22 @@ public sealed class MyWorkService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
                           select new { a.Id, a.Text, a.DueOn, PirId = p.Id, TrainId = t.Id, TrainTitle = t.Title }).ToListAsync(ct))
             .OrderBy(x => x.DueOn).Select(x => new WorkPirAction(x.Id, x.Text, x.DueOn, x.DueOn < today, x.PirId, x.TrainId, x.TrainTitle)).ToList();
 
-        var overdue = tasks.Count(t => t.Overdue) + gates.Count(g => g.Overdue) + steps.Count(s => s.Late) + conditions.Count(c => c.Expired) + pir.Count(a => a.Overdue);
-        var counts = new WorkCounts(tasks.Count, gates.Count, steps.Count, conditions.Count, pir.Count, tasks.Count + gates.Count + steps.Count + conditions.Count + pir.Count, overdue);
-        return new MyWork(counts, tasks, gates, steps, conditions, pir);
+        var reviews = new List<WorkReview>();
+        var role = await db.Set<Users>().AsNoTracking().Where(u => u.Id == userId).Select(u => u.Role).SingleOrDefaultAsync(ct);
+        if (role is Roles.ReleaseManager or Roles.RTE)
+        {
+            var openPirs = await (from p in db.Set<PostImplementationReviews>().AsNoTracking()
+                              join t in db.Set<ReleaseTrains>() on p.ReleaseTrainId equals t.Id
+                              where (p.Status == "Required" || p.Status == "Scheduled") && (p.RequiredReason == Services.PirDue.RollbackPerformed || p.RequiredReason == Services.PirDue.Aborted) && t.ArchivedAt == null
+                              select new { Pir = p, TrainTitle = t.Title }).ToListAsync(ct);
+            var due = await Services.PirDue.DueDatesAsync(db, [.. openPirs.Select(x => x.Pir)], _clock, _pirDueDays, ct);
+            reviews = [.. openPirs.Where(x => due.ContainsKey(x.Pir.Id)).OrderBy(x => due[x.Pir.Id]).ThenBy(x => x.TrainTitle, StringComparer.Ordinal)
+                .Select(x => new WorkReview(x.Pir.Id, x.Pir.RequiredReason, x.Pir.Status, due[x.Pir.Id], Services.PirDue.IsOverdue(x.Pir, due[x.Pir.Id], today), x.Pir.ReleaseTrainId, x.TrainTitle))];
+        }
+
+        var overdue = tasks.Count(t => t.Overdue) + gates.Count(g => g.Overdue) + steps.Count(s => s.Late) + conditions.Count(c => c.Expired) + pir.Count(a => a.Overdue) + reviews.Count(r => r.Overdue);
+        var counts = new WorkCounts(tasks.Count, gates.Count, steps.Count, conditions.Count, pir.Count, reviews.Count,
+            tasks.Count + gates.Count + steps.Count + conditions.Count + pir.Count + reviews.Count, overdue);
+        return new MyWork(counts, tasks, gates, steps, conditions, pir, reviews);
     }
 }

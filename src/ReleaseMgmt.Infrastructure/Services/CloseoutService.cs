@@ -2,11 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Domain.Services;
+using Microsoft.Extensions.Configuration;
 using ReleaseMgmt.Infrastructure.Persistence;
+using ReleaseMgmt.Infrastructure.Reminders;
 
 namespace ReleaseMgmt.Infrastructure.Services;
 
-public sealed record PirView(PostImplementationReviews? Pir, IReadOnlyList<PirActions> Actions);
+/// <summary>The train's PIR and actions. <c>DueOn</c>/<c>Overdue</c> are set only for a PIR required by a rollback or an abort (REOS-87, <see cref="PirDue"/>).</summary>
+public sealed record PirView(PostImplementationReviews? Pir, IReadOnlyList<PirActions> Actions, DateOnly? DueOn = null, bool Overdue = false);
 public sealed record KnownIssuesView(string? HypercareExitAt, string? HypercareExitByUserId, IReadOnlyList<KnownIssues> Issues);
 public sealed record RehearsalRunRow(string Id, DateTime StartedAt, DateTime? EndedAt, string? Outcome);
 public sealed record RollbackAttestationView(bool Required, DateTime? RehearsedAt, string? RehearsedByUserId, string? RehearsedByName, IReadOnlyList<RehearsalRunRow> RehearsalRuns);
@@ -20,8 +23,12 @@ public sealed record KnownIssuePatch(string? Title, string? Severity, string? Wo
 /// (PROJECT_SCOPE section 6; Q-036a..Q-036f). The PIR row for a bad close code is created by the trigger; this service manages it from there.
 /// Every write bumps the row's Version and writes one audit row in the same transaction. Status columns move only through actions.
 /// </summary>
-public sealed class CloseoutService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
+public sealed class CloseoutService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, IConfiguration? config = null)
+    : ServiceBase(dbf, time, realtime)
 {
+    private readonly DisplayClock _clock = DisplayClock.From(config ?? new ConfigurationBuilder().Build());
+    private readonly int _pirDueDays = PirDue.BusinessDaysFrom(config);
+
     public static readonly string[] Severities = ["Critical", "High", "Medium", "Low"];
     private static readonly string[] CloseoutRoles = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer];
 
@@ -43,7 +50,9 @@ public sealed class CloseoutService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         if (!await db.Set<ReleaseTrains>().AnyAsync(t => t.Id == trainId, ct)) return null;
         var pir = await db.Set<PostImplementationReviews>().AsNoTracking().SingleOrDefaultAsync(p => p.ReleaseTrainId == trainId, ct);
         var actions = pir is null ? [] : await db.Set<PirActions>().AsNoTracking().Where(a => a.PirId == pir.Id).OrderBy(a => a.DueOn).ThenBy(a => a.Id).ToListAsync(ct);
-        return new(pir, actions);
+        if (pir is null) return new(pir, actions);
+        DateOnly? due = (await PirDue.DueDatesAsync(db, [pir], _clock, _pirDueDays, ct)).TryGetValue(pir.Id, out var d) ? d : null;
+        return new(pir, actions, due, PirDue.IsOverdue(pir, due, _clock.LocalDate(Now)));
     }
 
     public async Task<KnownIssuesView?> GetKnownIssuesAsync(string trainId, CancellationToken ct = default)
@@ -58,7 +67,7 @@ public sealed class CloseoutService(IDbContextFactory<ReleaseDbContext> dbf, Tim
     }
 
     // ---- PIR --------------------------------------------------------------------------------------------------------
-    /// <summary>Manual PIR (RequiredReason 'Manual') for a Complete train that has none, e.g. a Successful close that later went wrong.</summary>
+    /// <summary>Manual PIR (RequiredReason 'Manual') for a Complete or Aborted train that has none, e.g. a Successful close that later went wrong (REOS-87 allows Aborted).</summary>
     public Task<ServiceResult<PostImplementationReviews>> CreateManualPirAsync(string trainId, Actor actor, CancellationToken ct = default) =>
         RunAsync(async db =>
         {
@@ -66,7 +75,8 @@ public sealed class CloseoutService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             if (t is null) return ServiceResult<PostImplementationReviews>.NotFound("train");
             var f = await RoleFailure<PostImplementationReviews>(db, actor);
             if (f is not null) return f;
-            if (t.CurrentStatus != "Complete") return ServiceResult<PostImplementationReviews>.Fail(new GuardFailure(CloseoutGuards.PirRequiresComplete, "A PIR is held after the train is Complete"));
+            if (t.CurrentStatus is not ("Complete" or "Aborted"))
+                return ServiceResult<PostImplementationReviews>.Fail(new GuardFailure(CloseoutGuards.PirRequiresComplete, "A PIR is started by hand once the train is Complete or Aborted"));
             if (await db.Set<PostImplementationReviews>().AnyAsync(p => p.ReleaseTrainId == trainId, ct))
                 return ServiceResult<PostImplementationReviews>.Fail(new GuardFailure(CloseoutGuards.PirAlreadyExists, "This train already has a PIR"));
             var p = new PostImplementationReviews { Id = Ids.New(), ReleaseTrainId = trainId, RequiredReason = "Manual", Status = "Required" };

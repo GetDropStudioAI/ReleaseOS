@@ -13,7 +13,7 @@ import { useAction } from './useAction'
  * Page Up/Down the month (the week in week view), Enter opens the first train of the day; every entry is also a real button. Status is glyph + word +
  * colour; freeze days are tinted AND named in text (visible on the first day of each row, and for screen readers on every day). Dates are shown in Display:TimeZone.
  */
-export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null }
+export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[] }
 export interface CalGate { id: string; name: string; class: string; status: string; dueOn: string; trainId: string; trainTitle: string; trainStatus: string }
 export interface CalFreeze { id: string; name: string; kind: 'Freeze' | 'Chill'; startsAt: string; endsAt: string; scope: string }
 export interface CalMilestone { id: string; name: string; dueOn: string; done: boolean; trainId: string; trainTitle: string; trainStatus: string }
@@ -98,7 +98,11 @@ export function Calendar({ onOpen, trainId: current }: { me: Me; onOpen?: (r: Pa
     for (const t of data?.trains ?? []) {
       const st = trainSt(t.status)
       add(t.targetDate, { key: `t:${t.id}`, kind: 'target', trainId: t.id, label: `Target · ${t.title}`, title: `${t.title}, target release date, ${st.word}`, st })
-      if (t.window) add(dayInZone(t.window.startsAt), { key: `w:${t.id}`, kind: 'window', trainId: t.id, label: `${fmtHM(t.window.startsAt)}–${fmtHM(t.window.endsAt)} ${zoneAbbr(t.window.startsAt)} window · ${t.title}`, title: `${t.title}, deployment window` })
+      // REOS-85: a window that collides with another open train's (and shares a CI or product) says so in words, with ▲.
+      const clash = t.collisions ?? []
+      const overlap = clash.length ? `overlaps ${clash.map(c => `${c.title} (${c.shared.join(', ')})`).join('; ')}` : ''
+      if (t.window) add(dayInZone(t.window.startsAt), { key: `w:${t.id}`, kind: 'window', trainId: t.id, label: `${fmtHM(t.window.startsAt)}–${fmtHM(t.window.endsAt)} ${zoneAbbr(t.window.startsAt)} window · ${t.title}`,
+        title: `${t.title}, deployment window${overlap ? `, ${overlap}` : ''}`, st: overlap ? { glyph: '▲', cls: 'warn', word: overlap } : undefined })
     }
     for (const g of data?.gates ?? []) {
       const st = gateSt(g.status)

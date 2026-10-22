@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getMyWork, type Me, type MyWorkData, type WorkVia } from './api'
+import { pirReason } from './Closeout'
 import type { Route } from './route'
 import { useRowNav } from './rowNav'
 import { fmtDay, fmtDayTime, zoneAbbr } from './time'
@@ -47,6 +48,11 @@ function buildItems(w: MyWorkData): Item[] {
     due: p.dueOn, dueMs: dayMs(p.dueOn), dueIsDate: true, status: [p.overdue ? OVERDUE : OPEN], via: null,
     target: { trainId: p.trainId },
   })
+  for (const r of w.reviews ?? []) items.push({
+    key: `review:${r.pirId}`, kind: 'Review', title: 'Post-implementation review', detail: pirReason(r.reason), trainTitle: r.trainTitle,
+    due: r.dueOn, dueMs: dayMs(r.dueOn), dueIsDate: true, status: [r.overdue ? OVERDUE : r.status === 'Scheduled' ? { cls: 'accent', text: '◐ scheduled' } : OPEN], via: null,
+    target: { trainId: r.trainId },
+  })
   return items.sort((a, b) => a.dueMs - b.dueMs)
 }
 
@@ -67,7 +73,7 @@ export function MyWork({ onOpen, refreshKey = 0 }: { me: Me; onOpen?: (r: Partia
       {!data && !error && <p className="muted">Loading…</p>}
       {c && (
         <p className="muted" data-testid="work-counts">
-          {c.total === 0 ? 'Nothing assigned to you.' : `${plural(c.total, 'item')} assigned to you (${plural(c.tasks, 'task')}, ${plural(c.gates, 'gate')}, ${plural(c.steps, 'step')}, ${plural(c.conditions, 'condition')}, ${plural(c.pirActions, 'PIR action')})`}
+          {c.total === 0 ? 'Nothing assigned to you.' : `${plural(c.total, 'item')} assigned to you (${plural(c.tasks, 'task')}, ${plural(c.gates, 'gate')}, ${plural(c.steps, 'step')}, ${plural(c.conditions, 'condition')}, ${plural(c.pirActions, 'PIR action')}${c.reviews ? `, ${plural(c.reviews, 'review')}` : ''})`}
           {c.overdue > 0 && <> · <span className="bad">✗ {c.overdue} overdue</span></>}
         </p>
       )}

@@ -43,7 +43,9 @@ public static class TrainQueryEndpoints
             var holidays = await HolidaysAsync(db, ct);
             var cutoff = time.GetUtcNow().UtcDateTime.AddDays(-30);
             var trains = await db.Set<ReleaseTrains>().AsNoTracking()
-                .Where(t => t.ArchivedAt == null && t.CurrentStatus != "Aborted" && (t.CurrentStatus != "Complete" || t.ActualEndAt >= cutoff))
+                // Complete and Aborted trains stay listed for 30 days (Complete by ActualEndAt; Aborted, which has no end time, by its last change, the abort),
+                // so a train aborted from its header does not vanish from the Stream (the web's "Aborted" group, REOS-86).
+                .Where(t => t.ArchivedAt == null && (t.CurrentStatus != "Complete" || t.ActualEndAt >= cutoff) && (t.CurrentStatus != "Aborted" || t.UpdatedAt >= cutoff))
                 .OrderBy(t => t.TargetReleaseDate).ThenBy(t => t.Title).ToListAsync(ct);
             var ids = trains.Select(t => t.Id).ToList();
             var gates = (await db.Set<StageGates>().AsNoTracking().Where(g => ids.Contains(g.ReleaseTrainId)).ToListAsync(ct))
@@ -56,7 +58,7 @@ public static class TrainQueryEndpoints
                 var blockers = blockerCounts[t.Id];
                 rows.Add(new StreamRow(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
                     BusinessDays.Between(today, t.TargetReleaseDate, holidays), blockers,
-                    [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, t.ActualEndAt?.ToString("yyyy-MM-dd"), t.Version));
+                    [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, (t.CurrentStatus == "Aborted" ? t.UpdatedAt : t.ActualEndAt)?.ToString("yyyy-MM-dd"), t.Version));
             }
             return Results.Ok(rows);
         }).RequireAuthorization(Policies.Read);
@@ -141,6 +143,10 @@ public static class TrainQueryEndpoints
             var w = await db.Set<DeploymentWindows>().AsNoTracking().SingleOrDefaultAsync(x => x.ReleaseTrainId == id, ct);
             return w is null ? Results.NotFound(new { message = "No deployment window set" }) : Results.Ok(ToRow(w));
         }).RequireAuthorization(Policies.Read);
+
+        // REOS-85/88: contingency before the rollback deadline and window collisions with other open trains. Advisory only (never a readiness guard).
+        api.MapGet("/trains/{id}/advisories", async (string id, AdvisoryService s, CancellationToken ct) =>
+            await s.GetAsync(id, ct) is { } a ? Results.Ok(a) : Results.NotFound(new { message = "Train not found" })).RequireAuthorization(Policies.Read);
 
         api.MapPut("/trains/{id}/window", async (string id, WindowBody body, ClaimsPrincipal u, HttpRequest req, WindowService s, CancellationToken ct) =>
         {

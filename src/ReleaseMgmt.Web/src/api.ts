@@ -61,6 +61,13 @@ export const getStream = () => get<StreamRow[]>('/api/v1/trains')
 export const getTrain = (id: string) => get<TrainDetail>(`/api/v1/trains/${id}`)
 export const getReadiness = (id: string, target = 'Executing') => get<Readiness>(`/api/v1/trains/${id}/readiness?target=${target}`)
 export const advanceTrain = (id: string, to: string, version: number) => post<unknown>(`/api/v1/trains/${id}:advance`, { to }, version)
+// REOS-85/88: advisories beside readiness (never guards)
+export interface ContingencyView { state: 'ok' | 'low' | 'over' | 'unknown'; reason: string | null; plannedMin: number | null; rollbackMin: number; plannedStart: string | null; plannedFinish: string | null; rollbackDeadline: string | null; spareMin: number | null; percent: number | null; minPercent: number }
+export interface WindowCollision { otherTrainId: string; otherTitle: string; otherStatus: string; otherStartsAt: string; otherEndsAt: string; sharedCis: string[]; sharedProducts: string[] }
+export interface Advisories { contingency: ContingencyView | null; collisions: WindowCollision[] }
+export const getAdvisories = (id: string) => get<Advisories>(`/api/v1/trains/${id}/advisories`)
+export const completeTrain = (id: string, closeCode: string, notes: string | null, version: number) => post<unknown>(`/api/v1/trains/${id}:complete`, { closeCode, notes }, version)
+export const abortTrain = (id: string, reason: string, version: number) => post<unknown>(`/api/v1/trains/${id}:abort`, { reason }, version)
 
 export interface ProductRow { id: string; name: string; versionTag: string; projectCode: string; tasksDone: number; tasksTotal: number; openBlockers: string[]; health: string }
 export interface ProductsResponse { tasksDone: number; tasksTotal: number; products: ProductRow[] }
@@ -147,7 +154,7 @@ export interface RehearsalRun { id: string; startedAt: string; endedAt: string |
 export interface RollbackAttestation { required: boolean; rehearsedAt: string | null; rehearsedByUserId: string | null; rehearsedByName: string | null; rehearsalRuns: RehearsalRun[] }
 export interface Pir { id: string; releaseTrainId: string; requiredReason: string; status: 'Required' | 'Scheduled' | 'Held' | 'Closed'; heldAt: string | null; summary: string | null; version: number }
 export interface PirAction { id: string; pirId: string; text: string; ownerUserId: string; dueOn: string; doneAt: string | null; version: number }
-export interface PirViewData { pir: Pir | null; actions: PirAction[] }
+export interface PirViewData { pir: Pir | null; actions: PirAction[]; dueOn?: string | null; overdue?: boolean }
 export interface KnownIssue { id: string; title: string; severity: 'Critical' | 'High' | 'Medium' | 'Low'; workaround: string | null; status: 'Open' | 'Accepted' | 'Resolved'; externalKey: string | null; raisedAt: string; resolvedAt: string | null; version: number }
 export interface KnownIssuesData { hypercareExitAt: string | null; hypercareExitByUserId: string | null; issues: KnownIssue[] }
 export const getAttestation = (id: string) => get<RollbackAttestation>(`/api/v1/trains/${id}/rollback-attestation`)
@@ -175,12 +182,14 @@ export const markAllNotificationsRead = () => post<{ marked: number }>('/api/v1/
 
 export interface WorkVia { kind: 'me' | 'team'; teamId: string | null; teamName: string | null }
 export interface MyWorkData {
-  counts: { tasks: number; gates: number; steps: number; conditions: number; pirActions: number; total: number; overdue: number }
+  counts: { tasks: number; gates: number; steps: number; conditions: number; pirActions: number; reviews: number; total: number; overdue: number }
   tasks: { id: string; description: string; gateId: string; gateName: string; trainId: string; trainTitle: string; dueOn: string; overdue: boolean; via: WorkVia }[]
   gates: { id: string; name: string; status: string; dueOn: string; overdue: boolean; openTasks: number; trainId: string; trainTitle: string; via: WorkVia }[]
   steps: { executionId: string; runId: string; runMode: string; stepId: string; stepCode: string; title: string; section: string; status: string; plannedStartAt: string; late: boolean; trainId: string; trainTitle: string; via: WorkVia }[]
   conditions: { id: string; text: string; expiresAt: string; expired: boolean; decisionId: string; trainId: string; trainTitle: string }[]
   pirActions: { id: string; text: string; dueOn: string; overdue: boolean; pirId: string; trainId: string; trainTitle: string }[]
+  /** REOS-87: reviews required by a rollback or an abort, not held yet (Release Managers and RTEs only) */
+  reviews: { pirId: string; reason: string; status: string; dueOn: string; overdue: boolean; trainId: string; trainTitle: string }[]
 }
 export const getMyWork = () => get<MyWorkData>('/api/v1/me/work')
 // REOS-38 train templates

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { useDraft, useSession } from './session'
 import { ChangeRecordPanel, GoNoGo, emptyGoNoGo, goNoGoKey, type GoNoGoDraft } from './Governance'
 import { FreezesPanel } from './Freezes'
@@ -12,7 +12,15 @@ import { ExportsPanel } from './ExportsPanel'
 import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
 import { scrollAndFocus } from './focus'
 import { MilestonesSection, milestoneState, useMilestones } from './Milestones'
-import { advanceTrain, getFreezesAhead, getReadiness, getStream, getTrain, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
+import { useAction } from './useAction'
+import { ConfirmInline } from './ConfirmInline'
+import { Conflict, isConflict } from './Conflict'
+import { announce } from './announce'
+import { CLOSE_WORD, CompleteForm, completeKey, emptyComplete, type CompleteDraft } from './TrainClose'
+import {
+  abortTrain, advanceTrain, completeTrain, getFreezesAhead, getReadiness, getStream, getTrain,
+  type ApiError, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail,
+} from './api'
 
 // Aborted trains keep a group of their own (shown only when the list has any), so a train never silently vanishes from the Stream (UX review 26).
 const GROUPS: { label: string; status: string; hideEmpty?: boolean }[] = [
@@ -20,6 +28,7 @@ const GROUPS: { label: string; status: string; hideEmpty?: boolean }[] = [
   { label: 'Planning', status: 'Planning' }, { label: 'Complete · last 30 days', status: 'Complete' }, { label: 'Aborted', status: 'Aborted', hideEmpty: true },
 ]
 const ORDER = ['Planning', 'Gated', 'Executing', 'Complete']
+const ABORTABLE = ['Planning', 'Gated', 'Executing']   // legal moves to Aborted (PROJECT_SCOPE 3)
 
 // Status is words + glyphs + coloured text, never pills or badges (CLAUDE.md rule 9).
 const GLYPH: Record<string, { g: string; cls: string; word: string }> = {
@@ -77,8 +86,15 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   const [rErr, setRErr] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const [err, setErr] = useState<string | null>(null)
-  const whyId = useId()
-  const [busy, setBusy] = useState(false)
+  const whyId = useId(), completeId = useId()
+  const { run, pending } = useAction()   // one lifecycle action at a time: Advance, Complete or Abort
+  // A refused lifecycle write, kept apart from `err` (cleared by every refetch, and the write refetches) and tied to its train (this header is reused
+  // when another train is opened). A 409 keeps what the user chose (close code and notes, or the abort reason) and can apply it to the train as it is now.
+  const [actErr, setActErr] = useState<{ trainId: string; text: string } | null>(null)
+  const [conflict, setConflict] = useState<{ trainId: string; status: string; error: ApiError; again: string; retry: (version: number) => unknown } | null>(null)
+  const [complete, setComplete] = useDraft<CompleteDraft>(completeKey(id))
+  const completeBtn = useRef<HTMLButtonElement>(null)
+  const closeCodes = useRef<HTMLSpanElement>(null)
   const [chosenGate, setChosenGate] = useState<string | null>(null)
   const [goDraft, setGoDraft] = useDraft<GoNoGoDraft>(goNoGoKey(id))   // the header button and the Go/No-Go section share one draft
   const [comms, setComms] = useDraft<CommsDraft>(commsKey(id))   // REOS-45: App swaps the right drawer to the Comms drawer while this is open
@@ -98,13 +114,30 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   if (err && !t) return <p className="bad" role="alert">✗ {err} <button type="button" className="text" onClick={retry}>Retry</button></p>
   if (!t) return <p className="muted">Loading…</p>
 
-  const advance = async () => {
-    if (!t.nextStatus) return
-    setBusy(true); setErr(null)
-    try { await advanceTrain(t.id, t.nextStatus, t.version); onChanged() }
-    catch (e) { setErr(errMsg(e, 'Could not advance the train.')); onChanged() }
-    finally { setBusy(false) }
+  /** Runs one lifecycle write with If-Match; on 409 the Conflict notice offers `again`, which repeats it at the version the server returned. */
+  const act = (label: string, again: string, fn: (version: number) => Promise<unknown>, done: string, after?: () => void) => {
+    const attempt = (version: number) => run(label, async () => {
+      setActErr(null); setConflict(null)
+      try { await fn(version); announce(done); after?.(); onChanged() }
+      catch (e) {
+        if (isConflict(e)) setConflict({ trainId: t.id, status: t.status, error: e, again, retry: attempt })
+        else setActErr({ trainId: t.id, text: errMsg(e, 'Could not change the train.') })
+        onChanged()
+      }
+    })
+    return attempt(t.version)
   }
+  const advance = () => t.nextStatus && act('Advancing…', `Advance to ${t.nextStatus} anyway`, v => advanceTrain(t.id, t.nextStatus!, v), `Advanced to ${t.nextStatus}.`)
+  const toComplete = t.nextStatus === 'Complete'   // Executing: this hop needs a close code, so it opens the Complete form instead of posting :advance
+  const toggleComplete = () => {
+    setConflict(null)
+    if (complete) { setComplete(undefined); return }
+    setComplete(emptyComplete())
+    requestAnimationFrame(() => closeCodes.current?.querySelector<HTMLElement>('[role=radio][tabindex="0"]')?.focus())
+  }
+  const completeNow = (code: Parameters<typeof completeTrain>[1], notes: string | null) =>
+    act('Completing…', 'Complete anyway', v => completeTrain(t.id, code, notes, v), `Train completed: ${CLOSE_WORD[code]}.`, () => setComplete(undefined))
+  const abort = (reason: string) => act('Aborting…', 'Abort anyway', v => abortTrain(t.id, reason, v), 'Train aborted.')
   const { id: relId, name } = splitId(t.title)
   const blockers = r?.blockers.length ?? 0
   const gatesBefore = t.nextStatus ? t.gates.filter(g => ORDER.indexOf(g.requiredBeforeStatus) <= ORDER.indexOf(t.nextStatus!)) : []
@@ -133,13 +166,23 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
           }}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</button>}
           <button type="button" className="text" data-comms-trigger aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</button>
           <button type="button" className="text" onClick={() => scrollAndFocus(document.querySelector<HTMLElement>('#exports h2'))}>Export</button>
-          {t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} aria-describedby={blockers > 0 ? whyId : undefined} onClick={advance}>{busy ? 'Advancing…' : `Advance to ${t.nextStatus}`}</button>}
+          {canPlan && ABORTABLE.includes(t.status) && <ConfirmInline label="Abort train" question={`Abort ${t.title}? An aborted train cannot be restarted.`} confirmLabel="Abort train" pendingLabel="Aborting…"
+            reason={{ label: 'Reason', required: true }} disabled={!!pending} onConfirm={abort} />}
+          {toComplete
+            ? canPlan && <button ref={completeBtn} type="button" className="text" disabled={!!pending || blockers > 0} aria-expanded={!!complete} aria-controls={complete ? completeId : undefined}
+                aria-describedby={blockers > 0 ? whyId : undefined} onClick={toggleComplete}>{complete ? 'Cancel complete' : 'Complete…'}</button>
+            : t.nextStatus && <button type="button" className="text" disabled={!!pending || blockers > 0} aria-describedby={blockers > 0 ? whyId : undefined} onClick={advance}>{pending === 'Advancing…' ? pending : `Advance to ${t.nextStatus}`}</button>}
         </span>
       </div>
-      {t.nextStatus && blockers > 0 && <p id={whyId} className="muted small">Advance to {t.nextStatus} is off: {plural(blockers, 'guard')} not met, listed under “To reach {t.nextStatus}”.</p>}
+      {t.nextStatus && blockers > 0 && (!toComplete || canPlan) && <p id={whyId} className="muted small">{toComplete ? 'Complete' : `Advance to ${t.nextStatus}`} is off: {plural(blockers, 'guard')} not met, listed under “To reach {t.nextStatus}”.</p>}
       <h1>{relId ? `${relId} ${name}` : name}</h1>
       <p className="muted">{t.status} · Target <strong className="label">{day(t.targetReleaseDate)} {t.targetReleaseDate.slice(0, 4)}</strong> · <span className="mono">{tMinus(t.daysToTarget)}</span> business days · <WindowLine trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} /></p>
       {err && <p className="bad" role="alert">✗ {err}</p>}
+      {actErr?.trainId === t.id && <p className="bad" role="alert">✗ {actErr.text}</p>}
+      {conflict?.trainId === t.id && <Conflict error={conflict.error} what="train">
+        {/* "anyway" only while the train is still where it was: once its status moved, the user decides again from what the screen now shows */}
+        {conflict.status === t.status && <><button type="button" className="text" disabled={!!pending} onClick={() => conflict.retry((conflict.error.body?.current as { version?: number } | undefined)?.version ?? t.version)}>{pending ?? conflict.again}</button>{' '}</>}
+        <button type="button" className="text" disabled={!!pending} onClick={() => setConflict(null)}>Dismiss</button></Conflict>}
       {t.nextStatus && r && (
         <section className="readiness" aria-label="Readiness">
           <span className="cap">To reach {t.nextStatus}</span>
@@ -152,6 +195,8 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
         </section>
       )}
       {t.nextStatus && rErr && <p className="bad" role="alert">✗ The readiness for {t.nextStatus} could not be loaded: {rErr} <button type="button" className="text" onClick={retry}>Retry</button></p>}
+      {toComplete && canPlan && complete && <CompleteForm id={completeId} draft={complete} onDraft={setComplete} pending={pending} groupRef={closeCodes} onConfirm={completeNow}
+        onCancel={() => { setComplete(undefined); requestAnimationFrame(() => completeBtn.current?.focus()) }} />}
       <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} canPlan={canPlan} trainStatus={t.status} onChanged={onChanged} />
       <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} trainId={t.id} trainStatus={t.status} canPlan={canPlan} onChanged={onChanged}
         milestones={(milestones.rows ?? []).map(m => ({ id: m.id, name: m.name, dueOn: m.dueOn, tMinus: m.tMinus, state: milestoneState(m) }))} />

@@ -61,6 +61,11 @@ export const getStream = () => get<StreamRow[]>('/api/v1/trains')
 export const getTrain = (id: string) => get<TrainDetail>(`/api/v1/trains/${id}`)
 export const getReadiness = (id: string, target = 'Executing') => get<Readiness>(`/api/v1/trains/${id}/readiness?target=${target}`)
 export const advanceTrain = (id: string, to: string, version: number) => post<unknown>(`/api/v1/trains/${id}:advance`, { to }, version)
+// Executing -> Complete goes through :complete (it needs a close code; :advance has none), and aborting needs a reason (Q-LC1, Q-LC2)
+export const CLOSE_CODES = ['Successful', 'SuccessfulWithIssues', 'Unsuccessful'] as const
+export type CloseCode = typeof CLOSE_CODES[number]
+export const completeTrain = (id: string, closeCode: CloseCode, notes: string | null, version: number) => post<unknown>(`/api/v1/trains/${id}:complete`, { closeCode, notes }, version)
+export const abortTrain = (id: string, reason: string, version: number) => post<unknown>(`/api/v1/trains/${id}:abort`, { reason }, version)
 
 export interface ProductRow { id: string; name: string; versionTag: string; projectCode: string; tasksDone: number; tasksTotal: number; openBlockers: string[]; health: string }
 export interface ProductsResponse { tasksDone: number; tasksTotal: number; products: ProductRow[] }

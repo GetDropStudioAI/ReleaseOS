@@ -108,6 +108,51 @@ public class CloseoutTests
         Assert.Equal("TrainClosed", await Guard(await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:rehearsed-rollback", new { }, c.V())));
     }
 
+    // ---- complete and abort (Q-LC1, Q-LC2) ---------------------------------------------------------------------------
+    [Fact]
+    public async Task Complete_takes_its_close_code_through_complete_not_advance_and_a_stale_version_is_409()
+    {
+        using var c = await Setup();
+        await Execute(c);
+        // :advance carries no close code, so the Complete hop can never succeed through it (the header used to send it)
+        Assert.Equal("CloseCodeRequired", await Guard(await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:advance", new { to = "Complete" }, c.V())));
+        var stale = await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:complete", new { closeCode = "Unsuccessful" }, "1");
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        var current = (await Json(stale)).GetProperty("current");
+        Assert.Equal("Executing", current.GetProperty("currentStatus").GetString());
+        Assert.Equal(c.V(), current.GetProperty("version").GetInt32().ToString());
+        Assert.Equal("0", Scalar(c.F, "SELECT COUNT(*) FROM PostImplementationReviews"));
+
+        Assert.Equal(HttpStatusCode.OK, (await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:complete", new { closeCode = "Unsuccessful", notes = "Rolled back" }, c.V())).StatusCode);
+        Assert.Equal("Complete|Unsuccessful|Rolled back", Scalar(c.F, "SELECT CurrentStatus || '|' || CloseCode || '|' || CloseNotes FROM ReleaseTrains WHERE Id='t1'"));
+        Assert.Equal("CloseCode=Unsuccessful", Scalar(c.F, "SELECT RequiredReason FROM PostImplementationReviews"));
+    }
+
+    [Fact]
+    public async Task Abort_needs_a_reason_which_is_kept_in_the_audit_row()
+    {
+        using var c = await Setup();
+        Assert.Equal("AbortReasonRequired", await Guard(await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", new { }, c.V())));
+        Assert.Equal("AbortReasonRequired", await Guard(await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", new { reason = "   " }, c.V())));
+        // :advance has no reason either, so it cannot be used to abort around the rule
+        Assert.Equal("AbortReasonRequired", await Guard(await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:advance", new { to = "Aborted" }, c.V())));
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(c.Viewer, HttpMethod.Post, "/api/v1/trains/t1:abort", new { reason = "Scope moved to R26.12" }, c.V())).StatusCode);
+        var stale = await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", new { reason = "Scope moved to R26.12" }, "1");
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("Gated", (await Json(stale)).GetProperty("current").GetProperty("currentStatus").GetString());
+        Assert.Equal(0, Audits(c.F, "ReleaseTrain", "Abort"));
+
+        var ok = await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", new { reason = "  Scope moved to R26.12 " }, c.V());
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.Equal("Aborted", (await Json(ok)).GetProperty("currentStatus").GetString());
+        Assert.Equal(1, Audits(c.F, "ReleaseTrain", "Abort"));
+        var after = JsonDocument.Parse(Scalar(c.F, "SELECT AfterJson FROM AuditEvents WHERE Action='Abort'")).RootElement;
+        Assert.Equal("Aborted", after.GetProperty("status").GetString());
+        Assert.Equal("Scope moved to R26.12", after.GetProperty("reason").GetString());
+        Assert.Equal(c.RteId, Scalar(c.F, "SELECT ActorUserId FROM AuditEvents WHERE Action='Abort'"));
+        Assert.Equal("IllegalTransition", await Guard(await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1:abort", new { reason = "again" }, c.V())));
+    }
+
     // ---- PIR -------------------------------------------------------------------------------------------------------
     [Fact]
     public async Task Completing_with_issues_creates_a_PIR_and_a_Successful_close_does_not()

@@ -36,6 +36,7 @@ public static class Guards
     public const string ExecutingRequiresBaseline = "ExecutingRequiresBaseline";
     public const string RollbackNotRehearsed = "RollbackNotRehearsed";
     public const string CloseCodeRequired = "CloseCodeRequired";
+    public const string AbortReasonRequired = "AbortReasonRequired";
     public const string GateOpenTasks = "GateOpenTasks";
     public const string ComplianceNeedsTask = "ComplianceNeedsTask";
     public const string EarlierGateOpen = "EarlierGateOpen";

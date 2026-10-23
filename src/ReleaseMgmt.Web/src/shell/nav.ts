@@ -14,7 +14,7 @@ export interface NavGroup { id: 'workspace' | 'management' | 'more'; label?: str
 export const NAV: NavGroup[] = [
   {
     id: 'workspace', label: 'Workspace', items: [
-      { view: 'overview', label: 'Overview', icon: 'layout-dashboard', placeholder: 'REOS-95' },
+      { view: 'overview', label: 'Overview', icon: 'layout-dashboard' },
       { view: 'calendar', label: 'Portfolio & calendar', icon: 'calendar-days' },
       { view: 'trains', label: 'Releases', icon: 'layers' },
       { view: 'orchestration', label: 'Orchestration', icon: 'workflow', placeholder: 'REOS-98' },

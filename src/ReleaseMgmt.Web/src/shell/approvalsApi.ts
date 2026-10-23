@@ -1,4 +1,4 @@
-import { get } from '../api'
+import { get } from '../api.ts'
 import { browserZone, localClock } from './clock.ts'
 
 /** GET /approvals (REOS-94): the queue behind the Approvals page and the sidebar badge. */

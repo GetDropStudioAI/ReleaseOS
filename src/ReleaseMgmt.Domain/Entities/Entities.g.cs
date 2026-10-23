@@ -17,6 +17,26 @@ public class Users
     public int Version { get; set; } = 1;
 }
 
+public class Workspaces
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public string Slug { get; set; } = "";
+    public string? Region { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class WorkspaceMembers
+{
+    public string WorkspaceId { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string Role { get; set; } = "";
+    public DateTime AddedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
 public class Teams
 {
     public string Id { get; set; } = Ids.New();
@@ -24,6 +44,7 @@ public class Teams
     public string Name { get; set; } = "";
     public string? WebhookDestinationId { get; set; }
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class TeamMembers
@@ -37,6 +58,7 @@ public class Holidays
     public DateOnly Day { get; set; }
     public string Name { get; set; } = "";
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class TrainTemplates
@@ -49,6 +71,7 @@ public class TrainTemplates
     public DateTime? ApprovedAt { get; set; }
     public DateOnly? ReviewDueOn { get; set; }
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class TemplateGates
@@ -95,6 +118,7 @@ public class CommTemplateLibrary
     public string SubjectLine { get; set; } = "";
     public string MarkdownBody { get; set; } = "";
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class ReleaseTrains
@@ -121,6 +145,7 @@ public class ReleaseTrains
     public int Version { get; set; } = 1;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class ChangeRecords
@@ -370,6 +395,7 @@ public class FreezeWindows
     public string? ProductPattern { get; set; }
     public string CreatedByUserId { get; set; } = "";
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class FreezeOverrides
@@ -425,6 +451,7 @@ public class SyncAlerts
     public DateTime? ResolvedAt { get; set; }
     public string? ResolvedByUserId { get; set; }
     public int Version { get; set; } = 1;
+    public string? WorkspaceId { get; set; } = "default";
 }
 
 public class WebhookDestinations
@@ -436,6 +463,7 @@ public class WebhookDestinations
     public string UrlHmac { get; set; } = "";
     public string Kind { get; set; } = "";
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class CommTemplates
@@ -488,6 +516,7 @@ public class Notifications
     public DateTime CreatedAt { get; set; }
     public DateTime? ReadAt { get; set; }
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class UserSessionState
@@ -515,6 +544,7 @@ public class ImportJobs
     public DateTime CreatedAt { get; set; }
     public DateTime? CommittedAt { get; set; }
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class ExportJobs
@@ -531,6 +561,7 @@ public class ExportJobs
     public DateTime? CompletedAt { get; set; }
     public string Status { get; set; } = "Queued";
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class MetricSnapshots
@@ -552,6 +583,7 @@ public class IcsTokens
     public string TokenSha256 { get; set; } = "";
     public DateTime CreatedAt { get; set; }
     public DateTime? RevokedAt { get; set; }
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class SessionRevocations
@@ -585,6 +617,7 @@ public class ConnectorState
     public DateTime? LastSuccessAt { get; set; }
     public int ConsecutiveFailures { get; set; } = 0;
     public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class AuditEvents
@@ -598,6 +631,7 @@ public class AuditEvents
     public string Action { get; set; } = "";
     public string? BeforeJson { get; set; }
     public string? AfterJson { get; set; }
+    public string? WorkspaceId { get; set; } = "default";
 }
 
 public class TrainMilestones

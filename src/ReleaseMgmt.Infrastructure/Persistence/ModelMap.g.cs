@@ -10,9 +10,11 @@ public static class ModelMap
     public static void Apply(ModelBuilder b)
     {
         b.Entity<Users>(e => { e.ToTable("Users"); e.HasKey(e => e.Id);  });
+        b.Entity<Workspaces>(e => { e.ToTable("Workspaces"); e.HasKey(e => e.Id);  });
+        b.Entity<WorkspaceMembers>(e => { e.ToTable("WorkspaceMembers"); e.HasKey(e => new { e.WorkspaceId, e.UserId });  });
         b.Entity<Teams>(e => { e.ToTable("Teams"); e.HasKey(e => e.Id);  });
         b.Entity<TeamMembers>(e => { e.ToTable("TeamMembers"); e.HasKey(e => new { e.TeamId, e.UserId });  });
-        b.Entity<Holidays>(e => { e.ToTable("Holidays"); e.HasKey(e => e.Day);  });
+        b.Entity<Holidays>(e => { e.ToTable("Holidays"); e.HasKey(e => new { e.WorkspaceId, e.Day });  });
         b.Entity<TrainTemplates>(e => { e.ToTable("TrainTemplates"); e.HasKey(e => e.Id);  });
         b.Entity<TemplateGates>(e => { e.ToTable("TemplateGates"); e.HasKey(e => e.Id);  });
         b.Entity<TemplateSteps>(e => { e.ToTable("TemplateSteps"); e.HasKey(e => e.Id);  });
@@ -55,26 +57,33 @@ public static class ModelMap
         b.Entity<IcsTokens>(e => { e.ToTable("IcsTokens"); e.HasKey(e => e.Id);  });
         b.Entity<SessionRevocations>(e => { e.ToTable("SessionRevocations"); e.HasKey(e => e.SessionId);  });
         b.Entity<ParsePreviews>(e => { e.ToTable("ParsePreviews"); e.HasKey(e => e.Id);  });
-        b.Entity<ConnectorState>(e => { e.ToTable("ConnectorState"); e.HasKey(e => e.SourceSystem);  });
+        b.Entity<ConnectorState>(e => { e.ToTable("ConnectorState"); e.HasKey(e => new { e.WorkspaceId, e.SourceSystem });  });
         b.Entity<AuditEvents>(e => { e.ToTable("AuditEvents"); e.HasKey(e => e.Id); e.Property(e => e.Id).ValueGeneratedOnAdd(); });
         b.Entity<TrainMilestones>(e => { e.ToTable("TrainMilestones"); e.HasKey(e => e.Id);  });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
+        b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WorkspaceMembers>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Teams>().HasOne<WebhookDestinations>().WithMany().HasForeignKey(e => e.WebhookDestinationId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<Teams>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TeamMembers>().HasOne<Teams>().WithMany().HasForeignKey(e => e.TeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TeamMembers>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<Holidays>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainTemplates>().HasOne<Users>().WithMany().HasForeignKey(e => e.ApprovedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainTemplates>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateGates>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateGates>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateSteps>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateSteps>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateCommSchedule>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateCommSchedule>().HasOne<CommTemplateLibrary>().WithMany().HasForeignKey(e => e.LibraryTemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CommTemplateLibrary>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ReleaseTrains>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ReleaseTrains>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ClonedFromTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ReleaseTrains>().HasOne<Users>().WithMany().HasForeignKey(e => e.RollbackRehearsedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ReleaseTrains>().HasOne<Users>().WithMany().HasForeignKey(e => e.HypercareExitByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ReleaseTrains>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ReleaseTrains>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ChangeRecords>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<AffectedCIs>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<DeploymentWindows>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -122,6 +131,7 @@ public static class ModelMap
         b.Entity<PirActions>().HasOne<PostImplementationReviews>().WithMany().HasForeignKey(e => e.PirId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<PirActions>().HasOne<Users>().WithMany().HasForeignKey(e => e.OwnerUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<FreezeWindows>().HasOne<Users>().WithMany().HasForeignKey(e => e.CreatedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<FreezeWindows>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<FreezeOverrides>().HasOne<FreezeWindows>().WithMany().HasForeignKey(e => e.FreezeWindowId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<FreezeOverrides>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<FreezeOverrides>().HasOne<Users>().WithMany().HasForeignKey(e => e.RequestedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -132,6 +142,8 @@ public static class ModelMap
         b.Entity<ExternalLinks>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<SyncAlerts>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<SyncAlerts>().HasOne<Users>().WithMany().HasForeignKey(e => e.ResolvedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<SyncAlerts>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookDestinations>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CommTemplates>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CommTemplates>().HasOne<CommTemplateLibrary>().WithMany().HasForeignKey(e => e.LibraryTemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CommTemplates>().HasOne<StageGates>().WithMany().HasForeignKey(e => e.StageGateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -142,18 +154,23 @@ public static class ModelMap
         b.Entity<CommDispatches>().HasOne<WebhookDestinations>().WithMany().HasForeignKey(e => e.WebhookDestinationId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CommDispatches>().HasOne<Users>().WithMany().HasForeignKey(e => e.DispatchedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Notifications>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<Notifications>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<UserSessionState>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<UserSessionState>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ActiveTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ImportJobs>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ImportJobs>().HasOne<Users>().WithMany().HasForeignKey(e => e.UploadedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ImportJobs>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ExportJobs>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ExportJobs>().HasOne<Users>().WithMany().HasForeignKey(e => e.RequestedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ExportJobs>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<MetricSnapshots>().HasOne<ExportJobs>().WithMany().HasForeignKey(e => e.ExportJobId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<MetricSnapshots>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<IcsTokens>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<IcsTokens>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<SessionRevocations>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ParsePreviews>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ParsePreviews>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ConnectorState>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainMilestones>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainMilestones>().HasOne<Users>().WithMany().HasForeignKey(e => e.OwnerUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainMilestones>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);

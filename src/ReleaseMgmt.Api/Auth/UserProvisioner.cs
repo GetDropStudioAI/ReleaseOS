@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Infrastructure.Persistence;
+using ReleaseMgmt.Infrastructure.Services;
 
 namespace ReleaseMgmt.Api.Auth;
 
@@ -26,6 +27,7 @@ public sealed class UserProvisioner(IDbContextFactory<ReleaseDbContext> dbf, Tim
         {
             u = new Users { Id = Ids.New(), Email = email, DisplayName = displayName, Role = role };
             db.Set<Users>().Add(u);
+            WorkspaceService.JoinDefault(db, u, Now());   // REOS-104
             Audit(db, u.Id, CreateAction, null, new Dictionary<string, object?> { ["Email"] = email, ["DisplayName"] = displayName, ["Role"] = role, ["IsActive"] = true });
         }
         else
@@ -40,18 +42,24 @@ public sealed class UserProvisioner(IDbContextFactory<ReleaseDbContext> dbf, Tim
                 u.Version++;
                 Audit(db, u.Id, UpdateAction, before, after);
             }
+            if (after.ContainsKey("Role")) await WorkspaceService.MirrorDefaultRoleAsync(db, u, Now(), ct);   // REOS-104
         }
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return u.Id;
     }
 
-    private void Audit(ReleaseDbContext db, string userId, string action, object? before, object after)
+    private DateTime Now()
     {
         var t = time.GetUtcNow().UtcDateTime;
+        return new DateTime(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);   // whole seconds, as ServiceBase stamps them
+    }
+
+    private void Audit(ReleaseDbContext db, string userId, string action, object? before, object after)
+    {
         db.Set<AuditEvents>().Add(new AuditEvents
         {
-            OccurredAt = new DateTime(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc),   // whole seconds, as ServiceBase stamps them
+            OccurredAt = Now(),
             ActorUserId = userId, EntityType = "User", EntityId = userId, Action = action,
             BeforeJson = before is null ? null : JsonSerializer.Serialize(before),
             AfterJson = JsonSerializer.Serialize(after),

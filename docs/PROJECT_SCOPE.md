@@ -79,7 +79,7 @@ Plan (`RunbookSteps`) and actuals (`StepExecutions` per `RunbookRuns`) are separ
 
 ## 4. Schema
 
-`db/schema.sql` is the contract: 49 tables, 42 triggers, 23 indexes; `tests/reference/test_schema.py` (94 cases) must pass against it. Conventions: UUIDv7 TEXT ids; UTC ISO-8601 TEXT timestamps; 0/1 booleans with CHECK; `Version` on every mutable table.
+`db/schema.sql` is the contract: 51 tables, 91 triggers, 26 indexes; `tests/reference/test_schema.py` (157 cases) must pass against it. Workspaces (D45, REOS-104): every root row (train, team, holiday, template, comm library entry, freeze, webhook, connector state, notification, import, export, ICS token, sync alert, audit row) carries `WorkspaceId`; child rows take their parent's; section 10b's triggers keep every reference inside one workspace (Q-104a). Conventions: UUIDv7 TEXT ids; UTC ISO-8601 TEXT timestamps; 0/1 booleans with CHECK; `Version` on every mutable table.
 
 Immutable by trigger: `AuditEvents`, `GateTransitions`, `Baselines`, `GoNoGoDecisions`, `CommDispatches` and `FreezeOverrides` (no update, no delete), and `Attachments` once locked (no update of any column, no delete).
 

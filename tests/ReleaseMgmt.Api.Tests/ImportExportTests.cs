@@ -518,6 +518,7 @@ public class ImportExportTests
         var ok = await Ok(await Preview(w.Rte, "Users", Csv(["Email", "DisplayName", "Role", "Handle"], ["new@x.com", "New Person", "GovernanceOfficer", "@newp"], ["dana@x.com", "Dana O.", "Viewer", "dana"])));
         await Ok(await Commit(w.Rte, ok.GetProperty("jobId").GetString()!));
         Assert.Equal("GovernanceOfficer,newp,1", Scalar(w.F, "SELECT Role||','||Handle||','||IsActive FROM Users WHERE Email='new@x.com'"));
+        Assert.Equal("GovernanceOfficer", Scalar(w.F, "SELECT m.Role FROM WorkspaceMembers m JOIN Users u ON u.Id=m.UserId WHERE u.Email='new@x.com' AND m.WorkspaceId='default'"));   // REOS-104
         Assert.Equal("Dana O.", Scalar(w.F, "SELECT DisplayName FROM Users WHERE Email='dana@x.com'"));
         Assert.Equal("Viewer", Scalar(w.F, "SELECT Role FROM Users WHERE Email='dana@x.com'"));
         var taken = await Json(await Preview(w.Rte, "Users", Csv(["Email", "DisplayName", "Role", "Handle"], ["third@x.com", "Third", "Viewer", "dana"]), "Append"));

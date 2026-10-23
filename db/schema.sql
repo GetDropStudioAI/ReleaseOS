@@ -30,12 +30,37 @@ CREATE TABLE Users (
 );
 CREATE UNIQUE INDEX UX_Users_IdpIdentity ON Users(IdpIssuer, IdpSubject) WHERE IdpSubject IS NOT NULL;
 
+CREATE TABLE Workspaces (                                 -- D45: several workspaces on one host; every root row below belongs to exactly one (REOS-104)
+    Id TEXT PRIMARY KEY,                                  -- 'default' holds the data from before workspaces (a documented exception to UUIDv7)
+    Name TEXT NOT NULL CHECK (length(trim(Name)) BETWEEN 1 AND 100),
+    Slug TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK (length(Slug) BETWEEN 1 AND 40 AND Slug NOT GLOB '*[^a-z0-9-]*'),   -- URL segment
+    Region TEXT CHECK (Region IS NULL OR length(Region) BETWEEN 1 AND 60),   -- a label ("EU", "US-East"); every workspace's data stays on this host
+    CreatedAt TEXT NOT NULL,
+    ArchivedAt TEXT,
+    Version INTEGER NOT NULL DEFAULT 1
+);
+-- The default workspace exists in every database: root rows written by raw SQL (fixtures, upgrades) land in it through the column DEFAULT.
+-- The app names it from Workspace:DefaultName and Workspace:Region at start. SQLite's 'now' here: there is no service clock at schema time.
+INSERT INTO Workspaces (Id, Name, Slug, CreatedAt) VALUES ('default', 'Default', 'default', strftime('%Y-%m-%dT%H:%M:%SZ','now'));
+
+CREATE TABLE WorkspaceMembers (                           -- a person's role is held per workspace (D45); users and sign-in stay global
+    WorkspaceId TEXT NOT NULL REFERENCES Workspaces(Id) ON DELETE CASCADE,
+    UserId TEXT NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
+    Role TEXT NOT NULL CHECK (Role IN ('Viewer','ReleaseManager','RTE','GovernanceOfficer')),   -- until REOS-105 the triggers read Users.Role, which the app keeps equal to the 'default' membership
+    AddedAt TEXT NOT NULL,
+    Version INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (WorkspaceId, UserId)
+);
+CREATE INDEX IX_WorkspaceMembers_User ON WorkspaceMembers(UserId);
+
 CREATE TABLE Teams (
     Id TEXT PRIMARY KEY,
-    Handle TEXT NOT NULL UNIQUE COLLATE NOCASE,          -- @handle in the bulk parser and CSV
+    Handle TEXT NOT NULL COLLATE NOCASE,                 -- @handle in the bulk parser and CSV; unique within the workspace
     Name TEXT NOT NULL,
     WebhookDestinationId TEXT REFERENCES WebhookDestinations(Id),   -- team channel for notifications
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    UNIQUE (WorkspaceId, Handle)
 );
 
 CREATE TABLE TeamMembers (
@@ -44,10 +69,12 @@ CREATE TABLE TeamMembers (
     PRIMARY KEY (TeamId, UserId)
 );
 
-CREATE TABLE Holidays (                                   -- business-day offset calendar (D9)
-    Day TEXT PRIMARY KEY,
+CREATE TABLE Holidays (                                   -- business-day offset calendar (D9), one per workspace
+    Day TEXT NOT NULL,
     Name TEXT NOT NULL,
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    PRIMARY KEY (WorkspaceId, Day)
 );
 
 -- =====================================================================
@@ -55,13 +82,15 @@ CREATE TABLE Holidays (                                   -- business-day offset
 -- =====================================================================
 CREATE TABLE TrainTemplates (
     Id TEXT PRIMARY KEY,
-    Name TEXT NOT NULL UNIQUE,
+    Name TEXT NOT NULL,                                   -- unique within the workspace
     Status TEXT NOT NULL DEFAULT 'Draft' CHECK (Status IN ('Draft','Approved','Retired')),
     DefaultRiskTier TEXT NOT NULL DEFAULT 'Moderate' CHECK (DefaultRiskTier IN ('Low','Moderate','High','VeryHigh')),
     ApprovedByUserId TEXT REFERENCES Users(Id),
     ApprovedAt TEXT,
     ReviewDueOn TEXT,                                     -- re-review cycle (default +12 months on approval)
     Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    UNIQUE (WorkspaceId, Name),
     CHECK ((Status = 'Approved') = (ApprovedByUserId IS NOT NULL AND ApprovedAt IS NOT NULL))
 );
 
@@ -103,11 +132,13 @@ CREATE TABLE TemplateCommSchedule (                       -- T-minus plan
 CREATE TABLE CommTemplateLibrary (
     Id TEXT PRIMARY KEY,
     TemplateType TEXT NOT NULL,                           -- Tminus28, GoNoGo, Cutover, Complete, HypercareExit, ...
-    Name TEXT NOT NULL UNIQUE,
+    Name TEXT NOT NULL,                                   -- unique within the workspace
     Audience TEXT NOT NULL,                               -- Exec, Ops, SupportDesk, Clients, All
     SubjectLine TEXT NOT NULL,
     MarkdownBody TEXT NOT NULL,                           -- tokens {ReleaseTitle} {BlockerCount} ... (allowlisted)
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    UNIQUE (WorkspaceId, Name)
 );
 
 -- =====================================================================
@@ -137,6 +168,7 @@ CREATE TABLE ReleaseTrains (
     Version INTEGER NOT NULL DEFAULT 1,
     CreatedAt TEXT NOT NULL,
     UpdatedAt TEXT NOT NULL,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
     CHECK ((CurrentStatus = 'Complete') = (CloseCode IS NOT NULL))
 );
 
@@ -399,6 +431,7 @@ CREATE TABLE FreezeWindows (
     ProductPattern TEXT,                                  -- NULL = all products; else GLOB on ProductName
     CreatedByUserId TEXT NOT NULL REFERENCES Users(Id),
     Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
     CHECK (EndsAt > StartsAt)
 );
 
@@ -457,7 +490,8 @@ CREATE TABLE SyncAlerts (
     IsResolved INTEGER NOT NULL DEFAULT 0 CHECK (IsResolved IN (0,1)),
     ResolvedAt TEXT,
     ResolvedByUserId TEXT REFERENCES Users(Id),
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT DEFAULT 'default' REFERENCES Workspaces(Id)   -- NULL = host-wide (backups); the fingerprint carries the workspace
 );
 CREATE UNIQUE INDEX UX_SyncAlerts_OpenFingerprint ON SyncAlerts(Fingerprint) WHERE IsResolved = 0;
 
@@ -468,7 +502,8 @@ CREATE TABLE WebhookDestinations (                       -- the URL's path is it
     ProtectedUrl TEXT NOT NULL CHECK (ProtectedUrl LIKE 'CfDJ8%'),   -- ASP.NET Data Protection payload of the https URL; decrypted only by the senders
     UrlHmac TEXT NOT NULL UNIQUE CHECK (length(UrlHmac) = 64 AND UrlHmac NOT GLOB '*[^0-9a-f]*'),   -- HMAC-SHA256 (hex) of the normalised URL: one row per address
     Kind TEXT NOT NULL CHECK (Kind IN ('Teams','Slack','Generic')),
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id)   -- UrlHmac stays unique on the host: one address, one destination (Q-104a)
 );
 
 CREATE TABLE CommTemplates (                              -- per-train copy, editable
@@ -517,7 +552,8 @@ CREATE TABLE Notifications (                              -- in-app inbox; escal
     Message TEXT NOT NULL,
     CreatedAt TEXT NOT NULL,
     ReadAt TEXT,
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id)
 );
 
 -- =====================================================================
@@ -547,6 +583,7 @@ CREATE TABLE ImportJobs (
     CreatedAt TEXT NOT NULL,
     CommittedAt TEXT,
     Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
     CHECK (Status <> 'Committed' OR ErrorCount = 0)      -- a batch with any error never commits
 );
 
@@ -562,7 +599,8 @@ CREATE TABLE ExportJobs (
     CreatedAt TEXT NOT NULL,
     CompletedAt TEXT,
     Status TEXT NOT NULL DEFAULT 'Queued' CHECK (Status IN ('Queued','Running','Done','Failed')),
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id)
 );
 
 CREATE TABLE MetricSnapshots (                            -- written only when an evidence pack is generated (D16)
@@ -581,9 +619,10 @@ CREATE TABLE IcsTokens (                                  -- per-user calendar f
     UserId TEXT NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
     TokenSha256 TEXT NOT NULL UNIQUE CHECK (length(TokenSha256) = 64),   -- store the hash, never the token
     CreatedAt TEXT NOT NULL,
-    RevokedAt TEXT
+    RevokedAt TEXT,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id)   -- one feed per person per workspace
 );
-CREATE UNIQUE INDEX UX_IcsTokens_ActivePerUser ON IcsTokens(UserId) WHERE RevokedAt IS NULL;
+CREATE UNIQUE INDEX UX_IcsTokens_ActivePerUser ON IcsTokens(WorkspaceId, UserId) WHERE RevokedAt IS NULL;
 
 CREATE TABLE SessionRevocations (                         -- signed-out session ids, refused until the session would have ended anyway (Q-SEC-B5)
     SessionId TEXT PRIMARY KEY,                           -- random id stamped in the cookie ticket at sign-in
@@ -607,14 +646,16 @@ CREATE TABLE ParsePreviews (                              -- bulk-parser preview
 );
 
 CREATE TABLE ConnectorState (                             -- poller bookkeeping; secrets live in Data Protection (D12)
-    SourceSystem TEXT PRIMARY KEY CHECK (SourceSystem IN ('Jira','ServiceNow')),
+    SourceSystem TEXT NOT NULL CHECK (SourceSystem IN ('Jira','ServiceNow')),
     BaseUrl TEXT NOT NULL,
     IsEnabled INTEGER NOT NULL DEFAULT 1 CHECK (IsEnabled IN (0,1)),
     LastCycleStartedAt TEXT,
     LastCycleCompletedAt TEXT,
     LastSuccessAt TEXT,
     ConsecutiveFailures INTEGER NOT NULL DEFAULT 0,
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    PRIMARY KEY (WorkspaceId, SourceSystem)
 );
 
 CREATE TABLE AuditEvents (
@@ -626,7 +667,8 @@ CREATE TABLE AuditEvents (
     EntityId TEXT NOT NULL,
     Action TEXT NOT NULL,
     BeforeJson TEXT,
-    AfterJson TEXT
+    AfterJson TEXT,
+    WorkspaceId TEXT DEFAULT 'default'                    -- NULL = host-wide (accounts, backups); no foreign key, like ReleaseTrainId: the log outlives what it describes
 );
 
 -- =====================================================================
@@ -737,10 +779,10 @@ WHEN NEW.CurrentStatus = 'Complete' AND NEW.CloseCode IN ('SuccessfulWithIssues'
 BEGIN
     INSERT INTO PostImplementationReviews(Id, ReleaseTrainId, RequiredReason, Status)
     VALUES (lower(hex(randomblob(16))), NEW.Id, 'CloseCode=' || NEW.CloseCode, 'Required');
-    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action, AfterJson)
+    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action, AfterJson, WorkspaceId)
     VALUES (COALESCE(NEW.LastChangedAt, strftime('%Y-%m-%dT%H:%M:%SZ','now')), NEW.LastChangedByUserId, NEW.Id, 'PostImplementationReview',
             (SELECT Id FROM PostImplementationReviews WHERE ReleaseTrainId = NEW.Id),
-            'AutoRequired', json_object('reason', 'CloseCode=' || NEW.CloseCode));
+            'AutoRequired', json_object('reason', 'CloseCode=' || NEW.CloseCode), NEW.WorkspaceId);
 END;
 
 -- Baseline: captured automatically when the first gate whose name contains 'Freeze' certifies (D15).
@@ -758,9 +800,9 @@ BEGIN
            ),
            NEW.CertifiedByUserId
     FROM ReleaseTrains t WHERE t.Id = NEW.ReleaseTrainId;
-    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action)
+    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action, WorkspaceId)
     VALUES (COALESCE(NEW.LastChangedAt, strftime('%Y-%m-%dT%H:%M:%SZ','now')), NEW.CertifiedByUserId,
-            NEW.ReleaseTrainId, 'Baseline', NEW.ReleaseTrainId, 'AutoCaptured');
+            NEW.ReleaseTrainId, 'Baseline', NEW.ReleaseTrainId, 'AutoCaptured', (SELECT WorkspaceId FROM ReleaseTrains WHERE Id = NEW.ReleaseTrainId));
 END;
 
 -- Gate: log every status change (actor from LastChangedByUserId, which must be set)
@@ -815,9 +857,9 @@ BEGIN
     UPDATE Attachments SET IsLocked = 1
      WHERE IsLocked = 0 AND ((EntityType = 'Gate' AND EntityId = NEW.Id)
         OR (EntityType = 'Task' AND EntityId IN (SELECT Id FROM ChecklistTasks WHERE StageGateId = NEW.Id)));
-    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action)
+    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action, WorkspaceId)
     SELECT COALESCE(NEW.LastChangedAt, strftime('%Y-%m-%dT%H:%M:%SZ','now')), NEW.LastChangedByUserId,
-           NEW.ReleaseTrainId, 'StageGate', NEW.Id, 'EvidenceLocked'
+           NEW.ReleaseTrainId, 'StageGate', NEW.Id, 'EvidenceLocked', (SELECT WorkspaceId FROM ReleaseTrains WHERE Id = NEW.ReleaseTrainId)
     WHERE OLD.Status NOT IN ('Certified','Waived');
 END;
 
@@ -846,9 +888,9 @@ BEGIN SELECT RAISE(ABORT, 'Freeze overrides are approved by a Release Manager or
 CREATE TRIGGER trg_Task_ReopenDecertifies AFTER UPDATE OF IsCompleted ON ChecklistTasks
 WHEN OLD.IsCompleted = 1 AND NEW.IsCompleted = 0
 BEGIN
-    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action)
+    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action, WorkspaceId)
     SELECT COALESCE(NEW.LastChangedAt, strftime('%Y-%m-%dT%H:%M:%SZ','now')), NEW.LastChangedByUserId,
-           g.ReleaseTrainId, 'StageGate', g.Id, 'Decertified'
+           g.ReleaseTrainId, 'StageGate', g.Id, 'Decertified', (SELECT WorkspaceId FROM ReleaseTrains WHERE Id = g.ReleaseTrainId)
       FROM StageGates g WHERE g.Id = NEW.StageGateId AND g.Status = 'Certified';
     UPDATE StageGates SET Status = 'InProgress', CertifiedByUserId = NULL, CertifiedAt = NULL,
            LastChangedByUserId = NEW.LastChangedByUserId, LastChangedAt = NEW.LastChangedAt, Version = Version + 1
@@ -858,9 +900,9 @@ END;
 CREATE TRIGGER trg_Task_InsertDecertifies AFTER INSERT ON ChecklistTasks
 WHEN NEW.IsCompleted = 0
 BEGIN
-    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action)
+    INSERT INTO AuditEvents(OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action, WorkspaceId)
     SELECT COALESCE(NEW.LastChangedAt, strftime('%Y-%m-%dT%H:%M:%SZ','now')), NEW.LastChangedByUserId,
-           g.ReleaseTrainId, 'StageGate', g.Id, 'Decertified'
+           g.ReleaseTrainId, 'StageGate', g.Id, 'Decertified', (SELECT WorkspaceId FROM ReleaseTrains WHERE Id = g.ReleaseTrainId)
       FROM StageGates g WHERE g.Id = NEW.StageGateId AND g.Status = 'Certified';
     UPDATE StageGates SET Status = 'InProgress', CertifiedByUserId = NULL, CertifiedAt = NULL,
            LastChangedByUserId = NEW.LastChangedByUserId, LastChangedAt = NEW.LastChangedAt, Version = Version + 1
@@ -890,6 +932,7 @@ WHEN NEW.Status = 'Running'
     JOIN RunbookSteps s ON s.Id = NEW.StepId
     LEFT JOIN BundledProducts p ON p.Id = s.BundledProductId
     WHERE f.Kind = 'Freeze'
+      AND f.WorkspaceId = (SELECT WorkspaceId FROM ReleaseTrains WHERE Id = s.ReleaseTrainId)   -- another workspace's freeze never applies
       AND NEW.ActualStartAt >= f.StartsAt AND NEW.ActualStartAt < f.EndsAt
       AND (f.ProductPattern IS NULL OR (p.ProductName IS NOT NULL AND p.ProductName GLOB f.ProductPattern))
       AND NOT EXISTS (
@@ -908,9 +951,309 @@ WHEN NEW.Status = 'Committed' AND NEW.ErrorCount > 0
 BEGIN SELECT RAISE(ABORT, 'Import has row errors; fix the file and re-preview'); END;
 
 -- =====================================================================
+-- 10b. Workspace boundary (D45, REOS-104)
+-- =====================================================================
+-- A root row never moves to another workspace, and no row references a row of another workspace. Child rows take their
+-- workspace from their parent (train, template, export job); rows of one train that point at each other (product, gate, step,
+-- run, communication template, dispatch) must be in the same train, and such rows never move to another train.
+-- One trigger per table and event; each check raises its own message. A reference to a missing row is left to the foreign key.
+
+-- Roots: WorkspaceId never changes
+CREATE TRIGGER trg_Ws_Holidays_Update BEFORE UPDATE OF WorkspaceId ON Holidays WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_TrainTemplates_Update BEFORE UPDATE OF WorkspaceId ON TrainTemplates WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_CommTemplateLibrary_Update BEFORE UPDATE OF WorkspaceId ON CommTemplateLibrary WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_FreezeWindows_Update BEFORE UPDATE OF WorkspaceId ON FreezeWindows WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_WebhookDestinations_Update BEFORE UPDATE OF WorkspaceId ON WebhookDestinations WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_Notifications_Update BEFORE UPDATE OF WorkspaceId ON Notifications WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_IcsTokens_Update BEFORE UPDATE OF WorkspaceId ON IcsTokens WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_ConnectorState_Update BEFORE UPDATE OF WorkspaceId ON ConnectorState WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+
+-- Roots that point at other roots
+CREATE TRIGGER trg_Ws_ReleaseTrains_Insert BEFORE INSERT ON ReleaseTrains
+BEGIN
+    SELECT RAISE(ABORT, 'The template belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM TrainTemplates x WHERE x.Id = NEW.TemplateId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'The cloned-from train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ClonedFromTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ReleaseTrains_Update BEFORE UPDATE OF WorkspaceId, TemplateId, ClonedFromTrainId ON ReleaseTrains
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The template belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM TrainTemplates x WHERE x.Id = NEW.TemplateId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'The cloned-from train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ClonedFromTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Teams_Insert BEFORE INSERT ON Teams
+BEGIN
+    SELECT RAISE(ABORT, 'The webhook destination belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM WebhookDestinations x WHERE x.Id = NEW.WebhookDestinationId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Teams_Update BEFORE UPDATE OF WorkspaceId, WebhookDestinationId ON Teams
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The webhook destination belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM WebhookDestinations x WHERE x.Id = NEW.WebhookDestinationId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_SyncAlerts_Insert BEFORE INSERT ON SyncAlerts
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_SyncAlerts_Update BEFORE UPDATE OF WorkspaceId, ReleaseTrainId ON SyncAlerts
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ImportJobs_Insert BEFORE INSERT ON ImportJobs
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ImportJobs_Update BEFORE UPDATE OF WorkspaceId, ReleaseTrainId ON ImportJobs
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ExportJobs_Insert BEFORE INSERT ON ExportJobs
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ExportJobs_Update BEFORE UPDATE OF WorkspaceId, ReleaseTrainId ON ExportJobs
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_AuditEvents_Insert BEFORE INSERT ON AuditEvents
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+
+-- Template rows: owner teams and library templates from the template's workspace
+CREATE TRIGGER trg_Ws_TemplateGates_Insert BEFORE INSERT ON TemplateGates
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TemplateGates_Update BEFORE UPDATE OF TemplateId, OwnerTeamId ON TemplateGates
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TemplateSteps_Insert BEFORE INSERT ON TemplateSteps
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TemplateSteps_Update BEFORE UPDATE OF TemplateId, OwnerTeamId ON TemplateSteps
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TemplateCommSchedule_Insert BEFORE INSERT ON TemplateCommSchedule
+BEGIN
+    SELECT RAISE(ABORT, 'The library template belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM CommTemplateLibrary x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.LibraryTemplateId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TemplateCommSchedule_Update BEFORE UPDATE OF TemplateId, LibraryTemplateId ON TemplateCommSchedule
+BEGIN
+    SELECT RAISE(ABORT, 'The library template belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM CommTemplateLibrary x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.LibraryTemplateId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+
+-- Train rows: teams, library templates and webhooks from the train's workspace; products, gates and comm templates from the same train
+CREATE TRIGGER trg_Ws_StageGates_Insert BEFORE INSERT ON StageGates
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_StageGates_Update BEFORE UPDATE OF ReleaseTrainId, OwnerTeamId ON StageGates
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another train') WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId;
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_RunbookSteps_Insert BEFORE INSERT ON RunbookSteps
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The product belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM BundledProducts x WHERE x.Id = NEW.BundledProductId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_RunbookSteps_Update BEFORE UPDATE OF ReleaseTrainId, OwnerTeamId, BundledProductId ON RunbookSteps
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another train') WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId;
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The product belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM BundledProducts x WHERE x.Id = NEW.BundledProductId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_TrainMilestones_Insert BEFORE INSERT ON TrainMilestones
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TrainMilestones_Update BEFORE UPDATE OF ReleaseTrainId, OwnerTeamId ON TrainMilestones
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another train') WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId;
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Blockers_Insert BEFORE INSERT ON Blockers
+BEGIN
+    SELECT RAISE(ABORT, 'The product belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM BundledProducts x WHERE x.Id = NEW.BundledProductId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+    SELECT RAISE(ABORT, 'The gate belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM StageGates x WHERE x.Id = NEW.StageGateId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_Blockers_Update BEFORE UPDATE OF ReleaseTrainId, BundledProductId, StageGateId ON Blockers
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another train') WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId;
+    SELECT RAISE(ABORT, 'The product belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM BundledProducts x WHERE x.Id = NEW.BundledProductId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+    SELECT RAISE(ABORT, 'The gate belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM StageGates x WHERE x.Id = NEW.StageGateId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_CommTemplates_Insert BEFORE INSERT ON CommTemplates
+BEGIN
+    SELECT RAISE(ABORT, 'The library template belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM CommTemplateLibrary x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.LibraryTemplateId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The gate belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM StageGates x WHERE x.Id = NEW.StageGateId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_CommTemplates_Update BEFORE UPDATE OF ReleaseTrainId, LibraryTemplateId, StageGateId ON CommTemplates
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another train') WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId;
+    SELECT RAISE(ABORT, 'The library template belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM CommTemplateLibrary x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.LibraryTemplateId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The gate belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM StageGates x WHERE x.Id = NEW.StageGateId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_CommSchedule_Insert BEFORE INSERT ON CommSchedule
+BEGIN
+    SELECT RAISE(ABORT, 'The communication template belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM CommTemplates x WHERE x.Id = NEW.CommTemplateId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+    SELECT RAISE(ABORT, 'The dispatch belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM CommDispatches x JOIN CommTemplates c ON c.Id = x.CommTemplateId
+                    WHERE x.Id = NEW.DispatchId AND c.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_CommSchedule_Update BEFORE UPDATE OF ReleaseTrainId, CommTemplateId, DispatchId ON CommSchedule
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another train') WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId;
+    SELECT RAISE(ABORT, 'The communication template belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM CommTemplates x WHERE x.Id = NEW.CommTemplateId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+    SELECT RAISE(ABORT, 'The dispatch belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM CommDispatches x JOIN CommTemplates c ON c.Id = x.CommTemplateId
+                    WHERE x.Id = NEW.DispatchId AND c.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_BundledProducts_Update BEFORE UPDATE OF ReleaseTrainId ON BundledProducts WHEN NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another train'); END;
+CREATE TRIGGER trg_Ws_RunbookRuns_Update BEFORE UPDATE OF ReleaseTrainId ON RunbookRuns WHEN NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another train'); END;
+
+-- Rows below a gate, a run, a communication template or an export job; freeze overrides
+CREATE TRIGGER trg_Ws_ChecklistTasks_Insert BEFORE INSERT ON ChecklistTasks
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN StageGates g ON g.Id = NEW.StageGateId JOIN ReleaseTrains p ON p.Id = g.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The product belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM BundledProducts x JOIN StageGates g ON g.Id = NEW.StageGateId
+                    WHERE x.Id = NEW.BundledProductId AND x.ReleaseTrainId IS NOT g.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_ChecklistTasks_Update BEFORE UPDATE OF StageGateId, OwnerTeamId, BundledProductId ON ChecklistTasks
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another train')
+     WHERE EXISTS (SELECT 1 FROM StageGates x JOIN StageGates o ON o.Id = OLD.StageGateId
+                    WHERE x.Id = NEW.StageGateId AND x.ReleaseTrainId IS NOT o.ReleaseTrainId);
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN StageGates g ON g.Id = NEW.StageGateId JOIN ReleaseTrains p ON p.Id = g.ReleaseTrainId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The product belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM BundledProducts x JOIN StageGates g ON g.Id = NEW.StageGateId
+                    WHERE x.Id = NEW.BundledProductId AND x.ReleaseTrainId IS NOT g.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_StepExecutions_Insert BEFORE INSERT ON StepExecutions
+BEGIN
+    SELECT RAISE(ABORT, 'The step belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM RunbookSteps x JOIN RunbookRuns r ON r.Id = NEW.RunId
+                    WHERE x.Id = NEW.StepId AND x.ReleaseTrainId IS NOT r.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_StepExecutions_Update BEFORE UPDATE OF RunId, StepId ON StepExecutions
+BEGIN
+    SELECT RAISE(ABORT, 'The step belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM RunbookSteps x JOIN RunbookRuns r ON r.Id = NEW.RunId
+                    WHERE x.Id = NEW.StepId AND x.ReleaseTrainId IS NOT r.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_StepDependencies_Insert BEFORE INSERT ON StepDependencies
+BEGIN
+    SELECT RAISE(ABORT, 'The step belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM RunbookSteps x JOIN RunbookSteps s ON s.Id = NEW.StepId
+                    WHERE x.Id = NEW.DependsOnStepId AND x.ReleaseTrainId IS NOT s.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_StepDependencies_Update BEFORE UPDATE OF StepId, DependsOnStepId ON StepDependencies
+BEGIN
+    SELECT RAISE(ABORT, 'The step belongs to another train')
+     WHERE EXISTS (SELECT 1 FROM RunbookSteps x JOIN RunbookSteps s ON s.Id = NEW.StepId
+                    WHERE x.Id = NEW.DependsOnStepId AND x.ReleaseTrainId IS NOT s.ReleaseTrainId);
+END;
+CREATE TRIGGER trg_Ws_CommDispatches_Insert BEFORE INSERT ON CommDispatches
+BEGIN
+    SELECT RAISE(ABORT, 'The webhook destination belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM WebhookDestinations x JOIN CommTemplates c ON c.Id = NEW.CommTemplateId JOIN ReleaseTrains p ON p.Id = c.ReleaseTrainId
+                    WHERE x.Id = NEW.WebhookDestinationId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_FreezeOverrides_Insert BEFORE INSERT ON FreezeOverrides
+BEGIN
+    SELECT RAISE(ABORT, 'The freeze window belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM FreezeWindows x JOIN ReleaseTrains p ON p.Id = NEW.ReleaseTrainId
+                    WHERE x.Id = NEW.FreezeWindowId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_MetricSnapshots_Insert BEFORE INSERT ON MetricSnapshots
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x JOIN ExportJobs p ON p.Id = NEW.ExportJobId
+                    WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_MetricSnapshots_Update BEFORE UPDATE OF ExportJobId, ReleaseTrainId ON MetricSnapshots
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x JOIN ExportJobs p ON p.Id = NEW.ExportJobId
+                    WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+
+-- =====================================================================
 -- 11. Indexes
 -- =====================================================================
 CREATE INDEX IX_Trains_Status ON ReleaseTrains(CurrentStatus, TargetReleaseDate);
+CREATE INDEX IX_Trains_Workspace ON ReleaseTrains(WorkspaceId, TargetReleaseDate);
 CREATE INDEX IX_Gates_Train ON StageGates(ReleaseTrainId, SequenceOrder);
 CREATE INDEX IX_Gates_Owner ON StageGates(OwnerUserId, Status);
 CREATE INDEX IX_GateTrans_Gate ON GateTransitions(StageGateId, OccurredAt);
@@ -924,7 +1267,8 @@ CREATE INDEX IX_Links_State ON ExternalLinks(SyncState) WHERE SyncState <> 'InSy
 CREATE INDEX IX_Attach_Entity ON Attachments(EntityType, EntityId);
 CREATE INDEX IX_Comm_Due ON CommSchedule(ReleaseTrainId, DueAt);
 CREATE INDEX IX_Notif_User ON Notifications(UserId, ReadAt, CreatedAt);
-CREATE INDEX IX_Freeze_Range ON FreezeWindows(StartsAt, EndsAt);
+CREATE INDEX IX_Freeze_Range ON FreezeWindows(WorkspaceId, StartsAt, EndsAt);
 CREATE INDEX IX_Audit_Train ON AuditEvents(ReleaseTrainId, OccurredAt);
 CREATE INDEX IX_Audit_Entity ON AuditEvents(EntityType, EntityId);
+CREATE INDEX IX_Audit_Workspace ON AuditEvents(WorkspaceId, OccurredAt);
 CREATE INDEX IX_Milestones_Train ON TrainMilestones(ReleaseTrainId, DueOn);

@@ -20,6 +20,13 @@ public static partial class SchemaSql
     public static IReadOnlyList<string> TablesAndIndexes() =>
         [.. TableRegex().Matches(Full).Select(m => m.Value), .. IndexRegex().Matches(Full).Select(m => m.Value)];
 
+    /// <summary>The triggers ON one table, verbatim and in file order: what a rebuild of that table must re-apply, since dropping a table drops its triggers.</summary>
+    public static IReadOnlyList<string> TriggersOn(string table) =>
+        [.. Triggers().Where(t => Regex.IsMatch(t, $@"^CREATE TRIGGER \w+ [^\n]*\bON {Regex.Escape(table)}\b"))];
+
+    /// <summary>INSERT statements: rows every database starts with (the default workspace), applied after the tables and indexes.</summary>
+    public static IReadOnlyList<string> Rows() => [.. RowRegex().Matches(Full).Select(m => m.Value)];
+
     /// <summary>CREATE TRIGGER statements, verbatim and in file order (same-event triggers fire newest-first).</summary>
     public static IReadOnlyList<string> Triggers() => [.. TriggerRegex().Matches(Full).Select(m => m.Value)];
 
@@ -28,6 +35,9 @@ public static partial class SchemaSql
 
     [GeneratedRegex(@"^CREATE (UNIQUE )?INDEX [^;]*;", RegexOptions.Multiline)]
     private static partial Regex IndexRegex();
+
+    [GeneratedRegex(@"^INSERT INTO \w+ [^;]*;", RegexOptions.Multiline)]
+    private static partial Regex RowRegex();
 
     [GeneratedRegex(@"^CREATE TRIGGER \w+.*?\bEND;", RegexOptions.Singleline | RegexOptions.Multiline)]
     private static partial Regex TriggerRegex();

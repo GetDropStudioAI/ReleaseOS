@@ -44,6 +44,7 @@ public sealed partial class UserCreationService(IDbContextFactory<ReleaseDbConte
                 return ServiceResult<Users>.Fail(new GuardFailure(HandleTaken, $"@{tag} is already someone's handle"));
             var u = new Users { Id = Ids.New(), Email = mail, DisplayName = name, Role = role, Handle = tag, IsActive = true };
             db.Set<Users>().Add(u);
+            WorkspaceService.JoinDefault(db, u, Now);   // REOS-104
             Audit(db, actor, null, "User", u.Id, "Create", null, new { u.Email, u.DisplayName, u.Role, u.Handle, u.IsActive });
             await db.SaveChangesAsync(ct);
             return ServiceResult<Users>.Ok(u);

@@ -57,7 +57,7 @@ public sealed class SchemaContractTests : IDisposable
     {
         var expected = Regex.Matches(_schemaText, @"^CREATE TRIGGER (\w+)", RegexOptions.Multiline).Select(m => m.Groups[1].Value).Order().ToList();
         var actual = Master(Migrated()).Where(r => r.Type == "trigger").Select(r => r.Name).Order().ToList();
-        Assert.Equal(42, expected.Count);
+        Assert.Equal(91, expected.Count);   // 42 + 49 workspace-boundary triggers (REOS-104)
         Assert.Equal(expected, actual);
     }
 
@@ -66,10 +66,23 @@ public sealed class SchemaContractTests : IDisposable
     {
         var migrated = Master(Migrated());
         var reference = Master(FromSchemaSql());
-        Assert.Equal(49, reference.Count(r => r.Type == "table"));   // 48 + TrainMilestones (REOS-84)
-        Assert.Equal(23, reference.Count(r => r.Type == "index"));   // 22 + IX_Milestones_Train
+        Assert.Equal(51, reference.Count(r => r.Type == "table"));   // 49 + Workspaces, WorkspaceMembers (REOS-104)
+        Assert.Equal(26, reference.Count(r => r.Type == "index"));   // 23 + IX_WorkspaceMembers_User, IX_Trains_Workspace, IX_Audit_Workspace
         Assert.Equal(reference.Select(r => (r.Type, r.Name)), migrated.Select(r => (r.Type, r.Name)));
         foreach (var (a, b) in reference.Zip(migrated)) Assert.Equal(a.Sql, b.Sql); // DDL text identical, incl. CHECKs
+    }
+
+    [Fact]
+    public void Migrated_database_starts_with_the_default_workspace_and_raw_rows_land_in_it()
+    {
+        using var c = new SqliteConnection($"Data Source={Migrated()};Pooling=False");
+        c.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT Id || '|' || Slug FROM Workspaces";
+        Assert.Equal("default|default", cmd.ExecuteScalar());
+        cmd.CommandText = "INSERT INTO Holidays(Day, Name) VALUES ('2026-12-25', 'Christmas'); SELECT WorkspaceId FROM Holidays";
+        Assert.Equal(ReleaseMgmt.Domain.Common.WorkspaceIds.Default, cmd.ExecuteScalar());
+        Assert.Equal(ReleaseMgmt.Domain.Common.WorkspaceIds.Default, new ReleaseMgmt.Domain.Entities.ReleaseTrains().WorkspaceId);   // EF writes it too
     }
 
     [Fact]

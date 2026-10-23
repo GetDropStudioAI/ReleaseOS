@@ -233,5 +233,109 @@ check(db5, M, False, "milestone name over 200 characters", ('m3','x'*201,'2026-1
 check(db5, M, False, "milestone due date that is not a date", ('m4','UAT sign-off','2026-10-32',None,None,0,None,None), expect="CHECK")
 check(db5, M, False, "done milestone without who and when", ('m5','UAT sign-off','2026-10-21',None,'tm1',1,None,None), expect="CHECK")
 
+print("Workspaces: membership, per-workspace uniqueness, and the boundary (D45, REOS-104)")
+db6 = db_fresh()
+H = lambda c: c * 64
+db6.executescript(f"""
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','Payments EU','payments-eu','{NOW}');
+INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Ops');
+INSERT INTO Teams(Id,Handle,Name,WorkspaceId) VALUES('tm2','ops','Ops EU','w2');
+INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind,WorkspaceId) VALUES('h2','EU','hooks.example.com','CfDJ8EU','{H('e')}','Generic','w2');
+INSERT INTO TrainTemplates(Id,Name) VALUES('tp1','Monthly');
+INSERT INTO TrainTemplates(Id,Name,WorkspaceId) VALUES('tp2','Monthly','w2');
+INSERT INTO CommTemplateLibrary(Id,TemplateType,Name,Audience,SubjectLine,MarkdownBody,WorkspaceId) VALUES('lib2','Tminus28','T-28','All','s','b','w2');
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,WorkspaceId) VALUES('t2','EU R1','2026-11-30','{NOW}','{NOW}','w2');
+INSERT INTO BundledProducts(Id,ReleaseTrainId,ProductName,VersionTag,ProjectCode) VALUES('p9','t2','EU API','1.0.0','EU');
+INSERT INTO StageGates(Id,ReleaseTrainId,GateName,SequenceOrder,OffsetDays,DueOn,OwnerUserId,LastChangedByUserId) VALUES('gw','t2','Readiness',1,3,'2026-11-25','rte','rte');
+INSERT INTO RunbookSteps(Id,ReleaseTrainId,StepCode,Title,OwnerUserId,PlannedStartAt,PlannedDurationMin) VALUES('s9','t2','R-001','EU deploy','rte','2026-11-30T02:00:00Z',10);
+INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId,WorkspaceId) VALUES('f2','EU freeze','2026-10-01T00:00:00Z','2026-12-31T00:00:00Z','rm','w2');
+""")
+assert_true(db6.execute("SELECT Name, Slug FROM Workspaces WHERE Id='default'").fetchone() == ('Default', 'default'), "the default workspace exists in a new database")
+assert_true(db6.execute("SELECT WorkspaceId FROM ReleaseTrains WHERE Id='t1'").fetchone() == ('default',), "a root row written without a workspace lands in the default one")
+roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('Workspaces','WorkspaceMembers')")
+         if 'WorkspaceId' in [c[1] for c in db6.execute(f"PRAGMA table_info({t})")]]
+assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
+            'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
+moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
+assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
+check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','Payments-EU',?)", False, "workspace slug with capitals", (NOW,), expect="CHECK")
+check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','payments eu',?)", False, "workspace slug with a space", (NOW,), expect="CHECK")
+check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','  ','w3',?)", False, "blank workspace name", (NOW,), expect="CHECK")
+check(db6, "INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','rte','RTE',?)", True, "a person is a member of a second workspace", (NOW,))
+check(db6, "INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','rte','Viewer',?)", False, "the same person twice in one workspace", (NOW,), expect="UNIQUE")
+check(db6, "INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','rm','Admin',?)", False, "a role outside the four", (NOW,), expect="CHECK")
+check(db6, "INSERT INTO Teams(Id,Handle,Name,WorkspaceId) VALUES('tm3','OPS','Ops again','w2')", False, "team handle twice in one workspace (any case)", expect="UNIQUE")
+check(db6, "INSERT INTO Holidays(Day,Name) VALUES('2026-12-25','Christmas')", True, "a holiday in the default workspace")
+check(db6, "INSERT INTO Holidays(Day,Name,WorkspaceId) VALUES('2026-12-25','Christmas','w2')", True, "the same holiday in another workspace")
+check(db6, "INSERT INTO Holidays(Day,Name) VALUES('2026-12-25','Xmas')", False, "the same day twice in one workspace", expect="UNIQUE")
+check(db6, "INSERT INTO TrainTemplates(Id,Name,WorkspaceId) VALUES('tp3','Monthly','w2')", False, "template name twice in one workspace", expect="UNIQUE")
+check(db6, "INSERT INTO ConnectorState(SourceSystem,BaseUrl) VALUES('Jira','https://a.example')", True, "Jira connector in the default workspace")
+check(db6, "INSERT INTO ConnectorState(SourceSystem,BaseUrl,WorkspaceId) VALUES('Jira','https://b.example','w2')", True, "a second Jira connector in another workspace")
+db6.execute("INSERT INTO IcsTokens(Id,UserId,TokenSha256,CreatedAt) VALUES('ic1','rte',?,?)", (H('1'), NOW))
+check(db6, "INSERT INTO IcsTokens(Id,UserId,TokenSha256,CreatedAt,WorkspaceId) VALUES('ic2','rte',?,?,'w2')", True, "a calendar feed per workspace for the same person", (H('2'), NOW))
+check(db6, "INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind) VALUES('h3','Same','hooks.example.com','CfDJ8X',?,'Generic')", False, "one address is one destination on the host", (H('e'),), expect="UNIQUE")
+check(db6, "UPDATE ReleaseTrains SET WorkspaceId='w2' WHERE Id='t1'", False, "move a train to another workspace", expect="cannot move to another workspace")
+check(db6, "UPDATE Holidays SET WorkspaceId='w2' WHERE WorkspaceId='default'", False, "move a holiday to another workspace", expect="cannot move to another workspace")
+check(db6, "UPDATE SyncAlerts SET WorkspaceId=NULL", True, "no alert rows: nothing to move")
+check(db6, "UPDATE Teams SET Name='Operations' WHERE Id='tm1'", True, "edit a root row in place")
+TR = "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,TemplateId,ClonedFromTrainId) VALUES(?,'x','2026-12-01',?,?,?,?)"
+check(db6, TR, False, "train from another workspace's template", ('t5', NOW, NOW, 'tp2', None), expect="template belongs to another workspace")
+check(db6, TR, False, "train cloned from another workspace's train", ('t5', NOW, NOW, None, 't2'), expect="cloned-from train belongs to another workspace")
+check(db6, TR, True, "train from its own workspace's template, cloned from its own train", ('t5', NOW, NOW, 'tp1', 't1'))
+check(db6, "UPDATE ReleaseTrains SET TemplateId='tp2' WHERE Id='t5'", False, "point a train at another workspace's template", expect="template belongs to another workspace")
+check(db6, TR, False, "a missing template is still a foreign-key error", ('t6', NOW, NOW, 'nope', None), expect="FOREIGN KEY")
+check(db6, "UPDATE Teams SET WebhookDestinationId='h2' WHERE Id='tm1'", False, "team channel from another workspace", expect="webhook destination belongs to another workspace")
+check(db6, "INSERT INTO StageGates(Id,ReleaseTrainId,GateName,SequenceOrder,OffsetDays,DueOn,OwnerTeamId) VALUES('g9','t1','CAB',9,1,'2026-10-29','tm2')", False, "gate owned by another workspace's team", expect="team belongs to another workspace")
+check(db6, "UPDATE StageGates SET OwnerUserId=NULL, OwnerTeamId='tm2' WHERE Id='g1'", False, "gate handed to another workspace's team", expect="team belongs to another workspace")
+check(db6, "UPDATE StageGates SET OwnerUserId=NULL, OwnerTeamId='tm1' WHERE Id='g1'", True, "gate handed to its own workspace's team")
+check(db6, "INSERT INTO StageGates(Id,ReleaseTrainId,GateName,SequenceOrder,OffsetDays,DueOn,OwnerTeamId) VALUES('g9','t1','CAB',9,1,'2026-10-29','nope')", False, "a missing team is still a foreign-key error", expect="FOREIGN KEY")
+check(db6, "INSERT INTO ChecklistTasks(Id,StageGateId,TaskDescription,OwnerTeamId,SequenceOrder) VALUES('k9','g1','x','tm2',9)", False, "task owned by another workspace's team", expect="team belongs to another workspace")
+check(db6, "INSERT INTO ChecklistTasks(Id,StageGateId,BundledProductId,TaskDescription,OwnerUserId,SequenceOrder) VALUES('k9','g1','p9','x','rte',9)", False, "task for another train's product", expect="product belongs to another train")
+check(db6, "UPDATE ChecklistTasks SET StageGateId='gw' WHERE Id='k1'", False, "task moved to another train's gate", expect="cannot move to another train")
+check(db6, "UPDATE ChecklistTasks SET StageGateId='g2' WHERE Id='k1'", True, "task moved to another gate of its train")
+check(db6, "UPDATE StageGates SET ReleaseTrainId='t2' WHERE Id='g2'", False, "gate moved to another train", expect="cannot move to another train")
+check(db6, "UPDATE BundledProducts SET ReleaseTrainId='t2' WHERE Id='p2'", False, "product moved to another train", expect="cannot move to another train")
+check(db6, "INSERT INTO RunbookSteps(Id,ReleaseTrainId,BundledProductId,StepCode,Title,OwnerUserId,PlannedStartAt,PlannedDurationMin) VALUES('s8','t1','p9','R-009','x','rte',?,5)", False, "runbook step for another train's product", (NOW,), expect="product belongs to another train")
+check(db6, "INSERT INTO RunbookSteps(Id,ReleaseTrainId,StepCode,Title,OwnerTeamId,PlannedStartAt,PlannedDurationMin) VALUES('s8','t1','R-009','x','tm2',?,5)", False, "runbook step owned by another workspace's team", (NOW,), expect="team belongs to another workspace")
+check(db6, "INSERT INTO StepDependencies(StepId,DependsOnStepId) VALUES('s1','s9')", False, "step depends on another train's step", expect="step belongs to another train")
+db6.execute("INSERT INTO RunbookRuns(Id,ReleaseTrainId,Mode,StartedAt,StartedByUserId) VALUES('r9','t1','Rehearsal',?,'rte')", (NOW,))
+check(db6, "INSERT INTO StepExecutions(Id,RunId,StepId) VALUES('e9','r9','s9')", False, "a run executes another train's step", expect="step belongs to another train")
+check(db6, "INSERT INTO StepExecutions(Id,RunId,StepId) VALUES('e9','r9','s1')", True, "a run executes its own train's step")
+check(db6, "INSERT INTO Blockers(Id,ReleaseTrainId,StageGateId,Title,Severity,RaisedAt) VALUES('b9','t1','gw','x','High',?)", False, "blocker on another train's gate", (NOW,), expect="gate belongs to another train")
+check(db6, "INSERT INTO TrainMilestones(Id,ReleaseTrainId,Name,DueOn,OwnerTeamId) VALUES('m9','t1','UAT','2026-10-21','tm2')", False, "milestone owned by another workspace's team", expect="team belongs to another workspace")
+check(db6, "INSERT INTO TemplateGates(Id,TemplateId,GateName,SequenceOrder,OffsetDays,RequiredBeforeStatus,OwnerTeamId) VALUES('tg1','tp1','CAB',1,2,'Gated','tm2')", False, "template gate owned by another workspace's team", expect="team belongs to another workspace")
+check(db6, "INSERT INTO TemplateSteps(Id,TemplateId,StepCode,Section,Title,OffsetMinutes,PlannedDurationMin,OwnerTeamId) VALUES('ts1','tp2','R-1','Deploy','x',0,5,'tm2')", True, "template step owned by its own workspace's team")
+check(db6, "INSERT INTO TemplateCommSchedule(Id,TemplateId,LibraryTemplateId,OffsetDays) VALUES('tc1','tp1','lib2',-28)", False, "template schedules another workspace's library template", expect="library template belongs to another workspace")
+check(db6, "INSERT INTO CommTemplates(Id,ReleaseTrainId,LibraryTemplateId,TemplateType,Audience,SubjectLine,MarkdownBody) VALUES('ct1','t1','lib2','Tminus28','All','s','b')", False, "train copies another workspace's library template", expect="library template belongs to another workspace")
+db6.execute("INSERT INTO CommTemplates(Id,ReleaseTrainId,TemplateType,Audience,SubjectLine,MarkdownBody) VALUES('ct2','t2','Tminus28','All','s','b')")
+check(db6, "INSERT INTO CommSchedule(Id,ReleaseTrainId,CommTemplateId,DueAt) VALUES('cs1','t1','ct2',?)", False, "train schedules another train's message", (NOW,), expect="communication template belongs to another train")
+db6.execute("INSERT INTO CommTemplates(Id,ReleaseTrainId,TemplateType,Audience,SubjectLine,MarkdownBody) VALUES('ct3','t1','Tminus28','All','s','b')")
+check(db6, "INSERT INTO CommDispatches(Id,CommTemplateId,Channel,WebhookDestinationId,HydratedSubject,HydratedBody,DispatchedByUserId,DispatchedAt,Outcome) VALUES('d1','ct3','Webhook','h2','s','b','rte',?,'Handed')", False, "message sent to another workspace's webhook", (NOW,), expect="webhook destination belongs to another workspace")
+check(db6, "INSERT INTO FreezeOverrides(Id,FreezeWindowId,ReleaseTrainId,Reason,RequestedByUserId,ApprovedByUserId,ApprovedAt,ExpiresAt) VALUES('o9','f2','t1','Emergency payments fix for EU',?,?,?,?)", False, "override of another workspace's freeze", ('rm', 'gov1', NOW, '2026-10-30T06:00:00Z'), expect="freeze window belongs to another workspace")
+check(db6, "INSERT INTO SyncAlerts(Id,ReleaseTrainId,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt,WorkspaceId) VALUES('a9','t1','Jira','NotFound','fp9','x',?,?,'w2')", False, "alert about another workspace's train", (NOW, NOW), expect="train belongs to another workspace")
+check(db6, "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt,WorkspaceId) VALUES('a9','Backup','BackupFailed','fp9','disk full',?,?,NULL)", True, "host-wide alert (no workspace)", (NOW, NOW))
+db6.execute("INSERT INTO ExportJobs(Id,Kind,FileName,RequestedByUserId,CreatedAt,WorkspaceId) VALUES('x9','EvidencePackPdf','e.pdf','rte',?,'w2')", (NOW,))
+check(db6, "INSERT INTO MetricSnapshots(ExportJobId,ReleaseTrainId,MetricKey,Value,CapturedAt) VALUES('x9','t1','lead_time',1,?)", False, "evidence pack snapshots another workspace's train", (NOW,), expect="train belongs to another workspace")
+check(db6, "INSERT INTO ImportJobs(Id,Kind,ReleaseTrainId,FileName,Sha256,RowCount,Status,UploadedByUserId,CreatedAt,WorkspaceId) VALUES('i9','Tasks','t1','f.csv','x',1,'Previewed','rte',?,'w2')", False, "import into another workspace's train", (NOW,), expect="train belongs to another workspace")
+check(db6, "INSERT INTO AuditEvents(OccurredAt,ReleaseTrainId,EntityType,EntityId,Action,WorkspaceId) VALUES(?,'t1','Train','t1','x','w2')", False, "audit row filed under another workspace than its train", (NOW,), expect="train belongs to another workspace")
+check(db6, "INSERT INTO AuditEvents(OccurredAt,EntityType,EntityId,Action,WorkspaceId) VALUES(?,'User','rte','Created',NULL)", True, "host-wide audit row (accounts)", (NOW,))
+db6.execute("UPDATE StageGates SET Status='InProgress', LastChangedByUserId='rte' WHERE Id='gw'")
+db6.execute(certify('gw', 'rte'))
+assert_true(db6.execute("SELECT WorkspaceId FROM AuditEvents WHERE EntityId='gw' AND Action='EvidenceLocked'").fetchall() == [('w2',)],
+            "an audit row written by a trigger carries the train's workspace")
+# Freeze lockout reads the train's own workspace: an Executing train inserted directly, a Live run, a Deploy step
+db6.executescript(f"""
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CurrentStatus,CreatedAt,UpdatedAt) VALUES('t7','Hotfix','2026-10-30','Executing','{NOW}','{NOW}');
+INSERT INTO RunbookSteps(Id,ReleaseTrainId,StepCode,Section,Title,OwnerUserId,PlannedStartAt,PlannedDurationMin) VALUES('s7','t7','R-001','Deploy','Deploy','rte','2026-10-30T02:00:00Z',10);
+INSERT INTO RunbookRuns(Id,ReleaseTrainId,Mode,StartedAt,StartedByUserId) VALUES('r7','t7','Live','{NOW}','rte');
+INSERT INTO StepExecutions(Id,RunId,StepId) VALUES('e7','r7','s7');
+""")
+check(db6, "UPDATE StepExecutions SET Status='Running',ActualStartAt='2026-10-30T02:00:00Z' WHERE Id='e7'", True, "another workspace's freeze does not lock this train out")
+db6.execute("UPDATE StepExecutions SET Status='Scheduled',ActualStartAt=NULL WHERE Id='e7'")
+db6.execute("INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId) VALUES('f7','Year end','2026-10-01T00:00:00Z','2026-12-31T00:00:00Z','rm')")
+check(db6, "UPDATE StepExecutions SET Status='Running',ActualStartAt='2026-10-30T02:00:00Z' WHERE Id='e7'", False, "its own workspace's freeze does", expect="Freeze window")
+assert_true(db.execute("SELECT count(*), sum(WorkspaceId IS NOT 'default') FROM AuditEvents").fetchone()[1] == 0,
+            "every audit row of the default workspace's release (service and trigger rows) is filed under it")
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

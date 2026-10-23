@@ -81,6 +81,7 @@ builder.Services.AddSingleton<TrainCreationService>();   // REOS-80 new train: b
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
 builder.Services.AddSingleton<UserCreationService>();   // REOS-83 add users ahead of their first sign-in
+builder.Services.AddSingleton<WorkspaceService>();      // REOS-104 workspaces (D45)
 builder.Services.AddSingleton<MilestoneService>();   // train milestones (Q-0840..)
 // REOS-35 evidence attachments: stored outside wwwroot (Attachments:Directory), capped at Attachments:MaxBytes (never above the 50 MB schema CHECK)
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
@@ -165,6 +166,8 @@ await using (var scope = app.Services.CreateAsyncScope())
     // REOS-73 (Q-053e): webhook addresses stored before the change are encrypted now; idempotent, and before anything reads WebhookDestinations.
     await ReleaseMgmt.Infrastructure.Comms.WebhookUrlProtectionUpgrade.RunAsync(connectionString, scope.ServiceProvider.GetRequiredService<ReleaseMgmt.Infrastructure.Comms.IWebhookUrlVault>(),
         app.Services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime, app.Logger);
+    // REOS-104 (Q-090e): the default workspace's name and region come from configuration when set.
+    await scope.ServiceProvider.GetRequiredService<WorkspaceService>().ApplyDefaultSettingsAsync(config["Workspace:DefaultName"], config["Workspace:Region"]);
     var seed = scope.ServiceProvider.GetRequiredService<SeedService>();
     await seed.SeedReferenceDataAsync();
     if (config.GetValue("Seed:Demo", app.Environment.IsDevelopment())) await seed.SeedDemoDataAsync(); // demo trains only when asked (default: Development)

@@ -136,6 +136,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("ReleaseTrainId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("WorkspaceId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.ToTable("AuditEvents", (string)null);
@@ -484,7 +487,13 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("CommTemplateLibrary", (string)null);
 
@@ -540,6 +549,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ConnectorState", b =>
                 {
+                    b.Property<string>("WorkspaceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("SourceSystem")
                         .HasColumnType("TEXT");
 
@@ -565,7 +577,7 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("SourceSystem");
+                    b.HasKey("WorkspaceId", "SourceSystem");
 
                     b.ToTable("ConnectorState", (string)null);
 
@@ -645,11 +657,17 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ReleaseTrainId");
 
                     b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("ExportJobs", (string)null);
 
@@ -785,9 +803,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("FreezeWindows", (string)null);
 
@@ -960,6 +984,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Holidays", b =>
                 {
+                    b.Property<string>("WorkspaceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Day")
                         .HasColumnType("TEXT");
 
@@ -970,7 +997,7 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("Day");
+                    b.HasKey("WorkspaceId", "Day");
 
                     b.ToTable("Holidays", (string)null);
 
@@ -997,9 +1024,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("IcsTokens", (string)null);
 
@@ -1054,11 +1087,17 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ReleaseTrainId");
 
                     b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("ImportJobs", (string)null);
 
@@ -1190,9 +1229,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("Notifications", (string)null);
 
@@ -1391,6 +1436,10 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClonedFromTrainId");
@@ -1402,6 +1451,8 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("RollbackRehearsedByUserId");
 
                     b.HasIndex("TemplateId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("ReleaseTrains", (string)null);
 
@@ -1714,11 +1765,16 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ReleaseTrainId");
 
                     b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("SyncAlerts", (string)null);
 
@@ -1761,9 +1817,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("WebhookDestinationId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("WebhookDestinationId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("Teams", (string)null);
 
@@ -1978,9 +2040,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("TrainTemplates", (string)null);
 
@@ -2085,9 +2153,76 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("WorkspaceId");
+
                     b.ToTable("WebhookDestinations", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WorkspaceMembers", b =>
+                {
+                    b.Property<string>("WorkspaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AddedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("WorkspaceId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("WorkspaceMembers", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Workspaces", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Workspaces", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -2251,6 +2386,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.CommTemplateLibrary", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.CommTemplates", b =>
                 {
                     b.HasOne("ReleaseMgmt.Domain.Entities.CommTemplateLibrary", null)
@@ -2268,6 +2412,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("StageGateId")
                         .OnDelete(DeleteBehavior.NoAction);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ConnectorState", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentWindows", b =>
@@ -2289,6 +2442,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -2334,6 +2493,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -2407,11 +2572,26 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Holidays", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.IcsTokens", b =>
                 {
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -2426,6 +2606,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -2458,6 +2644,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -2527,6 +2719,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("TemplateId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.RunbookRuns", b =>
@@ -2651,6 +2849,11 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("ResolvedByUserId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TeamMembers", b =>
@@ -2674,6 +2877,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("WebhookDestinationId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TemplateCommSchedule", b =>
@@ -2754,6 +2963,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("ApprovedByUserId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.UserSessionState", b =>
@@ -2766,6 +2981,30 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookDestinations", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WorkspaceMembers", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });

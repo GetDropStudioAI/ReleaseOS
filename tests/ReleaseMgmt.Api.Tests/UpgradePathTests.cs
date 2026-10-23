@@ -34,10 +34,13 @@ public class UpgradePathTests
         return rows;
     }
 
-    /// <summary>sqlite_master with comments and spacing removed (the stored DDL keeps the text it was created with) and the quotes ALTER TABLE ... RENAME adds.</summary>
+    /// <summary>
+    /// sqlite_master with comments and spacing removed (the stored DDL keeps the text it was created with), the quotes ALTER TABLE ... RENAME adds, and the
+    /// spacing ALTER TABLE ... ADD COLUMN leaves around commas and parentheses ("\n, WorkspaceId ...)" where a new table has ",\n    WorkspaceId ...\n)").
+    /// </summary>
     private static List<string> Shape(string path) =>
         [.. Rows(path, "SELECT type || ' ' || name || ' ' || tbl_name || ' ' || COALESCE(sql,'') FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> '__EFMigrationsHistory' ORDER BY type, name")
-            .Select(s => Regex.Replace(Regex.Replace(Regex.Replace(s, "--[^\n]*", ""), @"\s+", " "), "CREATE TABLE \"([A-Za-z_]+)\"", "CREATE TABLE $1").Trim())];
+            .Select(s => Regex.Replace(Regex.Replace(Regex.Replace(Regex.Replace(s, "--[^\n]*", ""), @"\s+", " "), "CREATE TABLE \"([A-Za-z_]+)\"", "CREATE TABLE $1").Trim(), @" ?([(),]) ?", "$1"))];
 
     [Fact]
     public async Task A_first_release_database_upgraded_by_the_scripts_and_started_once_equals_a_fresh_database()
@@ -59,6 +62,7 @@ public class UpgradePathTests
         Assert.Equal("wd1|Payments channel|hooks.example.test|CfDJ8|64|Teams", row);
         Assert.DoesNotContain(Rows(f.DbPath, "SELECT * FROM WebhookDestinations"), r => r.Contains("secret-part"));
         Assert.Equal(["team1|wd1"], Rows(f.DbPath, "SELECT Id, WebhookDestinationId FROM Teams"));
+        Assert.Equal(["team1|default", "wd1|default"], Rows(f.DbPath, "SELECT Id, WorkspaceId FROM Teams UNION ALL SELECT Id, WorkspaceId FROM WebhookDestinations ORDER BY 1"));   // REOS-104
         Assert.Empty(Rows(f.DbPath, "PRAGMA foreign_key_check"));
 
         using var fresh = new ApiFactory();

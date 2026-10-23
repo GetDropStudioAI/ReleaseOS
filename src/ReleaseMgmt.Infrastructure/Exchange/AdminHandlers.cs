@@ -3,6 +3,7 @@ using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Domain.Exchange;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Persistence;
+using ReleaseMgmt.Infrastructure.Services;
 
 namespace ReleaseMgmt.Infrastructure.Exchange;
 
@@ -54,6 +55,7 @@ internal sealed class UsersHandler : KindHandler
             {
                 var u = new Users { Email = p.After["Email"], DisplayName = p.After["DisplayName"], Role = p.After["Role"], Handle = p.After.GetValueOrDefault("Handle") is { Length: > 0 } h ? h : null, IsActive = true };
                 env.Db.Set<Users>().Add(u);
+                WorkspaceService.JoinDefault(env.Db, u, env.Now);   // REOS-104
                 env.AuditRow(p, null, "User", u.Id);
             }
             else

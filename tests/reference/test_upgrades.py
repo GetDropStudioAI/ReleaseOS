@@ -15,6 +15,7 @@ APP_CONVERTED = {"WebhookDestinations": "Url"}
 def normalise(sql):
     sql = re.sub(r"--[^\n]*", "", sql or "")
     sql = re.sub(r"\s+", " ", sql).strip()
+    sql = re.sub(r" ?([(),]) ?", r"\1", sql)   # ALTER TABLE ... ADD COLUMN writes "\n, col)" where a fresh CREATE has ",\n    col\n)"
     return re.sub(r'^(CREATE TABLE) "([A-Za-z_]+)"', r"\1 \2", sql)   # ALTER TABLE ... RENAME quotes the new name
 
 
@@ -37,6 +38,17 @@ def baseline_db():
     db.execute("INSERT INTO Users (Id, Email, DisplayName, Role, Handle) VALUES ('u1', 'gov@corp.example', 'Gov', 'GovernanceOfficer', 'gov')")
     db.execute("INSERT INTO Users (Id, Email, DisplayName, Role, IsActive, Version) VALUES ('u2', 'old@corp.example', 'Old', 'Viewer', 0, 4)")
     db.execute("INSERT INTO IcsTokens (Id, UserId, TokenSha256, CreatedAt) VALUES ('t1', 'u1', printf('%064d', 0), '2026-09-01T00:00:00Z')")
+    db.executescript("""
+        INSERT INTO Teams (Id, Handle, Name, Version) VALUES ('tm1', 'ops', 'Ops', 3);
+        INSERT INTO Holidays (Day, Name) VALUES ('2026-12-25', 'Christmas');
+        INSERT INTO TrainTemplates (Id, Name, Status, ApprovedByUserId, ApprovedAt) VALUES ('tp1', 'Monthly', 'Approved', 'u1', '2026-09-01T00:00:00Z');
+        INSERT INTO CommTemplateLibrary (Id, TemplateType, Name, Audience, SubjectLine, MarkdownBody) VALUES ('lib1', 'Tminus28', 'T-28', 'All', 's', 'b');
+        INSERT INTO ConnectorState (SourceSystem, BaseUrl, ConsecutiveFailures) VALUES ('Jira', 'https://jira.example', 2);
+        INSERT INTO ReleaseTrains (Id, Title, TemplateId, TargetReleaseDate, CreatedAt, UpdatedAt) VALUES ('r1', 'R26.10', 'tp1', '2026-10-30', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+        INSERT INTO StageGates (Id, ReleaseTrainId, GateName, SequenceOrder, OffsetDays, DueOn, OwnerTeamId) VALUES ('g1', 'r1', 'CAB', 1, 2, '2026-10-28', 'tm1');
+        INSERT INTO FreezeWindows (Id, Name, StartsAt, EndsAt, CreatedByUserId) VALUES ('f1', 'Year end', '2026-12-20T00:00:00Z', '2027-01-02T00:00:00Z', 'u1');
+        INSERT INTO AuditEvents (OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action) VALUES ('2026-09-01T00:00:00Z', 'u1', 'r1', 'Train', 'r1', 'Created');
+    """)
     return db
 
 
@@ -64,6 +76,28 @@ check(db.execute("SELECT Id, Email, Role, Handle, IsActive, Version, IdpIssuer, 
       == [("u1", "gov@corp.example", "GovernanceOfficer", "gov", 1, 1, None, None), ("u2", "old@corp.example", "Viewer", None, 0, 4, None, None)],
       "existing users kept, unbound")
 check(db.execute("SELECT UserId FROM IcsTokens").fetchall() == [("u1",)], "rows that reference Users kept")
+# Upgrade 004 (REOS-104): every existing row is in the default workspace, every user a member of it with their role, and the rebuilt tables keep their rows
+roots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ConnectorState", "ReleaseTrains", "FreezeWindows", "IcsTokens", "AuditEvents"]
+check(all(db.execute(f"SELECT count(*) = sum(WorkspaceId = 'default') AND count(*) > 0 FROM {t}").fetchone()[0] for t in roots),
+      "every existing root row is in the default workspace")
+check(db.execute("SELECT UserId, Role FROM WorkspaceMembers WHERE WorkspaceId = 'default' ORDER BY UserId").fetchall()
+      == [("u1", "GovernanceOfficer"), ("u2", "Viewer")], "every existing user is a member of the default workspace with their role (inactive ones too)")
+check(db.execute("SELECT Handle, Version FROM Teams").fetchall() == [("ops", 3)]
+      and db.execute("SELECT BaseUrl, ConsecutiveFailures FROM ConnectorState").fetchall() == [("https://jira.example", 2)]
+      and db.execute("SELECT Status, ApprovedByUserId FROM TrainTemplates").fetchall() == [("Approved", "u1")],
+      "rebuilt tables keep their rows and values")
+check(db.execute("SELECT OwnerTeamId FROM StageGates WHERE Id = 'g1'").fetchall() == [("tm1",)] and
+      db.execute("SELECT TemplateId FROM ReleaseTrains WHERE Id = 'r1'").fetchall() == [("tp1",)], "references to rebuilt tables kept")
+try:
+    db.execute("INSERT INTO Teams (Id, Handle, Name, WorkspaceId) VALUES ('tm9', 'ops', 'Ops', 'nowhere')")
+    check(False, "foreign keys enforced again after the upgrade (unknown workspace refused)")
+except sqlite3.IntegrityError as e:
+    check("FOREIGN KEY" in str(e), "foreign keys enforced again after the upgrade (unknown workspace refused)")
+try:
+    db.execute("UPDATE ReleaseTrains SET WorkspaceId = 'nowhere' WHERE Id = 'r1'")
+    check(False, "workspace boundary triggers active after the upgrade")
+except sqlite3.IntegrityError as e:
+    check("cannot move to another workspace" in str(e), "workspace boundary triggers active after the upgrade")
 check(db.execute("PRAGMA foreign_key_check").fetchall() == [], "foreign_key_check clean")
 check(db.execute("PRAGMA integrity_check").fetchone()[0] == "ok", "integrity_check ok")
 check(db.execute("PRAGMA legacy_alter_table").fetchone()[0] == 0 and db.execute("PRAGMA foreign_keys").fetchone()[0] == 1, "pragmas restored")

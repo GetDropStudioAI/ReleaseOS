@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Infrastructure.Persistence;
 
 namespace ReleaseMgmt.Infrastructure.Comms;
@@ -10,7 +11,7 @@ namespace ReleaseMgmt.Infrastructure.Comms;
 /// (it needs the Data Protection key ring, which a SQL migration cannot reach) and before anything reads the table. Idempotent:
 /// <list type="bullet">
 /// <item>Legacy shape (a plain <c>Url</c> column, the schema before 2026-09-30): every row's URL is protected and hashed, and the table is rebuilt with
-/// db/schema.sql's DDL text verbatim (so the schema contract test holds for upgraded databases too), in one transaction, with one audit row per destination
+/// db/schema.sql's DDL text verbatim and its triggers re-applied (so the schema contract test holds for upgraded databases too), in one transaction, with one audit row per destination
 /// (host only). Foreign keys from Teams and CommDispatches keep pointing at the same ids; <c>PRAGMA foreign_key_check</c> must be clean or nothing is kept.</item>
 /// <item>New shape but the HMAC key was missing (restored without <c>secrets/</c>): each row's hash is recomputed from its decrypted URL. A row that cannot be
 /// decrypted is left as it is and reported (the senders then fail visibly with a Webhook alert).</item>
@@ -35,15 +36,17 @@ public static class WebhookUrlProtectionUpgrade
         }
         if (columns.Count == 0) return new(0, 0, []);   // not migrated yet (should not happen: called after MigrateAsync)
         var now = nowUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
-        if (columns.Contains("Url")) return new(await ProtectLegacyAsync(c, vault, now, log, ct), 0, []);
+        // REOS-104: upgrade 004 adds WorkspaceId to whichever shape the table is in; a database that has not had it yet keeps its rows in the default one.
+        var workspace = columns.Contains("WorkspaceId") ? "WorkspaceId" : $"'{WorkspaceIds.Default}'";
+        if (columns.Contains("Url")) return new(await ProtectLegacyAsync(c, vault, now, workspace, log, ct), 0, []);
 
         if (!vault.EnsureHmacKey()) return new(0, 0, []);
-        var rows = new List<(string Id, string Name, string Protected, int Version)>();
+        var rows = new List<(string Id, string Name, string Protected, int Version, string Workspace)>();
         await using (var cmd = c.CreateCommand())
         {
-            cmd.CommandText = "SELECT Id, Name, ProtectedUrl, Version FROM WebhookDestinations";
+            cmd.CommandText = $"SELECT Id, Name, ProtectedUrl, Version, {workspace} FROM WebhookDestinations";
             await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) rows.Add((r.GetString(0), r.GetString(1), r.GetString(2), r.GetInt32(3)));
+            while (await r.ReadAsync(ct)) rows.Add((r.GetString(0), r.GetString(1), r.GetString(2), r.GetInt32(3), r.GetString(4)));
         }
         if (rows.Count == 0) return new(0, 0, []);
         var unreadable = new List<string>();
@@ -55,7 +58,7 @@ public static class WebhookUrlProtectionUpgrade
             try { url = vault.Unprotect(row.Protected); }
             catch (WebhookUrlUnreadableException) { unreadable.Add(row.Name); continue; }
             await ExecAsync(c, "UPDATE WebhookDestinations SET UrlHmac=$h, Version=Version+1 WHERE Id=$id", ct, tx, ("$h", vault.Hmac(url)), ("$id", row.Id));
-            await AuditAsync(c, tx, now, row.Id, "RehashUrl", new { reason = "the webhook address key was missing and has been created again" }, ct);
+            await AuditAsync(c, tx, now, row.Id, row.Workspace, "RehashUrl", new { reason = "the webhook address key was missing and has been created again" }, ct);
             rehashed++;
         }
         await tx.CommitAsync(ct);
@@ -64,15 +67,15 @@ public static class WebhookUrlProtectionUpgrade
         return new(0, rehashed, unreadable);
     }
 
-    private static async Task<int> ProtectLegacyAsync(SqliteConnection c, IWebhookUrlVault vault, string now, ILogger log, CancellationToken ct)
+    private static async Task<int> ProtectLegacyAsync(SqliteConnection c, IWebhookUrlVault vault, string now, string workspace, ILogger log, CancellationToken ct)
     {
         var ddl = SchemaSql.TablesAndIndexes().Single(s => s.StartsWith("CREATE TABLE WebhookDestinations ", StringComparison.Ordinal));
-        var rows = new List<(string Id, string Name, string Url, string Kind, int Version)>();
+        var rows = new List<(string Id, string Name, string Url, string Kind, int Version, string Workspace)>();
         await using (var cmd = c.CreateCommand())
         {
-            cmd.CommandText = "SELECT Id, Name, Url, Kind, Version FROM WebhookDestinations";
+            cmd.CommandText = $"SELECT Id, Name, Url, Kind, Version, {workspace} FROM WebhookDestinations";
             await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) rows.Add((r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4)));
+            while (await r.ReadAsync(ct)) rows.Add((r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4), r.GetString(5)));
         }
         // A table rebuild (SQLite "12-step" procedure): foreign keys off and the legacy ALTER so that renaming the old table does not rewrite the
         // REFERENCES WebhookDestinations(Id) clauses of Teams and CommDispatches to the temporary name. Both pragmas are no-ops inside a transaction, so they come first.
@@ -89,11 +92,12 @@ public static class WebhookUrlProtectionUpgrade
                     throw new InvalidOperationException($"Webhook destination '{row.Name}' ({row.Id}) does not hold an absolute URL; fix or remove it before upgrading");
                 var host = HostOf(uri);
                 var p = vault.Protect(row.Url);
-                await ExecAsync(c, "INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind,Version) VALUES($id,$n,$h,$p,$m,$k,$v)", ct, tx,
-                    ("$id", row.Id), ("$n", row.Name), ("$h", host), ("$p", p.ProtectedUrl), ("$m", p.UrlHmac), ("$k", row.Kind), ("$v", row.Version + 1));
-                await AuditAsync(c, tx, now, row.Id, "ProtectUrl", new { row.Name, row.Kind, Host = host }, ct);
+                await ExecAsync(c, "INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind,Version,WorkspaceId) VALUES($id,$n,$h,$p,$m,$k,$v,$w)", ct, tx,
+                    ("$id", row.Id), ("$n", row.Name), ("$h", host), ("$p", p.ProtectedUrl), ("$m", p.UrlHmac), ("$k", row.Kind), ("$v", row.Version + 1), ("$w", row.Workspace));
+                await AuditAsync(c, tx, now, row.Id, row.Workspace, "ProtectUrl", new { row.Name, row.Kind, Host = host }, ct);
             }
-            await ExecAsync(c, "DROP TABLE WebhookDestinations_plaintext", ct, tx);
+            await ExecAsync(c, "DROP TABLE WebhookDestinations_plaintext", ct, tx);   // takes the table's triggers with it (they followed the rename)
+            foreach (var trigger in SchemaSql.TriggersOn("WebhookDestinations")) await ExecAsync(c, trigger, ct, tx);   // CLAUDE.md rule 1: a rebuild re-applies them
             await using (var check = c.CreateCommand())
             {
                 check.Transaction = tx;
@@ -120,9 +124,9 @@ public static class WebhookUrlProtectionUpgrade
         return uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
     }
 
-    private static Task AuditAsync(SqliteConnection c, SqliteTransaction tx, string now, string id, string action, object after, CancellationToken ct) =>
-        ExecAsync(c, "INSERT INTO AuditEvents(OccurredAt,ActorUserId,EntityType,EntityId,Action,AfterJson) VALUES($t,NULL,'WebhookDestination',$id,$a,$j)", ct, tx,
-            ("$t", now), ("$id", id), ("$a", action), ("$j", JsonSerializer.Serialize(after, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+    private static Task AuditAsync(SqliteConnection c, SqliteTransaction tx, string now, string id, string workspace, string action, object after, CancellationToken ct) =>
+        ExecAsync(c, "INSERT INTO AuditEvents(OccurredAt,ActorUserId,EntityType,EntityId,Action,AfterJson,WorkspaceId) VALUES($t,NULL,'WebhookDestination',$id,$a,$j,$w)", ct, tx,
+            ("$t", now), ("$id", id), ("$a", action), ("$j", JsonSerializer.Serialize(after, new JsonSerializerOptions(JsonSerializerDefaults.Web))), ("$w", workspace));
 
     private static async Task ExecAsync(SqliteConnection c, string sql, CancellationToken ct, SqliteTransaction? tx = null, params (string Name, object Value)[] args)
     {

@@ -31,7 +31,7 @@ const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[]
   { name: 'orchestration', link: /^Orchestration$/, ready: h1('Orchestration') },
   { name: 'approvals', link: /^Approvals/, ready: h1('Approvals') },
   { name: 'deployments', link: /^Deployments$/, ready: h1('Deployments') },
-  { name: 'audit', link: /^Audit history$/, ready: h1('Audit') },
+  { name: 'audit', link: /^Audit history$/, ready: h1('Audit history') },
   { name: 'services', link: /^Service catalog$/, ready: h1('Service catalog') },
   { name: 'environments', link: /^Environments$/, ready: h1('Environments') },
   { name: 'admin', link: /^Teams & settings$/, ready: h1('Admin') },

@@ -8,7 +8,7 @@ using ReleaseMgmt.Infrastructure.Reminders;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>One decision waiting for the signed-in person. A gate or a waiver is due on a date; an override, a Go/No-Go or a condition at a time.</summary>
-public sealed record ApprovalItem(string Kind, string Id, string Title, string? Detail, string TrainId, string TrainTitle, DateOnly? DueOn, DateTime? DueAt, bool Overdue);
+public sealed record ApprovalItem(string Kind, string Id, string Title, string? Detail, string TrainId, string TrainTitle, DateOnly? DueOn, DateTime? DueAt, bool Overdue, string? GateId = null);
 public sealed record ApprovalCounts(int Certify, int Waivers, int Overrides, int GoNoGo, int Conditions, int Total);
 public sealed record ApprovalQueue(ApprovalCounts Counts, IReadOnlyList<ApprovalItem> Items);
 
@@ -39,8 +39,8 @@ public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf
         var today = _clock.LocalDate(now);
         var role = await db.Set<Users>().AsNoTracking().AnyAsync(u => u.Id == userId && u.IsActive, ct) ? await Memberships.RoleOf(db, userId, ct) : null;   // the role held in this workspace (REOS-105)
         var items = new List<ApprovalItem>();
-        ApprovalItem OnDay(string kind, string id, string title, string? detail, string trainId, string trainTitle, DateOnly due) =>
-            new(kind, id, title, detail, trainId, trainTitle, due, null, due < today);
+        ApprovalItem OnDay(string kind, string id, string title, string? detail, string trainId, string trainTitle, DateOnly due, string? gateId = null) =>
+            new(kind, id, title, detail, trainId, trainTitle, due, null, due < today, gateId);
         ApprovalItem AtTime(string kind, string id, string title, string? detail, string trainId, string trainTitle, DateTime due) =>
             new(kind, id, title, detail, trainId, trainTitle, null, due, due <= now);
 
@@ -62,7 +62,7 @@ public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf
                 if (mine.Count == 0 || mine.Any(k => !k.IsCompleted) || mine.Any(k => k.CompletedByUserId == userId)) continue;
                 if (gates.Any(p => p.ReleaseTrainId == g.ReleaseTrainId && p.SequenceOrder < g.SequenceOrder && !passed.Contains(p.Status))) continue;
                 var t = trains[g.ReleaseTrainId];
-                items.Add(OnDay(CertifyGate, g.Id, g.GateName, $"{mine.Count} of {mine.Count} tasks done", t.Id, t.Title, g.DueOn));
+                items.Add(OnDay(CertifyGate, g.Id, g.GateName, $"{mine.Count} of {mine.Count} tasks done", t.Id, t.Title, g.DueOn, g.Id));
             }
             var byId = gates.ToDictionary(g => g.Id);
             var waivers = await db.Set<GateWaivers>().AsNoTracking()
@@ -70,7 +70,7 @@ public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf
             foreach (var w in waivers.Where(w => !passed.Contains(byId[w.StageGateId].Status)))
             {
                 var g = byId[w.StageGateId]; var t = trains[g.ReleaseTrainId];
-                items.Add(OnDay(ApproveWaiver, w.Id, $"Waiver for {g.GateName}", w.Reason, t.Id, t.Title, g.DueOn));
+                items.Add(OnDay(ApproveWaiver, w.Id, $"Waiver for {g.GateName}", w.Reason, t.Id, t.Title, g.DueOn, g.Id));
             }
         }
 

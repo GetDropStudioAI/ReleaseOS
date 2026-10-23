@@ -104,6 +104,7 @@ public class EndpointRoleMatrixTests
         GET /api/v1/me/notifications/count                       Read
         GET /api/v1/me/session/{clientId}                        Read
         GET /api/v1/me/work                                      Read
+        GET /api/v1/overview                                     Read
         GET /api/v1/owners                                       Read
         GET /api/v1/runs/{id}                                    Read
         GET /api/v1/runs/{id}/forecast                           Read

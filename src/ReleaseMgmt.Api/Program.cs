@@ -96,6 +96,7 @@ builder.Services.AddSyncEngine(config, builder.Environment.IsDevelopment());   /
 // REOS-74 (Q-052e): the key ring is encrypted at rest (certificate, or DPAPI on Windows); outside Development an unprotected ring refuses to start unless opted in.
 var keyRing = KeyRingEncryption.Configure(builder.Services.AddDataProtection(), config, builder.Environment);
 builder.Services.AddSingleton<AdvisoryService>(); builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
+builder.Services.AddSingleton<OverviewService>();   // REOS-108 overview (B2)
 builder.Services.AddPdfExports(config, builder.Environment.IsDevelopment());   // REOS-50: PDF export jobs + worker (QuestPDF)
 builder.Services.AddProxyHeaders(config);   // SEC-E5: X-Forwarded-For/Proto from trusted proxies only
 builder.Services.AddExceptionHandler<DbRuleExceptionHandler>();
@@ -235,6 +236,7 @@ api.MapCalendar();   // REOS-51
 api.MapImports(); api.MapGridExports();   // REOS-48/49
 api.MapPdfExports();   // REOS-50
 api.MapMilestones();   // train milestones (Q-0840..)
+api.MapOverview();   // REOS-108 (B2)
 
 // Dev-only fake login: POST /auth/dev-login {email, name, role}. Never mapped outside Development; see DevSignIn for when it exists and who may call it.
 if (devTools)

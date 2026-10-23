@@ -10,8 +10,8 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261023045651_Schema")]
-    partial class Schema
+    [Migration("20261023103922_Triggers")]
+    partial class Triggers
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -245,6 +245,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CatalogServiceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ProductName")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -266,9 +269,66 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CatalogServiceId");
+
                     b.HasIndex("ReleaseTrainId");
 
                     b.ToTable("BundledProducts", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.CatalogServices", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerTeamId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProjectCode")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Repository")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServiceKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.HasIndex("OwnerTeamId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("CatalogServices", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -587,6 +647,43 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentEvents", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeploymentId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExternalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OccurredAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReceivedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeploymentId");
+
+                    b.ToTable("DeploymentEvents", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentWindows", b =>
                 {
                     b.Property<string>("Id")
@@ -612,6 +709,172 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("ReleaseTrainId");
 
                     b.ToTable("DeploymentWindows", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Deployments", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CanarySteps")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CatalogServiceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DesiredPods")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EnvironmentId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FinishedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IngestKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastEventAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReadyPods")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ReleaseTrainId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReleaseVersion")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Strategy")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("TrafficPercent")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CatalogServiceId");
+
+                    b.HasIndex("EnvironmentId");
+
+                    b.HasIndex("IngestKeyId");
+
+                    b.HasIndex("ReleaseTrainId");
+
+                    b.HasIndex("RunId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("Deployments", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Environments", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("AvailabilityMinPct")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("ControlWebhookDestinationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("ErrorRateMaxPct")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("LatencyP95MaxMs")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("SloAvailabilityPct")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("SloErrorRatePct")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("SloLatencyP95Ms")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ControlWebhookDestinationId");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("Environments", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -1107,6 +1370,59 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.IngestKeys", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("KeyPrefix")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("KeySha256")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastUsedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RevokedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RevokedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("RevokedByUserId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("IngestKeys", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.KnownIssues", b =>
                 {
                     b.Property<string>("Id")
@@ -1411,6 +1727,27 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("LastChangedByUserId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("OnCallTeamId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OnCallUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerTeamId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReleaseBranch")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReleaseKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReleaseTypeId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("RiskTier")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1451,6 +1788,16 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
                     b.HasIndex("LastChangedByUserId");
 
+                    b.HasIndex("OnCallTeamId");
+
+                    b.HasIndex("OnCallUserId");
+
+                    b.HasIndex("OwnerTeamId");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("ReleaseTypeId");
+
                     b.HasIndex("RollbackRehearsedByUserId");
 
                     b.HasIndex("TemplateId");
@@ -1458,6 +1805,42 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("WorkspaceId");
 
                     b.ToTable("ReleaseTrains", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ReleaseTypes", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DefaultTemplateId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefaultTemplateId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("ReleaseTypes", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -1953,6 +2336,23 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TrainEnvironments", b =>
+                {
+                    b.Property<string>("ReleaseTrainId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EnvironmentId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ReleaseTrainId", "EnvironmentId");
+
+                    b.HasIndex("EnvironmentId");
+
+                    b.ToTable("TrainEnvironments", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TrainMilestones", b =>
                 {
                     b.Property<string>("Id")
@@ -2209,9 +2609,16 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("KeyPrefix")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("NextKeyNumber")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Region")
                         .HasColumnType("TEXT");
@@ -2299,9 +2706,33 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.BundledProducts", b =>
                 {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.CatalogServices", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogServiceId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
                         .WithMany()
                         .HasForeignKey("ReleaseTrainId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.CatalogServices", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Teams", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerTeamId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -2426,11 +2857,75 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentEvents", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Deployments", null)
+                        .WithMany()
+                        .HasForeignKey("DeploymentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentWindows", b =>
                 {
                     b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
                         .WithMany()
                         .HasForeignKey("ReleaseTrainId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Deployments", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.CatalogServices", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogServiceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Environments", null)
+                        .WithMany()
+                        .HasForeignKey("EnvironmentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.IngestKeys", null)
+                        .WithMany()
+                        .HasForeignKey("IngestKeyId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseTrainId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.RunbookRuns", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Environments", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.WebhookDestinations", null)
+                        .WithMany()
+                        .HasForeignKey("ControlWebhookDestinationId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -2619,6 +3114,25 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.IngestKeys", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("RevokedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.KnownIssues", b =>
                 {
                     b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
@@ -2713,6 +3227,31 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .HasForeignKey("LastChangedByUserId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Teams", null)
+                        .WithMany()
+                        .HasForeignKey("OnCallTeamId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("OnCallUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Teams", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerTeamId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTypes", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseTypeId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("RollbackRehearsedByUserId")
@@ -2721,6 +3260,20 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.TrainTemplates", null)
                         .WithMany()
                         .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ReleaseTypes", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.TrainTemplates", null)
+                        .WithMany()
+                        .HasForeignKey("DefaultTemplateId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
@@ -2927,6 +3480,21 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.TrainTemplates", null)
                         .WithMany()
                         .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TrainEnvironments", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Environments", null)
+                        .WithMany()
+                        .HasForeignKey("EnvironmentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseTrainId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });

@@ -57,7 +57,7 @@ public sealed class SchemaContractTests : IDisposable
     {
         var expected = Regex.Matches(_schemaText, @"^CREATE TRIGGER (\w+)", RegexOptions.Multiline).Select(m => m.Groups[1].Value).Order().ToList();
         var actual = Master(Migrated()).Where(r => r.Type == "trigger").Select(r => r.Name).Order().ToList();
-        Assert.Equal(91, expected.Count);   // 42 + 49 workspace-boundary triggers (REOS-104)
+        Assert.Equal(107, expected.Count);   // 42 + 49 workspace-boundary triggers (REOS-104) + 16 release-model, deployment and boundary triggers (REOS-107/109/110)
         Assert.Equal(expected, actual);
     }
 
@@ -66,8 +66,8 @@ public sealed class SchemaContractTests : IDisposable
     {
         var migrated = Master(Migrated());
         var reference = Master(FromSchemaSql());
-        Assert.Equal(51, reference.Count(r => r.Type == "table"));   // 49 + Workspaces, WorkspaceMembers (REOS-104)
-        Assert.Equal(26, reference.Count(r => r.Type == "index"));   // 23 + IX_WorkspaceMembers_User, IX_Trains_Workspace, IX_Audit_Workspace
+        Assert.Equal(58, reference.Count(r => r.Type == "table"));   // 49 + Workspaces, WorkspaceMembers (REOS-104) + 7 (REOS-107/109/110)
+        Assert.Equal(31, reference.Count(r => r.Type == "index"));   // 23 + IX_WorkspaceMembers_User, IX_Trains_Workspace, IX_Audit_Workspace + 5 (UX_Trains_Key, IX_Deployments_*, IX_DeploymentEvents_Deployment)
         Assert.Equal(reference.Select(r => (r.Type, r.Name)), migrated.Select(r => (r.Type, r.Name)));
         foreach (var (a, b) in reference.Zip(migrated)) Assert.Equal(a.Sql, b.Sql); // DDL text identical, incl. CHECKs
     }

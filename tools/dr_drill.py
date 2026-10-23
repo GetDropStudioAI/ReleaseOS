@@ -13,7 +13,7 @@ What it does (all inside a scratch directory, nothing outside it is touched, no 
   3. simulates total loss: deletes the database, WAL, key ring, credentials, attachments and logs
   4. restores with `ReleaseMgmt.Api restore <backup> data/releasemgmt.db`, copies the three directories back, starts the API and waits for /healthz,
      timing every step with a monotonic clock
-  5. verifies: integrity_check, the triggers of db/schema.sql (all 91), row counts in every table, the audit trail (SHA-256 over every row), /healthz, the API serves the data,
+  5. verifies: integrity_check, the triggers of db/schema.sql (all 107), row counts in every table, the audit trail (SHA-256 over every row), /healthz, the API serves the data,
      the connector credentials decrypt with the restored key ring and FAIL with a clear error without it, attachment SHA-256 values, the ICS token
   6. asserts the total restore time is under 30 minutes
 Then it runs the live-backup consistency test: backups of a WAL database taken while writers are running (integrity_check plus a transaction-consistency invariant).

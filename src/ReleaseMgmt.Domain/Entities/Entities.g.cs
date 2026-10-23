@@ -26,6 +26,8 @@ public class Workspaces
     public DateTime CreatedAt { get; set; }
     public DateTime? ArchivedAt { get; set; }
     public int Version { get; set; } = 1;
+    public string KeyPrefix { get; set; } = "RLS";
+    public int NextKeyNumber { get; set; } = 1;
 }
 
 public class WorkspaceMembers
@@ -146,6 +148,13 @@ public class ReleaseTrains
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public string WorkspaceId { get; set; } = "default";
+    public string? ReleaseKey { get; set; }
+    public string? OwnerUserId { get; set; }
+    public string? OwnerTeamId { get; set; }
+    public string? ReleaseBranch { get; set; }
+    public string? OnCallUserId { get; set; }
+    public string? OnCallTeamId { get; set; }
+    public string? ReleaseTypeId { get; set; }
 }
 
 public class ChangeRecords
@@ -187,6 +196,7 @@ public class BundledProducts
     public string VersionTag { get; set; } = "";
     public string ProjectCode { get; set; } = "";
     public int Version { get; set; } = 1;
+    public string? CatalogServiceId { get; set; }
 }
 
 public class StageGates
@@ -649,4 +659,110 @@ public class TrainMilestones
     public string? LastChangedByUserId { get; set; }
     public DateTime? LastChangedAt { get; set; }
     public int Version { get; set; } = 1;
+}
+
+public class ReleaseTypes
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public int SortOrder { get; set; } = 0;
+    public string? DefaultTemplateId { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class Environments
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public string? Region { get; set; }
+    public string Kind { get; set; } = "";
+    public int SortOrder { get; set; } = 0;
+    public string? ControlWebhookDestinationId { get; set; }
+    public double? ErrorRateMaxPct { get; set; }
+    public double? LatencyP95MaxMs { get; set; }
+    public double? AvailabilityMinPct { get; set; }
+    public double? SloAvailabilityPct { get; set; }
+    public double? SloLatencyP95Ms { get; set; }
+    public double? SloErrorRatePct { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class TrainEnvironments
+{
+    public string ReleaseTrainId { get; set; } = "";
+    public string EnvironmentId { get; set; } = "";
+}
+
+public class CatalogServices
+{
+    public string Id { get; set; } = Ids.New();
+    public string ServiceKey { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string? OwnerTeamId { get; set; }
+    public string? Repository { get; set; }
+    public string? ProjectCode { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class IngestKeys
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public string KeyPrefix { get; set; } = "";
+    public string KeySha256 { get; set; } = "";
+    public string? CreatedByUserId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? LastUsedAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? RevokedByUserId { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class Deployments
+{
+    public string Id { get; set; } = Ids.New();
+    public string ExternalId { get; set; } = "";
+    public string CatalogServiceId { get; set; } = "";
+    public string EnvironmentId { get; set; } = "";
+    public string? ReleaseTrainId { get; set; }
+    public string? RunId { get; set; }
+    public string ReleaseVersion { get; set; } = "";
+    public string Strategy { get; set; } = "Rolling";
+    public string? CanarySteps { get; set; }
+    public string State { get; set; } = "Queued";
+    public double TrafficPercent { get; set; } = 0;
+    public int? ReadyPods { get; set; }
+    public int? DesiredPods { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+    public DateTime? LastEventAt { get; set; }
+    public string? IngestKeyId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class DeploymentEvents
+{
+    public string Id { get; set; } = Ids.New();
+    public string DeploymentId { get; set; } = "";
+    public DateTime OccurredAt { get; set; }
+    public DateTime ReceivedAt { get; set; }
+    public string Level { get; set; } = "";
+    public string Message { get; set; } = "";
+    public string? ExternalId { get; set; }
 }

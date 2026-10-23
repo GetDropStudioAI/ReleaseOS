@@ -45,6 +45,7 @@ def baseline_db():
         INSERT INTO CommTemplateLibrary (Id, TemplateType, Name, Audience, SubjectLine, MarkdownBody) VALUES ('lib1', 'Tminus28', 'T-28', 'All', 's', 'b');
         INSERT INTO ConnectorState (SourceSystem, BaseUrl, ConsecutiveFailures) VALUES ('Jira', 'https://jira.example', 2);
         INSERT INTO ReleaseTrains (Id, Title, TemplateId, TargetReleaseDate, CreatedAt, UpdatedAt) VALUES ('r1', 'R26.10', 'tp1', '2026-10-30', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+        INSERT INTO ReleaseTrains (Id, Title, TargetReleaseDate, CreatedAt, UpdatedAt) VALUES ('r2', 'R26.11', '2026-11-30', '2026-09-02T00:00:00Z', '2026-09-02T00:00:00Z');
         INSERT INTO StageGates (Id, ReleaseTrainId, GateName, SequenceOrder, OffsetDays, DueOn, OwnerTeamId) VALUES ('g1', 'r1', 'CAB', 1, 2, '2026-10-28', 'tm1');
         INSERT INTO FreezeWindows (Id, Name, StartsAt, EndsAt, CreatedByUserId) VALUES ('f1', 'Year end', '2026-12-20T00:00:00Z', '2027-01-02T00:00:00Z', 'u1');
         INSERT INTO AuditEvents (OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action) VALUES ('2026-09-01T00:00:00Z', 'u1', 'r1', 'Train', 'r1', 'Created');
@@ -130,6 +131,24 @@ try:
     check(False, "005: the waiver-approver trigger reads the membership role, not Users.Role")
 except sqlite3.IntegrityError as e:
     check("approved by a Governance Officer" in str(e), "005: the waiver-approver trigger reads the membership role, not Users.Role")
+
+# Upgrade 006 (REOS-107/109/110): existing releases get keys in creation order, the counter points past them, nothing else about them changes
+check(db.execute("SELECT Id, ReleaseKey, OwnerUserId, OwnerTeamId, ReleaseBranch, OnCallUserId, OnCallTeamId, ReleaseTypeId FROM ReleaseTrains ORDER BY CreatedAt").fetchall()
+      == [("r1", "RLS-1", None, None, None, None, None, None), ("r2", "RLS-2", None, None, None, None, None, None)], "006: existing releases get keys RLS-1, RLS-2 in creation order")
+check(db.execute("SELECT KeyPrefix, NextKeyNumber FROM Workspaces WHERE Id = 'default'").fetchall() == [("RLS", 3)], "006: the workspace counter points past the last key")
+db.execute("INSERT INTO ReleaseTrains (Id, Title, TargetReleaseDate, CreatedAt, UpdatedAt) VALUES ('r3', 'R26.12', '2026-12-15', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z')")
+check(db.execute("SELECT ReleaseKey FROM ReleaseTrains WHERE Id = 'r3'").fetchall() == [("RLS-3",)], "006: a release inserted afterwards takes the next key")
+try:
+    db.execute("UPDATE ReleaseTrains SET ReleaseKey = 'RLS-9' WHERE Id = 'r1'")
+    check(False, "006: a key never changes")
+except sqlite3.IntegrityError as e:
+    check("never changes" in str(e), "006: a key never changes")
+check(db.execute("SELECT count(*) FROM Environments").fetchone() == (0,) and db.execute("SELECT count(*) FROM Deployments").fetchone() == (0,), "006: the new tables start empty")
+try:
+    db.execute("INSERT INTO Environments (Id, Name, Kind, CreatedAt, WorkspaceId) VALUES ('e1', 'Staging', 'Staging', '2026-09-01T00:00:00Z', 'nowhere')")
+    check(False, "006: the new tables' foreign keys are enforced")
+except sqlite3.IntegrityError as e:
+    check("FOREIGN KEY" in str(e), "006: the new tables' foreign keys are enforced")
 
 again = baseline_db()
 for s in SCRIPTS:

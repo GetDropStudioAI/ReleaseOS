@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace ReleaseMgmt.Api.Tests;
 
-public sealed class ApiFactory(string environment = "Development", bool demoData = false, string? passwordResetUrl = null, bool requireIfMatch = false, long? attachmentMaxBytes = null) : WebApplicationFactory<Program>
+public sealed class ApiFactory(string environment = "Development", bool demoData = false, string? passwordResetUrl = null, bool requireIfMatch = false, long? attachmentMaxBytes = null, IReadOnlyDictionary<string, string>? settings = null) : WebApplicationFactory<Program>
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("reos-api-").FullName;
     public string DbPath => Path.Combine(_dir, "app.db");
@@ -26,6 +26,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         builder.UseSetting("Realtime:ServerTimeSeconds", "1");
         builder.UseSetting("Attachments:Directory", AttachmentsDir);
         if (attachmentMaxBytes is long mb) builder.UseSetting("Attachments:MaxBytes", mb.ToString());
+        foreach (var (k, v) in settings ?? new Dictionary<string, string>()) builder.UseSetting(k, v);
         builder.UseSetting("Notifications:ScanSeconds", "3600");   // the scheduler is driven by its own tests; keep it quiet here
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
         builder.UseSetting("Logging:File", Path.Combine(_dir, "log-.txt"));

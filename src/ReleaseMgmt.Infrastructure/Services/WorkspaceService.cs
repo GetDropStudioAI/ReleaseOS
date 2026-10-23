@@ -38,15 +38,38 @@ public sealed class WorkspaceService(IDbContextFactory<ReleaseDbContext> dbf, Ti
         }, ct);
     }
 
-    public sealed record WorkspaceView(string Id, string Name, string Slug, string? Region);
+    public sealed record WorkspaceView(string Id, string Name, string Slug, string? Region, string KeyPrefix = ReleaseKeys.DefaultPrefix, int Version = 1);
 
     /// <summary>The workspace the signed-in person is working in: the one the request resolved (REOS-105), or the default one outside any.</summary>
     public async Task<WorkspaceView> CurrentAsync(CancellationToken ct = default)
     {
         await using var db = await OpenAsync(ct);
         var ws = Memberships.WorkspaceOf(db);
-        return await db.Set<Workspaces>().AsNoTracking().Where(w => w.Id == ws).Select(w => new WorkspaceView(w.Id, w.Name, w.Slug, w.Region)).SingleAsync(ct);
+        return await db.Set<Workspaces>().AsNoTracking().Where(w => w.Id == ws).Select(w => new WorkspaceView(w.Id, w.Name, w.Slug, w.Region, w.KeyPrefix, w.Version)).SingleAsync(ct);
     }
+
+    /// <summary>
+    /// REOS-107: the prefix of the workspace's release keys (RLS in RLS-284): 2 to 10 capital letters or digits. It applies to keys given from now on; the keys that exist
+    /// keep theirs (a key never changes). One audit row; If-Match is the workspace's Version.
+    /// </summary>
+    public Task<ServiceResult<WorkspaceView>> SetKeyPrefixAsync(string? prefix, Actor actor, int? expectedVersion, CancellationToken ct = default) =>
+        RunAsync(async db =>
+        {
+            prefix = prefix?.Trim().ToUpperInvariant();
+            if (!ReleaseKeys.IsValidPrefix(prefix))
+                return ServiceResult<WorkspaceView>.Fail(new GuardFailure(ReleaseModelGuards.KeyPrefixInvalid, $"A key prefix is {ReleaseKeys.MinPrefix} to {ReleaseKeys.MaxPrefix} capital letters or digits"));
+            var ws = Memberships.WorkspaceOf(db);
+            var w = await db.Set<Workspaces>().SingleAsync(x => x.Id == ws, ct);
+            if (VersionMismatch(expectedVersion, w.Version)) return ServiceResult<WorkspaceView>.Conflict(w);
+            if (w.KeyPrefix != prefix)
+            {
+                var before = new { w.KeyPrefix };
+                w.KeyPrefix = prefix!; w.Version++;
+                Audit(db, actor, null, "Workspace", w.Id, "KeyPrefix", before, new { w.KeyPrefix, w.NextKeyNumber });
+                await db.SaveChangesAsync(ct);
+            }
+            return ServiceResult<WorkspaceView>.Ok(new(w.Id, w.Name, w.Slug, w.Region, w.KeyPrefix, w.Version));
+        }, ct);
 
     /// <summary>A user created by sign-in is a member of the default workspace with the role the identity provider gave (Users.Role).</summary>
     public static void JoinDefault(ReleaseDbContext db, Users user, DateTime now) => Join(db, user, WorkspaceIds.Default, user.Role, now);

@@ -52,6 +52,14 @@ public class WorkspaceIsolationTests
         INSERT INTO TrainTemplates(Id,Name) VALUES('tpa','{Marker} Template');
         INSERT INTO CommTemplateLibrary(Id,TemplateType,Name,Audience,SubjectLine,MarkdownBody) VALUES('la','Tminus28','{Marker} Library','All','{Marker} subject','{Marker} body');
         INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('ta','{Marker} Train','2026-11-30','High','{t}','{t}');
+        INSERT INTO ReleaseTypes(Id,Name,SortOrder) VALUES('rta','{Marker} Type',10);
+        INSERT INTO Environments(Id,Name,Region,Kind,SortOrder,CreatedAt) VALUES('enva','{Marker} Env','{Marker}-region','Production',10,'{t}');
+        INSERT INTO CatalogServices(Id,ServiceKey,Name,OwnerTeamId,Repository,CreatedAt) VALUES('svca','zqalpha-svc','{Marker} Service','tma','https://git.example/{Marker}','{t}');
+        INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt,LastUsedAt) VALUES('ika','{Marker} Key','rk_zqalp',printf('%064d',3),'{t}','2999-01-01T00:00:00Z');
+        UPDATE ReleaseTrains SET OwnerUserId='ua', OwnerTeamId='tma', ReleaseBranch='{Marker}-branch', ReleaseTypeId='rta' WHERE Id='ta';
+        INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('ta','enva');
+        INSERT INTO Deployments(Id,ExternalId,CatalogServiceId,EnvironmentId,ReleaseTrainId,ReleaseVersion,CreatedAt,UpdatedAt,IngestKeyId) VALUES('depa','{Marker}-dep-1','svca','enva','ta','9.9.9','{t}','{t}','ika');
+        INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('depa','{t}','{t}','Info','{Marker} event','{Marker}-ev-1');
         INSERT INTO ChangeRecords(ReleaseTrainId,Justification) VALUES('ta','{Marker} justification');
         INSERT INTO AffectedCIs(Id,ReleaseTrainId,CiName) VALUES('cia','ta','{Marker} CI');
         INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('dwa','ta','2026-11-30T02:00:00Z','2026-11-30T06:00:00Z');
@@ -95,7 +103,9 @@ public class WorkspaceIsolationTests
             ["pir-actions"] = "paa", ["milestones"] = "ma", ["attachments"] = "aa", ["comm-library"] = "la", ["comm-templates"] = "cta", ["comm-schedule"] = "csa",
             ["dispatches"] = "dsa", ["export-jobs"] = "xa", ["freezes"] = "fa", ["links"] = "lka", ["notifications"] = "na", ["alerts"] = "sya", ["webhook-allowlist"] = "wha",
             ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
+            ["release-types"] = "rta", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika",
             ["ciId"] = "cia", ["issueId"] = "kia", ["stepId"] = "sa", ["jobId"] = "ija", ["trainId"] = "ta", ["day"] = "2026-12-24",
+            ["audit"] = Scalar(f, "SELECT Id FROM AuditEvents WHERE ReleaseTrainId='ta' AND EntityType='Train'"),   // GET /audit/{id}: one of A's events
         };
     }
 
@@ -116,11 +126,12 @@ public class WorkspaceIsolationTests
             $"SELECT * FROM CommDispatches WHERE CommTemplateId IN (SELECT Id FROM CommTemplates WHERE ReleaseTrainId IN {trains})",
         }.ToList();
         foreach (var root in new[] { "Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
-                     "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents" })
+                     "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "Environments", "CatalogServices", "IngestKeys", "Deployments" })
             queries.Add($"SELECT * FROM {root} WHERE WorkspaceId='default'");
         foreach (var child in new[] { "ChangeRecords", "AffectedCIs", "DeploymentWindows", "BundledProducts", "StageGates", "Attachments", "RunbookSteps", "RunbookRuns", "Blockers",
-                     "KnownIssues", "GoNoGoDecisions", "PostImplementationReviews", "FreezeOverrides", "Baselines", "ExternalLinks", "CommTemplates", "CommSchedule", "TrainMilestones" })
+                     "KnownIssues", "GoNoGoDecisions", "PostImplementationReviews", "FreezeOverrides", "Baselines", "ExternalLinks", "CommTemplates", "CommSchedule", "TrainMilestones", "TrainEnvironments" })
             queries.Add($"SELECT * FROM {child} WHERE ReleaseTrainId IN {trains}");
+        queries.Add("SELECT * FROM DeploymentEvents WHERE DeploymentId IN (SELECT Id FROM Deployments WHERE WorkspaceId='default')");
         var rows = new List<string>();
         using var c = new SqliteConnection($"Data Source={f.DbPath};Pooling=False");
         c.Open();

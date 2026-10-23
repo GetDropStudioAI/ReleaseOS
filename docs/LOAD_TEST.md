@@ -104,3 +104,10 @@ The harness itself needed one fix first, and it was failing on main too: it deal
 - Data growth: 100 000 audit rows and 200 trains are the stated scale. The audit table grows without bound; at ten times that, re-run with `--audit-rows 1000000` and look at the audit filters and the CSV export first.
 - The analytics queries here run on synthetic history (mostly certified gates and few transitions). Their unloaded cost is 2 to 6 ms, which says the queries are index-friendly, not that real history will look the same.
 - Write requests are measured against the same 300 ms budget for reporting only.
+
+## 6. Deployment ingest (REOS-110)
+
+The push ingest API (`POST /api/v1/ingest/events`, one event per call) is checked in `ReleaseMgmt.Api.Tests/IngestApiTests.Fifty_events_a_second_are_accepted_without_slowing_the_app`: 50 events a second for 3 seconds (150 calls, each due at n/50 s) against the in-process host while a second client reads `GET /api/v1/trains` every 20 ms. It fails if any call is refused, if an event is missing afterwards, if `GET /trains` p95 rises above the larger of 6 times its unloaded p95 and 750 ms, or if the ingest p95 is a second or more. The bounds are loose on purpose (a shared CI runner); the point is that the run is steady at the rate in the acceptance.
+
+`REOS_INGEST_LOAD_SECONDS=60 dotnet test tests/ReleaseMgmt.Api.Tests --filter Fifty_events` makes it a longer sustained run (30 seconds, 1 500 events, passed on the development container). Each event call is one transaction with a deployment lookup, the inserts, one parent update and one audit row; SQLite takes thousands of those a second, and the per-key limit (100 calls/s) is above the acceptance rate, so the API's own limit does not get in the way of 50 events/s from one tool (batch up to 100 events a call for more).
+

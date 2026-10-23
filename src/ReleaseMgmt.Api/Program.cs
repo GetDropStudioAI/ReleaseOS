@@ -82,6 +82,13 @@ builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
 builder.Services.AddSingleton<UserCreationService>();   // REOS-83 add users ahead of their first sign-in
 builder.Services.AddSingleton<WorkspaceService>();      // REOS-104 workspaces (D45)
+builder.Services.AddSingleton<ReleaseModelService>();   // REOS-107 key, owner, team, branch, on-call, type, target environments
+builder.Services.AddSingleton<ReleaseTypeService>();    // REOS-107 / RT1 release types per workspace
+builder.Services.AddSingleton<EnvironmentService>();    // REOS-109 environments
+builder.Services.AddSingleton<ServiceCatalogService>(); // REOS-109 service catalog
+builder.Services.AddSingleton<IngestKeyService>();      // REOS-110 per-workspace API keys (hash only)
+builder.Services.AddSingleton<IngestLimiter>();         // REOS-110 per-key rate limit, per-address failure budget
+builder.Services.AddSingleton<DeploymentService>();     // REOS-110 deployments, events, ingest
 builder.Services.AddSingleton<ApprovalQueueService>();  // REOS-94 the approval queue behind the shell's Approvals badge
 builder.Services.AddSingleton<MilestoneService>();   // train milestones (Q-0840..)
 // REOS-35 evidence attachments: stored outside wwwroot (Attachments:Directory), capped at Attachments:MaxBytes (never above the 50 MB schema CHECK)
@@ -155,6 +162,7 @@ if (authority is not null)
         o.Events.OnRemoteFailure = OidcSignIn.OnRemoteFailure;   // REOS-65: a refused or failed sign-in goes back to the sign-in page with a reason code, never a 500
     });
 }
+auth.AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, IngestKeyAuthenticationHandler>(IngestKeyAuthentication.Scheme, null);   // REOS-110: the push ingest API's key, opens /api/v1/ingest/* only
 builder.Services.AddAuthorization(Policies.Configure);
 
 var app = builder.Build();
@@ -172,6 +180,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<WorkspaceService>().ApplyDefaultSettingsAsync(config["Workspace:DefaultName"], config["Workspace:Region"]);
     var seed = scope.ServiceProvider.GetRequiredService<SeedService>();
     await seed.SeedReferenceDataAsync();
+    await scope.ServiceProvider.GetRequiredService<ReleaseTypeService>().SeedAllAsync();   // REOS-107 / RT1: Beta, CERT, PenTest Cert, Production for a workspace that has no types
     if (config.GetValue("Seed:Demo", app.Environment.IsDevelopment())) await seed.SeedDemoDataAsync(); // demo trains only when asked (default: Development)
 }
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA
@@ -237,6 +246,9 @@ api.MapImports(); api.MapGridExports();   // REOS-48/49
 api.MapPdfExports();   // REOS-50
 api.MapMilestones();   // train milestones (Q-0840..)
 api.MapOverview();   // REOS-108 (B2)
+api.MapReleaseModel();   // REOS-107 / RT1
+api.MapEnvironmentsAndServices();   // REOS-109
+api.MapDeployments();   // REOS-110
 
 // Dev-only fake login: POST /auth/dev-login {email, name, role}. Never mapped outside Development; see DevSignIn for when it exists and who may call it.
 if (devTools)

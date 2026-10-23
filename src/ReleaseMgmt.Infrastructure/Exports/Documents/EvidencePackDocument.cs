@@ -61,6 +61,7 @@ public sealed class EvidencePackDocument(ExportModel model, ExportOptions option
                 t.Span(M.Train.CloseCode ?? "not closed").SemiBold().FontColor(PdfStyle.Ink);
                 t.Span($" · train version {M.Train.Version} · records are append-only");
             });
+            if (M.Train.Release?.Line() is { } release) c.Item().Text(release).FontColor(PdfStyle.Quiet);
         });
 
     private DateTime? PlannedFinish()

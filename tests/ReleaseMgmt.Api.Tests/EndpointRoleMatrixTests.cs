@@ -37,6 +37,9 @@ public class EndpointRoleMatrixTests
         ["Approvers"] = [Roles.ReleaseManager, Roles.GovernanceOfficer],
         // Milestone done/undone (Q-0842): planners, or the owner; Viewers are refused even when they own it. Ownership is asserted in MilestoneTests.
         ["OwnedNotViewer"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],
+        // Ingest (REOS-110): the push ingest API takes a workspace API key and nothing else. No role passes, a session cookie included: all of them get 401, not 403
+        // (the key is checked in IngestApiTests: missing, wrong, revoked and rate-limited keys, and a valid one).
+        ["Ingest"] = [],
     };
 
     // Endpoints mapped only when the host environment is Development.
@@ -67,6 +70,8 @@ public class EndpointRoleMatrixTests
         GET /api/v1/audit                                        AuditRead
         GET /api/v1/audit.csv                                    AuditRead
         GET /api/v1/audit/entity-types                           AuditRead
+        GET /api/v1/audit/integrity                              AuditRead
+        GET /api/v1/audit/{id}                                   AuditRead
         GET /api/v1/calendar                                     Read
         GET /api/v1/comm-library                                 Read
         GET /api/v1/comm-library/{id}                            Read
@@ -245,6 +250,36 @@ public class EndpointRoleMatrixTests
         POST /api/v1/milestones/{id}:done                        OwnedNotViewer
         POST /api/v1/milestones/{id}:undone                      OwnedNotViewer
         DELETE /api/v1/milestones/{id}                           Plan
+        GET /api/v1/trains/{id}/release                          Read
+        PATCH /api/v1/trains/{id}/release                        Plan
+        PATCH /api/v1/workspace                                  Admin
+        GET /api/v1/release-types                                Read
+        POST /api/v1/release-types                               Plan
+        PATCH /api/v1/release-types/{id}                         Plan
+        POST /api/v1/release-types/{id}:archive                  Plan
+        POST /api/v1/release-types/{id}:unarchive                Plan
+        GET /api/v1/environments                                 Read
+        GET /api/v1/environments/{id}                            Read
+        POST /api/v1/environments                                Plan
+        PATCH /api/v1/environments/{id}                          Plan
+        POST /api/v1/environments/{id}:archive                   Plan
+        POST /api/v1/environments/{id}:unarchive                 Plan
+        GET /api/v1/services                                     Read
+        GET /api/v1/services/{id}                                Read
+        POST /api/v1/services                                    Plan
+        PATCH /api/v1/services/{id}                              Plan
+        POST /api/v1/services/{id}:archive                       Plan
+        POST /api/v1/services/{id}:unarchive                     Plan
+        PUT /api/v1/products/{id}/service                        Plan
+        GET /api/v1/deployments                                  Read
+        GET /api/v1/deployments/{id}                             Read
+        GET /api/v1/trains/{id}/deployments                      Read
+        GET /api/v1/trains/{id}/environments                     Read
+        GET /api/v1/ingest-keys                                  Admin
+        POST /api/v1/ingest-keys                                 Admin
+        POST /api/v1/ingest-keys/{id}:revoke                     Admin
+        POST /api/v1/ingest/deployments                          Ingest
+        POST /api/v1/ingest/events                               Ingest
         """);
 
     private static Dictionary<string, string> Parse(string table) =>
@@ -336,8 +371,8 @@ public class EndpointRoleMatrixTests
                 checks++;
                 var denied = status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
                 if (allow && (denied || (int)status >= 500)) wrong.Add($"{key} [{cls}] as {who}: expected allowed, got {(int)status} {(status >= HttpStatusCode.InternalServerError ? (await res.Content.ReadAsStringAsync())[..Math.Min(300, (await res.Content.ReadAsStringAsync()).Length)] : "")}");
-                else if (!allow && who == "anonymous" && status != HttpStatusCode.Unauthorized) wrong.Add($"{key} [{cls}] as {who}: expected 401, got {(int)status}");
-                else if (!allow && who != "anonymous" && status != HttpStatusCode.Forbidden) wrong.Add($"{key} [{cls}] as {who}: expected 403, got {(int)status}");
+                else if (!allow && (who == "anonymous" || cls == "Ingest") && status != HttpStatusCode.Unauthorized) wrong.Add($"{key} [{cls}] as {who}: expected 401, got {(int)status}");
+                else if (!allow && who != "anonymous" && cls != "Ingest" && status != HttpStatusCode.Forbidden) wrong.Add($"{key} [{cls}] as {who}: expected 403, got {(int)status}");
             }
         }
         Assert.True(wrong.Count == 0, $"{wrong.Count} of {checks} role checks failed:\n  " + string.Join("\n  ", wrong));

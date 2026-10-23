@@ -20,6 +20,7 @@ public sealed class ReleaseReportDocument(ExportModel model, ExportOptions optio
                 t.Span(M.Train.ChangeTicket ?? "no change ticket").FontFamily(PdfStyle.MonoFamilies).FontSize(PdfStyle.MonoSize);
                 t.Span($" · Risk {PdfFmt.Risk(M.Train.RiskTier)} · Target {F.Day(M.Train.TargetDate)} · Status {M.Train.Status} · train version {M.Train.Version}");
             });
+            if (M.Train.Release?.Line() is { } release) c.Item().Text(release).FontColor(PdfStyle.Quiet);
         });
 
         Section(col, "Summary", c => KeyVal(c,

@@ -55,6 +55,7 @@ public class ApprovalQueueTests
             UPDATE ChecklistTasks SET IsCompleted=1, CompletedAt='2026-10-20T12:00:00Z', CompletedByUserId='{g2}', LastChangedByUserId='{g2}' WHERE Id='k2';
             INSERT INTO GateWaivers(Id,StageGateId,Reason,RequestedByUserId,RequestedAt) VALUES('w1','g2','The auditor holds the evidence this cycle','{g2}','2026-10-20T13:00:00Z');");
         Assert.Equal(["CertifyGate:g2", "ApproveWaiver:w1"], await Items(gov1));
+        foreach (var i in (await Queue(gov1)).GetProperty("items").EnumerateArray()) Assert.Equal("g2", i.GetProperty("gateId").GetString());   // the screen finds the gate (and the waiver's version) from it
         Assert.Empty(await Items(gov2));   // completed a task in the gate (SoD), and requested the waiver
         foreach (var c in new[] { rte, rm, viewer }) Assert.Empty(await Items(c));
         var item = (await Queue(gov1)).GetProperty("items")[0];

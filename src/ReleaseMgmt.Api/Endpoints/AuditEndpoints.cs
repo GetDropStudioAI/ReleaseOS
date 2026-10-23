@@ -30,8 +30,16 @@ public static class AuditEndpoints
                 cursor = id;
             }
             int? limit = int.TryParse(req.Query["limit"], out var l) ? l : null;
-            return Results.Ok(await s.QueryAsync(f, cursor, limit, ct));
+            return Results.Ok(await s.QueryAsync(f, cursor, limit, ct, includeTotal: req.Query["total"] == "true"));
         }).RequireAuthorization(Policies.AuditRead);
+
+        // GET /audit/integrity -> { appendOnly, missingTriggers[], hashChained, retainedEvents, oldestAt, newestAt, checkedAt }: a real check of the append-only triggers (no hash chain yet, REOS-114)
+        api.MapGet("/audit/integrity", async (AuditQueryService s, TimeProvider time, CancellationToken ct) => Results.Ok(await s.IntegrityAsync(time, ct))).RequireAuthorization(Policies.AuditRead);
+
+        // GET /audit/{id} -> one event (a shared link to an event that is not on the loaded page), 404 when it is not in this workspace
+        api.MapGet("/audit/{id}", async (string id, AuditQueryService s, CancellationToken ct) =>
+            long.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && await s.GetAsync(n, ct) is { } row ? Results.Ok(row) : Results.NotFound(new { guard = "NotFound", message = "No such audit event" }))
+            .RequireAuthorization(Policies.AuditRead);
 
         // GET /audit/entity-types -> string[] (feeds the filter line)
         api.MapGet("/audit/entity-types", async (AuditQueryService s, CancellationToken ct) => Results.Ok(await s.EntityTypesAsync(ct))).RequireAuthorization(Policies.AuditRead);

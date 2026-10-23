@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Tests;
 
 /// <summary>
-/// Port of tests/reference/test_schema.py: same 167 cases, same order, same expected messages, run against the
+/// Port of tests/reference/test_schema.py: same 247 cases, same order, same expected messages, run against the
 /// EF-migrated database (not schema.sql directly). The Python oracle stays and must keep passing.
 /// Sections that share a database in the oracle share one in-order scenario here.
 /// </summary>
@@ -352,7 +352,8 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         var roots = Rows(db6, "SELECT m.name FROM sqlite_master m WHERE m.type='table' AND m.name NOT IN ('Workspaces','WorkspaceMembers') AND m.name NOT LIKE '__EF%' AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name='WorkspaceId')")
             .Select(r => (string)r[0]!).Order().ToList();
         string[] expectedRoots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
-            "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents"];
+            "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents",
+            "ReleaseTypes", "Environments", "CatalogServices", "IngestKeys", "Deployments"];
         AssertTrue(roots.SequenceEqual(expectedRoots.Order()), "WorkspaceId on every root table, and only there", string.Join(",", roots));
         var moving = roots.Where(t => t != "AuditEvents" && Count(db6, "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name=?", $"trg_Ws_{t}_Update") == 0).ToList();
         AssertTrue(moving.Count == 0, "every root table but the append-only audit log refuses a change of workspace", string.Join(",", moving));
@@ -450,5 +451,112 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         Exec(db6, "UPDATE WorkspaceMembers SET Role='Viewer' WHERE WorkspaceId='default' AND UserId='gov2'");
         Exec(db6, "UPDATE ChecklistTasks SET IsCompleted=1,CompletedAt=?,CompletedByUserId='gov1',LastChangedByUserId='gov1' WHERE Id='k2'", Now);
         Check(db6, Certify("g2", "gov2"), false, "a Governance Officer by Users.Role whose membership is now Viewer", expect: "Governance Officers only");
+    }
+
+    [Fact]
+    public void Release_model_environments_catalog_and_deployments()
+    {
+        using var db7 = fx.Fresh();
+        Exec(db7, $@"
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt,KeyPrefix) VALUES('w2','EU','eu','{Now}','EU');
+INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Ops');
+INSERT INTO Teams(Id,Handle,Name,WorkspaceId) VALUES('tm2','euops','EU Ops','w2');
+INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','rm','ReleaseManager','{Now}');
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,WorkspaceId) VALUES('t2','EU R1','2026-11-30','{Now}','{Now}','w2');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt) VALUES('e1','Staging','Staging','{Now}'),('e2','Prod EU','Production','{Now}');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt,WorkspaceId) VALUES('e9','Prod','Production','{Now}','w2');
+INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt) VALUES('sv1','payments-api','Payments API','{Now}');
+INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt,WorkspaceId) VALUES('sv9','payments-api','Payments API EU','{Now}','w2');
+INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt) VALUES('ik1','CI','rk_ab12',printf('%064d',1),'{Now}');");
+        AssertTrue((string)Rows(db7, "SELECT ReleaseKey FROM ReleaseTrains WHERE Id='t1'").Single()[0]! == "RLS-1", "a train inserted without a key takes the workspace's next one");
+        AssertTrue((string)Rows(db7, "SELECT ReleaseKey FROM ReleaseTrains WHERE Id='t2'").Single()[0]! == "EU-1", "the key uses the train's workspace prefix and counter");
+        Exec(db7, $"INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt) VALUES('t3','R2','2026-11-30','{Now}','{Now}')");
+        var t3 = Rows(db7, "SELECT ReleaseKey, (SELECT NextKeyNumber FROM Workspaces WHERE Id='default') FROM ReleaseTrains WHERE Id='t3'").Single();
+        AssertTrue((string)t3[0]! == "RLS-2" && (long)t3[1]! == 3, "keys count up");
+        Exec(db7, "DELETE FROM ReleaseTrains WHERE Id='t3'");
+        Exec(db7, $"INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt) VALUES('t4','R3','2026-11-30','{Now}','{Now}')");
+        AssertTrue((string)Rows(db7, "SELECT ReleaseKey FROM ReleaseTrains WHERE Id='t4'").Single()[0]! == "RLS-3", "a deleted release's number is not reused");
+        Check(db7, "UPDATE ReleaseTrains SET ReleaseKey='RLS-99' WHERE Id='t1'", false, "a release key never changes", expect: "release key never changes");
+        Check(db7, "UPDATE ReleaseTrains SET ReleaseKey='RLS-1' WHERE Id='t4'", false, "a release key never changes (to another's)", expect: "release key never changes");
+        Check(db7, $"INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseKey) VALUES('t5','x','2026-11-30','{Now}','{Now}','RLS-1')", false, "two releases with one key in a workspace", expect: "UNIQUE");
+        Check(db7, $"INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseKey,WorkspaceId) VALUES('t5','x','2026-11-30','{Now}','{Now}','RLS-1','w2')", true, "the same key in another workspace");
+        Check(db7, $"INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseKey) VALUES('t6','x','2026-11-30','{Now}','{Now}','rls 7')", false, "a key with a space or lower case", expect: "CHECK");
+        Check(db7, "UPDATE Workspaces SET KeyPrefix='r' WHERE Id='w2'", false, "a one-letter key prefix", expect: "CHECK");
+        Check(db7, "UPDATE Workspaces SET KeyPrefix='rel' WHERE Id='w2'", false, "a lower-case key prefix", expect: "CHECK");
+        Check(db7, "UPDATE Workspaces SET KeyPrefix='EU2' WHERE Id='w2'", true, "a valid key prefix");
+        Check(db7, "UPDATE ReleaseTrains SET OwnerUserId='rte' WHERE Id='t1'", true, "owner who is a member of the workspace");
+        Check(db7, "UPDATE ReleaseTrains SET OwnerUserId='rte' WHERE Id='t2'", false, "owner who is not a member of the train's workspace", expect: "owner is not a member of this workspace");
+        Check(db7, "UPDATE ReleaseTrains SET OwnerTeamId='tm2' WHERE Id='t1'", false, "owning team of another workspace", expect: "owning team belongs to another workspace");
+        Check(db7, "UPDATE ReleaseTrains SET OwnerTeamId='tm1', ReleaseBranch='release/26.10', OnCallTeamId='tm1' WHERE Id='t1'", true, "team, branch and on-call team");
+        Check(db7, "UPDATE ReleaseTrains SET OnCallUserId='rm' WHERE Id='t1'", false, "on-call a person and a team", expect: "CHECK");
+        Check(db7, "UPDATE ReleaseTrains SET OnCallTeamId=NULL, OnCallUserId='rm' WHERE Id='t1'", true, "on-call a person");
+        Check(db7, "UPDATE ReleaseTrains SET OnCallUserId='dev' WHERE Id='t2'", false, "on-call person who is not a member of the train's workspace", expect: "on-call person is not a member of this workspace");
+        Check(db7, "UPDATE ReleaseTrains SET ReleaseBranch='  ' WHERE Id='t1'", false, "a blank release branch", expect: "CHECK");
+        Check(db7, "INSERT INTO ReleaseTypes(Id,Name) VALUES('ty1','CERT')", true, "a release type");
+        Check(db7, "INSERT INTO ReleaseTypes(Id,Name) VALUES('ty2','cert')", false, "a release type name twice in a workspace (any case)", expect: "UNIQUE");
+        Check(db7, "INSERT INTO ReleaseTypes(Id,Name,WorkspaceId) VALUES('ty3','CERT','w2')", true, "the same type name in another workspace");
+        Check(db7, "UPDATE ReleaseTrains SET ReleaseTypeId='ty3' WHERE Id='t1'", false, "a release of another workspace's type", expect: "release type belongs to another workspace");
+        Check(db7, "UPDATE ReleaseTrains SET ReleaseTypeId='ty1' WHERE Id='t1'", true, "a release of its workspace's type");
+        Check(db7, "UPDATE ReleaseTypes SET WorkspaceId='w2' WHERE Id='ty1'", false, "a release type moved to another workspace", expect: "cannot move to another workspace");
+        Check(db7, "INSERT INTO Environments(Id,Name,Kind,CreatedAt) VALUES('e3','Dev','Dev',?)", false, "an environment kind outside staging and production", [Now], "CHECK");
+        Check(db7, "INSERT INTO Environments(Id,Name,Kind,CreatedAt) VALUES('e3','staging','Staging',?)", false, "an environment name twice in a workspace (any case)", [Now], "UNIQUE");
+        Check(db7, "INSERT INTO Environments(Id,Name,Kind,CreatedAt,ErrorRateMaxPct) VALUES('e3','UAT','Staging',?,120)", false, "an error-rate threshold over 100 %", [Now], "CHECK");
+        Check(db7, "INSERT INTO Environments(Id,Name,Kind,CreatedAt,ControlWebhookDestinationId) VALUES('e3','UAT','Staging',?,'nope')", false, "a control webhook that does not exist", [Now], "FOREIGN KEY");
+        Exec(db7, "INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind,WorkspaceId) VALUES('hw2','EU hook','hooks.eu.example','CfDJ8X',printf('%064d',7),'Generic','w2')");
+        Check(db7, "UPDATE Environments SET ControlWebhookDestinationId='hw2' WHERE Id='e1'", false, "environment control webhook of another workspace", expect: "webhook destination belongs to another workspace");
+        Check(db7, "INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('t1','e1')", true, "a release targets an environment");
+        Check(db7, "INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('t1','e9')", false, "a release targets another workspace's environment", expect: "environment belongs to another workspace");
+        Check(db7, "INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('t1','e1')", false, "the same environment twice on a release", expect: "UNIQUE");
+        Check(db7, "INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt) VALUES('sv2','PAYMENTS-API','x',?)", false, "a service key twice in a workspace (any case)", [Now], "UNIQUE");
+        Check(db7, "INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt) VALUES('sv2','pay ments','x',?)", false, "a service key with a space", [Now], "CHECK");
+        Check(db7, "INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt,OwnerTeamId) VALUES('sv2','card-portal','Card Portal',?,'tm2')", false, "a service owned by another workspace's team", [Now], "team belongs to another workspace");
+        Check(db7, "INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt,OwnerTeamId) VALUES('sv2','card-portal','Card Portal',?,'tm1')", true, "a service owned by its workspace's team", [Now]);
+        Check(db7, "UPDATE BundledProducts SET CatalogServiceId='sv1' WHERE Id='p1'", true, "a product linked to a service of its workspace");
+        Check(db7, "UPDATE BundledProducts SET CatalogServiceId='sv9' WHERE Id='p2'", false, "a product linked to another workspace's service", expect: "catalog service belongs to another workspace");
+        Check(db7, "INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt) VALUES('ik2','x','rk_zz99',printf('%064d',1),?)", false, "one key hash twice", [Now], "UNIQUE");
+        Check(db7, "INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt) VALUES('ik2','x','rk_zz99','NOTHEX',?)", false, "a key hash that is not 64 hex characters", [Now], "CHECK");
+        Check(db7, "UPDATE IngestKeys SET RevokedAt=? WHERE Id='ik1'", false, "revoked without saying by whom", [Now], "CHECK");
+        Check(db7, "UPDATE IngestKeys SET RevokedAt=?, RevokedByUserId='rte' WHERE Id='ik1'", true, "a key revoked by a person", [Now]);
+        Check(db7, "UPDATE IngestKeys SET WorkspaceId='w2' WHERE Id='ik1'", false, "a key moved to another workspace", expect: "cannot move to another workspace");
+        const string Dep_Sql = "INSERT INTO Deployments(Id,ExternalId,CatalogServiceId,EnvironmentId,ReleaseTrainId,RunId,ReleaseVersion,Strategy,CanarySteps,State,StartedAt,FinishedAt,CreatedAt,UpdatedAt,WorkspaceId) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        static object?[] Dep(string id, string ext = "ci-1", string svc = "sv1", string env = "e1", string? train = "t1", string? run = null, string ver = "4.5.0", string strat = "Rolling",
+            string? steps = null, string state = "Queued", string? started = null, string? finished = null, string ws = "default") =>
+            [id, ext, svc, env, train, run, ver, strat, steps, state, started, finished, Now, Now, ws];
+        Check(db7, Dep_Sql, true, "a deployment of a service to an environment for a release", Dep("d1"));
+        Check(db7, Dep_Sql, false, "the same external id twice in a workspace", Dep("d2"), "UNIQUE");
+        Check(db7, Dep_Sql, true, "the same external id in another workspace", Dep("d2", svc: "sv9", env: "e9", train: "t2", ws: "w2"));
+        Check(db7, Dep_Sql, false, "a deployment of another workspace's service", Dep("d3", ext: "ci-3", svc: "sv9"), "service belongs to another workspace");
+        Check(db7, Dep_Sql, false, "a deployment to another workspace's environment", Dep("d3", ext: "ci-3", env: "e9"), "environment belongs to another workspace");
+        Check(db7, Dep_Sql, false, "a deployment for another workspace's release", Dep("d3", ext: "ci-3", train: "t2"), "train belongs to another workspace");
+        Check(db7, Dep_Sql, false, "an unknown strategy", Dep("d3", ext: "ci-3", strat: "BlueGreen"), "CHECK");
+        Check(db7, Dep_Sql, false, "canary steps on a rolling deployment", Dep("d3", ext: "ci-3", steps: "[5,50,100]"), "CHECK");
+        Check(db7, Dep_Sql, false, "canary steps that are not JSON", Dep("d3", ext: "ci-3", strat: "Canary", steps: "5,50"), "CHECK");
+        Check(db7, Dep_Sql, true, "canary steps as a JSON array", Dep("d3", ext: "ci-3", strat: "Canary", steps: "[5,50,100]"));
+        Check(db7, Dep_Sql, false, "running without a start time", Dep("d4", ext: "ci-4", state: "Running"), "CHECK");
+        Check(db7, Dep_Sql, false, "finished without a finish time", Dep("d4", ext: "ci-4", state: "Successful", started: Now), "CHECK");
+        Check(db7, Dep_Sql, false, "a finish time on a queued deployment", Dep("d4", ext: "ci-4", finished: Now), "CHECK");
+        Check(db7, "UPDATE Deployments SET TrafficPercent=101 WHERE Id='d1'", false, "traffic over 100 %", expect: "CHECK");
+        Check(db7, "UPDATE Deployments SET State='Successful', StartedAt=?, FinishedAt=? WHERE Id='d1'", false, "queued straight to successful", [Now, Now], "Illegal deployment state transition");
+        Check(db7, "UPDATE Deployments SET State='Running', StartedAt=? WHERE Id='d1'", true, "queued to running", [Now]);
+        Check(db7, "UPDATE Deployments SET State='Paused' WHERE Id='d1'", true, "running to paused");
+        Check(db7, "UPDATE Deployments SET State='Successful', FinishedAt=? WHERE Id='d1'", false, "paused straight to successful", [Now], "Illegal deployment state transition");
+        Check(db7, "UPDATE Deployments SET State='Running' WHERE Id='d1'", true, "paused back to running");
+        Check(db7, "UPDATE Deployments SET State='Successful', FinishedAt=? WHERE Id='d1'", true, "running to successful", [Now]);
+        Check(db7, "UPDATE Deployments SET State='Running', FinishedAt=NULL WHERE Id='d1'", false, "successful back to running", expect: "Illegal deployment state transition");
+        Check(db7, "UPDATE Deployments SET State='RolledBack' WHERE Id='d1'", true, "successful to rolled back (the finish time stays)");
+        Check(db7, "UPDATE Deployments SET State='Failed' WHERE Id='d1'", false, "rolled back is final", expect: "Illegal deployment state transition");
+        Check(db7, "UPDATE Deployments SET EnvironmentId='e2' WHERE Id='d1'", false, "a deployment moved to another environment", expect: "keeps its external id, service and environment");
+        Check(db7, "UPDATE Deployments SET ReleaseTrainId='t2' WHERE Id='d1'", false, "a deployment linked to another workspace's release", expect: "train belongs to another workspace");
+        Exec(db7, "INSERT INTO RunbookRuns(Id,ReleaseTrainId,Mode,StartedAt,StartedByUserId) VALUES('r1','t4','Rehearsal',?,'rte')", Now);
+        Check(db7, "UPDATE Deployments SET RunId='r1' WHERE Id='d3'", false, "a deployment linked to a run of another release", expect: "run belongs to another train");
+        Check(db7, "UPDATE Deployments SET ReleaseTrainId='t4', RunId='r1' WHERE Id='d3'", true, "a deployment linked to a release and its run");
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('d3',?,?,'Info','Canary at 5 %','e-1')", true, "a deployment event", [Now, Now]);
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('d3',?,?,'Info','again','e-1')", false, "an event id twice on a deployment", [Now, Now], "UNIQUE");
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('d3',?,?,'Info','no id')", true, "an event without an id", [Now, Now]);
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('d3',?,?,'Debug','x')", false, "an event level outside the three", [Now, Now], "CHECK");
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('d3',?,?,'Info','')", false, "an empty event message", [Now, Now], "CHECK");
+        Check(db7, "UPDATE DeploymentEvents SET Message='edited' WHERE Id=1", false, "an event edited", expect: "append-only");
+        Check(db7, "DELETE FROM Deployments WHERE Id='d3'", true, "deleting a deployment removes its events with it");
+        AssertTrue(Count(db7, "SELECT count(*) FROM DeploymentEvents") == 0, "no orphan events");
     }
 }

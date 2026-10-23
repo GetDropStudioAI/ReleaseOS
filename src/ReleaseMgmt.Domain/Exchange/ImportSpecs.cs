@@ -66,8 +66,10 @@ public static class ImportKinds
     public static readonly IReadOnlyList<ImportKindSpec> All =
     [
         new(Trains, "Trains", "trains", [Req("Title", max: 200), Req("TargetReleaseDate", ColumnType.Date), Req("RiskTier", ColumnType.Enum, RiskTiers),
-            Opt("Template", max: 200), Opt("ChangeTicketNumber", max: 60), Opt("WindowStart", ColumnType.Timestamp), Opt("WindowEnd", ColumnType.Timestamp)], ["Title"], Plan: false, Admin: false),
-        new(Products, "Products", "products", [Req("Train", max: 200), Req("ProductName", max: 200), Req("VersionTag", max: 100), Req("ProjectCode", max: 100)], ["Train", "ProductName"], Plan: true, Admin: false),
+            Opt("Template", max: 200), Opt("ChangeTicketNumber", max: 60), Opt("WindowStart", ColumnType.Timestamp), Opt("WindowEnd", ColumnType.Timestamp),
+            Opt("Owner", max: 254, hint: "the owner's email"), Opt("Team", max: 41, hint: "the owning team's handle"), Opt("Branch", max: 200), Opt("OnCall", max: 254, hint: "an email, or @handle for a team"),
+            Opt("ReleaseType", max: 100), Opt("Environments", max: 1000, hint: "environment names, separated by commas")], ["Title"], Plan: false, Admin: false),
+        new(Products, "Products", "products", [Req("Train", max: 200), Req("ProductName", max: 200), Req("VersionTag", max: 100), Req("ProjectCode", max: 100), Opt("ServiceKey", max: 60, hint: "a service key from the catalog")], ["Train", "ProductName"], Plan: true, Admin: false),
         new(Gates, "Gates", "gates", [Req("Train", max: 200), Req("GateName", max: 200), Req("SequenceOrder", ColumnType.Int, min: 1, max: 1000), Req("OffsetDays", ColumnType.Int, min: 0, max: 365),
             Req("RequiredBefore", ColumnType.Enum, RequiredBefore), Req("Owner", ColumnType.Owner), Opt("GateClass", ColumnType.Enum, GateClasses)], ["Train", "SequenceOrder"], Plan: true, Admin: false),
         new(Tasks, "Tasks", "tasks", [Req("Train", max: 200), Req("Gate", max: 200), Req("Description", max: 2000), Req("Owner", ColumnType.Owner),

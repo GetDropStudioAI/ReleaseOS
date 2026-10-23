@@ -227,7 +227,7 @@ public class MilestoneTests
         var all = await Feed($"/api/v1/ics/{tok}.ics");
         var ev = IcsCalendar.Load(all)!.Events.ToDictionary(e => e.Uid!);
         var e1 = ev[$"{a}-milestone@releasemgmt"];
-        Assert.Equal("R26.10: Code complete", e1.Summary);
+        Assert.Equal("RLS-1 R26.10: Code complete", e1.Summary);
         Assert.False(e1.DtStart!.HasTime);
         Assert.Equal(new DateTime(2026, 10, 16), e1.DtStart.Value.Date);
         Assert.Equal(new DateTime(2026, 10, 17), e1.DtEnd!.Value.Date);
@@ -245,7 +245,7 @@ public class MilestoneTests
         var moved = IcsCalendar.Load(await Feed($"/api/v1/ics/{tok}.ics"))!.Events.Single(e => e.Uid == $"{a}-milestone@releasemgmt");
         Assert.Equal(new DateTime(2026, 10, 19), moved.DtStart!.Value.Date);
         Assert.True(moved.Sequence > e1.Sequence);
-        Assert.Equal("R26.10: Code complete (done)", moved.Summary);
+        Assert.Equal("RLS-1 R26.10: Code complete (done)", moved.Summary);
         Assert.DoesNotContain($"{a}-milestone@releasemgmt", await Feed($"/api/v1/ics/{tok}/mine.ics"));
         Assert.True((await Json(await c.Viewer.GetAsync("/api/v1/calendar?from=2026-10-01&to=2026-10-31"))).GetProperty("milestones")[0].GetProperty("done").GetBoolean());
     }

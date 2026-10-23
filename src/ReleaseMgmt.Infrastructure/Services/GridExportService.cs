@@ -23,7 +23,7 @@ public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, A
     internal static readonly IReadOnlyDictionary<string, string[]> ReadOnlyColumns = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
     {
         [ImportKinds.Users] = ["#Id", "#IsActive", "#Version"], [ImportKinds.Teams] = ["#Id", "#Version"], [ImportKinds.Holidays] = ["#Version"],
-        [ImportKinds.Trains] = ["#Id", "#Status", "#Version"], [ImportKinds.Products] = ["#Id", "#Version"], [ImportKinds.Gates] = ["#Id", "#DueOn", "#Status", "#Version"],
+        [ImportKinds.Trains] = ["#Id", "#Key", "#Status", "#Version"], [ImportKinds.Products] = ["#Id", "#Version"], [ImportKinds.Gates] = ["#Id", "#DueOn", "#Status", "#Version"],
         [ImportKinds.Tasks] = ["#Id", "#Completed", "#Version"], [ImportKinds.RunbookSteps] = ["#Id", "#Version"], [ImportKinds.ExternalLinks] = ["#Id", "#SyncState", "#LastSyncedStatus", "#Version"],
     };
 

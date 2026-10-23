@@ -129,11 +129,38 @@ public static class FieldLimits
         [typeof(PlanStructureEndpoints.NewGateBody)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id },
         [typeof(PlanStructureEndpoints.PatchGateBody)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Status"] = Code },
         // REOS-80: new train (blank, from template, copy). Dates and timestamps are ISO strings, well under Code.
-        [typeof(NewTrainInput)] = new() { ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code, ["TemplateId"] = Id, ["WindowStartsAt"] = Code, ["WindowEndsAt"] = Code },
-        [typeof(NewProductInput)] = new() { ["ProductName"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag },
+        [typeof(NewTrainInput)] = new()
+        {
+            ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code, ["TemplateId"] = Id, ["WindowStartsAt"] = Code, ["WindowEndsAt"] = Code,
+            ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["ReleaseBranch"] = ReleaseModelLimits.MaxBranch, ["OnCallUserId"] = Id, ["OnCallTeamId"] = Id, ["ReleaseTypeId"] = Id, ["EnvironmentIds"] = Id,
+        },
+        [typeof(NewProductInput)] = new() { ["ProductName"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey },
         [typeof(CloneTrainInput)] = new() { ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code },
         [typeof(TemplateStepInput)] = new() { ["StepCode"] = StepCode, ["Section"] = Code, ["Title"] = StepTitle, ["OwnerTeamId"] = Id },
         [typeof(TemplateScheduleInput)] = new() { ["LibraryTemplateId"] = Id },
+        // REOS-107: the release model, workspace key prefix and release types (RT1)
+        [typeof(ReleasePatch)] = new()
+        {
+            ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["ReleaseBranch"] = ReleaseModelLimits.MaxBranch, ["OnCallUserId"] = Id, ["OnCallTeamId"] = Id, ["ReleaseTypeId"] = Id, ["EnvironmentIds"] = Id,
+        },
+        [typeof(ReleaseModelEndpoints.KeyPrefixBody)] = new() { ["KeyPrefix"] = ReleaseKeys.MaxPrefix },
+        [typeof(NewReleaseType)] = new() { ["Name"] = ReleaseModelLimits.MaxReleaseTypeName, ["DefaultTemplateId"] = Id },
+        [typeof(ReleaseTypePatch)] = new() { ["Name"] = ReleaseModelLimits.MaxReleaseTypeName, ["DefaultTemplateId"] = Id },
+        // REOS-109: environments, the service catalog and a product's link to it
+        [typeof(NewEnvironment)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id },
+        [typeof(EnvironmentPatch)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id, ["Clear"] = Code },
+        [typeof(NewCatalogService)] = new() { ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey, ["Name"] = ReleaseModelLimits.MaxServiceName, ["OwnerTeamId"] = Id, ["Repository"] = ReleaseModelLimits.MaxRepository, ["ProjectCode"] = ReleaseModelLimits.MaxProjectCode },
+        [typeof(CatalogServicePatch)] = new() { ["Name"] = ReleaseModelLimits.MaxServiceName, ["OwnerTeamId"] = Id, ["Repository"] = ReleaseModelLimits.MaxRepository, ["ProjectCode"] = ReleaseModelLimits.MaxProjectCode },
+        [typeof(ProductServiceLink)] = new() { ["ServiceId"] = Id, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey },
+        // REOS-110: API keys and the push ingest API (an event message is 2,000 characters, the schema's CHECK)
+        [typeof(DeploymentEndpoints.IngestKeyBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName },
+        [typeof(IngestDeployment)] = new()
+        {
+            ["ExternalId"] = ReleaseModelLimits.MaxExternalId, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey, ["Environment"] = ReleaseModelLimits.MaxEnvironmentName,
+            ["ReleaseVersion"] = ReleaseModelLimits.MaxReleaseVersion, ["Strategy"] = Code, ["State"] = Code, ["ReleaseKey"] = 20,
+        },
+        [typeof(DeploymentEndpoints.IngestEventsBody)] = new() { ["DeploymentExternalId"] = ReleaseModelLimits.MaxExternalId },
+        [typeof(IngestEvent)] = new() { ["Level"] = Code, ["Message"] = ReleaseModelLimits.MaxEventMessage, ["ExternalId"] = ReleaseModelLimits.MaxExternalId },
     };
 
     /// <summary>Every body type with a row in the table (for the completeness test and the documentation table).</summary>

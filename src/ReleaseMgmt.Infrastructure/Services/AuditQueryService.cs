@@ -12,7 +12,14 @@ public sealed record AuditFilter(string? Train = null, string? Entity = null, st
 public sealed record AuditRow(long Id, DateTime OccurredAt, string? ActorUserId, string? ActorName, string? ReleaseTrainId, string? TrainTitle,
     string EntityType, string EntityId, string Action, string? BeforeJson, string? AfterJson);
 
-public sealed record AuditPage(IReadOnlyList<AuditRow> Items, string? NextCursor, int Limit);
+/// <summary><paramref name="Total"/> is the number of events matching the filter, set only when the caller asked for it (the audit screen's "Showing 1–100 of 412").</summary>
+public sealed record AuditPage(IReadOnlyList<AuditRow> Items, string? NextCursor, int Limit, long? Total = null);
+
+/// <summary>
+/// What the audit screen's integrity banner can truthfully say (REOS-101). There is no hash chain yet (REOS-114), so this is the protection the log does have:
+/// the two triggers that make AuditEvents append-only, checked in the live database, and the extent of the log in this workspace.
+/// </summary>
+public sealed record AuditIntegrity(bool AppendOnly, IReadOnlyList<string> MissingTriggers, bool HashChained, long RetainedEvents, DateTime? OldestAt, DateTime? NewestAt, DateTime CheckedAt);
 
 /// <summary>
 /// Read-only view of AuditEvents (REOS-38, Q-038a..c). Deliberately has no write path: the table is append-only by trigger and reading it is not itself audited.
@@ -75,7 +82,7 @@ public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf)
         select new AuditRow(a.Id, a.OccurredAt, a.ActorUserId, u.DisplayName, a.ReleaseTrainId, t.Title, a.EntityType, a.EntityId, a.Action, a.BeforeJson, a.AfterJson);
 
     /// <summary>One page, newest first. <paramref name="cursor"/> is the <c>NextCursor</c> of the previous page (the Id of its last row).</summary>
-    public async Task<AuditPage> QueryAsync(AuditFilter f, long? cursor, int? limit, CancellationToken ct = default)
+    public async Task<AuditPage> QueryAsync(AuditFilter f, long? cursor, int? limit, CancellationToken ct = default, bool includeTotal = false)
     {
         var n = ClampLimit(limit);
         await using var db = await dbf.CreateDbContextAsync(ct);
@@ -84,7 +91,30 @@ public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf)
         var rows = await Project(db, q.OrderByDescending(a => a.Id)).Take(n + 1).ToListAsync(ct);
         var more = rows.Count > n;
         if (more) rows.RemoveAt(n);
-        return new AuditPage(rows, more ? rows[^1].Id.ToString(CultureInfo.InvariantCulture) : null, n);
+        var total = includeTotal ? await CountAsync(f, ct) : (long?)null;
+        return new AuditPage(rows, more ? rows[^1].Id.ToString(CultureInfo.InvariantCulture) : null, n, total);
+    }
+
+    /// <summary>One event by its id (the audit screen reopens a shared link to an event that is not on the page it loaded). Null when it does not exist in this workspace.</summary>
+    public async Task<AuditRow?> GetAsync(long id, CancellationToken ct = default)
+    {
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        return await Project(db, db.Set<AuditEvents>().AsNoTracking().Where(a => a.Id == id)).SingleOrDefaultAsync(ct);
+    }
+
+    /// <summary>Names of the triggers that keep AuditEvents append-only (db/schema.sql); the integrity check fails when the live database lacks one.</summary>
+    public static readonly string[] AppendOnlyTriggers = ["trg_Audit_NoUpdate", "trg_Audit_NoDelete"];
+
+    public async Task<AuditIntegrity> IntegrityAsync(TimeProvider time, CancellationToken ct = default)
+    {
+        await using var db = await dbf.CreateDbContextAsync(ct);
+        var present = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'AuditEvents'").ToListAsync(ct);
+        var missing = AppendOnlyTriggers.Where(t => !present.Contains(t)).ToList();
+        var events = db.Set<AuditEvents>().AsNoTracking();
+        var count = await events.LongCountAsync(ct);
+        var oldest = count == 0 ? (DateTime?)null : await events.MinAsync(a => a.OccurredAt, ct);
+        var newest = count == 0 ? (DateTime?)null : await events.MaxAsync(a => a.OccurredAt, ct);
+        return new AuditIntegrity(missing.Count == 0, missing, HashChained: false, count, oldest, newest, time.GetUtcNow().UtcDateTime);
     }
 
     public async Task<long> CountAsync(AuditFilter f, CancellationToken ct = default)

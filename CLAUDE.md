@@ -34,7 +34,7 @@ tests/reference/   Python oracle tests; must keep passing against db/schema.sql
 ```
 
 ## Non-negotiable rules
-1. **`db/schema.sql` is the contract** (51 tables, 91 triggers, 26 indexes). EF migrations must produce the same tables, CHECKs, indexes and triggers. Triggers go in one hand-written migration (`migrationBuilder.Sql`), verbatim and **in file order** (SQLite fires same-event triggers newest-first, and the error each rule reports depends on that order). If you need to change the schema, change `db/schema.sql` first, rerun `python3 tests/reference/test_schema.py`, then the migration.
+1. **`db/schema.sql` is the contract** (58 tables, 107 triggers, 31 indexes). EF migrations must produce the same tables, CHECKs, indexes and triggers. Triggers go in one hand-written migration (`migrationBuilder.Sql`), verbatim and **in file order** (SQLite fires same-event triggers newest-first, and the error each rule reports depends on that order). If you need to change the schema, change `db/schema.sql` first, rerun `python3 tests/reference/test_schema.py`, then the migration.
    - **Every entity** is configured with `ToTable(t => t.UseSqlReturningClause(false))`. EF Core's default save path (SQLite `RETURNING`) is not supported on tables with AFTER triggers.
    - A trigger `RAISE(ABORT, …)` surfaces as a `SqliteException`. Map it to 422 `{guard:"DbRule", message}`, never a 500. The service normally catches the rule first; the mapping covers races and clock skew.
    - SQLite migrations that rebuild a table silently drop its triggers. A CI test asserts the migrated database has exactly the trigger names in `db/schema.sql`; if a migration rebuilds a table, it must re-apply that table's triggers.
@@ -53,7 +53,7 @@ tests/reference/   Python oracle tests; must keep passing against db/schema.sql
 ```bash
 dotnet build
 dotnet test
-python3 tests/reference/test_schema.py          # 167 cases, must stay green
+python3 tests/reference/test_schema.py          # 247 cases, must stay green
 python3 tests/tools/test_workflows.py           # after editing .github/workflows: an invalid workflow never runs, so CI cannot report it
 python3 tests/reference/seed_and_query.py       # seeds history through the triggers, runs all 15 metrics
 python3 tests/reference/seed_and_query.py --write   # regenerates fixtures/seed.db + expected_metrics.json (only if schema/analytics change)

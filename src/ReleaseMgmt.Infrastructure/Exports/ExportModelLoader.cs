@@ -145,7 +145,7 @@ public sealed class ExportModelLoader(IDbContextFactory<ReleaseDbContext> dbf, A
         var generatedBy = users.TryGetValue(requestedByUserId, out var gb) ? gb.DisplayName : requestedByUserId;
         return new ExportModel(jobId, ExportSupport.JobRef(jobId), kind, now, generatedBy, clock,
             new TrainInfo(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate, t.ChangeTicketNumber, t.CloseCode, t.CloseNotes, t.ActualStartAt, t.ActualEndAt, t.Version, t.CreatedAt,
-                t.RollbackRehearsedAt, Name(t.RollbackRehearsedByUserId)),
+                t.RollbackRehearsedAt, Name(t.RollbackRehearsedByUserId), await ReleaseInfoOf(db, t, ct)),
             new ChangeInfo(cr?.Justification, cr?.ImplementationPlan, cr?.RiskImpactAnalysis, cr?.BackoutPlan, cr?.TestPlan, cr?.CommunicationPlan, cr?.CabDate),
             cis, win is null ? null : new WindowInfo(win.StartsAt, win.EndsAt), productRows.Select(p => new ProductRow(p.ProductName, p.VersionTag, p.ProjectCode)).ToList(),
             gates, transRows, waivers, overrides, escalations, decisions, blockers, steps, runs, attachments, lines, total,
@@ -180,5 +180,11 @@ public sealed class ExportModelLoader(IDbContextFactory<ReleaseDbContext> dbf, A
             return ps.EnumerateArray().Select(p => p.TryGetProperty("name", out var n) ? n.GetString() ?? "?" : "?").ToList();
         }
         catch (JsonException) { return []; }
+    }
+
+    private static async Task<ReleaseInfo> ReleaseInfoOf(ReleaseDbContext db, ReleaseTrains t, CancellationToken ct)
+    {
+        var v = await ReleaseModelService.ViewAsync(db, t, ct);
+        return new(v.Key, v.Owner?.Name, v.OwnerTeam?.Name, v.Branch, v.OnCallUser?.Name ?? v.OnCallTeam?.Name, v.Type?.Name, [.. v.Environments.Select(e => e.Name)]);
     }
 }

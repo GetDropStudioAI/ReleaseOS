@@ -4,7 +4,7 @@ import { browserZone, localClock } from './clock.ts'
 /** GET /approvals (REOS-94): the queue behind the Approvals page and the sidebar badge. */
 export interface ApprovalItem {
   kind: 'CertifyGate' | 'ApproveWaiver' | 'GrantOverride' | 'RecordGoNoGo' | 'CloseCondition'
-  id: string; title: string; detail: string | null; trainId: string; trainTitle: string; dueOn: string | null; dueAt: string | null; overdue: boolean
+  id: string; title: string; detail: string | null; trainId: string; trainTitle: string; dueOn: string | null; dueAt: string | null; overdue: boolean; gateId: string | null
 }
 export interface ApprovalQueue { counts: { certify: number; waivers: number; overrides: number; goNoGo: number; conditions: number; total: number }; items: ApprovalItem[] }
 

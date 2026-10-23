@@ -140,6 +140,13 @@ public class FieldLimitTests
         var clients = new[] { await As(f, Roles.ReleaseManager, "rm@limits.test"), await As(f, Roles.GovernanceOfficer, "go@limits.test"), await As(f, Roles.Viewer, "v@limits.test") };
         var bodyLimit = 1024 * 1024;   // Limits:MaxRequestBodyBytes default: a limit above it is enforced by the 413 first
 
+        var ingestKey = IngestTestKit.Key(f);   // the ingest routes take a workspace API key, not a role
+        HttpRequestMessage Send(HttpMethod m, RouteEndpoint e, string json)
+        {
+            var req = new HttpRequestMessage(m, Url(e)) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+            if (e.RoutePattern.RawText!.StartsWith("/api/v1/ingest/", StringComparison.Ordinal)) req.Headers.Authorization = new("Bearer", ingestKey);
+            return req;
+        }
         var before = Snapshot(f);
         var wrong = new List<string>();
         var checks = 0;
@@ -153,7 +160,7 @@ public class FieldLimitTests
                 foreach (var c in clients)   // the first role the route lets through (authorization runs before the filter)
                 {
                     res?.Dispose();
-                    res = await c.SendAsync(new HttpRequestMessage(new HttpMethod(method), Url(e)) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+                    res = await c.SendAsync(Send(new HttpMethod(method), e, json));
                     if (res.StatusCode != HttpStatusCode.Forbidden) break;
                 }
                 checks++;
@@ -181,7 +188,7 @@ public class FieldLimitTests
             foreach (var field in Fields(type, []).Where(x => x.Max < 100_000))
             {
                 var json = field.Body(new string('x', field.Max)).ToJsonString();
-                using var res = await clients[0].SendAsync(new HttpRequestMessage(new HttpMethod(method), Url(e)) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+                using var res = await clients[0].SendAsync(Send(new HttpMethod(method), e, json));
                 if (res.StatusCode == HttpStatusCode.UnprocessableEntity && (await res.Content.ReadAsStringAsync()).Contains("\"FieldTooLong\""))
                     wrong.Add($"{KeyOf(e)} {field.Path}: a value of exactly {field.Max} was refused");
             }

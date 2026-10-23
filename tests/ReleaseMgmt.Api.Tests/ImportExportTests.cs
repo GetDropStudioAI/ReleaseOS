@@ -716,8 +716,8 @@ public class ImportExportTests
         Assert.Equal(XLDataType.Text, ws.Cell(rows["Onboarding UI"], 3).DataType);
         Assert.Equal("2026-11-13", ws.Cell(rows["Onboarding UI"], 4).GetString());       // an ISO date stayed text, not a date serial
         Assert.Equal(XLDataType.Text, ws.Cell(rows["Onboarding UI"], 4).DataType);
-        var version = ws.Cell(rows["Payments API"], 6);
-        Assert.Equal("#Version", ws.Cell(1, 6).GetString()); Assert.Equal(XLDataType.Number, version.DataType); Assert.Equal(1, version.GetDouble());
+        var version = ws.Cell(rows["Payments API"], 7);   // Train, ProductName, VersionTag, ProjectCode, ServiceKey, #Id, #Version
+        Assert.Equal("#Version", ws.Cell(1, 7).GetString()); Assert.Equal(XLDataType.Number, version.DataType); Assert.Equal(1, version.GetDouble());
     }
 
     [Fact]

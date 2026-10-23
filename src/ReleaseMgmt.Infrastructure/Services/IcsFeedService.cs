@@ -58,7 +58,7 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
             foreach (var s in (await db.Set<RunbookSteps>().AsNoTracking().ToListAsync(ct)).Where(s => byId.ContainsKey(s.ReleaseTrainId) && Mine(s.OwnerUserId, s.OwnerTeamId)))
             {
                 var t = byId[s.ReleaseTrainId];
-                events.Add(new Ev($"{s.Id}-step@releasemgmt", $"{t.Title}: {s.StepCode} {s.Title}", Utc(s.PlannedStartAt), Utc(s.PlannedStartAt.AddMinutes(Math.Max(1, s.PlannedDurationMin))),
+                events.Add(new Ev($"{s.Id}-step@releasemgmt", $"{Name(t)}: {s.StepCode} {s.Title}", Utc(s.PlannedStartAt), Utc(s.PlannedStartAt.AddMinutes(Math.Max(1, s.PlannedDurationMin))),
                     (s.Version - 1) + (t.Version - 1), t.UpdatedAt));
             }
         }
@@ -76,11 +76,11 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
             var windows = (await db.Set<DeploymentWindows>().AsNoTracking().ToListAsync(ct)).Where(w => byId.ContainsKey(w.ReleaseTrainId));
             var gates = (await db.Set<StageGates>().AsNoTracking().ToListAsync(ct)).Where(g => byId.ContainsKey(g.ReleaseTrainId));
             foreach (var t in trains)
-                events.Add(new Ev($"{t.Id}-target@releasemgmt", $"{t.Title}: target release date", Day(t.TargetReleaseDate), Day(t.TargetReleaseDate.AddDays(1)), t.Version - 1, t.UpdatedAt));
+                events.Add(new Ev($"{t.Id}-target@releasemgmt", $"{Name(t)}: target release date", Day(t.TargetReleaseDate), Day(t.TargetReleaseDate.AddDays(1)), t.Version - 1, t.UpdatedAt));
             foreach (var w in windows)
             {
                 var t = byId[w.ReleaseTrainId];
-                events.Add(new Ev($"{w.Id}-window@releasemgmt", $"{t.Title}: deployment window", Utc(w.StartsAt), Utc(w.EndsAt), (w.Version - 1) + (t.Version - 1), t.UpdatedAt));
+                events.Add(new Ev($"{w.Id}-window@releasemgmt", $"{Name(t)}: deployment window", Utc(w.StartsAt), Utc(w.EndsAt), (w.Version - 1) + (t.Version - 1), t.UpdatedAt));
             }
             foreach (var g in gates) events.Add(GateEvent(g, byId[g.ReleaseTrainId]));
             foreach (var m in (await db.Set<TrainMilestones>().AsNoTracking().ToListAsync(ct)).Where(m => byId.ContainsKey(m.ReleaseTrainId))) events.Add(MilestoneEvent(m, byId[m.ReleaseTrainId]));
@@ -100,13 +100,17 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
         return new CalendarSerializer().SerializeToString(cal);
     }
 
+    /// <summary>REOS-107: a release's events are titled with its key in front ("RLS-12 R26.10: Code Freeze due"), so a calendar search for the key finds them. The feeds stay titles and times only:
+    /// the owner, team, branch and on-call are not put in a link that anyone holding the token can read.</summary>
+    private static string Name(ReleaseTrains t) => t.ReleaseKey is null ? t.Title : $"{t.ReleaseKey} {t.Title}";
+
     private static Ev GateEvent(StageGates g, ReleaseTrains t) =>
-        new($"{g.Id}-gate@releasemgmt", $"{t.Title}: {g.GateName} due", Day(g.DueOn), Day(g.DueOn.AddDays(1)), (g.Version - 1) + (t.Version - 1),
+        new($"{g.Id}-gate@releasemgmt", $"{Name(t)}: {g.GateName} due", Day(g.DueOn), Day(g.DueOn.AddDays(1)), (g.Version - 1) + (t.Version - 1),
             g.LastChangedAt is DateTime c && c > t.UpdatedAt ? c : t.UpdatedAt);
 
     /// <summary>All-day on the milestone's date; UID <c>{id}-milestone@releasemgmt</c> (Q-0844). The title says "done" once it is, so a subscriber sees it without opening the app.</summary>
     private static Ev MilestoneEvent(TrainMilestones m, ReleaseTrains t) =>
-        new($"{m.Id}-milestone@releasemgmt", $"{t.Title}: {m.Name}{(m.IsDone ? " (done)" : "")}", Day(m.DueOn), Day(m.DueOn.AddDays(1)), (m.Version - 1) + (t.Version - 1),
+        new($"{m.Id}-milestone@releasemgmt", $"{Name(t)}: {m.Name}{(m.IsDone ? " (done)" : "")}", Day(m.DueOn), Day(m.DueOn.AddDays(1)), (m.Version - 1) + (t.Version - 1),
             m.LastChangedAt is DateTime c && c > t.UpdatedAt ? c : t.UpdatedAt);
 
     private static async Task<IEnumerable<Ev>> FreezeEvents(ReleaseDbContext db, CancellationToken ct) =>

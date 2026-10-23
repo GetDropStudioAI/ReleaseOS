@@ -155,7 +155,7 @@ public class CalendarTests
 
         // gate due date: all-day, DTEND exclusive next day
         var g1 = ev["g1-gate@releasemgmt"];
-        Assert.Equal("R26.10: Code Freeze due", g1.Summary);
+        Assert.Equal("RLS-1 R26.10: Code Freeze due", g1.Summary);   // REOS-107: a release's events carry its key
         Assert.False(g1.DtStart!.HasTime);
         Assert.Equal(new DateTime(2026, 10, 23), g1.DtStart.Value.Date);
         Assert.Equal(new DateTime(2026, 10, 24), g1.DtEnd!.Value.Date);
@@ -201,7 +201,7 @@ public class CalendarTests
         // the RTE owns g1 and step s1; the governance officer owns g2
         Assert.Equal(["g1-gate@releasemgmt", "s1-step@releasemgmt"], Uids(mine));
         var step = Parse(mine).Events.Single(e => e.Uid == "s1-step@releasemgmt");
-        Assert.Equal("R26.10: R-001 Deploy API, \"blue\";green", step.Summary);   // commas, quotes and semicolons survive Ical.Net's escaping
+        Assert.Equal("RLS-1 R26.10: R-001 Deploy API, \"blue\";green", step.Summary);   // commas, quotes and semicolons survive Ical.Net's escaping
         Assert.Equal(new DateTime(2026, 10, 30, 6, 10, 0), step.DtStart!.Value);
         Assert.Equal(new DateTime(2026, 10, 30, 6, 40, 0), step.DtEnd!.Value);
         Assert.Contains("\\,", mine);

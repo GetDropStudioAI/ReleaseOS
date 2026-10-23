@@ -6,7 +6,25 @@ namespace ReleaseMgmt.Infrastructure.Exports;
 // so a document is a consistent snapshot of the train at GeneratedAt. All times are UTC; the documents format them in Display:TimeZone through DisplayClock.
 
 public sealed record TrainInfo(string Id, string Title, string Status, string RiskTier, DateOnly TargetDate, string? ChangeTicket, string? CloseCode, string? CloseNotes,
-    DateTime? ActualStartAt, DateTime? ActualEndAt, int Version, DateTime CreatedAt, DateTime? RollbackRehearsedAt, string? RollbackRehearsedBy);
+    DateTime? ActualStartAt, DateTime? ActualEndAt, int Version, DateTime CreatedAt, DateTime? RollbackRehearsedAt, string? RollbackRehearsedBy, ReleaseInfo? Release = null);
+
+/// <summary>REOS-107: the release's key, owner, team, branch, on-call, type and target environments, as the documents print them (names, not ids).</summary>
+public sealed record ReleaseInfo(string? Key, string? Owner, string? Team, string? Branch, string? OnCall, string? Type, IReadOnlyList<string> Environments)
+{
+    /// <summary>One line of the parts that are set, e.g. <c>RLS-12 · Owner Rae Tran · Team Operations · Branch release/27.01 · On call SRE · Type CERT · Environments Staging, Production</c>; null when none is.</summary>
+    public string? Line()
+    {
+        var parts = new List<string>();
+        if (Key is not null) parts.Add(Key);
+        if (Owner is not null) parts.Add($"Owner {Owner}");
+        if (Team is not null) parts.Add($"Team {Team}");
+        if (Branch is not null) parts.Add($"Branch {Branch}");
+        if (OnCall is not null) parts.Add($"On call {OnCall}");
+        if (Type is not null) parts.Add($"Type {Type}");
+        if (Environments.Count > 0) parts.Add($"Environments {string.Join(", ", Environments)}");
+        return parts.Count == 0 ? null : string.Join(" · ", parts);
+    }
+}
 
 public sealed record ChangeInfo(string? Justification, string? ImplementationPlan, string? RiskImpactAnalysis, string? BackoutPlan, string? TestPlan, string? CommunicationPlan, DateOnly? CabDate);
 public sealed record WindowInfo(DateTime StartsAt, DateTime EndsAt);

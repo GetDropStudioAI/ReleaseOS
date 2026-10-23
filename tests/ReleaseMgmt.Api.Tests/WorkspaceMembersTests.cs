@@ -119,9 +119,13 @@ public class WorkspaceMembersTests
         {
             new { name = "", slug = "ok", region = "EU" }, new { name = "x", slug = "", region = "EU" }, new { name = "x", slug = "Has Space", region = "EU" },
             new { name = "x", slug = "-lead", region = "EU" }, new { name = "x", slug = "trail-", region = "EU" }, new { name = "x", slug = "under_score", region = "EU" },
-            new { name = "x", slug = new string('a', 41), region = "EU" }, new { name = new string('n', 101), slug = "ok", region = "EU" }, new { name = "x", slug = "ok", region = new string('r', 61) },
         })
             Assert.Equal("InvalidInput", await Guard(await rte.PostAsJsonAsync("/api/v1/workspaces", bad)));
+        foreach (var tooLong in new object[]   // refused earlier still, by the per-field limits every JSON route has (Q-SEC-D1)
+        {
+            new { name = "x", slug = new string('a', 41), region = "EU" }, new { name = new string('n', 101), slug = "ok", region = "EU" }, new { name = "x", slug = "ok", region = new string('r', 61) },
+        })
+            Assert.Equal("FieldTooLong", await Guard(await rte.PostAsJsonAsync("/api/v1/workspaces", tooLong)));
         Assert.Equal("0", Scalar(f, "SELECT COUNT(*) FROM Workspaces WHERE Id<>'default'"));
 
         await Create(rte, "One", "one");

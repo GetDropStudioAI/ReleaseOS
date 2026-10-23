@@ -3,6 +3,7 @@ using Ical.Net.CalendarComponents;
 using Ical.Net.DataTypes;
 using Ical.Net.Serialization;
 using Microsoft.EntityFrameworkCore;
+using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Infrastructure.Persistence;
 
@@ -22,11 +23,13 @@ public static class IcsScopes
 /// <item>DTSTAMP and LAST-MODIFIED come from stored timestamps (train UpdatedAt, gate LastChangedAt), never from the clock: an unchanged database yields a byte-identical file.</item>
 /// <item>Events are written in UID order.</item>
 /// </list>
+/// The workspace's name leads every feed name and event title ("Payments · RLS-284 Card portal: Code Freeze due"), so feeds from two workspaces differ in a subscriber's calendar (REOS-138, Q-138a);
+/// the UIDs are untouched, since they are the subscriber's event identity. PRODID names the product.
 /// Timed events (deployment windows, runbook steps) are UTC in the file; gate due dates, milestones, target dates and freeze/chill ranges are all-day (VALUE=DATE).
 /// </summary>
 public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
 {
-    public const string ProdId = "-//ReleaseMgmt//Release calendar//EN";
+    public const string ProdId = "-//ReleaseOS//Release calendar//EN";
     private static readonly DateTime Epoch = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private sealed record Ev(string Uid, string Summary, CalDateTime Start, CalDateTime End, int Sequence, DateTime Stamp);
@@ -35,6 +38,8 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
     public async Task<string?> BuildAsync(string scope, string? trainId, string userId, CancellationToken ct = default)
     {
         await using var db = await dbf.CreateDbContextAsync(ct);
+        var workspaceId = WorkspaceScope.Current ?? WorkspaceIds.Default;
+        var workspace = await db.Set<Workspaces>().AsNoTracking().Where(w => w.Id == workspaceId).Select(w => w.Name).SingleOrDefaultAsync(ct) ?? workspaceId;
         var trainsQ = db.Set<ReleaseTrains>().AsNoTracking().Where(t => t.ArchivedAt == null && t.CurrentStatus != "Aborted");
         string name;
         var events = new List<Ev>();
@@ -89,12 +94,12 @@ public sealed class IcsFeedService(IDbContextFactory<ReleaseDbContext> dbf)
         }
 
         var cal = new Calendar { ProductId = ProdId, Version = "2.0" };
-        cal.AddProperty("X-WR-CALNAME", name);
+        cal.AddProperty("X-WR-CALNAME", $"{workspace} · {name}");
         cal.AddProperty("X-PUBLISHED-TTL", "PT1H");
         foreach (var e in events.OrderBy(x => x.Uid, StringComparer.Ordinal))
             cal.Events.Add(new CalendarEvent
             {
-                Uid = e.Uid, Summary = e.Summary, DtStart = e.Start, DtEnd = e.End, Sequence = e.Sequence,
+                Uid = e.Uid, Summary = $"{workspace} · {e.Summary}", DtStart = e.Start, DtEnd = e.End, Sequence = e.Sequence,
                 DtStamp = Utc(e.Stamp), LastModified = Utc(e.Stamp), Transparency = "TRANSPARENT",
             });
         return new CalendarSerializer().SerializeToString(cal);

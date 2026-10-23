@@ -170,7 +170,7 @@ public class ResourceInjectionTests
         Assert.Single(lines, l => l.StartsWith("X-WR-CALNAME:", StringComparison.Ordinal));
         var unfolded = ics.Replace("\r\n ", "");   // RFC 5545 line folding
         Assert.Contains("Q4\\nEND:VEVENT\\nBEGIN:VEVENT\\nUID:forged@evil\\nSUMMARY:Forged\\;X=1\\,2", unfolded);   // the value is there, as escaped TEXT
-        Assert.Contains("X-WR-CALNAME:R26.10\\nX-WR-CALNAME:forged", unfolded);
+        Assert.Contains("X-WR-CALNAME:Default · R26.10\\nX-WR-CALNAME:forged", unfolded);
     }
 
     // ---- SEC-D7: request bodies ---------------------------------------------------------------------------------------------------------------------

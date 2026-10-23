@@ -240,7 +240,7 @@ for (const scheme of ['light', 'dark'] as const) {
       expect(live.status).toBe(200)
       expect(live.type).toContain('text/calendar')
       expect(live.text).toContain('BEGIN:VCALENDAR')
-      expect(live.text).toContain('X-WR-CALNAME:Release trains')
+      expect(live.text).toContain('X-WR-CALNAME:Default · Release trains')
 
       // shown once: after a reload the secret is nowhere on the page, only the row
       await page.reload()

@@ -143,8 +143,8 @@ public class CalendarTests
         Assert.Contains("private", r.Headers.CacheControl!.ToString());
         Assert.NotNull(r.Headers.ETag);
         var ics = await r.Content.ReadAsStringAsync();
-        Assert.Contains("PRODID:-//ReleaseMgmt//", ics);
-        Assert.Contains("X-WR-CALNAME:Release trains", ics);
+        Assert.Contains("PRODID:-//ReleaseOS//", ics);
+        Assert.Contains("X-WR-CALNAME:Default · Release trains", ics);
 
         var cal = Parse(ics);
         var ev = cal.Events.ToDictionary(e => e.Uid!);
@@ -155,7 +155,7 @@ public class CalendarTests
 
         // gate due date: all-day, DTEND exclusive next day
         var g1 = ev["g1-gate@releasemgmt"];
-        Assert.Equal("RLS-1 R26.10: Code Freeze due", g1.Summary);   // REOS-107: a release's events carry its key
+        Assert.Equal("Default · RLS-1 R26.10: Code Freeze due", g1.Summary);   // REOS-107 the key, REOS-138 the workspace
         Assert.False(g1.DtStart!.HasTime);
         Assert.Equal(new DateTime(2026, 10, 23), g1.DtStart.Value.Date);
         Assert.Equal(new DateTime(2026, 10, 24), g1.DtEnd!.Value.Date);
@@ -172,9 +172,9 @@ public class CalendarTests
         // freeze: all-day range, 20 -> 24 Dec with the end at midnight = exclusive 24th; chill ends at noon so it runs through the 27th (exclusive 28th)
         Assert.Equal(new DateTime(2026, 12, 20), ev["f1-freeze@releasemgmt"].DtStart!.Value.Date);
         Assert.Equal(new DateTime(2026, 12, 24), ev["f1-freeze@releasemgmt"].DtEnd!.Value.Date);
-        Assert.Equal("Freeze: Q4 close", ev["f1-freeze@releasemgmt"].Summary);
+        Assert.Equal("Default · Freeze: Q4 close", ev["f1-freeze@releasemgmt"].Summary);
         Assert.Equal(new DateTime(2026, 11, 28), ev["c1-chill@releasemgmt"].DtEnd!.Value.Date);
-        Assert.Equal("Chill: Peak week", ev["c1-chill@releasemgmt"].Summary);
+        Assert.Equal("Default · Chill: Peak week", ev["c1-chill@releasemgmt"].Summary);
         // titles and times only
         Assert.DoesNotContain("DESCRIPTION", ics);
         // the all-trains feed has no runbook steps (they are personal)
@@ -190,7 +190,7 @@ public class CalendarTests
         var train = await Feed(c.F, $"/api/v1/ics/{tok.Token}/trains/t1.ics");
         Assert.Contains("t1-target@releasemgmt", train);
         Assert.DoesNotContain("t2-target@releasemgmt", train);
-        Assert.Contains("X-WR-CALNAME:R26.10", train);
+        Assert.Contains("X-WR-CALNAME:Default · R26.10", train);
         Assert.Equal(HttpStatusCode.NotFound, (await Anon(c.F, $"/api/v1/ics/{tok.Token}/trains/nope.ics")).StatusCode);
         Assert.Contains("t2-target@releasemgmt", await Feed(c.F, $"/api/v1/ics/{tok.Token}/all.ics"));
 
@@ -201,7 +201,7 @@ public class CalendarTests
         // the RTE owns g1 and step s1; the governance officer owns g2
         Assert.Equal(["g1-gate@releasemgmt", "s1-step@releasemgmt"], Uids(mine));
         var step = Parse(mine).Events.Single(e => e.Uid == "s1-step@releasemgmt");
-        Assert.Equal("RLS-1 R26.10: R-001 Deploy API, \"blue\";green", step.Summary);   // commas, quotes and semicolons survive Ical.Net's escaping
+        Assert.Equal("Default · RLS-1 R26.10: R-001 Deploy API, \"blue\";green", step.Summary);   // commas, quotes and semicolons survive Ical.Net's escaping
         Assert.Equal(new DateTime(2026, 10, 30, 6, 10, 0), step.DtStart!.Value);
         Assert.Equal(new DateTime(2026, 10, 30, 6, 40, 0), step.DtEnd!.Value);
         Assert.Contains("\\,", mine);
@@ -453,5 +453,19 @@ public class CalendarTests
         await FreshMinute();
         for (var i = 0; i < 70; i++) last = (await c.GetAsync($"/api/v1/ics/{new string('B', 43)}.ics")).StatusCode;
         Assert.Equal(HttpStatusCode.TooManyRequests, last);
+    }
+
+    [Fact]
+    public async Task Feed_names_and_event_titles_lead_with_the_workspace_so_two_workspaces_differ_in_a_calendar_and_UIDs_do_not_change()
+    {
+        var c = await Setup(); using var _ = c.F;
+        var tok = await NewToken(c.Rte);
+        var before = await Feed(c.F, $"/api/v1/ics/{tok.Token}/all.ics");
+        Sql(c.F, "UPDATE Workspaces SET Name='Payments' WHERE Id='default'");
+        var after = await Feed(c.F, $"/api/v1/ics/{tok.Token}/all.ics");
+        Assert.Contains("X-WR-CALNAME:Payments · Release trains", after);
+        Assert.All(Parse(after).Events, e => Assert.StartsWith("Payments · ", e.Summary));
+        Assert.Contains(Parse(after).Events, e => e.Summary == "Payments · RLS-1 R26.10: Code Freeze due");   // workspace, then key, then title
+        Assert.Equal(Uids(before), Uids(after));   // the subscriber's event identity is untouched
     }
 }

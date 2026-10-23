@@ -136,7 +136,7 @@ public class ReleaseModelExchangeTests
         await Json(await rte.PostAsJsonAsync("/api/v1/trains", new { title = "R27.01", targetReleaseDate = Date(), riskTier = "Low", ownerTeamId = "tm1", releaseBranch = "release/27.01" }));
         var path = (await Json(await rte.PostAsJsonAsync("/api/v1/me/ics-tokens", new { scope = "all" }))).GetProperty("path").GetString()!;
         var ics = await f.CreateClient().GetStringAsync(path);
-        Assert.Contains("SUMMARY:RLS-1 R27.01: target release date", ics);
+        Assert.Contains("SUMMARY:Default · RLS-1 R27.01: target release date", ics);
         Assert.DoesNotContain("release/27.01", ics);   // titles and times only: the branch and the people are not put in a link anyone can open
     }
 }

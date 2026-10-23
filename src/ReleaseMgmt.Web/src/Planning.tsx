@@ -176,7 +176,7 @@ export function Products({ trainId, refreshKey, selection, onSelect, canPlan = f
           <Button variant="primary" onClick={add}>Add product</Button>
         </div>)}
       {locked && <Notice tone="info" title="The manifest is locked">{LOCK_REASON[trainStatus!]}</Notice>}
-      {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
+      {err && <div role="alert"><Notice tone="danger" title="That did not work">{err}</Notice></div>}
       {conflict && (
         <Conflict error={conflict} what="product">
           {editRow && editing && <><button type="button" className="text" onClick={() => save(editRow, (conflict.body?.current as { version?: number } | undefined)?.version)}>Overwrite with mine</button>{' '}</>}

@@ -152,7 +152,7 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
         <Button onClick={exportPanel}>Export</Button>
         {canPlan && open && <Button variant="destructive" onClick={() => setClosing('abort')}>Abort…</Button>}
       </div>
-      {(actionErr || p.err) && <Notice tone="danger" title="That did not work" live>{actionErr ?? p.err}</Notice>}
+      {(actionErr || p.err) && <div role="alert"><Notice tone="danger" title="That did not work">{actionErr ?? p.err}</Notice></div>}
       <Tabs tabs={tabs} value={tab} onChange={id => setTab(id as TabId)} label="Release sections" group="release" />
 
       {tab === 'overview' && <TabPanel id="overview" group="release">

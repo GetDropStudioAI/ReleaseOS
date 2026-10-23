@@ -141,7 +141,7 @@ export function GoNoGo({ trainId, trainVersion, canDecide, refreshKey, onChanged
             : <span><Button ref={recordBtn} variant="primary" onClick={review}>Record decision</Button> <span className="rd-na">Decisions cannot be edited afterwards.</span></span>}
         </div>)}
       {conflict && <Conflict error={conflict} what="train">{draft && <button type="button" className="text" disabled={!!pending} onClick={() => save((conflict.body?.current as { version?: number } | undefined)?.version)}>{pending ?? 'Record anyway'}</button>}</Conflict>}
-      {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
+      {err && <div role="alert"><Notice tone="danger" title="That did not work">{err}</Notice></div>}
       {!latest ? <p className="rd-na">No Go/No-Go recorded yet. Executing needs a Go.</p> : row(latest)}
       {history && <div id={historyId}>{list.slice(1).map(row)}</div>}
     </Panel>
@@ -208,7 +208,7 @@ export function ChangeRecordPanel({ trainId, canEdit, refreshKey, onChanged }: {
       ) : empty ? <p className="rd-na">Nothing recorded yet.</p> : (
         <dl className="rd-facts">{FIELDS.filter(f => cr[f.key]).map(f => <Fragment key={f.key}><dt>{f.label}</dt><dd>{cr[f.key]}</dd></Fragment>)}</dl>
       )}
-      {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
+      {err && <div role="alert"><Notice tone="danger" title="That did not work">{err}</Notice></div>}
       <h3 className="rd-sub">Affected configuration items</h3>
       {cis.length === 0 ? <p className="rd-na">None listed.</p> : <DataTable caption="Affected configuration items" columns={ciColumns} rows={cis} rowKey={c => c.id} />}
       {canEdit && (

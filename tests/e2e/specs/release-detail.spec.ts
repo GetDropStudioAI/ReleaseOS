@@ -11,6 +11,7 @@ async function drill(page: Page) {
 }
 /** Records a Go/No-Go decision through the API as the signed-in Release Manager. */
 async function record(page: Page, trainId: string, decision: string, notes: string, conditions: { text: string; ownerUserId: string; expiresAt: string }[] = []) {
+  await page.waitForTimeout(1500)                                                         // the server refuses two decisions within a second (DecisionTooSoon)
   const res = await page.evaluate(async ([id, d, n, c]) => {
     const t = await (await fetch(`/api/v1/trains/${id}`)).json() as { version: number }
     const r = await fetch(`/api/v1/trains/${id}/gonogo`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': String(t.version) }, body: JSON.stringify({ decision: d, notes: n, newTargetReleaseDate: null, conditions: c }) })

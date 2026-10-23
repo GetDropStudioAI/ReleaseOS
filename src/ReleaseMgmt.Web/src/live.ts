@@ -5,6 +5,13 @@ import { hubQuery } from './workspace'
 
 export type LiveState = 'connecting' | 'live' | 'reconnecting' | 'offline'
 
+/** Deployment pages (REOS-100) listen to the same connection: a DeploymentChanged push is a hint to refetch that deployment (payloads are never trusted). */
+const deploymentListeners = new Set<(deploymentId: string) => void>()
+export function onDeploymentChanged(fn: (deploymentId: string) => void): () => void {
+  deploymentListeners.add(fn)
+  return () => { deploymentListeners.delete(fn) }
+}
+
 interface Handlers {
   /** A train changed somewhere: refetch (payloads are hints, never trusted). */
   onTrainChanged: (trainId: string, version: number) => void
@@ -35,6 +42,7 @@ export function useLive(enabled: boolean, handlers: Handlers) {
     hub.on('ServerTime', (t: string) => { setServerTime(t); setServerTimeState(t) })
     hub.on('ForecastChanged', (tid: string, rid: string) => h.current.onForecastChanged?.(tid, rid))
     hub.on('SyncAlertRaised', (id: string) => h.current.onSyncAlert?.(id))
+    hub.on('DeploymentChanged', (id: string) => deploymentListeners.forEach(fn => fn(id)))
     hub.onreconnecting(() => setState('reconnecting'))
     hub.onreconnected(() => { setState('live'); h.current.onResync() })
     hub.onclose(() => setState('offline'))

@@ -9,11 +9,6 @@ const PAGES: Partial<Record<View, { description: string; today: string; links: {
     today: 'Runbooks run from each release today: open a release and choose Rehearsal or Live runbook.',
     links: [{ view: 'trains', label: 'Releases' }],
   },
-  deployments: {
-    description: 'Live rollouts of services to environments, with health, traffic and automatic rollback.',
-    today: 'ReleaseOS does not receive deployment telemetry yet. Runbook steps record what was deployed and when.',
-    links: [{ view: 'trains', label: 'Releases' }],
-  },
   services: {
     description: 'Every service your releases ship, with its versions, owners and environments.',
     today: 'Products and their versions are recorded on each release today.',

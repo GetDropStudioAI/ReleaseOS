@@ -13,7 +13,7 @@ test('the Workspace group matches the design in order and labels; the Management
 })
 
 test('a destination with no screen yet opens a placeholder; every other one opens its screen', () => {
-  assert.deepEqual(NAV.flatMap(g => g.items).filter(i => i.placeholder).map(i => i.view), ['orchestration', 'services', 'environments'])
+  assert.deepEqual(NAV.flatMap(g => g.items).filter(i => i.placeholder).map(i => i.view), ['services', 'environments'])
   assert.equal(placeholderOf('calendar'), undefined)
   assert.equal(pathOf('trains'), '/')
   assert.equal(pathOf('approvals'), '/approvals')

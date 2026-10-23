@@ -40,12 +40,13 @@
     {
       "name": "text/secondary",
       "id": "VariableID:11:4",
-      "light": "#657287",
+      "light": "#626F84",
       "dark": "#A7B1C2",
       "scopes": [
         "TEXT_FILL"
       ],
-      "css": "--color-text-secondary"
+      "css": "--color-text-secondary",
+      "note": "Light darkened from the design's #657287 for WCAG AA on bg/muted (Q-090f)"
     },
     {
       "name": "text/tertiary",
@@ -410,5 +411,42 @@
       ],
       "css": "--color-inverse-danger"
     }
-  ]
+  ],
+  "dimensions": {
+    "_source": "Sampled from the seven light frames on 2026-10-23 (REOS-93): the Figma file has no number variables. Fonts: the frames use Inter and IBM Plex Mono; the app uses the OS UI and monospace faces instead (CLAUDE.md rule 10), via --font-sans and --font-mono.",
+    "type-title": "28px",
+    "tracking-title": "-0.8px",
+    "leading-title": "1.15",
+    "type-metric": "29px",
+    "tracking-metric": "-1px",
+    "type-headline": "20px",
+    "tracking-headline": "-0.7px",
+    "type-section": "13px",
+    "type-body": "12px",
+    "type-small": "11px",
+    "type-caption": "10px",
+    "type-mono": "10px",
+    "type-mono-small": "9px",
+    "tracking-overline": "1.2px",
+    "radius-xs": "2px",
+    "radius-sm": "4px",
+    "radius-md": "6px",
+    "radius-lg": "8px",
+    "radius-full": "999px",
+    "border-width": "1px",
+    "icon-stroke": "1.6",
+    "sidebar-width": "216px",
+    "utility-height": "64px",
+    "page-gutter": "32px",
+    "panel-pad": "18px",
+    "control-height": "36px",
+    "control-pad-x": "13px",
+    "chip-pad-y": "4px",
+    "chip-pad-x": "8px",
+    "gap-xs": "4px",
+    "gap-sm": "6px",
+    "gap-md": "10px",
+    "gap-lg": "16px",
+    "gap-xl": "24px"
+  }
 }

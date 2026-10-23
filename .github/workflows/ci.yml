@@ -36,6 +36,11 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Web unit tests
+        working-directory: src/ReleaseMgmt.Web
+        run: npm test
+      - name: "Design tokens match the Figma export (tools/gen_tokens.py --check)"
+        run: python tools/gen_tokens.py --check
       - name: Build
         run: dotnet build ReleaseMgmt.sln --configuration Release
       - name: Test

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
 import { loadTheme, saveTheme, type ThemeChoice } from './theme'
 import { signInMessage, withoutSignInReason } from './signinReason'
@@ -30,6 +30,9 @@ import { getConfig } from './api'
 import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 import { Announcer } from './announce'
 import { JumpTo } from './JumpTo'
+
+// The component gallery is a review page (REOS-93): loaded only when opened, so it adds nothing to the app's first load.
+const Gallery = lazy(() => import('./Gallery').then(m => ({ default: m.Gallery })))
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
 const NAV = ['Trains']
@@ -195,7 +198,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   // WCAG 2.4.2 / 2.4.3: every view has its own document title, and a navigation the user made moves focus to the new page.
   const trainTitle = rows?.find(r => r.id === selected)?.title
   useEffect(() => {
-    const names: Record<Route['view'], string> = { trains: 'Trains', admin: 'Admin', work: 'My work', inbox: 'Inbox', audit: 'Audit', templates: 'Templates', sync: 'Sync health', connectors: 'Connectors', library: 'Comm library', analytics: 'Analytics', calendar: 'Calendar', importexport: 'Imports & exports' }
+    const names: Record<Route['view'], string> = { trains: 'Trains', admin: 'Admin', work: 'My work', inbox: 'Inbox', audit: 'Audit', templates: 'Templates', sync: 'Sync health', connectors: 'Connectors', library: 'Comm library', analytics: 'Analytics', calendar: 'Calendar', importexport: 'Imports & exports', gallery: 'Component gallery' }
     const page = view === 'trains' && trainTitle ? `${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live runbook' : 'Rehearsal'}` : ''}` : names[view]
     document.title = `${page} · ReleaseOS`
   }, [view, trainTitle, mode])
@@ -270,7 +273,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
       </aside>
       <main id="workspace" ref={mainRef} tabIndex={-1} className={view !== 'trains' ? 'workspace wide' : 'workspace'}>
         {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-        {view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a train in the Stream.'}</p></>)}
+        {view === 'gallery' ? <Suspense fallback={<p className="muted">Loading…</p>}><Gallery /></Suspense> : view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a train in the Stream.'}</p></>)}
       </main>
       {view === 'trains' && (
         <aside className="inspector" aria-label="Inspector">

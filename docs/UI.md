@@ -1,6 +1,34 @@
 # UI specification
 
-> **Superseded in part (2026-10-23, D41):** the Figma redesign ([uxMlQ7LTNoW8sIKWSIeY98](https://www.figma.com/design/uxMlQ7LTNoW8sIKWSIeY98)) replaces the no-pills/badges/boxes/modals rules below. This file and `tokens.css` are rewritten in REOS-93; until then, where they disagree, the redesign wins for new screens.
+## Redesign system (D41, 2026-10-23): the reference for every new or restyled screen
+
+The visual reference is the Figma redesign [uxMlQ7LTNoW8sIKWSIeY98](https://www.figma.com/design/uxMlQ7LTNoW8sIKWSIeY98): seven 1600 px screens, each in a light frame and a dark frame (REOS-103). It replaces the no-pills/badges/boxes/modals rules of the sections below; those sections still describe the screens that have not been restyled yet. Mapping of the design's terms to this app: `docs/proposals/redesign-mapping.md`.
+
+**Tokens.** `docs/ui/redesign-tokens.json` is the export of the Figma variables (collection Color, modes Light and Dark, 35 semantic colours) plus the dimensions sampled from the frames (type sizes, radii, spacing, control and layout sizes). `python3 tools/gen_tokens.py` writes them into the generated block of `docs/ui/tokens.css` (`--color-*` and the dimension names); `--check` fails when the CSS has drifted, and a web unit test checks the same. To change a colour: change the Figma variable, copy the value into the JSON, run the generator. Light is the default; dark follows the OS unless the person chose a theme, and `data-theme="light"|"dark"` on any element shows that theme inside it (the gallery uses this). Fonts stay the OS faces (`--font-sans`, `--font-mono`; CLAUDE.md rule 10), not the frames' Inter and IBM Plex Mono.
+
+**Components** (`src/ReleaseMgmt.Web/src/ui/`, styles in `ui/ui.css`, all `os-` classes, tokens only, no colour literal: a unit test fails on one):
+
+| Component | Use |
+|---|---|
+| `Button` | `primary` (filled accent, one per area), `secondary` (outlined), `destructive` (danger text, e.g. Rollback); optional leading Lucide icon |
+| `StatusChip` | dot + status word; the tone comes from the word (`chipTone`: Successful/Passed/Approved/Healthy/Recorded = success, Running/Live/Canary active = info, Pending/Blocked/Medium risk/Conditional go = warning, Failed = danger, Planned/Queued = neutral). Never colour alone |
+| `CountBadge` | a count beside a navigation item; nothing at zero; the accessible name says what is counted |
+| `MetricCard` | label, large value, optional unit, detail line in a tone |
+| `Panel` | heading row (title, subtitle, right-aligned meta), body, footer; `inverse` is the dark panel (Go/no-go, Deployment events) |
+| `DataTable` + `TwoLine` | column headings, rows, two-line first cell, footer with count and sync time; with `onSelect`, rows are focusable, Up/Down move, Enter selects |
+| `Tabs` + `TabPanel` | ARIA tabs with optional counts; one tab stop, arrows, Home, End |
+| `Notice` | operational notice: icon, title, description, action link; `live` for one that appears while the person is on the page |
+| `PropertyList` | label left, value right, `mono` for ids, versions and times |
+| `ProgressBar` | readiness, canary traffic; announces the percentage |
+| `FilterSelect` | the design's filter dropdown, a native select underneath |
+| `SearchField` | leading icon and the platform's shortcut hint (⌘ K or Ctrl K); the shell owns the binding |
+| `ConfirmDialog` | the only dialog: destructive or irreversible actions (Rollback, Pause run); starts on Cancel, Escape cancels, focus returns |
+
+Icons are Lucide (`lucide-react`, pinned), decorative (`aria-hidden`) unless they are the only content of a control, 16 px at stroke 1.6. **Rules that stay:** status is never colour alone; every interactive element has the visible focus ring; no checkboxes or toggle switches; times are UTC and labelled, with the person's local time alongside (D44). **Contrast:** components use `text/secondary` for any caption that carries information and `text/tertiary` only for decoration, until QUESTIONS Q-090f is decided.
+
+**Gallery.** `/gallery` (signed in) shows every component and variant in light and dark side by side, for review against the Figma frames; `tests/e2e/specs/gallery.spec.ts` checks it with axe in both themes, focus rings, keyboard tabs and rows, and the dialog.
+
+## Before the redesign (screens not yet restyled)
 
 Tokens: `docs/ui/tokens.css` (import it as the base stylesheet). Mockups: `docs/ui/mockups/*.html` (open in a browser; fonts resolve to your OS) and `*.png` renders. Mockup data is illustrative; match layout, density, copy and behaviour.
 

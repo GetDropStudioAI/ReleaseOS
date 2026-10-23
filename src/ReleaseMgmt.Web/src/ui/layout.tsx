@@ -22,6 +22,22 @@ export function Panel({ title, subtitle, meta, footer, inverse, level = 2, child
   )
 }
 
+/**
+ * Page heading (REOS-94, Figma node 6:4773): a breadcrumb trail, the page title (the page's only h1), a one-line description, and up to two page actions on
+ * the right (a secondary and a primary Button). The breadcrumb is a labelled navigation list; its last entry is the current page.
+ */
+export function PageHeading({ trail, title, description, actions }: { trail: string[]; title: string; description?: ReactNode; actions?: ReactNode }) {
+  return (
+    <div className="os-page-heading">
+      <nav aria-label="Breadcrumb"><ol className="os-breadcrumb">{trail.map((t, i) => <li key={i} aria-current={i === trail.length - 1 ? 'page' : undefined}>{t}</li>)}</ol></nav>
+      <div className="os-page-title-row">
+        <div className="os-page-intro"><h1 className="os-page-title">{title}</h1>{description && <p className="os-page-description">{description}</p>}</div>
+        {actions && <div className="os-page-actions">{actions}</div>}
+      </div>
+    </div>
+  )
+}
+
 /** Metric card: label, large value with an optional unit, and a detail line whose colour repeats its meaning (amber for attention, green for better). */
 export function MetricCard({ label, value, unit, detail, tone }: { label: string; value: ReactNode; unit?: string; detail?: ReactNode; tone?: Tone | 'accent' }) {
   return (

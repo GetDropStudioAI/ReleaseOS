@@ -41,7 +41,8 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         if (mode != "Live" || step.Section != "Deploy") return null;
         string? product = step.BundledProductId is null ? null : await db.Set<BundledProducts>().Where(p => p.Id == step.BundledProductId).Select(p => p.ProductName).SingleOrDefaultAsync(ct);
         var trainId = step.ReleaseTrainId;
-        return await db.Set<FreezeWindows>().Where(f => f.Kind == "Freeze" && at >= f.StartsAt && at < f.EndsAt
+        var workspace = await db.Set<ReleaseTrains>().Where(t => t.Id == trainId).Select(t => t.WorkspaceId).SingleAsync(ct);   // REOS-104: only the train's own workspace's freezes
+        return await db.Set<FreezeWindows>().Where(f => f.Kind == "Freeze" && f.WorkspaceId == workspace && at >= f.StartsAt && at < f.EndsAt
                 && (f.ProductPattern == null || (product != null && EF.Functions.Glob(product, f.ProductPattern)))
                 && !db.Set<FreezeOverrides>().Any(o => o.FreezeWindowId == f.Id && o.ReleaseTrainId == trainId && o.ExpiresAt > at))
             .OrderBy(f => f.StartsAt).FirstOrDefaultAsync(ct);
@@ -135,24 +136,37 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
     /// Grant/Renew audit row that named the same requester for the same window (audit ids are the autoincrement order, so two events in one second still order).
     /// Override rows written without the service (seed data) have no audit row and consume nothing.
     /// </summary>
-    private static async Task<List<string>> OpenRequestersAsync(ReleaseDbContext db, string windowId, string trainId, CancellationToken ct)
+    private static async Task<List<string>> OpenRequestersAsync(ReleaseDbContext db, string windowId, string trainId, CancellationToken ct) =>
+        [.. (await OpenRequestsAsync(db, windowId, trainId, ct)).Select(r => r.RequesterId)];
+
+    /// <summary>One open override request: the last unconsumed <c>RequestOverride</c> of a requester for a window and train.</summary>
+    public sealed record OpenRequest(string WindowId, string TrainId, string RequesterId, DateTime RequestedAt);
+
+    /// <summary>
+    /// The open override requests (see <see cref="OpenRequestersAsync"/> for the rule), for one window and train or, with both null, for all of them
+    /// (the approval queue, REOS-94).
+    /// </summary>
+    public static async Task<List<OpenRequest>> OpenRequestsAsync(ReleaseDbContext db, string? windowId, string? trainId, CancellationToken ct)
     {
         var lastRequest = await db.Set<AuditEvents>().AsNoTracking()
-            .Where(a => a.EntityType == "FreezeWindow" && a.EntityId == windowId && a.Action == "RequestOverride" && a.ReleaseTrainId == trainId && a.ActorUserId != null)
-            .GroupBy(a => a.ActorUserId!).Select(g => new { UserId = g.Key, Last = g.Max(a => a.Id) }).ToListAsync(ct);
+            .Where(a => a.EntityType == "FreezeWindow" && a.Action == "RequestOverride" && a.ActorUserId != null && a.ReleaseTrainId != null
+                        && (windowId == null || a.EntityId == windowId) && (trainId == null || a.ReleaseTrainId == trainId))
+            .GroupBy(a => new { a.EntityId, TrainId = a.ReleaseTrainId!, UserId = a.ActorUserId! })
+            .Select(g => new { g.Key.EntityId, g.Key.TrainId, g.Key.UserId, Last = g.Max(a => a.Id), At = g.Max(a => a.OccurredAt) }).ToListAsync(ct);
         if (lastRequest.Count == 0) return [];
+        var trains = lastRequest.Select(r => r.TrainId).Distinct().ToList();
         var grants = await db.Set<AuditEvents>().AsNoTracking()
-            .Where(a => a.EntityType == "FreezeOverride" && a.ReleaseTrainId == trainId && (a.Action == "Grant" || a.Action == "Renew") && a.AfterJson != null)
-            .Select(a => new { a.Id, a.AfterJson }).ToListAsync(ct);
-        var lastGrant = new Dictionary<string, long>();
+            .Where(a => a.EntityType == "FreezeOverride" && a.ReleaseTrainId != null && trains.Contains(a.ReleaseTrainId) && (a.Action == "Grant" || a.Action == "Renew") && a.AfterJson != null)
+            .Select(a => new { a.Id, TrainId = a.ReleaseTrainId!, a.AfterJson }).ToListAsync(ct);
+        var lastGrant = new Dictionary<(string Window, string Train, string User), long>();
         foreach (var g in grants)
         {
             using var doc = JsonDocument.Parse(g.AfterJson!);   // written by GrantOverrideAsync below; the table is append-only
             var after = doc.RootElement;
-            if (after.TryGetProperty("windowId", out var win) && win.GetString() == windowId && after.TryGetProperty("requestedBy", out var by) && by.GetString() is { } uid)
-                lastGrant[uid] = Math.Max(lastGrant.GetValueOrDefault(uid), g.Id);
+            if (after.TryGetProperty("windowId", out var win) && win.GetString() is { } w && after.TryGetProperty("requestedBy", out var by) && by.GetString() is { } uid)
+                lastGrant[(w, g.TrainId, uid)] = Math.Max(lastGrant.GetValueOrDefault((w, g.TrainId, uid)), g.Id);
         }
-        return [.. lastRequest.Where(r => r.Last > lastGrant.GetValueOrDefault(r.UserId)).Select(r => r.UserId)];
+        return [.. lastRequest.Where(r => r.Last > lastGrant.GetValueOrDefault((r.EntityId, r.TrainId, r.UserId))).Select(r => new OpenRequest(r.EntityId, r.TrainId, r.UserId, r.At))];
     }
 
     /// <summary>An RTE or Release Manager asks for an override. Nothing is stored beyond the audit row: the approvers are notified and one of them grants it (Q-034b).</summary>

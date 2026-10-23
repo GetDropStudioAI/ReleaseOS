@@ -82,6 +82,7 @@ builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
 builder.Services.AddSingleton<UserCreationService>();   // REOS-83 add users ahead of their first sign-in
 builder.Services.AddSingleton<WorkspaceService>();      // REOS-104 workspaces (D45)
+builder.Services.AddSingleton<ApprovalQueueService>();  // REOS-94 the approval queue behind the shell's Approvals badge
 builder.Services.AddSingleton<MilestoneService>();   // train milestones (Q-0840..)
 // REOS-35 evidence attachments: stored outside wwwroot (Attachments:Directory), capped at Attachments:MaxBytes (never above the 50 MB schema CHECK)
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
@@ -217,6 +218,7 @@ api.MapConnectors();   // REOS-39
 api.MapUserCreation();   // REOS-83
 api.MapAttachments();
 api.MapNotifications();
+api.MapShell();   // REOS-94
 api.MapTemplates();   // REOS-38
 api.MapTrainCreation();   // REOS-80
 api.MapAudit();

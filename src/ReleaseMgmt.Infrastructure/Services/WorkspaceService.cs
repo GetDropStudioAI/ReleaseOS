@@ -38,6 +38,15 @@ public sealed class WorkspaceService(IDbContextFactory<ReleaseDbContext> dbf, Ti
         }, ct);
     }
 
+    public sealed record WorkspaceView(string Id, string Name, string Slug, string? Region);
+
+    /// <summary>The workspace the signed-in person is working in: the default one until REOS-105/106 add membership-scoped choice.</summary>
+    public async Task<WorkspaceView> CurrentAsync(CancellationToken ct = default)
+    {
+        await using var db = await OpenAsync(ct);
+        return await db.Set<Workspaces>().AsNoTracking().Where(w => w.Id == WorkspaceIds.Default).Select(w => new WorkspaceView(w.Id, w.Name, w.Slug, w.Region)).SingleAsync(ct);
+    }
+
     /// <summary>
     /// A new user is a member of the default workspace with their role. Until REOS-105 moves the triggers and policies onto memberships, Users.Role is the
     /// role that counts, so every write that creates a user or changes Users.Role keeps this membership equal to it, in the same transaction.

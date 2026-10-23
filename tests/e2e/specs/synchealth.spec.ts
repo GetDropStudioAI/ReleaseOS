@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn } from './support'
+import { signIn, syncHealthCard } from './support'
 
 // REOS-42: Sync health (screen 5), the connector-wide banner on every screen, the live SyncAlertRaised push, and the webhook allowlist.
 // Alerts are seeded through the Development-only /api/v1/dev/sync/* endpoints (SyncDevEndpoints); `raise` goes through the real SyncAlertWriter,
@@ -20,7 +20,7 @@ const dev = (page: Page, path: string, body: unknown = {}) =>
     return { status: r.status, body: await r.json().catch(() => null) }
   }, [path, body] as const)
 
-const syncLink = (page: Page) => page.locator('nav[aria-label=Primary] a[href="/sync"]')
+const syncLink = (page: Page) => syncHealthCard(page)   // REOS-94: the sidebar's control-plane card
 const openRow = (page: Page, text: string) => page.locator('table[aria-label="Open alerts"] tbody tr', { hasText: text })
 
 for (const scheme of ['light', 'dark'] as const) {
@@ -65,7 +65,7 @@ for (const scheme of ['light', 'dark'] as const) {
         await expect(banner).toContainText('ServiceNow rejected our credentials')
         await expect(banner).toContainText('on any screen is current')
         await expect(page.getByTestId('sync-banner')).toContainText('ServiceNow rejected our credentials')       // and on the Sync health screen itself
-        await expect(b.locator('.stream-row').first()).toBeVisible()                                              // the regions below the banner are still laid out
+        await expect(b.locator('main h1')).toHaveText('Inbox')                                                   // the page below the banner is still laid out
         await b.goto('/')
         await expect(banner).toContainText('ServiceNow rejected our credentials')                                 // another screen again, after a reload
         // everything on the page sits in a landmark while the banner speaks (it once did not: CI run 105, governance.spec on macOS)

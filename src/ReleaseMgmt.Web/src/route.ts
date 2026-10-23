@@ -3,13 +3,19 @@ import type { Selection } from './Planning'
 
 /** The URL carries the train and the selected node, so a deep link or a refresh reopens the same Inspector (PROJECT_SCOPE 5.4). */
 export type Mode = 'plan' | 'rehearsal' | 'live'
-export interface Route { view: 'trains' | 'admin' | 'work' | 'inbox' | 'audit' | 'templates' | 'sync' | 'connectors' | 'library' | 'analytics' | 'calendar' | 'importexport' | 'gallery'; trainId: string | null; selection: Selection; mode: Mode }
+export type View = 'trains' | 'admin' | 'work' | 'inbox' | 'audit' | 'templates' | 'sync' | 'connectors' | 'library' | 'analytics' | 'calendar' | 'importexport' | 'gallery'
+  | 'overview' | 'orchestration' | 'approvals' | 'deployments' | 'services' | 'environments'   // REOS-94: the redesign's destinations (shell/nav.ts)
+export interface Route { view: View; trainId: string | null; selection: Selection; mode: Mode }
 
 export const ROOT: Route = { view: 'trains', trainId: null, selection: null, mode: 'plan' }
 
+/** Every view but the train workspace is one path segment: /calendar, /approvals, ... */
+const PAGES = new Set<View>(['admin', 'work', 'inbox', 'audit', 'templates', 'sync', 'connectors', 'library', 'analytics', 'calendar', 'importexport', 'gallery',
+  'overview', 'orchestration', 'approvals', 'deployments', 'services', 'environments'])
+
 export function parsePath(path: string): Route {
   const seg = path.split('/').filter(Boolean).map(decodeURIComponent)
-  if (seg[0] === 'admin' || seg[0] === 'work' || seg[0] === 'inbox' || seg[0] === 'audit' || seg[0] === 'templates' || seg[0] === 'sync' || seg[0] === 'connectors' || seg[0] === 'library' || seg[0] === 'analytics' || seg[0] === 'calendar' || seg[0] === 'importexport' || seg[0] === 'gallery') return { view: seg[0], trainId: null, selection: null, mode: 'plan' }
+  if (PAGES.has(seg[0] as View)) return { view: seg[0] as View, trainId: null, selection: null, mode: 'plan' }
   if (seg[0] !== 'trains' || !seg[1]) return ROOT
   const trainId = seg[1]
   let mode: Mode = 'plan'

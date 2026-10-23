@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn } from './support'
+import { signIn, inboxBell } from './support'
 
 // REOS-38: My work and the notifications inbox. The live drill (Development-only) gives the signed-in RTE a running step (My work)
 // and a critical "step started late" notice (Inbox), so no extra seeding endpoint is needed.
@@ -15,7 +15,6 @@ async function scan(page: Page, where: string) {
   const detail = bad.map(v => `${v.id} (${v.impact}): ${v.help}\n   ${v.nodes.slice(0, 3).map(n => n.target.join(' ')).join('\n   ')}`).join('\n')
   expect(bad, `axe violations on ${where}:\n${detail}`).toEqual([])
 }
-const nav = (page: Page) => page.getByRole('navigation', { name: 'Primary' })
 const lateNotice = (page: Page) => page.locator('tbody tr', { hasText: 'Step R-002 started' }).first()   // newest first; the drill notifies every RTE, so older notices from other tests can be present
 
 test('My work lists my running step, opens it in its train, and passes axe', async ({ page }) => {
@@ -61,7 +60,7 @@ test('Inbox: unread notice is semibold with words, nav shows the count, opening 
   await expect(n).toContainText('● unread')
   await expect(n).toContainText('level 1')
   await expect(n).toHaveCSS('font-weight', '600')
-  await expect(nav(page).getByRole('link', { name: /^Inbox \(\d+\)$/ })).toBeVisible()
+  await expect(inboxBell(page)).toHaveAccessibleName(/^Inbox, \d+ unread$/)
   await scan(page, 'Inbox')
 
   // In the table, j / k move the selection and Enter opens the selected notice's train (live run) and marks it read. The drill's notice is not always
@@ -78,7 +77,7 @@ test('Inbox: unread notice is semibold with words, nav shows the count, opening 
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}/live`))
 
-  await nav(page).getByRole('link', { name: /^Inbox/ }).click()
+  await inboxBell(page).click()
   await expect(lateNotice(page)).toContainText('○ read')
   await expect(lateNotice(page)).not.toHaveCSS('font-weight', '600')
 })
@@ -113,5 +112,5 @@ test('Inbox: a new notification arrives live and the nav count updates without a
   await expect(page.getByText('No notifications yet.')).toBeVisible()
   await drill(page)   // the drill's late-start notice is pushed over SignalR (NotificationCreated)
   await expect(page.locator('tbody tr', { hasText: 'Step R-002 started' })).toBeVisible()
-  await expect(nav(page).getByRole('link', { name: /^Inbox \(\d+\)$/ })).toBeVisible()
+  await expect(inboxBell(page)).toHaveAccessibleName(/^Inbox, \d+ unread$/)
 })

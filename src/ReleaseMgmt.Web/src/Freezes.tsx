@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Button, ErrorState, Panel } from './ui'
 import {
   approveWaiver, waiveGate, createFreeze, getFreezes, getMe, getOwners, getWaivers, grantOverride, requestOverride, requestWaiver,
   type ApiError, type FreezeOverride, type FreezeRow, type Owner, type Waiver,
@@ -48,7 +49,7 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
   const formBox = useRef<HTMLDivElement>(null)
   const opener = useRef<HTMLElement | null>(null)
   useEffect(() => { getFreezes(trainId).then(setRows).catch(e => setErr(errMsg(e))) }, [trainId, refreshKey])
-  if (!rows) return err ? <p className="bad" role="alert">✗ {err}</p> : null
+  if (!rows) return err ? <ErrorState what="The freeze windows" message={err} /> : null
 
   const canApprove = hasRole(who.roles, 'ReleaseManager', 'GovernanceOfficer')
   const canRequest = hasRole(who.roles, 'RTE', 'ReleaseManager')
@@ -87,9 +88,8 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
   const createMissing = !!creating && (!creating.name.trim() || !creating.starts || !creating.ends)
 
   return (
-    <section aria-label="Freeze windows">
-      <div className="section-head"><h2 className="cap dark">Freeze windows</h2>
-        <span className="muted">{canApprove && <button ref={newBtn} type="button" className="text" aria-expanded={!!creating} aria-controls={creating ? createId : undefined} disabled={!!pending && !!creating} onClick={toggleCreate}>{creating ? 'Cancel' : 'New freeze window'}</button>}</span></div>
+    <Panel label="Freeze windows" title="Freeze windows" subtitle="Which freezes and chills apply to this release, and the overrides granted."
+      meta={canApprove && <Button ref={newBtn} aria-expanded={!!creating} aria-controls={creating ? createId : undefined} disabled={!!pending && !!creating} onClick={toggleCreate}>{creating ? 'Cancel' : 'New freeze window'}</Button>}>
       {creating && (
         <div className="inline-form stack" id={createId} ref={createBox} role="group" aria-label="New freeze window">
           <label>Name <input className="line wide" value={creating.name} onChange={e => setCreating({ ...creating, name: e.target.value })} /></label>
@@ -161,7 +161,7 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
             })}
           </tbody>
         </table>)}
-    </section>
+    </Panel>
   )
 }
 

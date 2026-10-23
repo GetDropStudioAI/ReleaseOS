@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Button, Panel } from './ui'
 import { createExportJob, exportJobFileUrl, getMe, listExportJobs, type ExportJob, type ExportKind } from './api'
 import { errMsg } from './format'
 import { fmtDayTime } from './time'
@@ -42,7 +43,7 @@ export function ExportsPanel({ trainId, refreshKey = 0 }: { trainId: string; ref
   const seen = useRef<{ trainId: string; status: Map<string, ExportJob['status']> } | null>(null)
   const mine = useRef(new Set<string>())   // jobs this user queued from this panel
   const links = useRef(new Map<string, HTMLAnchorElement>())
-  const panel = useRef<HTMLElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
 
   /** Compare with the previous poll: announce jobs that finished, and offer the download of one this user just queued. */
   const track = useCallback((r: ExportJob[]) => {
@@ -82,14 +83,12 @@ export function ExportsPanel({ trainId, refreshKey = 0 }: { trainId: string; ref
   }
 
   return (
-    <section id="exports" aria-label="Exports" ref={panel}>
-      <div className="section-head"><h2 className="cap dark">Exports</h2>
-        <span className="actions-col">
+    <div id="exports" ref={panel}><Panel label="Exports" title="Exports" subtitle="Documents are generated in the background and listed here when ready."
+      meta={<span className="rd-row-actions">
           {DOCS.filter(d => canAudit || !d.audit).map(d => (
-            <button key={`${d.kind}/${d.format}`} type="button" className="text" disabled={busy !== null} onClick={() => generate(d)}>{busy === `${d.kind}/${d.format}` ? 'Queuing…' : d.label}</button>
+            <Button key={`${d.kind}/${d.format}`} disabled={busy !== null} onClick={() => generate(d)}>{busy === `${d.kind}/${d.format}` ? 'Queuing…' : d.label}</Button>
           ))}
-        </span>
-      </div>
+        </span>}>
       {err && <p className="bad" role="alert">✗ {err}</p>}
       {jobs === null ? (err ? null : <p className="muted">Loading…</p>) : jobs.length === 0
         ? <p className="muted">No exports yet. PDFs are generated in the background and listed here when ready.</p>
@@ -113,6 +112,6 @@ export function ExportsPanel({ trainId, refreshKey = 0 }: { trainId: string; ref
             </tbody>
           </table>)}
       <p className="muted">Records are kept: an export is never deleted, and its file is kept for the retention period (365 days unless configured otherwise). The evidence pack is regenerated on demand, never cached.</p>
-    </section>
+    </Panel></div>
   )
 }

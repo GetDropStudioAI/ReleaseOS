@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { openTab, signIn, trainByTitle } from './support'
 
 // REOS-82: the Links section of the train workspace. Add a ServiceNow change to a product and a Jira issue to the train, read their sync state in words,
 // remove both with the inline confirm (Cancel first, then Confirm), and check the section with axe in light and dark. Leaves the shared database as it found it.
@@ -16,12 +16,13 @@ test('an RTE adds two links, reads their state in words, and removes them with a
   await signIn(page, 'links-rte@example.com', 'RTE')
   const t = await trainByTitle(page, 'Reporting')
   await page.goto(`/trains/${t.id}`)
+  await openTab(page, 'Activity')                                                       // links are on the Activity tab
   const links = page.locator('section[aria-label="Links"]')
   await expect(links.locator('h2')).toHaveText('Links')
   await expect(links).toContainText('No links.')
 
   // add: ServiceNow change on a product (the key is typed in lower case; the server stores it upper case)
-  await links.locator('.section-head button:text-is("Add link")').click()
+  await links.locator('.os-panel-head button:text-is("Add link")').click()
   const form = links.locator('[role=group][aria-label="Add link"]')
   await expect(form.locator('button:text-is("Add link")')).toBeDisabled()
   await expect(form).toContainText('Enter the Jira key')                                // a disabled action says why
@@ -39,7 +40,7 @@ test('an RTE adds two links, reads their state in words, and removes them with a
   await expect(chg).toContainText('never')
 
   // add: Jira issue on the train itself; a bad key is refused inline with the reason
-  await links.locator('.section-head button:text-is("Add link")').click()
+  await links.locator('.os-panel-head button:text-is("Add link")').click()
   await expect(form.locator('button.choice:text-is("ServiceNow")')).toHaveAttribute('aria-pressed', 'true')   // the last system and target are kept for the next key
   await form.locator('button.choice:text-is("Jira")').click()
   await form.locator('label:has-text("Attach to") select').selectOption({ label: 'This train' })
@@ -80,6 +81,7 @@ test('a Viewer sees the Links section without Add or Remove', async ({ page }) =
   await signIn(page, 'links-viewer@example.com', 'Viewer')
   const t = await trainByTitle(page, 'Reporting')
   await page.goto(`/trains/${t.id}`)
+  await openTab(page, 'Activity')                                                       // links are on the Activity tab
   const links = page.locator('section[aria-label="Links"]')
   await expect(links.locator('h2')).toHaveText('Links')
   await expect(links.locator('button')).toHaveCount(0)

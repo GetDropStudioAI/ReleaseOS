@@ -1,63 +1,70 @@
-import { useEffect, useRef, useState } from 'react'
-import { RadioChoice } from './Governance'
+import { useEffect, useId, useRef, useState } from 'react'
 import { abortTrain, completeTrain } from './api'
 import { errMsg } from './format'
-import { useFocusWhen } from './focus'
 import { announce } from './announce'
+import { ConfirmDialog } from './ui'
 
-const CLOSE_CODES = [
+export const CLOSE_CODES = [
   { key: 'Successful', word: 'Successful' }, { key: 'SuccessfulWithIssues', word: 'Successful with issues' }, { key: 'Unsuccessful', word: 'Unsuccessful' },
 ] as const
-type CloseCode = typeof CLOSE_CODES[number]['key']
+export type CloseCode = typeof CLOSE_CODES[number]['key']
 export type Closing = 'complete' | 'abort'
 
+/** What the dialog says it will do, so the wording is one place the tests can check. */
+export const closeCopy = (kind: Closing, code: CloseCode, status: string) => kind === 'complete'
+  ? { title: 'Complete this release?', confirm: 'Complete release', pending: 'Completing…', note: code !== 'Successful' ? 'A post-implementation review will be required.' : null }
+  : { title: 'Abort this release?', confirm: 'Abort release', pending: 'Aborting…', note: status === 'Executing' ? 'An Executing release that is aborted requires a post-implementation review.' : null }
+
 /**
- * REOS-86: ending a train from its header. "Complete…" asks for the close code (POST :complete; :advance has no close code, so it was always
- * refused with CloseCodeRequired) and "Abort…" asks for a reason, kept in the audit row. Both are inline forms under the header line, never a
- * modal (docs/UI.md); the trigger buttons live in the header's action row and toggle `closing`.
+ * REOS-86 / REOS-127 (D53): ending a release from its header. "Complete…" asks for the close code (POST :complete; :advance has no close code, so it was
+ * always refused with CloseCodeRequired) and "Abort…" asks for a reason, kept in the audit row. Both are confirmation dialogs (ui ConfirmDialog, D41 allows a
+ * dialog for an irreversible action): they start on Cancel, Escape cancels, focus returns to the button that opened them, and a failure from the server
+ * is shown inside the dialog, which stays open. `kind` is null while closed; the dialog stays mounted so focus can return.
  */
-export function TrainCloseForm({ kind, trainId, version, status, onCancel, onDone }: { kind: Closing; trainId: string; version: number; status: string; onCancel: () => void; onDone: () => void }) {
+export function CloseDialog({ kind, trainId, version, status, onCancel, onDone }: { kind: Closing | null; trainId: string; version: number; status: string; onCancel: () => void; onDone: () => void }) {
   const [code, setCode] = useState<CloseCode>('Successful')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const group = useRef<HTMLSpanElement>(null)
-  const reasonRef = useFocusWhen<HTMLInputElement>(kind === 'abort')
-  // Opening Complete puts focus on the chosen close code (the radio group renders in this pass, so focus it on the next frame).
-  useEffect(() => { if (kind === 'complete') requestAnimationFrame(() => group.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus()) }, [kind])
-  const short = kind === 'abort' && text.trim().length === 0
+  const [bad, setBad] = useState(false)
+  const last = useRef<Closing>('complete')
+  if (kind) last.current = kind
+  const shown = kind ?? last.current
+  const codeId = useId(), textId = useId(), errId = useId()
+  useEffect(() => { if (kind) { setCode('Successful'); setText(''); setErr(null); setBad(false); setBusy(false) } }, [kind])
+  const copy = closeCopy(shown, code, status)
   const submit = async () => {
-    if (busy || short) return
-    setBusy(true); setErr(null)
+    if (busy) return
+    if (shown === 'abort' && text.trim().length === 0) { setBad(true); setErr('Reason: say why this release is being aborted.'); return }
+    setBusy(true); setErr(null); setBad(false)
     try {
-      if (kind === 'complete') { await completeTrain(trainId, code, text.trim() || null, version); announce('Train completed.') }
-      else { await abortTrain(trainId, text.trim(), version); announce('Train aborted.') }
+      if (shown === 'complete') { await completeTrain(trainId, code, text.trim() || null, version); announce('Release completed.') }
+      else { await abortTrain(trainId, text.trim(), version); announce('Release aborted.') }
       onDone()
-    } catch (e) { setErr(errMsg(e, kind === 'complete' ? 'Could not complete the train.' : 'Could not abort the train.')) }
+    } catch (e) { setErr(errMsg(e, shown === 'complete' ? 'Could not complete the release.' : 'Could not abort the release.')) }
     finally { setBusy(false) }
   }
-  const keys = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); void submit() }
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel() }
-  }
-  if (kind === 'complete') {
-    return (
-      <div className="inline-form train-close" role="group" aria-label="Complete the train" onKeyDown={keys}>
-        <span>Close code <RadioChoice label="Close code" options={[...CLOSE_CODES]} value={code} onChange={setCode} groupRef={group} /></span>
-        <label>Notes <input className="line wide" value={text} onChange={e => setText(e.target.value)} /></label>
-        <span><button type="button" className="text" disabled={busy} onClick={submit}>{busy ? 'Completing…' : 'Complete train'}</button>{' '}
-          <button type="button" className="text" disabled={busy} onClick={onCancel}>Cancel</button></span>
-        {code !== 'Successful' && <span className="muted small">A post-implementation review will be required.</span>}
-        {err && <span className="bad" role="alert">✗ {err}</span>}
-      </div>)
-  }
+  // Escape closes the dialog (the platform's cancel); it must not also reach the page's Escape that closes the Inspector.
   return (
-    <div className="inline-form train-close" role="group" aria-label="Abort the train" onKeyDown={keys}>
-      <span>Abort the train? It cannot be restarted.</span>
-      <label>Reason (required) <input ref={reasonRef} className="line wide" value={text} aria-required="true" onChange={e => setText(e.target.value)} /></label>
-      <span><button type="button" className="text destructive" disabled={busy || short} onClick={submit}>{busy ? 'Aborting…' : 'Abort train'}</button>{' '}
-        <button type="button" className="text" disabled={busy} onClick={onCancel}>Cancel</button></span>
-      {status === 'Executing' && <span className="muted small">An Executing train that is aborted requires a post-implementation review.</span>}
-      {err && <span className="bad" role="alert">✗ {err}</span>}
-    </div>)
+    <div onKeyDown={e => { if (e.key === 'Escape') e.stopPropagation() }}>
+      <ConfirmDialog open={kind !== null} title={copy.title} confirmLabel={copy.confirm} pendingLabel={copy.pending} destructive={shown === 'abort'} pending={busy} onConfirm={() => void submit()} onCancel={onCancel}>
+        <div className="rd-dialog-fields" onKeyDown={e => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); void submit() } }}>
+          {shown === 'complete'
+            ? <>
+                <p>Completing ends the release and records how it went. It cannot be undone.</p>
+                <label className="rd-field" htmlFor={codeId}>Close code
+                  <select id={codeId} value={code} onChange={e => setCode(e.target.value as CloseCode)}>{CLOSE_CODES.map(c => <option key={c.key} value={c.key}>{c.word}</option>)}</select></label>
+                <label className="rd-field" htmlFor={textId}>Notes (optional)<input id={textId} value={text} onChange={e => setText(e.target.value)} /></label>
+              </>
+            : <>
+                <p>Aborting ends the release. It cannot be restarted.</p>
+                <label className="rd-field" htmlFor={textId}>Reason (required)
+                  <input id={textId} value={text} aria-required="true" aria-invalid={bad || undefined} aria-describedby={bad ? errId : undefined} onChange={e => setText(e.target.value)} /></label>
+              </>}
+          {copy.note && <p>{copy.note}</p>}
+          {err && <p id={errId} className="rd-error" role="alert">{err}</p>}
+        </div>
+      </ConfirmDialog>
+    </div>
+  )
 }

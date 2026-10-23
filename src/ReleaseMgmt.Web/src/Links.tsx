@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Button, Panel } from './ui'
 import { addLink, getConnectors, getLinks, getProducts, getSteps, getTrain, removeLink, type ExternalLinkRow, type LinkEntityType } from './api'
 import { isConflict } from './Conflict'
 import { brokenReason, externalUrl, freshness, keyHint } from './externalLinks'
@@ -67,9 +68,8 @@ export function Links({ trainId, canEdit, refreshKey, onChanged }: { trainId: st
   }
 
   return (
-    <section aria-label="Links" id="links">
-      <div className="section-head"><h2 className="cap dark">Links</h2>
-        <span className="muted">{links && links.length > 0 && <>{links.length} · </>}{canEdit && !adding && <button type="button" className="text" onClick={() => { setAdding(true); setErr(null) }}>Add link</button>}</span></div>
+    <div id="links"><Panel label="Links" title="Links" subtitle="Jira and ServiceNow records this release points at."
+      meta={<>{links && links.length > 0 && <span>{links.length}</span>}{canEdit && !adding && <Button onClick={() => { setAdding(true); setErr(null) }}>Add link</Button>}</>}>
       {err && <p className="bad" role="alert">✗ {err}</p>}
       {adding && (
         <div className="inline-form" role="group" aria-label="Add link">
@@ -127,6 +127,6 @@ export function Links({ trainId, canEdit, refreshKey, onChanged }: { trainId: st
           })}</tbody>
         </table></div>
       )}
-    </section>
+    </Panel></div>
   )
 }

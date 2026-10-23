@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { Copy, Download, ShieldAlert, ShieldCheck, X } from 'lucide-react'
 import { ApiError, get, getStream, type Me, type StreamRow, type UserRow } from './api'
 import { announce } from './announce'
-import { Button, ConfirmDialog, EmptyState, ErrorState, FilterSelect, LoadingState, NoPermissionState, Notice, PageHeading, Panel, PropertyList, SearchField, StatusChip, TwoLine } from './ui'
+import { Button, ConfirmDialog, EmptyState, ErrorState, FilterSelect, LoadingState, NoPermissionState, Notice, PageHeading, Panel, PropertyList, ScrollRegion, SearchField, StatusChip, TwoLine } from './ui'
 import { localClock, browserZone } from './shell/clock'
 import {
   EMPTY_FILTERS, LARGE_EXPORT, PAGE_SIZE, SERVER_EXPORT_MAX, anyFilter, auditPath, auditQuery, diffLines, eventFromSearch, eventId, eventRecord, eventTitle, outcomeOf,
@@ -248,7 +248,7 @@ export function AuditViewer({ me, onOpenTrain }: { me: Me; onOpenTrain?: (trainI
           <header className="os-panel-head"><h2 id="au-title" className="os-panel-title">Event history</h2><div className="os-panel-meta">Newest first</div></header>
           {rows === null && !error ? <LoadingState what="events" /> : rows && (
             <>
-              <div className="os-table-wrap">
+              <ScrollRegion label="Audit events">
                 <table className="os-table selectable au-table" ref={tableRef}>
                   <caption className="sr-only">Audit events, newest first. Up and Down move the selection, Enter opens the details, Escape closes them.</caption>
                   <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Event</th><th scope="col">Resource</th><th scope="col">Actor</th><th scope="col">Outcome</th></tr></thead>
@@ -269,7 +269,7 @@ export function AuditViewer({ me, onOpenTrain }: { me: Me; onOpenTrain?: (trainI
                     })}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
               <footer className="au-pager">
                 <span className="os-muted" aria-live="polite">{rows.length === 0 ? '' : `Showing ${from.toLocaleString('en-US')}–${to.toLocaleString('en-US')}${total !== null ? ` of ${total.toLocaleString('en-US')}` : ''} events`}</span>
                 <span className="au-pager-buttons">

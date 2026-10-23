@@ -1,8 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn } from './support'
+import { openTab, signIn } from './support'
 
-// REOS-86: the train header ends a train with "Complete…" (close code + notes) and "Abort…" (reason), as inline forms under the header line.
+// REOS-86 / REOS-127 (D53): the release header ends a release with "Complete…" (close code + notes) and "Abort…" (reason), as confirmation dialogs.
 // REOS-87: a live run rolled back requires the train's post-implementation review, due within a business day. Each test makes its own drill train.
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']
@@ -31,21 +31,31 @@ test('a rolled-back live run requires a review with a due date, and Abort asks f
   const d = await drill(page)
   await endRun(page, d, 'RolledBack')
   await page.goto(`/trains/${d.trainId}`)
+  await openTab(page, 'Activity')                                                  // the review is on the Activity tab
 
   await expect(pirSection(page)).toContainText('a live run was rolled back')
   await expect(pirSection(page)).toContainText(/due \w{3},? \d{1,2} \w{3}/)
 
-  await page.locator('button:text-is("Abort…")').click()
-  const form = page.locator('[role=group][aria-label="Abort the train"]')
-  await expect(form.locator('input')).toBeFocused()
-  await expect(form.locator('button:text-is("Abort train")')).toBeDisabled()      // a reason is required
-  await expect(form).toContainText('requires a post-implementation review')
-  await form.locator('input').fill('Rolled back; not retrying in this window')
-  await form.locator('button:text-is("Abort train")').click()
+  const abort = page.getByRole('button', { name: 'Abort…' })
+  await abort.click()
+  const dialog = page.getByRole('dialog', { name: 'Abort this release?' })
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()       // the dialog starts on the safe choice
+  await expect(dialog).toContainText('requires a post-implementation review')
+  await page.keyboard.press('Escape')                                              // Escape cancels and focus returns to the opener
+  await expect(dialog).toBeHidden()
+  await expect(abort).toBeFocused()
+  await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}$`))
 
+  await abort.click()
+  await dialog.getByRole('button', { name: 'Abort release' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Reason')                  // a reason is required: refused inside the dialog, which stays open
+  await dialog.getByLabel('Reason (required)').fill('Rolled back; not retrying in this window')
+  await dialog.getByRole('button', { name: 'Abort release' }).click()
+
+  await expect(dialog).toBeHidden()
   await expect(page.locator('.stream-row[aria-current=true]')).toContainText('Aborted')
-  await expect(page.locator('button:text-is("Abort…")')).toHaveCount(0)
-  await expect(pirSection(page)).toContainText('a live run was rolled back')   // the rollback's review stands; aborting adds no second one
+  await expect(page.getByRole('button', { name: 'Abort…' })).toHaveCount(0)
+  await expect(pirSection(page)).toContainText('a live run was rolled back')       // the rollback's review stands; aborting adds no second one
 })
 
 test('Complete asks for a close code; closing with issues requires a review', async ({ page }) => {
@@ -54,19 +64,20 @@ test('Complete asks for a close code; closing with issues requires a review', as
   await endRun(page, d, 'Aborted')          // the run was stopped, not rolled back: no review yet
   await page.goto(`/trains/${d.trainId}`)
   await expect(page.locator('h1')).toContainText('Live drill')
+  await openTab(page, 'Activity')
   await expect(pirSection(page)).toHaveCount(0)
-
-  await page.locator('button:text-is("Complete…")').click()
-  const form = page.locator('[role=group][aria-label="Complete the train"]')
-  await expect(form.locator('[role=radio][aria-checked=true]')).toBeFocused()
-  await form.locator('[role=radio]', { hasText: 'Successful with issues' }).click()
-  await expect(form).toContainText('A post-implementation review will be required.')
-  await form.locator('input').fill('Card authorisation latency above target for 20 minutes')
-  const r = await new AxeBuilder({ page }).include('[role=group][aria-label="Complete the train"]').withTags(TAGS).analyze()
+  await page.getByRole('button', { name: 'Complete…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Complete this release?' })
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await dialog.getByLabel('Close code').selectOption({ label: 'Successful with issues' })
+  await expect(dialog).toContainText('A post-implementation review will be required.')
+  await dialog.getByLabel('Notes (optional)').fill('Card authorisation latency above target for 20 minutes')
+  const r = await new AxeBuilder({ page }).include('dialog[open]').withTags(TAGS).analyze()
   expect(r.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([])
-  await form.locator('button:text-is("Complete train")').click()
+  await dialog.getByRole('button', { name: 'Complete release' }).click()
 
+  await expect(dialog).toBeHidden()
   await expect(page.locator('.stream-row[aria-current=true]')).toContainText('SuccessfulWithIssues')
   await expect(pirSection(page)).toContainText('close code SuccessfulWithIssues')
-  await expect(page.locator('button:text-is("Complete…")')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Complete…' })).toHaveCount(0)
 })

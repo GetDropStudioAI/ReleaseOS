@@ -66,7 +66,7 @@ public static class ModelMap
         b.Entity<CatalogServices>(e => { e.ToTable("CatalogServices"); e.HasKey(e => e.Id);  });
         b.Entity<IngestKeys>(e => { e.ToTable("IngestKeys"); e.HasKey(e => e.Id);  });
         b.Entity<Deployments>(e => { e.ToTable("Deployments"); e.HasKey(e => e.Id);  });
-        b.Entity<DeploymentEvents>(e => { e.ToTable("DeploymentEvents"); e.HasKey(e => e.Id);  });
+        b.Entity<DeploymentEvents>(e => { e.ToTable("DeploymentEvents"); e.HasKey(e => e.Id); e.Property(e => e.Id).ValueGeneratedOnAdd(); });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);

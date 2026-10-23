@@ -550,12 +550,12 @@ INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt) VALUES('ik1','CI',
         Exec(db7, "INSERT INTO RunbookRuns(Id,ReleaseTrainId,Mode,StartedAt,StartedByUserId) VALUES('r1','t4','Rehearsal',?,'rte')", Now);
         Check(db7, "UPDATE Deployments SET RunId='r1' WHERE Id='d3'", false, "a deployment linked to a run of another release", expect: "run belongs to another train");
         Check(db7, "UPDATE Deployments SET ReleaseTrainId='t4', RunId='r1' WHERE Id='d3'", true, "a deployment linked to a release and its run");
-        Check(db7, "INSERT INTO DeploymentEvents(Id,DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('ev1','d3',?,?,'Info','Canary at 5 %','e-1')", true, "a deployment event", [Now, Now]);
-        Check(db7, "INSERT INTO DeploymentEvents(Id,DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('ev2','d3',?,?,'Info','again','e-1')", false, "an event id twice on a deployment", [Now, Now], "UNIQUE");
-        Check(db7, "INSERT INTO DeploymentEvents(Id,DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('ev2','d3',?,?,'Info','no id')", true, "an event without an id", [Now, Now]);
-        Check(db7, "INSERT INTO DeploymentEvents(Id,DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('ev3','d3',?,?,'Debug','x')", false, "an event level outside the three", [Now, Now], "CHECK");
-        Check(db7, "INSERT INTO DeploymentEvents(Id,DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('ev3','d3',?,?,'Info','')", false, "an empty event message", [Now, Now], "CHECK");
-        Check(db7, "UPDATE DeploymentEvents SET Message='edited' WHERE Id='ev1'", false, "an event edited", expect: "append-only");
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('d3',?,?,'Info','Canary at 5 %','e-1')", true, "a deployment event", [Now, Now]);
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('d3',?,?,'Info','again','e-1')", false, "an event id twice on a deployment", [Now, Now], "UNIQUE");
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('d3',?,?,'Info','no id')", true, "an event without an id", [Now, Now]);
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('d3',?,?,'Debug','x')", false, "an event level outside the three", [Now, Now], "CHECK");
+        Check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message) VALUES('d3',?,?,'Info','')", false, "an empty event message", [Now, Now], "CHECK");
+        Check(db7, "UPDATE DeploymentEvents SET Message='edited' WHERE Id=1", false, "an event edited", expect: "append-only");
         Check(db7, "DELETE FROM Deployments WHERE Id='d3'", true, "deleting a deployment removes its events with it");
         AssertTrue(Count(db7, "SELECT count(*) FROM DeploymentEvents") == 0, "no orphan events");
     }

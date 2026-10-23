@@ -21,7 +21,7 @@ public sealed record IngestEventsResult(string DeploymentId, string ExternalId, 
 public sealed record DeploymentView(string Id, string ExternalId, string ServiceId, string ServiceKey, string ServiceName, string EnvironmentId, string EnvironmentName, string EnvironmentKind,
     string? TrainId, string? ReleaseKey, string? TrainTitle, string? RunId, string ReleaseVersion, string Strategy, IReadOnlyList<double>? CanarySteps, string State, double TrafficPercent,
     int? ReadyPods, int? DesiredPods, string? StartedAt, string? FinishedAt, string? LastEventAt, string CreatedAt, string UpdatedAt, int Version);
-public sealed record DeploymentEventView(string Id, string OccurredAt, string ReceivedAt, string Level, string Message);
+public sealed record DeploymentEventView(long Id, string OccurredAt, string ReceivedAt, string Level, string Message);
 public sealed record DeploymentDetail(DeploymentView Deployment, IReadOnlyList<DeploymentEventView> Events);
 public sealed record DeploymentFilter(string? EnvironmentId = null, string? ServiceId = null, string? TrainId = null, string? State = null, int Take = 100);
 
@@ -210,7 +210,7 @@ public sealed class DeploymentService(IDbContextFactory<ReleaseDbContext> dbf, T
             if (e.ExternalId is not null && !seen.Add(e.ExternalId)) { duplicates++; continue; }
             db.Set<DeploymentEvents>().Add(new DeploymentEvents
             {
-                Id = Ids.New(), DeploymentId = dep.Id, OccurredAt = (e.OccurredAt ?? now).ToUniversalTime(), ReceivedAt = now, Level = e.Level ?? "Info", Message = e.Message!.Trim(), ExternalId = e.ExternalId,
+                DeploymentId = dep.Id, OccurredAt = (e.OccurredAt ?? now).ToUniversalTime(), ReceivedAt = now, Level = e.Level ?? "Info", Message = e.Message!.Trim(), ExternalId = e.ExternalId,
             });
             accepted++;
         }

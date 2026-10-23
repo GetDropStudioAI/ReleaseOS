@@ -1,6 +1,6 @@
 -- Upgrade 006 (REOS-107, REOS-109, REOS-110; D42, D46): the release model, environments, the service catalog, deployments and the ingest API's keys.
 -- From: migrations 20261023045651_Schema + 20261023045703_Triggers (after 005).
--- To:   migrations 20261023103913_Schema + 20261023103922_Triggers.
+-- To:   migrations 20261023111406_Schema + 20261023111416_Triggers.
 -- Run with the app stopped and after a backup (docs/RUNBOOK_OPERATIONS.md §8):  sqlite3 releaseos.db < db/upgrades/006_release_model_deployments.sql
 -- One transaction. Text below is verbatim from db/schema.sql:
 --  * New tables: ReleaseTypes, Environments, TrainEnvironments, CatalogServices, IngestKeys, Deployments, DeploymentEvents.
@@ -216,8 +216,8 @@ CREATE TABLE Deployments (                                -- B7/D42: service x e
     CHECK ((State IN ('Successful','Failed','RolledBack')) = (FinishedAt IS NOT NULL))
 );
 
-CREATE TABLE DeploymentEvents (                           -- append-only; what the tool reported, in order
-    Id TEXT PRIMARY KEY,
+CREATE TABLE DeploymentEvents (                           -- append-only; what the tool reported, in order. An integer id, like AuditEvents: events arrive many to the second, and the id is their order
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
     DeploymentId TEXT NOT NULL REFERENCES Deployments(Id) ON DELETE CASCADE,
     OccurredAt TEXT NOT NULL,                             -- the tool's clock
     ReceivedAt TEXT NOT NULL,                             -- ours
@@ -858,8 +858,8 @@ END;
 -- The app's startup migration must see the new migrations as applied.
 DELETE FROM __EFMigrationsHistory WHERE MigrationId IN ('20261023045651_Schema', '20261023045703_Triggers');
 INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES
-    ('20261023103913_Schema', '10.0.12'),
-    ('20261023103922_Triggers', '10.0.12');
+    ('20261023111406_Schema', '10.0.12'),
+    ('20261023111416_Triggers', '10.0.12');
 
 COMMIT;
 PRAGMA foreign_keys=ON;

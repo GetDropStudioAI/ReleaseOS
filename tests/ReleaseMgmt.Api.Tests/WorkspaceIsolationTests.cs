@@ -59,7 +59,7 @@ public class WorkspaceIsolationTests
         UPDATE ReleaseTrains SET OwnerUserId='ua', OwnerTeamId='tma', ReleaseBranch='{Marker}-branch', ReleaseTypeId='rta' WHERE Id='ta';
         INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('ta','enva');
         INSERT INTO Deployments(Id,ExternalId,CatalogServiceId,EnvironmentId,ReleaseTrainId,ReleaseVersion,CreatedAt,UpdatedAt,IngestKeyId) VALUES('depa','{Marker}-dep-1','svca','enva','ta','9.9.9','{t}','{t}','ika');
-        INSERT INTO DeploymentEvents(Id,DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('eva','depa','{t}','{t}','Info','{Marker} event','{Marker}-ev-1');
+        INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('depa','{t}','{t}','Info','{Marker} event','{Marker}-ev-1');
         INSERT INTO ChangeRecords(ReleaseTrainId,Justification) VALUES('ta','{Marker} justification');
         INSERT INTO AffectedCIs(Id,ReleaseTrainId,CiName) VALUES('cia','ta','{Marker} CI');
         INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('dwa','ta','2026-11-30T02:00:00Z','2026-11-30T06:00:00Z');

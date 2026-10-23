@@ -758,7 +758,7 @@ public class Deployments
 
 public class DeploymentEvents
 {
-    public string Id { get; set; } = Ids.New();
+    public long Id { get; set; }
     public string DeploymentId { get; set; } = "";
     public DateTime OccurredAt { get; set; }
     public DateTime ReceivedAt { get; set; }

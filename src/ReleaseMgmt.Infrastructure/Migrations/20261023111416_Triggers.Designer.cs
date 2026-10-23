@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261023103922_Triggers")]
+    [Migration("20261023111416_Triggers")]
     partial class Triggers
     {
         /// <inheritdoc />
@@ -649,8 +649,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentEvents", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DeploymentId")
                         .IsRequired()

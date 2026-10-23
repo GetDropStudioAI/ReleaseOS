@@ -646,8 +646,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentEvents", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DeploymentId")
                         .IsRequired()

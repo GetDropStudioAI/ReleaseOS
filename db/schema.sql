@@ -803,8 +803,8 @@ CREATE TABLE Deployments (                                -- B7/D42: service x e
     CHECK ((State IN ('Successful','Failed','RolledBack')) = (FinishedAt IS NOT NULL))
 );
 
-CREATE TABLE DeploymentEvents (                           -- append-only; what the tool reported, in order
-    Id TEXT PRIMARY KEY,
+CREATE TABLE DeploymentEvents (                           -- append-only; what the tool reported, in order. An integer id, like AuditEvents: events arrive many to the second, and the id is their order
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
     DeploymentId TEXT NOT NULL REFERENCES Deployments(Id) ON DELETE CASCADE,
     OccurredAt TEXT NOT NULL,                             -- the tool's clock
     ReceivedAt TEXT NOT NULL,                             -- ours

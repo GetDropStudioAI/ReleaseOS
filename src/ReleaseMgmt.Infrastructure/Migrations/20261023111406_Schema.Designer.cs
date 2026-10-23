@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261023103913_Schema")]
+    [Migration("20261023111406_Schema")]
     partial class Schema
     {
         /// <inheritdoc />
@@ -649,8 +649,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.DeploymentEvents", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DeploymentId")
                         .IsRequired()

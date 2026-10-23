@@ -109,3 +109,7 @@
 /* The filter select shows the focus ring on itself here (a tab tour checks the focused element, not its wrapper). */
 .rd .os-filter:focus-within { outline: none; }
 .rd .os-filter select:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
+/* Tables in the narrower release column wrap and use the tighter padding, so they do not need a horizontal scrollbar (a scroll region with nothing to focus fails axe). */
+.rd .os-table th, .rd .os-table td { padding-left: var(--gap-md); padding-right: var(--gap-md); }
+.rd .os-table th { white-space: normal; }
+.rd .os-table td.mono { overflow-wrap: anywhere; }

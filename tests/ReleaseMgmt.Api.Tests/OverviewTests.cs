@@ -33,7 +33,7 @@ public class OverviewTests
 
     /// <summary>
     /// The clock is 2026-10-23 12:00Z (Display:TimeZone America/Chicago, CDT = UTC−5). Open trains: p1 Planning (a Compliance gate ready to certify, a failed
-    /// gate), g1 Gated (no Go/No-Go, a waiver to approve, window colliding with g2 on CI ledger-db), g2 Gated (Go with an open condition), e1 Executing (live run,
+    /// gate), g1 Gated (no Go/No-Go, a waiver to approve, window colliding with g2 on CI ledger-db), g2 Gated (Go with an open condition; an open condition of its earlier decision no longer counts), e1 Executing (live run,
     /// window overlapping the Search* freeze, an override requested). Closed: c1–c3 completed in the last 14 days, c4 before that, a1 aborted; x1 archived.
     /// </summary>
     private static async Task<World> Setup()
@@ -67,8 +67,10 @@ public class OverviewTests
               ('k1','gp1','Evidence pack filed','{rteId}',1,1,'2026-10-22T10:00:00Z','{rteId}'),
               ('k2','gg1','Runbook reviewed','{rteId}',0,1,NULL,NULL);
             INSERT INTO GateWaivers(Id,StageGateId,Reason,RequestedByUserId,RequestedAt) VALUES('wv1','gg1','The ops review happens in the CAB on Monday','{rteId}','2026-10-22T10:00:00Z');
-            INSERT INTO GoNoGoDecisions(Id,ReleaseTrainId,Decision,DecidedByUserId,DecidedAt,GateSnapshotJson) VALUES('d2','g2','GoWithConditions','{rmId}','2026-10-22T10:00:00Z','{{}}');
-            INSERT INTO GoNoGoConditions(Id,DecisionId,Text,OwnerUserId,ExpiresAt) VALUES('cd1','d2','Load test signed off','{rteId}','2026-10-24T18:00:00Z');
+            INSERT INTO GoNoGoDecisions(Id,ReleaseTrainId,Decision,DecidedByUserId,DecidedAt,GateSnapshotJson) VALUES
+              ('d1','g2','GoWithConditions','{rmId}','2026-10-21T10:00:00Z','{{}}'),('d2','g2','GoWithConditions','{rmId}','2026-10-22T10:00:00Z','{{}}');
+            INSERT INTO GoNoGoConditions(Id,DecisionId,Text,OwnerUserId,ExpiresAt) VALUES
+              ('cd0','d1','Replaced by the later decision','{rteId}','2026-10-24T12:00:00Z'),('cd1','d2','Load test signed off','{rteId}','2026-10-24T18:00:00Z');
             INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES
               ('w1','g1','2026-10-25T06:00:00Z','2026-10-25T10:00:00Z'),('w2','g2','2026-10-25T09:30:00Z','2026-10-25T11:00:00Z'),
               ('w3','e1','2026-10-23T10:00:00Z','2026-10-23T14:00:00Z'),('w4','c1','2026-10-20T13:00:00Z','2026-10-20T15:00:00Z');
@@ -143,15 +145,17 @@ public class OverviewTests
         var items = o.GetProperty("attention").EnumerateArray().Select(a => (Kind: a.GetProperty("kind").GetString(), Train: a.GetProperty("trainId").GetString(),
             Due: a.GetProperty("dueAt").GetString(), Detail: a.GetProperty("detail").GetString())).ToList();
         Assert.Equal([
-            ("ApproveFreezeOverride", "e1", "2026-10-23T13:00:00Z", "rte asks to override Search freeze"),
             ("FreezeConflict", "e1", "2026-10-23T13:00:00Z", "Window overlaps Search freeze with no override"),
+            ("GrantOverride", "e1", "2026-10-23T13:00:00Z", "rte asks to override Search freeze"),
             ("ApproveWaiver", "g1", "2026-10-24T05:00:00Z", "Ops Readiness · requested by rte"),          // end of 23 Oct in America/Chicago
             ("CloseCondition", "g2", "2026-10-24T18:00:00Z", "Load test signed off"),
             ("RecordGoNoGo", "g1", "2026-10-25T06:00:00Z", "No decision recorded yet"),                    // when its window opens
             ("WindowCollision", "g1", "2026-10-25T06:00:00Z", "Overlaps R26.32 Cards · CI ledger-db"),     // once per pair
-            ("CertifyComplianceGate", "p1", "2026-10-27T05:00:00Z", "Compliance Sign-off"),
+            ("CertifyGate", "p1", "2026-10-27T05:00:00Z", "Compliance Sign-off"),
             ("FailedGate", "p1", "2026-10-29T05:00:00Z", "Security Review failed"),
         ], items.Select(i => (i.Kind!, i.Train!, i.Due!, i.Detail!)).ToList());
+        var grant = o.GetProperty("attention").EnumerateArray().Single(a => a.GetProperty("kind").GetString() == "GrantOverride");
+        Assert.Equal($"fz1:e1:{UserId(w.Root, "rte@ov.test")}", grant.GetProperty("entityId").GetString());   // the id shape GET /approvals uses
         // g2 has a Go (with conditions); the Chill and p1 (no window) raise no conflict
         Assert.Equal("Blocked", o.GetProperty("activity").EnumerateArray().Single(r => r.GetProperty("trainId").GetString() == "p1").GetProperty("displayStatus").GetString());
     }
@@ -165,7 +169,7 @@ public class OverviewTests
         var o = await Json(await w.Rte.GetAsync("/api/v1/overview"));
         var kinds = Kinds(o);
         Assert.DoesNotContain("ApproveWaiver", kinds);
-        Assert.DoesNotContain("ApproveFreezeOverride", kinds);   // the grant consumed the request
+        Assert.DoesNotContain("GrantOverride", kinds);   // the grant consumed the request
         Assert.DoesNotContain("FreezeConflict", kinds);          // and the override lasts past the overlap
         Assert.Equal(3, o.GetProperty("cards").GetProperty("needAttention").GetProperty("approvals").GetInt32());
     }

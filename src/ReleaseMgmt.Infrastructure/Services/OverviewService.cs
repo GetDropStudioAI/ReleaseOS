@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Infrastructure.Persistence;
@@ -158,7 +157,7 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             var ts = taskLookup[g.Id].ToList();
             if (ts.Count == 0 || ts.Any(k => !k.Done)) continue;
             if (byTrain[g.ReleaseTrainId].Any(p => p.SequenceOrder < g.SequenceOrder && !Closed.Contains(p.Status))) continue;
-            items.Add(Item("Approval", "CertifyComplianceGate", "Compliance gate to certify", g.GateName, byId[g.ReleaseTrainId], GateDue(g), g.Id, "Governance Officer"));
+            items.Add(Item("Approval", ApprovalQueueService.CertifyGate, "Compliance gate to certify", g.GateName, byId[g.ReleaseTrainId], GateDue(g), g.Id, "Governance Officer"));
         }
 
         // Waivers requested and not yet approved, on a gate that is still open
@@ -171,7 +170,7 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         foreach (var w in waivers)
         {
             var g = openGates[w.StageGateId];
-            items.Add(Item("Approval", "ApproveWaiver", "Waiver to approve", $"{g.GateName} · requested by {w.DisplayName}", byId[g.ReleaseTrainId], GateDue(g), w.Id, "Governance Officer"));
+            items.Add(Item("Approval", ApprovalQueueService.ApproveWaiver, "Waiver to approve", $"{g.GateName} · requested by {w.DisplayName}", byId[g.ReleaseTrainId], GateDue(g), w.Id, "Governance Officer"));
         }
 
         items.AddRange(await OverrideRequestsAsync(db, byId, now, ct));
@@ -186,49 +185,36 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         {
             var t = byId[id];
             var due = windows.TryGetValue(id, out var w) ? w.StartsAt.ToString(Iso) : EndOfDay(t.TargetReleaseDate);
-            items.Add(Item("Approval", "RecordGoNoGo", "Go/No-Go to record", latest.ContainsKey(id) ? "The last decision was No-Go" : "No decision recorded yet", t, due, id, "Release Manager"));
+            items.Add(Item("Approval", ApprovalQueueService.RecordGoNoGo, "Go/No-Go to record", latest.ContainsKey(id) ? "The last decision was No-Go" : "No decision recorded yet", t, due, id, "Release Manager"));
         }
 
-        // Go conditions still open on an open train, due when they expire
+        // Go conditions still open on an open train's latest decision (a later decision replaces them, as in /approvals and My work), due when they expire
         var openIds = byId.Keys.ToList();
+        var latestIds = (await db.Set<GoNoGoDecisions>().AsNoTracking().Where(d => openIds.Contains(d.ReleaseTrainId)).Select(d => new { d.Id, d.ReleaseTrainId, d.DecidedAt }).ToListAsync(ct))
+            .GroupBy(d => d.ReleaseTrainId).Select(g => g.OrderByDescending(d => d.DecidedAt).First().Id).ToList();
         var conditions = await (from c in db.Set<GoNoGoConditions>().AsNoTracking()
                                 join d in db.Set<GoNoGoDecisions>().AsNoTracking() on c.DecisionId equals d.Id
-                                where c.ClosedAt == null && openIds.Contains(d.ReleaseTrainId)
+                                where c.ClosedAt == null && latestIds.Contains(d.Id)
                                 select new { c.Id, c.Text, c.ExpiresAt, d.ReleaseTrainId }).ToListAsync(ct);
-        items.AddRange(conditions.Select(c => Item("Approval", "CloseCondition", "Go condition to close", c.Text, byId[c.ReleaseTrainId], c.ExpiresAt.ToString(Iso), c.Id, "Condition owner or Release Manager")));
+        items.AddRange(conditions.Select(c => Item("Approval", ApprovalQueueService.CloseCondition, "Go condition to close", c.Text, byId[c.ReleaseTrainId], c.ExpiresAt.ToString(Iso), c.Id, "Condition owner or Release Manager")));
         return items;
     }
 
     /// <summary>
-    /// Open freeze-override requests across the workspace: a <c>RequestOverride</c> audit row not yet consumed by a later Grant/Renew naming the same requester for the
-    /// same window and train (the rule FreezeService applies per window, SEC-A1), on an open train, for a freeze that has not ended. Due when the freeze starts.
+    /// Open freeze-override requests across the workspace (<see cref="FreezeService.OpenRequestsAsync"/>: a request stays open until a Grant/Renew names its requester,
+    /// SEC-A1), on an open train, for a freeze that has not ended. Due when the freeze starts.
     /// </summary>
     private static async Task<List<AttentionItem>> OverrideRequestsAsync(ReleaseDbContext db, Dictionary<string, ReleaseTrains> byId, DateTime now, CancellationToken ct)
     {
-        var openIds = byId.Keys.ToList();
-        var requests = await db.Set<AuditEvents>().AsNoTracking()
-            .Where(a => a.EntityType == "FreezeWindow" && a.Action == "RequestOverride" && a.ActorUserId != null && a.ReleaseTrainId != null && openIds.Contains(a.ReleaseTrainId))
-            .GroupBy(a => new { a.EntityId, a.ReleaseTrainId, a.ActorUserId }).Select(g => new { g.Key.EntityId, g.Key.ReleaseTrainId, g.Key.ActorUserId, Last = g.Max(a => a.Id) }).ToListAsync(ct);
-        if (requests.Count == 0) return [];
-        var grants = await db.Set<AuditEvents>().AsNoTracking()
-            .Where(a => a.EntityType == "FreezeOverride" && (a.Action == "Grant" || a.Action == "Renew") && a.AfterJson != null && a.ReleaseTrainId != null && openIds.Contains(a.ReleaseTrainId))
-            .Select(a => new { a.Id, a.ReleaseTrainId, a.AfterJson }).ToListAsync(ct);
-        var lastGrant = new Dictionary<(string Window, string Train, string User), long>();
-        foreach (var g in grants)
-        {
-            using var doc = JsonDocument.Parse(g.AfterJson!);
-            var after = doc.RootElement;
-            if (after.TryGetProperty("windowId", out var win) && win.GetString() is { } w && after.TryGetProperty("requestedBy", out var by) && by.GetString() is { } u)
-                lastGrant[(w, g.ReleaseTrainId!, u)] = Math.Max(lastGrant.GetValueOrDefault((w, g.ReleaseTrainId!, u)), g.Id);
-        }
-        var pending = requests.Where(r => r.Last > lastGrant.GetValueOrDefault((r.EntityId, r.ReleaseTrainId!, r.ActorUserId!))).ToList();
-        var windowIds = pending.Select(r => r.EntityId).Distinct().ToList();
+        var pending = (await FreezeService.OpenRequestsAsync(db, null, null, ct)).Where(r => byId.ContainsKey(r.TrainId)).ToList();
+        if (pending.Count == 0) return [];
+        var windowIds = pending.Select(r => r.WindowId).Distinct().ToList();
         var freezes = await db.Set<FreezeWindows>().AsNoTracking().Where(f => windowIds.Contains(f.Id)).ToDictionaryAsync(f => f.Id, ct);
-        var userIds = pending.Select(r => r.ActorUserId!).Distinct().ToList();
+        var userIds = pending.Select(r => r.RequesterId).Distinct().ToList();
         var names = await db.Set<Users>().AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
-        return [.. pending.Where(r => freezes.TryGetValue(r.EntityId, out var f) && f.EndsAt > now)
-            .Select(r => { var f = freezes[r.EntityId]; return Item("Approval", "ApproveFreezeOverride", "Freeze override to approve",
-                $"{names.GetValueOrDefault(r.ActorUserId!, "Someone")} asks to override {f.Name}", byId[r.ReleaseTrainId!], f.StartsAt.ToString(Iso), $"{f.Id}:{r.ActorUserId}", "Release Manager or Governance Officer (not the requester)"); })];
+        return [.. pending.Where(r => freezes.TryGetValue(r.WindowId, out var f) && f.EndsAt > now)
+            .Select(r => { var f = freezes[r.WindowId]; return Item("Approval", ApprovalQueueService.GrantOverride, "Freeze override to approve",
+                $"{names.GetValueOrDefault(r.RequesterId, "Someone")} asks to override {f.Name}", byId[r.TrainId], f.StartsAt.ToString(Iso), $"{r.WindowId}:{r.TrainId}:{r.RequesterId}", "Release Manager or Governance Officer (not the requester)"); })];
     }
 
     /// <summary>REOS-85 collisions, one item per pair of trains (on the train whose window opens first), while either window is still to end. Due when the first window opens.</summary>

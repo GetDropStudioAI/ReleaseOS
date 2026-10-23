@@ -6,7 +6,7 @@ import { openPage, signIn, trainByTitle } from './support'
 //   1. Keyboard-only tour: from the top of the page Tab to each primary-navigation link and press Enter, in navigation order; the view must open,
 //      and axe must find no serious or critical violation on it.
 //   2. On each view, Tab through the whole page: every stop has an accessible name, a visible focus indicator and a box, and focus is never trapped.
-//   3. The train workspace in Plan, Rehearsal and Live mode, and its two right-hand drawers (Communicate, Paste tasks), opened from the keyboard.
+//   3. The train workspace in Plan, and Rehearsal and Live mode in Orchestration, and its two right-hand drawers (Communicate, Paste tasks), opened from the keyboard.
 // Read-only against the shared demo database: it signs in as its own users and changes nothing.
 test.setTimeout(240_000)
 
@@ -28,7 +28,7 @@ const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[]
   { name: 'overview', link: /^Overview$/, ready: h1('Overview') },
   { name: 'calendar', link: /^Portfolio & calendar$/, ready: h1('Release portfolio') },
   { name: 'trains', link: /^Releases$/, ready: p => expect(p.locator('.stream-row').first()).toBeVisible() },
-  { name: 'orchestration', link: /^Orchestration$/, ready: h1('Orchestration') },
+  { name: 'orchestration', link: /^Orchestration$/, ready: h1('Orchestration pipeline') },
   { name: 'approvals', link: /^Approvals/, ready: h1('Approvals') },
   { name: 'deployments', link: /^Deployments$/, ready: h1('Deployments') },
   { name: 'audit', link: /^Audit history$/, ready: h1('Audit history') },
@@ -134,13 +134,13 @@ for (const scheme of ['light', 'dark'] as const) {
       }
     })
 
-    test('train workspace in Plan, Rehearsal and Live mode, gate Inspector and both drawers', async ({ page }) => {
+    test('train workspace in Plan, and Rehearsal and Live mode in Orchestration, gate Inspector and both drawers', async ({ page }) => {
       await signIn(page, `a11y-train-${scheme}@example.com`)
       const t = await trainByTitle(page, 'Card portal')
       const gate = t.gates.find(g => g.name === 'Compliance Sign-off')!
       for (const mode of ['', '/rehearsal', '/live']) {
-        await openPage(page, `/trains/${t.id}${mode}`)
-        await expect(page.locator('.stream-row').first()).toBeVisible()
+        await openPage(page, mode ? `/orchestration/${t.id}${mode}` : `/trains/${t.id}`)   // Rehearsal and Live are inside Orchestration (REOS-128)
+        if (!mode) await expect(page.locator('.stream-row').first()).toBeVisible()
         await page.waitForTimeout(400)   // let the readiness line, timeline and run data settle
         await scan(page, `train ${mode || 'plan'} (${scheme})`)
         checkStops(await tabThrough(page), `train ${mode || 'plan'} (${scheme}) tab order`)

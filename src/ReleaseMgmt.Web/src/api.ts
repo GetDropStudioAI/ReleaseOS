@@ -107,7 +107,7 @@ export const getFreezesAhead = () => get<FreezeAhead[]>('/api/v1/freeze-windows/
 
 export const getConfig = () => get<{ displayTimeZone: string }>('/api/v1/config')
 
-export interface RunSummary { id: string; mode: 'Rehearsal' | 'Live'; startedAt: string; endedAt: string | null; outcome: string | null; version: number }
+export interface RunSummary { id: string; mode: 'Rehearsal' | 'Live'; startedAt: string; endedAt: string | null; outcome: string | null; version: number; pausedAt?: string | null }
 export interface RunStepRow { stepId: string; stepCode: string; section: string; title: string; ownerName: string | null; plannedStartAt: string; plannedEndAt: string; plannedDurationMin: number; status: string; actualStartAt: string | null; actualEndAt: string | null; actorName: string | null; note: string | null; dependsOn: string[]; blocks: string[]; instructions: string | null; canAct: boolean; version: number }
 export interface RunDetail { id: string; trainId: string; mode: 'Rehearsal' | 'Live'; startedAt: string; startedBy: string | null; endedAt: string | null; outcome: string | null; shiftMinutes: number; version: number; steps: RunStepRow[] }
 export interface ForecastStepRow { step: string; state: string; start: string | null; end: string | null; endVarianceMin: number | null }

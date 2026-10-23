@@ -141,7 +141,7 @@ The routes come from `route.ts` (`View`). The sidebar labels come from `shell/na
 
 | Surface | Today | Ticket | Design | Coverage |
 |---|---|---|---|---|
-| Mode switch Plan / Rehearsal / Live (`/trains/{id}/rehearsal`, `/live`) | `LiveRun.tsx` | — | None: Orchestration is a separate destination with a release selector | `Not covered` |
+| Mode switch Plan / Rehearsal / Live (`/trains/{id}/rehearsal`, `/live`) | `LiveRun.tsx` (now `orchestration/`) | REOS-128 | None: Orchestration is a separate destination with a release selector | Built (REOS-128, Q-128a): the run mode is a selector on Orchestration; the release's buttons open it there |
 | No run yet; Start rehearsal; Start live run (needs Executing) | `LiveRun.tsx` | — | None | `Not covered` |
 | Run clock: now, window countdown, forecast finish, time to rollback deadline, steps done | `LiveRun.tsx` | REOS-98 | status chip, run ID, started by, elapsed | `Partly`: forecast, deadline and countdown missing |
 | Step rows with plan, actual and forecast bars on a window-scaled axis, deadline line, alert when the forecast crosses the deadline | `LiveRun.tsx` `Bars` | REOS-98 (steps table) | stage cards and a table; no bars, no forecast | `Partly` |

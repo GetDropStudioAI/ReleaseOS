@@ -30,7 +30,7 @@ test('My work lists my running step, opens it in its train, and passes axe', asy
   await scan(page, 'My work')
 
   await row.getByRole('button', { name: 'R-002 Deploy Payments API' }).click()
-  await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}/live/steps/${d.steps['R-002']}$`))
+  await expect(page).toHaveURL(new RegExp(`/orchestration/${d.trainId}/live/steps/${d.steps['R-002']}$`))
 })
 
 test('My work keyboard: j moves the row selection, Enter opens the train', async ({ page }) => {
@@ -48,7 +48,7 @@ test('My work keyboard: j moves the row selection, Enter opens the train', async
   await expect(first).toHaveAttribute('aria-current', 'true')
   await expect(first).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}`))
+  await expect(page).toHaveURL(new RegExp(`/orchestration/${d.trainId}`))   // a step opens in Orchestration (REOS-128)
 })
 
 test('Inbox: unread notice is semibold with words, nav shows the count, opening marks it read', async ({ page }) => {
@@ -75,7 +75,7 @@ test('Inbox: unread notice is semibold with words, nav shows the count, opening 
   await expect(drillRow).toHaveAttribute('aria-current', 'true')
   await expect(drillRow).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(new RegExp(`/trains/${d.trainId}/live`))
+  await expect(page).toHaveURL(new RegExp(`/orchestration/${d.trainId}/live`))
 
   await inboxBell(page).click()
   await expect(lateNotice(page)).toContainText('○ read')

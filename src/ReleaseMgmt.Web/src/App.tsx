@@ -15,7 +15,7 @@ import { Connectors } from './Connectors'
 import { CommLibrary } from './CommLibrary'
 import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
 import { Inspector } from './Planning'
-import { LiveRun, RunStepDrawer, useRun } from './LiveRun'
+import { Orchestration } from './orchestration/Orchestration'
 import { BulkDrawer, bulkKey, type BulkDraft } from './Bulk'
 import { CommsDrawer, commsKey, type CommsDraft } from './CommsDrawer'
 import { NewTrainDrawer, emptyNewTrain, newTrainKey, type NewTrainDraft } from './NewTrain'
@@ -115,7 +115,6 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const live = useLive(true, { onTrainChanged: () => { refetch(); bumpShell() }, onResync: () => { refetch(); refreshUnread(); setNotifRev(n => n + 1); notifySyncChanged(); bumpShell() }, onForecastChanged: refetch, onNotification: () => { refreshUnread(); setNotifRev(n => n + 1); bumpShell() }, onSyncAlert: notifySyncChanged })
   const { view, trainId: selected, selection } = route
   const mode = route.mode ?? 'plan'
-  const runData = useRun(selected, mode, rev)
   const [bulk, setBulk] = useDraft<BulkDraft>(bulkKey(selected ?? ''))
   const [comms, setComms] = useDraft<CommsDraft>(commsKey(selected ?? ''))   // REOS-45
   const [newTrain, setNewTrain] = useDraft<NewTrainDraft>(newTrainKey)   // REOS-80: the New train drawer wins the right-hand column while open
@@ -137,7 +136,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   // WCAG 2.4.2 / 2.4.3: every view has its own document title, and a navigation the user made moves focus to the new page.
   const trainTitle = rows?.find(r => r.id === selected)?.title
   useEffect(() => {
-    const page = view === 'trains' && trainTitle ? `${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live runbook' : 'Rehearsal'}` : ''}` : pageName(view)
+    const page = view === 'trains' && trainTitle ? trainTitle : view === 'orchestration' && trainTitle ? `Orchestration · ${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live run' : 'Rehearsal'}` : ''}` : pageName(view)
     document.title = `${page} · ReleaseOS`
   }, [view, trainTitle, mode])
   // docs/UI.md: Esc closes the Inspector or step drawer. Keys typed into a field, or already handled (the Comms drawer, confirms), are left alone.
@@ -177,7 +176,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const open = (r: Partial<Route>) => go({ ...ROOT, ...r })   // from My work / Inbox / Approvals: open a train (view resets to trains)
   const toView = (v: Route['view']) => go(v === 'trains' ? { ...route, view: 'trains' } : { ...ROOT, view: v })
   const releases = view === 'trains'   // the Stream and the Inspector belong to the Releases destination; every other page uses the full width
-  const redesigned = view === 'approvals' || view === 'admin' || view === 'templates' || view === 'library' || view === 'connectors' || view === 'audit' || view === 'overview' || view === 'calendar' || view === 'deployments' || placeholderOf(view) !== undefined   // drawn with the redesign's page layout (shell.css .os-page), which has its own gutters
+  const redesigned = view === 'approvals' || view === 'admin' || view === 'templates' || view === 'library' || view === 'connectors' || view === 'audit' || view === 'overview' || view === 'calendar' || view === 'deployments' || view === 'orchestration' || placeholderOf(view) !== undefined   // drawn with the redesign's page layout (shell.css .os-page), which has its own gutters
   return (
     <div className="os-app">
       <a className="skip-link" href="#workspace" onClick={e => { e.preventDefault(); const m = document.getElementById('workspace'); m?.focus() }}>Skip to content</a>
@@ -198,7 +197,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
           )}
           <main id="workspace" ref={mainRef} tabIndex={-1} className={releases ? (selected && mode === 'plan' ? 'workspace redesigned' : 'workspace') : redesigned ? 'workspace wide redesigned' : 'workspace wide'}>
             {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-            {view === 'deployments' ? <Deployments live={live.state} refreshKey={shellRev + rev} canControl={canAdmin} onOpenTrain={trainId => open({ trainId })} /> : view === 'overview' ? <Overview refreshKey={shellRev + rev} canCreate={canAdmin} onCreate={() => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : view === 'approvals' ? <Approvals refreshKey={shellRev + rev} canAudit={canAudit(me.roles)} onViewAudit={id => { toView('audit'); window.history.replaceState(null, '', auditPath(id)) }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : placeholderOf(view) ? <Placeholder view={view} onGo={toView} /> : view === 'gallery' ? <Suspense fallback={<p className="muted">Loading…</p>}><Gallery /></Suspense> : view === 'admin' ? <Admin canEdit={canAdmin} me={me} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} onOpenTrain={trainId => open({ trainId })} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} onOpen={open} onPlan={canAdmin ? () => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') } : undefined} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Releases</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a release in the Stream.'}</p></>)}
+            {view === 'orchestration' ? <Orchestration trains={rows} trainId={selected} mode={mode} selection={selection} live={live.state} refreshKey={shellRev + rev} canPlan={canAdmin} canAudit={canAudit(me.roles)} onRoute={(r, replace) => go({ ...route, ...r }, replace)} onChanged={refetch} onOpenTrain={trainId => open({ trainId })} onOpenDeployment={id => { toView('deployments'); window.history.replaceState(null, '', `/deployments/${encodeURIComponent(id)}`) }} onOpenLogs={() => toView('audit')} /> : view === 'deployments' ? <Deployments live={live.state} refreshKey={shellRev + rev} canControl={canAdmin} onOpenTrain={trainId => open({ trainId })} /> : view === 'overview' ? <Overview refreshKey={shellRev + rev} canCreate={canAdmin} onCreate={() => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : view === 'approvals' ? <Approvals refreshKey={shellRev + rev} canAudit={canAudit(me.roles)} onViewAudit={id => { toView('audit'); window.history.replaceState(null, '', auditPath(id)) }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : placeholderOf(view) ? <Placeholder view={view} onGo={toView} /> : view === 'gallery' ? <Suspense fallback={<p className="muted">Loading…</p>}><Gallery /></Suspense> : view === 'admin' ? <Admin canEdit={canAdmin} me={me} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} onOpenTrain={trainId => open({ trainId })} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} onOpen={open} onPlan={canAdmin ? () => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') } : undefined} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Releases</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a release in the Stream.'}</p></>)}
           </main>
           {releases && (
             <aside className="inspector" aria-label="Inspector">
@@ -209,9 +208,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
                 ? <CommsDrawer trainId={selected} canDispatch={canAdmin} refreshKey={rev} onClose={() => setComms(undefined)} onChanged={refetch} />
                 : selected && bulk?.open && canAdmin
                 ? <BulkDrawer trainId={selected} gates={gates} onClose={() => setBulk(bulk && bulk.text ? { ...bulk, open: false } : undefined)} onChanged={refetch} />
-                : selected && mode !== 'plan' && selection?.kind === 'step'
-                  ? <RunStepDrawer stepId={selection.id} data={runData} onClose={() => to({ selection: null })} onChanged={refetch} />
-                  : <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />}
+                : <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />}
             </aside>
           )}
         </div>

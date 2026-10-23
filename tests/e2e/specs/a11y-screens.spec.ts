@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { openPage, signIn, trainByTitle } from './support'
 
 // REOS-53 (M8): accessibility pass over EVERY view in route.ts, in light and dark, driven and checked from the keyboard.
 //   1. Keyboard-only tour: from the top of the page Tab to each primary-navigation link and press Enter, in navigation order; the view must open,
@@ -139,8 +139,7 @@ for (const scheme of ['light', 'dark'] as const) {
       const t = await trainByTitle(page, 'Card portal')
       const gate = t.gates.find(g => g.name === 'Compliance Sign-off')!
       for (const mode of ['', '/rehearsal', '/live']) {
-        await page.goto(`/trains/${t.id}${mode}`)
-        await expect(page.locator('main h1')).toBeVisible()
+        await openPage(page, `/trains/${t.id}${mode}`)
         await expect(page.locator('.stream-row').first()).toBeVisible()
         await page.waitForTimeout(400)   // let the readiness line, timeline and run data settle
         await scan(page, `train ${mode || 'plan'} (${scheme})`)

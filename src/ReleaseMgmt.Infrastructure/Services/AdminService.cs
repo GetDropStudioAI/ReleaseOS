@@ -15,7 +15,7 @@ public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimePr
     public async Task<List<Users>> ListUsersAsync(CancellationToken ct = default)
     {
         await using var db = await _dbf.CreateDbContextAsync(ct);
-        return await db.Set<Users>().AsNoTracking().OrderBy(u => u.DisplayName).ToListAsync(ct);
+        return await Memberships.Members(db).AsNoTracking().OrderBy(u => u.DisplayName).ToListAsync(ct);   // the current workspace's members (REOS-105)
     }
 
     public async Task<List<Holidays>> ListHolidaysAsync(CancellationToken ct = default)
@@ -37,7 +37,7 @@ public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimePr
     public Task<ServiceResult<Users>> PatchUserAsync(string userId, string? handle, bool? isActive, Actor actor, int? expectedVersion, CancellationToken ct = default) =>
         RunAsync(async db =>
         {
-            var u = await db.Set<Users>().SingleOrDefaultAsync(x => x.Id == userId, ct);
+            var u = await Memberships.Members(db).SingleOrDefaultAsync(x => x.Id == userId, ct);   // only a member of the current workspace (REOS-105)
             if (u is null) return ServiceResult<Users>.NotFound("user");
             if (VersionMismatch(expectedVersion, u.Version)) return ServiceResult<Users>.Conflict(u);
             if (handle is not null && !ValidHandle(handle)) return Invalid<Users>("A handle is letters, digits, '.', '_' or '-' (optionally starting with @)");
@@ -45,7 +45,7 @@ public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimePr
             if (handle is not null) u.Handle = handle.Length == 0 ? null : handle.TrimStart('@');
             if (isActive is bool a) u.IsActive = a;
             u.Version++;
-            Audit(db, actor, null, "User", u.Id, "Update", before, new { u.Handle, u.IsActive });
+            Audit(db, actor, null, "User", u.Id, "Update", before, new { u.Handle, u.IsActive }).WorkspaceId = null;   // accounts are host-wide
             await db.SaveChangesAsync(ct);
             return ServiceResult<Users>.Ok(u);
         }, ct);
@@ -54,6 +54,7 @@ public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimePr
         RunAsync(async db =>
         {
             if (handle is null || !ValidHandle(handle) || string.IsNullOrWhiteSpace(name)) return Invalid<Teams>("A team needs a name and a handle (letters, digits, '.', '_' or '-')");
+            if (!await AllMembersAsync(db, memberUserIds, ct)) return Invalid<Teams>(NotMembers);
             var t = new Teams { Id = Ids.New(), Handle = handle.TrimStart('@'), Name = name.Trim() };
             db.Set<Teams>().Add(t);
             foreach (var m in memberUserIds.Distinct()) db.Set<TeamMembers>().Add(new TeamMembers { TeamId = t.Id, UserId = m });
@@ -69,6 +70,7 @@ public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimePr
             if (t is null) return ServiceResult<Teams>.NotFound("team");
             if (VersionMismatch(expectedVersion, t.Version)) return ServiceResult<Teams>.Conflict(t);
             if (name is not null) { if (string.IsNullOrWhiteSpace(name)) return Invalid<Teams>("A team needs a name"); t.Name = name.Trim(); }
+            if (memberUserIds is not null && !await AllMembersAsync(db, memberUserIds, ct)) return Invalid<Teams>(NotMembers);
             if (memberUserIds is not null)
             {
                 var want = memberUserIds.Distinct().ToHashSet();
@@ -104,6 +106,14 @@ public sealed class AdminService(IDbContextFactory<ReleaseDbContext> dbf, TimePr
             await db.SaveChangesAsync(ct);
             return ServiceResult<Holidays>.Ok(h);
         }, ct);
+
+    /// <summary>A team's members are members of its workspace (REOS-105).</summary>
+    private const string NotMembers = "Every team member must be a member of this workspace";
+    private static async Task<bool> AllMembersAsync(ReleaseDbContext db, IEnumerable<string> userIds, CancellationToken ct)
+    {
+        var ids = userIds.Distinct().ToList();
+        return await Memberships.Members(db).CountAsync(u => ids.Contains(u.Id), ct) == ids.Count;
+    }
 
     private static bool ValidHandle(string handle) =>
         handle.Length == 0 || System.Text.RegularExpressions.Regex.IsMatch(handle, @"^@?[A-Za-z0-9._-]{1,40}$");

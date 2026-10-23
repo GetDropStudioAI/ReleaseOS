@@ -94,7 +94,7 @@ internal sealed class PlanEnv(ReleaseDbContext db, ImportKindSpec spec, string m
     public async Task LoadPeopleAsync(CancellationToken ct)
     {
         if (_people) return;
-        Users = await db.Set<Users>().AsNoTracking().ToListAsync(ct);
+        Users = await Services.Memberships.Members(db).AsNoTracking().ToListAsync(ct);   // owners and team members come from the current workspace (REOS-105)
         Teams = await db.Set<Teams>().AsNoTracking().ToListAsync(ct);
         _people = true;
     }

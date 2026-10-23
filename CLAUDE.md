@@ -53,7 +53,7 @@ tests/reference/   Python oracle tests; must keep passing against db/schema.sql
 ```bash
 dotnet build
 dotnet test
-python3 tests/reference/test_schema.py          # 157 cases, must stay green
+python3 tests/reference/test_schema.py          # 167 cases, must stay green
 python3 tests/tools/test_workflows.py           # after editing .github/workflows: an invalid workflow never runs, so CI cannot report it
 python3 tests/reference/seed_and_query.py       # seeds history through the triggers, runs all 15 metrics
 python3 tests/reference/seed_and_query.py --write   # regenerates fixtures/seed.db + expected_metrics.json (only if schema/analytics change)

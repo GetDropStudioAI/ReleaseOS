@@ -289,7 +289,35 @@ public class EndpointRoleMatrixTests
         var endpoints = Endpoints(f);
         var clients = new Dictionary<string, HttpClient> { ["anonymous"] = f.CreateClient() };
         foreach (var r in All) clients[r] = await As(f, r, $"{r.ToLowerInvariant()}@matrix.test");
+        await CheckMatrix(endpoints, clients);
+    }
 
+    /// <summary>
+    /// REOS-105: the matrix again, per workspace role. Each person holds the role under test in workspace B and a different role in the default workspace
+    /// (a Viewer in B is a Governance Officer in the default one, an RTE or Release Manager in B is a Viewer there, a Governance Officer in B is an RTE
+    /// there), and every request names B. The role that decides is the one held in B.
+    /// </summary>
+    [Fact]
+    public async Task Each_endpoint_allows_and_denies_exactly_the_roles_its_class_lists_by_the_role_held_in_the_workspace()
+    {
+        using var f = new ApiFactory();
+        var endpoints = Endpoints(f);
+        var elsewhere = new Dictionary<string, string>
+        {
+            [Roles.Viewer] = Roles.GovernanceOfficer, [Roles.RTE] = Roles.Viewer, [Roles.ReleaseManager] = Roles.Viewer, [Roles.GovernanceOfficer] = Roles.RTE,
+        };
+        var clients = new Dictionary<string, HttpClient> { ["anonymous"] = f.CreateClient() };
+        foreach (var r in All)
+        {
+            var c = await WorkspaceIsolationTests.InB(f, r, $"{r.ToLowerInvariant()}@matrix.test", defaultRole: elsewhere[r]);
+            c.DefaultRequestHeaders.Add("X-Workspace", "beta");
+            clients[r] = c;
+        }
+        await CheckMatrix(endpoints, clients);
+    }
+
+    private static async Task CheckMatrix(List<RouteEndpoint> endpoints, Dictionary<string, HttpClient> clients)
+    {
         var wrong = new List<string>();
         var checks = 0;
         foreach (var e in endpoints.OrderBy(x => KeyOf(x) == "POST /auth/logout").ThenBy(KeyOf, StringComparer.Ordinal))   // logout last: it ends the session of every client that calls it

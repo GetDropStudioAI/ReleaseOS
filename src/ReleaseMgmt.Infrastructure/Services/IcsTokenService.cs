@@ -118,7 +118,12 @@ public sealed class IcsTokenService(IDbContextFactory<ReleaseDbContext> dbf, Tim
     /// The user a feed token belongs to, or null (unknown, revoked, malformed, or its user deactivated: indistinguishable to the caller). The lookup is by the SHA-256 of the presented
     /// value, so the database compares hashes the caller cannot steer byte by byte, and the hash is compared again in constant time. Best-effort last-used stamp.
     /// </summary>
-    public async Task<string?> ResolveAsync(string token, CancellationToken ct = default)
+    public async Task<string?> ResolveAsync(string token, CancellationToken ct = default) => (await ResolveFeedAsync(token, ct))?.UserId;
+
+    /// <summary>The token's user and workspace (REOS-105): a feed shows only its token's workspace, and stops while its user is not a member of it.</summary>
+    public sealed record FeedOwner(string UserId, string WorkspaceId);
+
+    public async Task<FeedOwner?> ResolveFeedAsync(string token, CancellationToken ct = default)
     {
         if (token.Length is < 20 or > 100) return null;
         var hash = Hash(token);
@@ -127,11 +132,12 @@ public sealed class IcsTokenService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         var row = await (from t in db.Set<IcsTokens>().AsNoTracking()
                          join u in db.Set<Users>().AsNoTracking() on t.UserId equals u.Id
                          where t.TokenSha256 == hash
-                         select new { t.Id, t.UserId, t.TokenSha256, t.RevokedAt, u.IsActive }).SingleOrDefaultAsync(ct);
+                         select new { t.Id, t.UserId, t.TokenSha256, t.RevokedAt, u.IsActive, t.WorkspaceId,
+                                      Member = db.Set<WorkspaceMembers>().IgnoreQueryFilters().Any(m => m.UserId == t.UserId && m.WorkspaceId == t.WorkspaceId) }).SingleOrDefaultAsync(ct);
         var stored = Encoding.ASCII.GetBytes(row?.TokenSha256 ?? new string('0', 64));
         var same = CryptographicOperations.FixedTimeEquals(stored, Encoding.ASCII.GetBytes(hash));
-        if (row is null || !same || row.RevokedAt is not null || !row.IsActive) return null;   // SEC-A3 / SEC-B6: a deactivated user's link stops working (not revoked: it works again if they are reactivated)
+        if (row is null || !same || row.RevokedAt is not null || !row.IsActive || !row.Member) return null;   // SEC-A3 / SEC-B6: a deactivated user's link stops working (not revoked: it works again if they are reactivated)
         LastUsed[row.Id] = Now;
-        return row.UserId;
+        return new FeedOwner(row.UserId, row.WorkspaceId);
     }
 }

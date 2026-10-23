@@ -7,8 +7,8 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>
-/// REOS-104 (D45, Q-104a): workspaces on one host. Every root row belongs to one; db/schema.sql creates the default workspace, and until REOS-105 scopes
-/// queries and permissions every row is written there (the entities' WorkspaceId defaults to it).
+/// REOS-104 (D45, Q-104a): workspaces on one host. Every root row belongs to one; db/schema.sql creates the default workspace. REOS-105 scopes every
+/// query, permission and live update to the current workspace (<see cref="WorkspaceScope"/>) and reads roles from the memberships kept here.
 /// </summary>
 public sealed class WorkspaceService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
@@ -40,25 +40,33 @@ public sealed class WorkspaceService(IDbContextFactory<ReleaseDbContext> dbf, Ti
 
     public sealed record WorkspaceView(string Id, string Name, string Slug, string? Region);
 
-    /// <summary>The workspace the signed-in person is working in: the default one until REOS-105/106 add membership-scoped choice.</summary>
+    /// <summary>The workspace the signed-in person is working in: the one the request resolved (REOS-105), or the default one outside any.</summary>
     public async Task<WorkspaceView> CurrentAsync(CancellationToken ct = default)
     {
         await using var db = await OpenAsync(ct);
-        return await db.Set<Workspaces>().AsNoTracking().Where(w => w.Id == WorkspaceIds.Default).Select(w => new WorkspaceView(w.Id, w.Name, w.Slug, w.Region)).SingleAsync(ct);
+        var ws = Memberships.WorkspaceOf(db);
+        return await db.Set<Workspaces>().AsNoTracking().Where(w => w.Id == ws).Select(w => new WorkspaceView(w.Id, w.Name, w.Slug, w.Region)).SingleAsync(ct);
     }
 
-    /// <summary>
-    /// A new user is a member of the default workspace with their role. Until REOS-105 moves the triggers and policies onto memberships, Users.Role is the
-    /// role that counts, so every write that creates a user or changes Users.Role keeps this membership equal to it, in the same transaction.
-    /// </summary>
-    public static void JoinDefault(ReleaseDbContext db, Users user, DateTime now) =>
-        db.Set<WorkspaceMembers>().Add(new WorkspaceMembers { WorkspaceId = WorkspaceIds.Default, UserId = user.Id, Role = user.Role, AddedAt = now });
+    /// <summary>A user created by sign-in is a member of the default workspace with the role the identity provider gave (Users.Role).</summary>
+    public static void JoinDefault(ReleaseDbContext db, Users user, DateTime now) => Join(db, user, WorkspaceIds.Default, user.Role, now);
 
-    /// <summary>After Users.Role changed: the default membership takes the same role (created if a raw-SQL fixture or an import left none).</summary>
+    /// <summary>
+    /// REOS-105: a person joins a workspace with a role there. The triggers and policies read this role (Users.Role is the role from sign-in, which is the
+    /// default workspace's: Q-105e).
+    /// </summary>
+    public static WorkspaceMembers Join(ReleaseDbContext db, Users user, string workspaceId, string role, DateTime now) =>
+        db.Set<WorkspaceMembers>().Add(new WorkspaceMembers { WorkspaceId = workspaceId, UserId = user.Id, Role = role, AddedAt = now }).Entity;
+
+    /// <summary>
+    /// After sign-in changed Users.Role: the default membership takes the same role. A person who is a member of no workspace at all (a raw-SQL fixture or
+    /// an older import) joins the default one; a person who belongs only to other workspaces is not added to the default one by signing in (Q-105e).
+    /// </summary>
     public static async Task MirrorDefaultRoleAsync(ReleaseDbContext db, Users user, DateTime now, CancellationToken ct)
     {
-        var m = await db.Set<WorkspaceMembers>().FindAsync([WorkspaceIds.Default, user.Id], ct);
-        if (m is null) JoinDefault(db, user, now);
+        var mine = await db.Set<WorkspaceMembers>().IgnoreQueryFilters().Where(m => m.UserId == user.Id).ToListAsync(ct);
+        var m = mine.FirstOrDefault(x => x.WorkspaceId == WorkspaceIds.Default);
+        if (m is null) { if (mine.Count == 0) JoinDefault(db, user, now); }
         else if (m.Role != user.Role) { m.Role = user.Role; m.Version++; }
     }
 }

@@ -58,8 +58,15 @@ public sealed class NotificationScheduler : BackgroundService
         catch (OperationCanceledException) { /* shutting down */ }
     }
 
-    /// <summary>One pass over every rule. Returns how many new in-app notifications it wrote.</summary>
+    /// <summary>One pass over every rule in every workspace, each inside its workspace (REOS-105). Returns how many new in-app notifications it wrote.</summary>
     public async Task<int> ScanAsync(CancellationToken ct = default)
+    {
+        var fired = 0;
+        await WorkspaceLoop.ForEachAsync(_dbf, async _ => fired += await ScanWorkspaceAsync(ct), ct);
+        return fired;
+    }
+
+    private async Task<int> ScanWorkspaceAsync(CancellationToken ct)
     {
         var fired = 0;
         var rules = new (string Name, Func<CancellationToken, Task<int>> Run)[]
@@ -253,5 +260,5 @@ public sealed class NotificationScheduler : BackgroundService
     }
 
     private static async Task<HashSet<string>> RoleRecipientsAsync(ReleaseDbContext db, string role, CancellationToken ct) =>
-        (await db.Set<Users>().Where(u => u.IsActive && u.Role == role).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+        (await Services.Memberships.ActiveWithRole(db, role).Select(u => u.Id).ToListAsync(ct)).ToHashSet();   // in the workspace being scanned (REOS-105)
 }

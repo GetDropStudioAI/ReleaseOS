@@ -18,17 +18,17 @@ public static class GovernanceEndpoints
     public static void MapGovernance(this RouteGroupBuilder api)
     {
         api.MapGet("/trains/{id}/change-record", async (string id, ChangeRecordService s, CancellationToken ct) =>
-            Results.Ok(await s.GetAsync(id, ct) ?? new ReleaseMgmt.Domain.Entities.ChangeRecords { ReleaseTrainId = id, Version = 0 })).RequireAuthorization(Policies.Read);
+            Results.Ok(await s.GetAsync(id, ct) ?? new ReleaseMgmt.Domain.Entities.ChangeRecords { ReleaseTrainId = id, Version = 0 })).RequireAuthorization(Policies.Read).TrainInRoute();
         api.MapPut("/trains/{id}/change-record", (string id, ChangeRecordBody b, ClaimsPrincipal u, HttpRequest r, ChangeRecordService s, CancellationToken ct) =>
             s.SaveAsync(id, new(b.Justification, b.ImplementationPlan, b.RiskImpactAnalysis, b.BackoutPlan, b.TestPlan, b.CommunicationPlan, b.CabDate), ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
 
-        api.MapGet("/trains/{id}/cis", async (string id, ChangeRecordService s, CancellationToken ct) => Results.Ok(await s.ListCisAsync(id, ct))).RequireAuthorization(Policies.Read);
+        api.MapGet("/trains/{id}/cis", async (string id, ChangeRecordService s, CancellationToken ct) => Results.Ok(await s.ListCisAsync(id, ct))).RequireAuthorization(Policies.Read).TrainInRoute();
         api.MapPost("/trains/{id}/cis", (string id, CiBody b, ClaimsPrincipal u, ChangeRecordService s, CancellationToken ct) =>
             s.AddCiAsync(id, b.CiName, b.CiExternalId, ActorOf(u), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapDelete("/trains/{id}/cis/{ciId}", (string id, string ciId, ClaimsPrincipal u, ChangeRecordService s, CancellationToken ct) =>
             s.RemoveCiAsync(id, ciId, ActorOf(u), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
 
-        api.MapGet("/trains/{id}/gonogo", async (string id, GoNoGoService s, CancellationToken ct) => Results.Ok(await s.ListAsync(id, ct))).RequireAuthorization(Policies.Read);
+        api.MapGet("/trains/{id}/gonogo", async (string id, GoNoGoService s, CancellationToken ct) => Results.Ok(await s.ListAsync(id, ct))).RequireAuthorization(Policies.Read).TrainInRoute();
         api.MapPost("/trains/{id}/gonogo", (string id, GoNoGoBody b, ClaimsPrincipal u, HttpRequest r, GoNoGoService s, CancellationToken ct) =>
             s.RecordAsync(id, b.Decision, b.Notes, b.NewTargetReleaseDate, b.Conditions?.Select(c => new NewCondition(c.Text, c.OwnerUserId, c.ExpiresAt)).ToList(), ActorOf(u), r.IfMatch(), ct).ToHttpAsync())
             .RequireAuthorization(Policies.ReleaseManager);

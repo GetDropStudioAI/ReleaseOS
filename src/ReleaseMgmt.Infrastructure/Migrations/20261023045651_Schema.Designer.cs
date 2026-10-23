@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261023032932_Schema")]
+    [Migration("20261023045651_Schema")]
     partial class Schema
     {
         /// <inheritdoc />

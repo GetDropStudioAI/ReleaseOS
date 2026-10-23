@@ -69,6 +69,7 @@ public class LiveBackupConsistencyTests : IDisposable
         {
             c.Open(); Run(c, SqliteConnectionInterceptor.Pragmas);
             Run(c, "INSERT INTO Users(Id,Email,DisplayName,Role) VALUES('rte','rte@x.com','Rae T.','RTE')");
+            Run(c, "INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('default','rte','RTE','2026-10-01T00:00:00Z')");   // roles are per workspace (REOS-105)
             Run(c, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('t1','R26.10','2026-10-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')");
             Run(c, "INSERT INTO StageGates(Id,ReleaseTrainId,GateName,GateClass,SequenceOrder,OffsetDays,DueOn,RequiredBeforeStatus,OwnerUserId,Status,LastChangedByUserId) VALUES('g1','t1','Code Freeze','Standard',1,5,'2026-10-23','Gated','rte','InProgress','rte')");
             foreach (var t in tasks) Run(c, $"INSERT INTO ChecklistTasks(Id,StageGateId,TaskDescription,OwnerUserId,SequenceOrder) VALUES('{t}','g1','Task {t}','rte',{t[1..]})");

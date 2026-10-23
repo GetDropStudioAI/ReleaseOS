@@ -1,12 +1,15 @@
 using System.Data.Common;
 using System.Globalization;
 using Microsoft.Data.Sqlite;
+using ReleaseMgmt.Domain.Common;
 
 namespace ReleaseMgmt.Infrastructure.Analytics;
 
 /// <summary>The request's filter: <see cref="From"/>/<see cref="To"/> are calendar dates (inclusive), <see cref="Now"/> the as-of instant (UTC).</summary>
 public sealed record AnalyticsWindow(DateOnly From, DateOnly To, DateTime Now)
 {
+    /// <summary>The workspace whose records the metrics read (:ws, REOS-105): the current one, or the default workspace outside any.</summary>
+    public string WorkspaceId { get; init; } = WorkspaceScope.Current ?? WorkspaceIds.Default;
     public string FromText => From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     public string ToText => To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     /// <summary>ISO-8601 UTC, the format every timestamp column is stored in, so julianday(:now) and string comparison line up.</summary>
@@ -20,7 +23,7 @@ public sealed record MetricInfo(string Id, string Name, string Title, string Uni
 
 /// <summary>
 /// The 15 release-level metrics (PROJECT_SCOPE section 8), each running its statement from db/analytics.sql with bound parameters
-/// (:from :to :now; nothing is ever concatenated into the SQL). Rounding is done by SQLite's round() inside the statement, as the oracle does;
+/// (:from :to :now :ws; nothing is ever concatenated into the SQL). Rounding is done by SQLite's round() inside the statement, as the oracle does;
 /// the client only passes values through. Reads through <see cref="IAnalyticsConnectionFactory"/>, which is read-only.
 /// </summary>
 public sealed class AnalyticsService(IAnalyticsConnectionFactory connections)
@@ -98,6 +101,7 @@ public sealed class AnalyticsService(IAnalyticsConnectionFactory connections)
         Bind(cmd, sql, ":from", w.FromText);
         Bind(cmd, sql, ":to", w.ToText);
         Bind(cmd, sql, ":now", w.NowText);
+        Bind(cmd, sql, ":ws", w.WorkspaceId);
         var rows = new List<T>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) rows.Add(map(r));

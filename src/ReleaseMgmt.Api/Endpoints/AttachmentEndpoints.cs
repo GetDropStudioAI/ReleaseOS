@@ -78,9 +78,9 @@ public static class AttachmentEndpoints
         api.MapGet("/attachments", async (string trainId, string? entityType, string? entityId, AttachmentService s, CancellationToken ct) =>
             Results.Ok(await s.ManifestAsync(trainId, entityType, entityId, ct))).RequireAuthorization(Policies.Read);
         api.MapGet("/trains/{id}/attachments", async (string id, string? entityType, string? entityId, AttachmentService s, CancellationToken ct) =>
-            Results.Ok(await s.ManifestAsync(id, entityType, entityId, ct))).RequireAuthorization(Policies.Read);
+            Results.Ok(await s.ManifestAsync(id, entityType, entityId, ct))).RequireAuthorization(Policies.Read).TrainInRoute();
         api.MapGet("/trains/{id}/attachments/manifest", async (string id, AttachmentService s, CancellationToken ct) =>
-            Results.Ok(await s.ManifestAsync(id, null, null, ct))).RequireAuthorization(Policies.Read);
+            Results.Ok(await s.ManifestAsync(id, null, null, ct))).RequireAuthorization(Policies.Read).TrainInRoute();
 
         api.MapGet("/attachments/{id}", async (string id, HttpContext http, AttachmentService s, CancellationToken ct) =>
         {

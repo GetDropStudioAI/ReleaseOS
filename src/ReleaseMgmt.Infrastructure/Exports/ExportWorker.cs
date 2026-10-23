@@ -1,3 +1,4 @@
+using ReleaseMgmt.Domain.Common;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
@@ -58,7 +59,7 @@ public sealed class ExportWorker(ExportService jobs, ExportModelLoader loader, M
         var ran = 0;
         while (!ct.IsCancellationRequested && await jobs.ClaimNextAsync(ct) is { } job)
         {
-            await ProcessAsync(job, ct);
+            using (WorkspaceScope.Enter(job.WorkspaceId)) await ProcessAsync(job, ct);   // REOS-105: rendered inside the job's workspace
             ran++;
         }
         return ran;

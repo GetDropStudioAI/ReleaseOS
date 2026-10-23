@@ -156,7 +156,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             var newTarget = target!.Value;
             var shiftDays = newTarget.DayNumber - src.TargetReleaseDate.DayNumber;   // Q-080a: window and step times move by the same calendar days as the target
             var holidays = await HolidaysAsync(db, ct);
-            var active = (await db.Set<Users>().AsNoTracking().Where(u => u.IsActive).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+            var active = (await Memberships.Members(db).AsNoTracking().Where(u => u.IsActive).Select(u => u.Id).ToListAsync(ct)).ToHashSet();   // an owner who left the workspace is reassigned too
             var notes = new List<string>();
             var reassigned = 0;
             string? Owner(string? userId) { if (userId is null || active.Contains(userId)) return userId; reassigned++; return actor.UserId; }

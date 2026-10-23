@@ -81,7 +81,7 @@ public static class TrainQueryEndpoints
         api.MapGet("/owners", async (IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
         {
             await using var db = await dbf.CreateDbContextAsync(ct);
-            var users = await db.Set<Users>().AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.DisplayName).Select(u => new { id = u.Id, name = u.DisplayName, kind = "user" }).ToListAsync(ct);
+            var users = await Memberships.Members(db).AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.DisplayName).Select(u => new { id = u.Id, name = u.DisplayName, kind = "user" }).ToListAsync(ct);
             var teams = await db.Set<Teams>().AsNoTracking().OrderBy(t => t.Handle).Select(t => new { id = t.Id, name = "@" + t.Handle, kind = "team" }).ToListAsync(ct);
             return Results.Ok(users.Concat(teams));
         }).RequireAuthorization(Policies.Read);

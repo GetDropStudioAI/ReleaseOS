@@ -90,6 +90,12 @@ Under `stress` a trivial request such as `GET /me/notifications/count` has p50 4
 
 With no think time, 100 to 200 simultaneous users is a load no team of that size produces (100 real users click about once every few seconds, which is what `typical` models: 67 requests per second for 50 users). Throughput **falls** as concurrency rises past 50 while the server uses well under half of the machine, which means requests are waiting rather than computing. Likely causes, **not investigated further** because the acceptance is met: EF Core's SQLite provider runs each command synchronously on a thread-pool thread, so 100+ concurrent requests exhaust the pool's ready threads and it injects new ones slowly; and every request opens a connection and re-runs three PRAGMAs. If the pilot grows well beyond 50 active users, start there.
 
+### 4.4 Workspaces (REOS-105, 2026-10-23)
+
+Re-run after every query gained the workspace filters (the 14 root tables directly, every child table through `EXISTS` on its parent) and every request a membership lookup: `python3 tools/run_load_test.py`, same machine class, 60 s measured, 50 users, one workspace. **Passed:** `stress` overall p95 **96.0 ms** (reads 95.9, writes 98.3), `typical` overall p95 **15.5 ms**, zero unexpected errors, zero busy/locked. Within the run-to-run range of 4.1, so the filters cost no measurable latency at this scale.
+
+The harness itself needed one fix first, and it was failing on main too: it dealt the open tasks round-robin to all 50 users, so Viewers and Governance Officers ticked tasks they did not own, which the owner check added after REOS-52 (SEC-A, `TaskDenial`) rightly refuses with 403 (96 "unexpected errors" in a 20 s run of main). Now only RTEs and Release Managers tick tasks and the contended five; the other roles open a train instead.
+
 ## 5. What this does not show
 
 - A production host: no separate client machine, no reverse proxy or TLS, no antivirus scanning the database file (a real risk on Windows Server), no network storage (D3 forbids it), a different core count and disk.

@@ -114,6 +114,23 @@ try:   # a trigger that reads Users still works after the rebuild (certification
 except sqlite3.Error as e:
     check(False, f"Users readable after rebuild: {e}")
 
+# Upgrade 005 (REOS-105): a user left without a membership after 004 (a raw-SQL import) keeps their role in the default workspace, and the role
+# triggers read the membership role from then on
+mid = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("005_"):
+        mid.execute("INSERT INTO Users (Id, Email, DisplayName, Role) VALUES ('u3', 'late@corp.example', 'Late', 'GovernanceOfficer')")
+    mid.executescript(s.read_text())
+check(mid.execute("SELECT Role FROM WorkspaceMembers WHERE WorkspaceId = 'default' AND UserId = 'u3'").fetchall() == [("GovernanceOfficer",)],
+      "005: a user without a membership becomes a member of the default workspace with their role")
+mid.execute("UPDATE WorkspaceMembers SET Role = 'Viewer' WHERE UserId = 'u1'")
+mid.execute("INSERT INTO GateWaivers (Id, StageGateId, Reason, RequestedByUserId, RequestedAt) VALUES ('wv1', 'g1', 'Vendor slipped; accepted risk in writing', 'u3', '2026-09-01T00:00:00Z')")
+try:
+    mid.execute("UPDATE GateWaivers SET ApprovedByUserId = 'u1', ApprovedAt = '2026-09-01T00:00:00Z' WHERE Id = 'wv1'")
+    check(False, "005: the waiver-approver trigger reads the membership role, not Users.Role")
+except sqlite3.IntegrityError as e:
+    check("approved by a Governance Officer" in str(e), "005: the waiver-approver trigger reads the membership role, not Users.Role")
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

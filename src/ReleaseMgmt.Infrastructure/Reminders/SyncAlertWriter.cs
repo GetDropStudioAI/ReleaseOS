@@ -20,13 +20,21 @@ public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, Tim
 {
     private readonly IDbContextFactory<ReleaseDbContext> _dbf = dbf;
 
-    public static string Fingerprint(string source, string kind, string key) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{source}|{kind}|{key}")));
+    /// <summary>The open-alert fingerprint in the current workspace (<see cref="WorkspaceScope"/>).</summary>
+    public static string Fingerprint(string source, string kind, string key) => Fingerprint(WorkspaceScope.Current, source, kind, key);
+
+    /// <summary>
+    /// REOS-105: the open-alert fingerprint is unique on the host, so it carries the workspace: two workspaces' Jira connectors failing the same way are
+    /// two alerts. The default workspace and host-wide alerts keep the form from before workspaces, so an alert open at the upgrade still deduplicates
+    /// and auto-resolves (Q-105d).
+    /// </summary>
+    public static string Fingerprint(string? workspaceId, string source, string kind, string key) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(workspaceId is null or WorkspaceIds.Default ? $"{source}|{kind}|{key}" : $"{workspaceId}|{source}|{kind}|{key}")));
 
     public async Task<string> RaiseAsync(string source, string kind, string key, string message, string? trainId = null, CancellationToken ct = default)
     {
         message = message.Length > 500 ? message[..500] : message;
-        (string Id, bool Created) r;
+        (string Id, bool Created, string? WorkspaceId) r;
         try { r = await WriteAsync(source, kind, key, message, trainId, ct); }
         catch (DbUpdateException) { r = await WriteAsync(source, kind, key, message, trainId, ct); }   // lost the race for the open-fingerprint unique index: the row exists now, so bump it
 
@@ -34,8 +42,10 @@ public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, Tim
         {
             try
             {
+                // A host-wide alert (no workspace) goes to the default workspace's planners, the host's own (Q-105c)
+                using var scope = WorkspaceScope.Current is null ? WorkspaceScope.Enter(r.WorkspaceId ?? WorkspaceIds.Default) : null;
                 await using var db = await _dbf.CreateDbContextAsync(ct);
-                var who = await db.Set<Users>().Where(u => u.IsActive && (u.Role == Roles.RTE || u.Role == Roles.ReleaseManager)).Select(u => u.Id).ToListAsync(ct);
+                var who = await Services.Memberships.ActiveWithRole(db, Roles.RTE, Roles.ReleaseManager).Select(u => u.Id).ToListAsync(ct);   // the planners of the alert's workspace (REOS-105)
                 foreach (var u in who)
                     await notifier.NotifyAsync(new NotificationRequest(u, "SyncAlert", "SyncAlert", r.Id, $"{source} {kind}: {message}", 0), ct);
             }
@@ -47,7 +57,7 @@ public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, Tim
         }
         if (realtime is not null)
         {
-            try { await realtime.SyncAlertRaisedAsync(r.Id, ct); }
+            try { await realtime.SyncAlertRaisedAsync(r.WorkspaceId, r.Id, ct); }
             catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "Alert {AlertId} was saved but the live push failed", r.Id); }
         }
         return r.Id;
@@ -63,47 +73,54 @@ public sealed class SyncAlertWriter(IDbContextFactory<ReleaseDbContext> dbf, Tim
     {
         if (keys.Count == 0) return 0;
         var fps = keys.Select(k => Fingerprint(k.Source, k.Kind, k.Key)).Distinct().ToList();
-        var result = await RunAsync<List<string>>(async db =>
+        var result = await RunAsync<List<(string Id, string? WorkspaceId)>>(async db =>
         {
             var now = Now;
             var open = await db.Set<SyncAlerts>().Where(a => fps.Contains(a.Fingerprint) && !a.IsResolved).ToListAsync(ct);
             foreach (var a in open)
             {
                 a.IsResolved = true; a.ResolvedAt = now; a.Version++;
-                Audit(db, null, a.ReleaseTrainId, "SyncAlert", a.Id, "AutoResolved", after: new { a.SourceSystem, a.Kind, a.OccurrenceCount });
+                Audit(db, null, a.ReleaseTrainId, "SyncAlert", a.Id, "AutoResolved", after: new { a.SourceSystem, a.Kind, a.OccurrenceCount }).WorkspaceId = a.WorkspaceId;
             }
             if (open.Count > 0) await db.SaveChangesAsync(ct);
-            return ServiceResult<List<string>>.Ok(open.Select(a => a.Id).ToList());
+            return ServiceResult<List<(string, string?)>>.Ok(open.Select(a => (a.Id, a.WorkspaceId)).ToList());
         }, ct);
         if (!result.IsOk) throw new InvalidOperationException("Could not resolve the alerts: " + (result.Failures.Count > 0 ? result.Failures[0].Message : result.Missing));
         if (realtime is not null)
-            foreach (var id in result.Value!)
+            foreach (var (id, ws) in result.Value!)
             {
-                try { await realtime.SyncAlertRaisedAsync(id, ct); }
+                try { await realtime.SyncAlertRaisedAsync(ws, id, ct); }
                 catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "Alert {AlertId} was resolved but the live push failed", id); }
             }
         return result.Value!.Count;
     }
 
-    private async Task<(string Id, bool Created)> WriteAsync(string source, string kind, string key, string message, string? trainId, CancellationToken ct)
+    private async Task<(string Id, bool Created, string? WorkspaceId)> WriteAsync(string source, string kind, string key, string message, string? trainId, CancellationToken ct)
     {
-        var fp = Fingerprint(source, kind, key);
-        var result = await RunAsync<(string, bool)>(async db =>
+        // The alert belongs to the current workspace; outside any, to its train's workspace, else it is host-wide (backups, the live channel).
+        var ws = WorkspaceScope.Current;
+        if (ws is null && trainId is not null)
+        {
+            await using var look = await _dbf.CreateDbContextAsync(ct);
+            ws = await look.Set<ReleaseTrains>().Where(t => t.Id == trainId).Select(t => t.WorkspaceId).SingleOrDefaultAsync(ct);
+        }
+        var fp = Fingerprint(ws, source, kind, key);
+        var result = await RunAsync<(string, bool, string?)>(async db =>
         {
             var now = Now;
             var open = await db.Set<SyncAlerts>().SingleOrDefaultAsync(a => a.Fingerprint == fp && !a.IsResolved, ct);
             if (open is not null)
             {
                 open.OccurrenceCount++; open.LastOccurredAt = now; open.ErrorMessage = message; open.Version++;
-                Audit(db, null, open.ReleaseTrainId, "SyncAlert", open.Id, "Repeated", after: new { open.OccurrenceCount });
+                Audit(db, null, open.ReleaseTrainId, "SyncAlert", open.Id, "Repeated", after: new { open.OccurrenceCount }).WorkspaceId = open.WorkspaceId;
                 await db.SaveChangesAsync(ct);
-                return ServiceResult<(string, bool)>.Ok((open.Id, false));
+                return ServiceResult<(string, bool, string?)>.Ok((open.Id, false, open.WorkspaceId));
             }
-            var a = new SyncAlerts { ReleaseTrainId = trainId, SourceSystem = source, Kind = kind, Fingerprint = fp, ErrorMessage = message, FirstOccurredAt = now, LastOccurredAt = now };
+            var a = new SyncAlerts { ReleaseTrainId = trainId, SourceSystem = source, Kind = kind, Fingerprint = fp, ErrorMessage = message, FirstOccurredAt = now, LastOccurredAt = now, WorkspaceId = ws };
             db.Set<SyncAlerts>().Add(a);
-            Audit(db, null, trainId, "SyncAlert", a.Id, "Raised", after: new { source, kind, key });
+            Audit(db, null, trainId, "SyncAlert", a.Id, "Raised", after: new { source, kind, key }).WorkspaceId = ws;   // a host-wide alert has a host-wide audit row
             await db.SaveChangesAsync(ct);
-            return ServiceResult<(string, bool)>.Ok((a.Id, true));
+            return ServiceResult<(string, bool, string?)>.Ok((a.Id, true, ws));
         }, ct);
         if (!result.IsOk) throw new InvalidOperationException("Could not record the alert: " + (result.Failures.Count > 0 ? result.Failures[0].Message : result.Missing));
         return result.Value;

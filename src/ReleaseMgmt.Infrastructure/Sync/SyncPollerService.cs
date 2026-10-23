@@ -46,6 +46,7 @@ public sealed class SyncPollerService : BackgroundService
     private readonly SemaphoreSlim _running = new(1, 1);
     private readonly Dictionary<string, int> _throttled = [];            // consecutive 429 cycles per source (in memory: a restart starts counting again, Q-039d)
     private readonly Dictionary<string, DateTime> _backoffUntil = [];
+    private static string Throttle(string source) => $"{WorkspaceScope.Current}|{source}";   // REOS-105: each workspace's connector backs off on its own
 
     public SyncPollerService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConnectorFactory factory, SyncAlertWriter alerts, IAlertSink sink,
         SyncCycleWriter writer, SyncOptions options, IConfiguration config, ILogger<SyncPollerService> log)
@@ -83,14 +84,18 @@ public sealed class SyncPollerService : BackgroundService
         }
     }
 
-    /// <summary>One pass over every enabled connector (Jira, then ServiceNow). Serialised: a "sync now" during a cycle waits for it.</summary>
+    /// <summary>One pass over every enabled connector (Jira, then ServiceNow) of every workspace, each inside its workspace (REOS-105). Serialised: a
+    /// "sync now" during a cycle waits for it.</summary>
     public async Task<IReadOnlyList<ConnectorCycleResult>> RunOnceAsync(CancellationToken ct = default)
     {
         await _running.WaitAsync(ct);
         try
         {
             var results = new List<ConnectorCycleResult>();
-            foreach (var source in ExternalKeys.Sources) results.Add(await RunConnectorCoreAsync(source, ct));
+            await WorkspaceLoop.ForEachAsync(_dbf, async _ =>
+            {
+                foreach (var source in ExternalKeys.Sources) results.Add(await RunConnectorCoreAsync(source, ct));
+            }, ct);
             return results;
         }
         finally { _running.Release(); }
@@ -109,8 +114,8 @@ public sealed class SyncPollerService : BackgroundService
         var started = Now;
         try
         {
-            var cfgUrl = _config[$"Connectors:{source}:BaseUrl"];
-            if (!string.IsNullOrWhiteSpace(cfgUrl)) await _writer.EnsureRowAsync(source, cfgUrl, ct);
+            var cfgUrl = _config[$"Connectors:{source}:BaseUrl"];   // configuration describes the default workspace's connectors only (Q-105f)
+            if (!string.IsNullOrWhiteSpace(cfgUrl) && (WorkspaceScope.Current ?? WorkspaceIds.Default) == WorkspaceIds.Default) await _writer.EnsureRowAsync(source, cfgUrl, ct);
             return await CycleAsync(source, started, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -150,7 +155,7 @@ public sealed class SyncPollerService : BackgroundService
             return new(source, ConnectorCycleResult.Idle, 0);
         }
 
-        if (_backoffUntil.TryGetValue(source, out var until) && Now < until)
+        if (_backoffUntil.TryGetValue(Throttle(source), out var until) && Now < until)
         {
             await _writer.ApplyAsync(source, started, connectorFailed: false, clean: false, [], ct);   // alive, but not a clean cycle
             return new(source, ConnectorCycleResult.Backoff, 0, "RateLimited", $"Backing off until {until:HH:mm:ss}Z after HTTP 429");
@@ -189,7 +194,7 @@ public sealed class SyncPollerService : BackgroundService
 
         if (wide is null)
         {
-            _throttled.Remove(source); _backoffUntil.Remove(source);
+            _throttled.Remove(Throttle(source)); _backoffUntil.Remove(Throttle(source));
             foreach (var kind in new[] { "AuthFailed", "Unreachable", "RateLimited" }) resolve.Add((source, kind, ConnectorErrorClassifier.ConnectorKey));
             resolve.Add(("SyncEngine", "Stalled", CycleKey(source)));
             await _writer.ApplyAsync(source, started, connectorFailed: false, clean: true, updates, ct);
@@ -208,13 +213,13 @@ public sealed class SyncPollerService : BackgroundService
         var raiseNow = true;
         if (wide.Kind == ConnectorErrorKind.RateLimited)
         {
-            var n = _throttled[source] = _throttled.GetValueOrDefault(source) + 1;
+            var n = _throttled[Throttle(source)] = _throttled.GetValueOrDefault(Throttle(source)) + 1;
             var open = await SyncSupport.WindowOpenSinceAsync(_dbf, Now, ct) is not null;
             var wait = SyncIntervals.Backoff(n, _o.BackoffBase, wide.RetryAfter, SyncIntervals.PollInterval(open, _o.Poll, _o.WindowPoll));
-            _backoffUntil[source] = Now + wait;
+            _backoffUntil[Throttle(source)] = Now + wait;
             raiseNow = n >= SyncIntervals.RateLimitAlertAfter;
         }
-        else { _throttled.Remove(source); _backoffUntil.Remove(source); }
+        else { _throttled.Remove(Throttle(source)); _backoffUntil.Remove(Throttle(source)); }
 
         _log.LogWarning("{Source} sync cycle failed: {Kind} {Message}", source, wide.Kind, wide.Message);
         if (raiseNow) await RaiseAsync(source, alertKind, ConnectorErrorClassifier.ConnectorKey, wide.Message, null, ct);

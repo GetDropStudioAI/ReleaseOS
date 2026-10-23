@@ -111,7 +111,7 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             if (n.RequestedByUserId == actor.UserId) f.Add(new(Guards.OverrideSelfApproval, "An override needs two distinct people: you cannot approve your own request"));
             if (!Approvers.Contains(await RoleOf(db, actor.UserId) ?? "")) f.Add(new(Guards.OverrideApproverRole, "Overrides are approved by a Release Manager or Governance Officer"));
             var requester = await db.Set<Users>().AsNoTracking().SingleOrDefaultAsync(u => u.Id == n.RequestedByUserId, ct);
-            if (requester is null || !requester.IsActive || !Requesters.Contains(requester.Role))
+            if (requester is null || !requester.IsActive || !Requesters.Contains(await RoleOf(db, requester.Id) ?? ""))
                 f.Add(new(Guards.OverrideRequesterRole, "The requester must be an active RTE or Release Manager"));
             else if (_requireRequest && n.RequestedByUserId != actor.UserId && await OpenRequestersAsync(db, windowId, n.TrainId, ct) is var open && !open.Contains(requester.Id))
             {
@@ -187,7 +187,7 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             if (proposedExpiry is DateTime pe && pe.ToUniversalTime() <= Now) f.Add(new(Guards.OverrideExpiry, "An override must expire in the future (no permanent exceptions)"));
             if (f.Count > 0) return ServiceResult<int>.Fail(f);
 
-            approvers = await db.Set<Users>().Where(u => u.IsActive && Approvers.Contains(u.Role) && u.Id != actor.UserId).Select(u => u.Id).ToListAsync(ct);
+            approvers = await Memberships.ActiveWithRole(db, [.. Approvers]).Where(u => u.Id != actor.UserId).Select(u => u.Id).ToListAsync(ct);
             var who = await db.Set<Users>().Where(u => u.Id == actor.UserId).Select(u => u.DisplayName).SingleAsync(ct);
             message = $"{who} asks for a freeze override on {t.Title} ({w.Name})" + (proposedExpiry is DateTime x ? $" until {x.ToUniversalTime():yyyy-MM-dd HH:mm}Z" : "") + $": {text}";
             Audit(db, actor, trainId, "FreezeWindow", w.Id, "RequestOverride", null, new { trainId, reason = text, proposedExpiry, notified = approvers.Count });

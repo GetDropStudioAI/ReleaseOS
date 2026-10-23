@@ -61,6 +61,7 @@ public sealed class SeedService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
         var gov2 = User("gov2", "Gus Patel (Governance)", Roles.GovernanceOfficer);
         var dev = User("dev", "Dee Vega (Viewer)", Roles.Viewer);
         db.Set<Users>().AddRange(rte, rm, gov1, gov2, dev);
+        foreach (var u in new[] { rte, rm, gov1, gov2, dev }) WorkspaceService.JoinDefault(db, u, stamp);   // the role that counts is the membership's (REOS-105)
 
         var nextFriday = DateOnly.FromDateTime(stamp);
         while (nextFriday.DayOfWeek != DayOfWeek.Friday) nextFriday = nextFriday.AddDays(1);

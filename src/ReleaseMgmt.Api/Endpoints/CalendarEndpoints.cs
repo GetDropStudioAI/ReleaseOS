@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using ReleaseMgmt.Api.Auth;
+using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Services;
 
@@ -50,8 +51,12 @@ public static class CalendarEndpoints
         // Ics:MaxFailuresPerMinute times this minute its further failures are 429 instead of 404. Behind a proxy that does not forward the client address
         // every caller shares one address, so a brake in front of the lookup let strangers lock every calendar out; tokens are 256-bit, so the brake was
         // never what stops guessing.
-        var userId = await tokens.ResolveAsync(token, ct);
-        var body = userId is null ? null : await feeds.BuildAsync(scope, trainId, userId, ct);
+        IcsTokenService.FeedOwner? owner;
+        using (WorkspaceScope.HostWide()) owner = await tokens.ResolveFeedAsync(token, ct);   // the token names its workspace, whatever the caller's cookie says
+        string? body = null;
+        if (owner is not null)
+            using (WorkspaceScope.Enter(owner.WorkspaceId))   // REOS-105: the feed shows its token's workspace only
+                body = await feeds.BuildAsync(scope, trainId, owner.UserId, ct);
         if (body is null)
         {
             if (Throttled(http, tokens, cfg, failed: false)) return Results.StatusCode(StatusCodes.Status429TooManyRequests);

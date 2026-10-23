@@ -24,7 +24,7 @@ public sealed record ApprovalQueue(ApprovalCounts Counts, IReadOnlyList<Approval
 /// <item><c>RecordGoNoGo</c>: a Gated train whose latest decision is not a Go. Release Managers (GoNoGoService).</item>
 /// <item><c>CloseCondition</c>: an open condition of the train's current decision owned by the person (as in My work).</item>
 /// </list>
-/// The role is <c>Users.Role</c> until REOS-105 moves roles onto workspace memberships. Read-only; sorted by due time, soonest first.
+/// The role is the one held in the current workspace (REOS-105), and every row comes from that workspace. Read-only; sorted by due time, soonest first.
 /// </summary>
 public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config)
 {
@@ -37,7 +37,7 @@ public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf
         await using var db = await dbf.CreateDbContextAsync(ct);
         var now = time.GetUtcNow().UtcDateTime;
         var today = _clock.LocalDate(now);
-        var role = await db.Set<Users>().AsNoTracking().Where(u => u.Id == userId && u.IsActive).Select(u => u.Role).SingleOrDefaultAsync(ct);
+        var role = await db.Set<Users>().AsNoTracking().AnyAsync(u => u.Id == userId && u.IsActive, ct) ? await Memberships.RoleOf(db, userId, ct) : null;   // the role held in this workspace (REOS-105)
         var items = new List<ApprovalItem>();
         ApprovalItem OnDay(string kind, string id, string title, string? detail, string trainId, string trainTitle, DateOnly due) =>
             new(kind, id, title, detail, trainId, trainTitle, due, null, due < today);

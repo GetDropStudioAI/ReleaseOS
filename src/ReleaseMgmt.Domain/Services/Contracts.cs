@@ -20,21 +20,23 @@ public interface INotifier
 }
 
 /// <summary>Live-update seam (D7). Services call it after a commit; the Api host implements it with SignalR. Clients refetch, they do not trust payloads.</summary>
+/// <summary>Live hints (D7), delivered only to connections in the workspace the change belongs to (REOS-105): a member of another workspace is never told.</summary>
 public interface IRealtimePublisher
 {
-    Task TrainChangedAsync(string trainId, int version, CancellationToken ct = default);
-    Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default);
+    Task TrainChangedAsync(string workspaceId, string trainId, int version, CancellationToken ct = default);
+    Task NotificationCreatedAsync(string workspaceId, string userId, string notificationId, CancellationToken ct = default);
     /// <summary>A step event changed a run's forecast; clients on that train refetch GET /runs/{id}/forecast.</summary>
-    Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default);
-    /// <summary>A SyncAlerts row was raised, repeated or resolved; every client refetches GET /sync/alerts and the connector-wide banner state.</summary>
-    Task SyncAlertRaisedAsync(string alertId, CancellationToken ct = default);
+    Task ForecastChangedAsync(string workspaceId, string trainId, string runId, CancellationToken ct = default);
+    /// <summary>A SyncAlerts row was raised, repeated or resolved; clients refetch GET /sync/alerts and the connector-wide banner state. A null workspace
+    /// is a host-wide alert, which every workspace shows.</summary>
+    Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default);
 }
 
 /// <summary>Used where no live channel exists (tests, tools).</summary>
 public sealed class NullRealtimePublisher : IRealtimePublisher
 {
-    public Task TrainChangedAsync(string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
-    public Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
-    public Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
-    public Task SyncAlertRaisedAsync(string alertId, CancellationToken ct = default) => Task.CompletedTask;
+    public Task TrainChangedAsync(string workspaceId, string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
+    public Task NotificationCreatedAsync(string workspaceId, string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
+    public Task ForecastChangedAsync(string workspaceId, string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default) => Task.CompletedTask;
 }

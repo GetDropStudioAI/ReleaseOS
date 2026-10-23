@@ -178,12 +178,15 @@ await using (var scope = app.Services.CreateAsyncScope())
 app.UseForwardedHeaders();                    // SEC-E5: first, so every later check sees the real client and scheme
 app.UseExceptionHandler();
 if (!app.Environment.IsDevelopment()) app.UseHsts();   // SEC-E5: browsers keep to https once they have reached the app over it
+app.UseMiddleware<WorkspaceRoutePrefix>();     // REOS-105: /api/v1/w/{workspace}/... is /api/v1/... in that workspace; before routing, so the endpoints match
+app.UseRouting();                              // explicit (it was implicit, first): after the prefix is taken off, before anything that reads the endpoint
 app.UseMiddleware<SecurityHeaders>();          // REOS-53
 app.UseMiddleware<RequestBodyLimit>();         // security review SEC-D7: Limits:MaxRequestBodyBytes (Q-SEC-D1)
 app.UseMiddleware<CrossSiteRequestGuard>();    // REOS-53: before authentication, so a cross-site write never reaches a handler
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
+app.UseMiddleware<WorkspaceResolution>();      // REOS-105: the current workspace, checked against membership; role claims become the workspace role
 app.UseAuthorization();
 
 app.MapGet("/healthz", [AllowAnonymous] (IDbContextFactory<ReleaseDbContext> dbf, BackupService backup,
@@ -198,7 +201,8 @@ api.MapGet("/me", (ClaimsPrincipal u) => new
     id = u.FindFirstValue("uid"),
     email = u.FindFirstValue(ClaimTypes.Email),
     name = u.Identity?.Name,
-    roles = u.FindAll(ClaimTypes.Role).Select(c => c.Value)
+    roles = u.FindAll(ClaimTypes.Role).Select(c => c.Value),   // the role held in the current workspace (REOS-105)
+    workspaceId = u.FindFirstValue(WorkspaceResolution.Claim),
 }).RequireAuthorization(Policies.Read);
 api.MapLifecycle();
 api.MapTrainQueries();

@@ -37,15 +37,26 @@ public sealed partial class UserCreationService(IDbContextFactory<ReleaseDbConte
 
         return RunAsync(async db =>
         {
+            // REOS-105: the person joins the current workspace with this role. Accounts are host-wide: someone who already has one (in another workspace)
+            // is added as a member rather than refused, so the answer never says which workspace they are in (Q-105e).
+            var ws = Memberships.WorkspaceOf(db);
             // Email and Handle are COLLATE NOCASE in the schema, so these comparisons match the UNIQUE constraints; a race past them is a 422 DbRule.
-            if (await db.Set<Users>().AnyAsync(u => u.Email == mail, ct))
-                return ServiceResult<Users>.Fail(new GuardFailure(UserExists, $"{mail} is already a user"));
+            var existing = await db.Set<Users>().SingleOrDefaultAsync(u => u.Email == mail, ct);
+            if (existing is not null)
+            {
+                if (await Memberships.RoleOf(db, existing.Id, ct) is not null)
+                    return ServiceResult<Users>.Fail(new GuardFailure(UserExists, $"{mail} is already a user"));
+                WorkspaceService.Join(db, existing, ws, role, Now);
+                Audit(db, actor, null, "WorkspaceMember", existing.Id, "Add", null, new { workspaceId = ws, role });
+                await db.SaveChangesAsync(ct);
+                return ServiceResult<Users>.Ok(existing);
+            }
             if (tag is not null && await db.Set<Users>().AnyAsync(u => u.Handle == tag, ct))
                 return ServiceResult<Users>.Fail(new GuardFailure(HandleTaken, $"@{tag} is already someone's handle"));
             var u = new Users { Id = Ids.New(), Email = mail, DisplayName = name, Role = role, Handle = tag, IsActive = true };
             db.Set<Users>().Add(u);
-            WorkspaceService.JoinDefault(db, u, Now);   // REOS-104
-            Audit(db, actor, null, "User", u.Id, "Create", null, new { u.Email, u.DisplayName, u.Role, u.Handle, u.IsActive });
+            WorkspaceService.Join(db, u, ws, role, Now);
+            Audit(db, actor, null, "User", u.Id, "Create", null, new { u.Email, u.DisplayName, u.Role, u.Handle, u.IsActive, workspaceId = ws }).WorkspaceId = null;   // accounts are host-wide
             await db.SaveChangesAsync(ct);
             return ServiceResult<Users>.Ok(u);
         }, ct);

@@ -30,6 +30,7 @@ def db_fresh():
       ('s1','t1','p1','R-001','PreCheck','Health check','rte','2026-10-30T02:00:00Z',10),
       ('s2','t1','p1','R-002','Deploy','Deploy Payments API','rte','2026-10-30T02:10:00Z',30);
     INSERT INTO StepDependencies(StepId,DependsOnStepId) VALUES('s2','s1');
+    INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) SELECT 'default', Id, Role, '{NOW}' FROM Users;   -- the role triggers read the membership role (REOS-105)
     """)
     return db
 
@@ -334,6 +335,27 @@ check(db6, "UPDATE StepExecutions SET Status='Running',ActualStartAt='2026-10-30
 db6.execute("UPDATE StepExecutions SET Status='Scheduled',ActualStartAt=NULL WHERE Id='e7'")
 db6.execute("INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId) VALUES('f7','Year end','2026-10-01T00:00:00Z','2026-12-31T00:00:00Z','rm')")
 check(db6, "UPDATE StepExecutions SET Status='Running',ActualStartAt='2026-10-30T02:00:00Z' WHERE Id='e7'", False, "its own workspace's freeze does", expect="Freeze window")
+# Role triggers read the role held in the train's workspace (REOS-105), never Users.Role: gov1 is a Governance Officer in the default workspace only,
+# dev is a Viewer by Users.Role but a Governance Officer in w2, and rte is in no role in w2's sense for approving.
+db6.executescript(f"""
+INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','gov1','Viewer','{NOW}'),('w2','dev','GovernanceOfficer','{NOW}'),('w2','gov2','RTE','{NOW}');
+INSERT INTO StageGates(Id,ReleaseTrainId,GateName,GateClass,SequenceOrder,OffsetDays,DueOn,OwnerUserId,Status,LastChangedByUserId) VALUES('gc','t2','EU Compliance','Compliance',2,2,'2026-11-28','dev','InProgress','dev');
+INSERT INTO ChecklistTasks(Id,StageGateId,TaskDescription,OwnerUserId,SequenceOrder,IsCompleted,CompletedAt,CompletedByUserId) VALUES('kc','gc','EU evidence','rte',1,1,'{NOW}','rte');
+INSERT INTO GateWaivers(Id,StageGateId,Reason,RequestedByUserId,RequestedAt) VALUES('wv9','gc','EU regulator extension granted in writing','rte','{NOW}');
+""")
+check(db6, certify('gc', 'gov1'), False, "Compliance certifier who is only a Viewer in the train's workspace", expect="Governance Officers only")
+check(db6, certify('gc', 'rm'), False, "Compliance certifier who is not a member of the train's workspace", expect="Governance Officers only")
+check(db6, "UPDATE GateWaivers SET ApprovedByUserId='gov1',ApprovedAt=? WHERE Id='wv9'", False, "waiver approver who is a Governance Officer elsewhere only", (NOW,), expect="approved by a Governance Officer")
+check(db6, "INSERT INTO GateWaivers(Id,StageGateId,Reason,RequestedByUserId,ApprovedByUserId,RequestedAt,ApprovedAt) VALUES('wv8','gc','Inserted approved by an outsider','rte','gov2',?,?)", False, "waiver inserted pre-approved by an RTE of the workspace", (NOW,NOW), expect="approved by a Governance Officer")
+check(db6, "UPDATE GateWaivers SET ApprovedByUserId='dev',ApprovedAt=? WHERE Id='wv9'", True, "waiver approved by the workspace's Governance Officer (a Viewer by Users.Role)", (NOW,))
+check(db6, certify('gc', 'dev'), True, "Compliance gate certified by the workspace's Governance Officer")
+check(db6, OVERRIDE, False, "freeze override approved by someone who is not a member of the train's workspace", ('o8', 'f2', 't2', 'Emergency payments fix for EU', 'gov2', 'rm', NOW, '2026-10-30T06:00:00Z'), expect="approved by a Release Manager or Governance Officer")
+check(db6, OVERRIDE, False, "freeze override approved by a Viewer of the train's workspace", ('o8', 'f2', 't2', 'Emergency payments fix for EU', 'gov2', 'gov1', NOW, '2026-10-30T06:00:00Z'), expect="approved by a Release Manager or Governance Officer")
+check(db6, OVERRIDE, True, "freeze override approved by the workspace's Governance Officer", ('o8', 'f2', 't2', 'Emergency payments fix for EU', 'gov2', 'dev', NOW, '2026-10-30T06:00:00Z'))
+db6.execute("UPDATE WorkspaceMembers SET Role='Viewer' WHERE WorkspaceId='default' AND UserId='gov2'")
+db6.execute("UPDATE StageGates SET Status='InProgress', LastChangedByUserId='gov1' WHERE Id='g2'") if db6.execute("SELECT Status FROM StageGates WHERE Id='g2'").fetchone()[0] != 'InProgress' else None
+db6.execute("UPDATE ChecklistTasks SET IsCompleted=1,CompletedAt=?,CompletedByUserId='gov1',LastChangedByUserId='gov1' WHERE Id='k2'", (NOW,))
+check(db6, certify('g2', 'gov2'), False, "a Governance Officer by Users.Role whose membership is now Viewer", expect="Governance Officers only")
 assert_true(db.execute("SELECT count(*), sum(WorkspaceId IS NOT 'default') FROM AuditEvents").fetchone()[1] == 0,
             "every audit row of the default workspace's release (service and trigger rows) is filed under it")
 

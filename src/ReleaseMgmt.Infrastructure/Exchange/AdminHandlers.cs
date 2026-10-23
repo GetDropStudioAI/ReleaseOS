@@ -11,11 +11,16 @@ internal sealed class UsersHandler : KindHandler
 {
     public override ImportKindSpec Spec { get; } = ImportKinds.Get(ImportKinds.Users)!;
 
-    public override async Task<List<CurrentRow>> LoadAsync(ReleaseDbContext db, GridFilter filter, CancellationToken ct) =>
-        [.. (await db.Set<Users>().AsNoTracking().ToListAsync(ct)).OrderBy(u => u.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(u => u.Email, StringComparer.OrdinalIgnoreCase)
+    // REOS-105: the current workspace's members, with the role each holds there
+    public override async Task<List<CurrentRow>> LoadAsync(ReleaseDbContext db, GridFilter filter, CancellationToken ct)
+    {
+        var ws = Memberships.WorkspaceOf(db);
+        var roles = await db.Set<WorkspaceMembers>().IgnoreQueryFilters().AsNoTracking().Where(m => m.WorkspaceId == ws).ToDictionaryAsync(m => m.UserId, m => m.Role, ct);
+        return [.. (await Memberships.Members(db).AsNoTracking().ToListAsync(ct)).OrderBy(u => u.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(u => u.Email, StringComparer.OrdinalIgnoreCase)
             .Select(u => new CurrentRow(u.Id, u.Version, null, K(u.Email),
-                new Dictionary<string, string> { ["Email"] = u.Email, ["DisplayName"] = Norm(u.DisplayName), ["Role"] = u.Role, ["Handle"] = Norm(u.Handle) },
+                new Dictionary<string, string> { ["Email"] = u.Email, ["DisplayName"] = Norm(u.DisplayName), ["Role"] = roles[u.Id], ["Handle"] = Norm(u.Handle) },
                 [new("#Id", u.Id), new("#IsActive", u.IsActive ? "Yes" : "No"), new("#Version", u.Version.ToString())]))];
+    }
 
     protected override Resolved? Resolve(PlanEnv env, ParsedRow row)
     {
@@ -55,7 +60,7 @@ internal sealed class UsersHandler : KindHandler
             {
                 var u = new Users { Email = p.After["Email"], DisplayName = p.After["DisplayName"], Role = p.After["Role"], Handle = p.After.GetValueOrDefault("Handle") is { Length: > 0 } h ? h : null, IsActive = true };
                 env.Db.Set<Users>().Add(u);
-                WorkspaceService.JoinDefault(env.Db, u, env.Now);   // REOS-104
+                WorkspaceService.Join(env.Db, u, Memberships.WorkspaceOf(env.Db), u.Role, env.Now);   // REOS-105: a member of the workspace that imports them
                 env.AuditRow(p, null, "User", u.Id);
             }
             else
@@ -76,7 +81,7 @@ internal sealed class TeamsHandler : KindHandler
 
     public override async Task<List<CurrentRow>> LoadAsync(ReleaseDbContext db, GridFilter filter, CancellationToken ct)
     {
-        var users = (await db.Set<Users>().AsNoTracking().ToListAsync(ct)).ToDictionary(u => u.Id);
+        var users = (await Memberships.Members(db).AsNoTracking().ToListAsync(ct)).ToDictionary(u => u.Id);
         var members = (await db.Set<TeamMembers>().AsNoTracking().ToListAsync(ct)).ToLookup(m => m.TeamId);
         return [.. (await db.Set<Teams>().AsNoTracking().ToListAsync(ct)).OrderBy(t => t.Handle, StringComparer.OrdinalIgnoreCase)
             .Select(t => new CurrentRow(t.Id, t.Version, null, K(t.Handle),

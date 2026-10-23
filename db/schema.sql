@@ -20,7 +20,7 @@ CREATE TABLE Users (
     Id TEXT PRIMARY KEY,
     Email TEXT NOT NULL UNIQUE COLLATE NOCASE,          -- contact and display data; organisation sign-in matches IdpIssuer + IdpSubject
     DisplayName TEXT NOT NULL,
-    Role TEXT NOT NULL CHECK (Role IN ('Viewer','ReleaseManager','RTE','GovernanceOfficer')),
+    Role TEXT NOT NULL CHECK (Role IN ('Viewer','ReleaseManager','RTE','GovernanceOfficer')),   -- the role from sign-in, held in the default workspace; others are per membership (REOS-105)
     Handle TEXT UNIQUE COLLATE NOCASE,                   -- optional @handle for the bulk parser
     IsActive INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
     IdpIssuer TEXT,                                      -- OIDC 'iss' of the bound identity; NULL until the first organisation sign-in (Q-SEC-B8)
@@ -46,7 +46,7 @@ INSERT INTO Workspaces (Id, Name, Slug, CreatedAt) VALUES ('default', 'Default',
 CREATE TABLE WorkspaceMembers (                           -- a person's role is held per workspace (D45); users and sign-in stay global
     WorkspaceId TEXT NOT NULL REFERENCES Workspaces(Id) ON DELETE CASCADE,
     UserId TEXT NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
-    Role TEXT NOT NULL CHECK (Role IN ('Viewer','ReleaseManager','RTE','GovernanceOfficer')),   -- until REOS-105 the triggers read Users.Role, which the app keeps equal to the 'default' membership
+    Role TEXT NOT NULL CHECK (Role IN ('Viewer','ReleaseManager','RTE','GovernanceOfficer')),   -- the role triggers read this role, in the train's workspace (REOS-105)
     AddedAt TEXT NOT NULL,
     Version INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (WorkspaceId, UserId)
@@ -835,8 +835,9 @@ WHEN NEW.Status IN ('Certified','Waived') AND EXISTS (
 BEGIN SELECT RAISE(ABORT, 'An earlier gate is not certified'); END;
 
 CREATE TRIGGER trg_Gate_ComplianceCertifierRole BEFORE UPDATE OF Status ON StageGates
-WHEN NEW.Status IN ('Certified','Waived') AND NEW.GateClass = 'Compliance'
- AND (SELECT Role FROM Users WHERE Id = NEW.CertifiedByUserId) <> 'GovernanceOfficer'
+WHEN NEW.Status IN ('Certified','Waived') AND NEW.GateClass = 'Compliance' AND NEW.CertifiedByUserId IS NOT NULL
+ AND COALESCE((SELECT m.Role FROM WorkspaceMembers m JOIN ReleaseTrains t ON t.WorkspaceId = m.WorkspaceId
+               WHERE t.Id = NEW.ReleaseTrainId AND m.UserId = NEW.CertifiedByUserId), '') <> 'GovernanceOfficer'
 BEGIN SELECT RAISE(ABORT, 'Compliance gates are certified by Governance Officers only'); END;
 
 -- Segregation of duties: the certifier of a Compliance gate completed none of its tasks
@@ -864,15 +865,18 @@ BEGIN
 END;
 
 -- Approver roles: waiver approver is a Governance Officer (D10); freeze-override approver is a
--- Release Manager or Governance Officer.
+-- Release Manager or Governance Officer. Every role trigger reads the role held in the train's workspace (D45, REOS-105):
+-- someone who is not a member of that workspace holds no role there.
 CREATE TRIGGER trg_Waiver_ApproverRole BEFORE UPDATE OF ApprovedByUserId ON GateWaivers
 WHEN NEW.ApprovedByUserId IS NOT NULL
- AND (SELECT Role FROM Users WHERE Id = NEW.ApprovedByUserId) <> 'GovernanceOfficer'
+ AND COALESCE((SELECT m.Role FROM WorkspaceMembers m JOIN ReleaseTrains t ON t.WorkspaceId = m.WorkspaceId JOIN StageGates g ON g.ReleaseTrainId = t.Id
+               WHERE g.Id = NEW.StageGateId AND m.UserId = NEW.ApprovedByUserId), '') <> 'GovernanceOfficer'
 BEGIN SELECT RAISE(ABORT, 'Waivers are approved by a Governance Officer'); END;
 
 CREATE TRIGGER trg_Waiver_ApproverRoleInsert BEFORE INSERT ON GateWaivers
 WHEN NEW.ApprovedByUserId IS NOT NULL
- AND (SELECT Role FROM Users WHERE Id = NEW.ApprovedByUserId) <> 'GovernanceOfficer'
+ AND COALESCE((SELECT m.Role FROM WorkspaceMembers m JOIN ReleaseTrains t ON t.WorkspaceId = m.WorkspaceId JOIN StageGates g ON g.ReleaseTrainId = t.Id
+               WHERE g.Id = NEW.StageGateId AND m.UserId = NEW.ApprovedByUserId), '') <> 'GovernanceOfficer'
 BEGIN SELECT RAISE(ABORT, 'Waivers are approved by a Governance Officer'); END;
 
 CREATE TRIGGER trg_Override_NoUpdate BEFORE UPDATE ON FreezeOverrides
@@ -881,7 +885,8 @@ CREATE TRIGGER trg_Override_NoDelete BEFORE DELETE ON FreezeOverrides
 BEGIN SELECT RAISE(ABORT, 'Freeze overrides are immutable; renew with a new row'); END;
 
 CREATE TRIGGER trg_Override_ApproverRole BEFORE INSERT ON FreezeOverrides
-WHEN (SELECT Role FROM Users WHERE Id = NEW.ApprovedByUserId) NOT IN ('ReleaseManager','GovernanceOfficer')
+WHEN COALESCE((SELECT m.Role FROM WorkspaceMembers m JOIN ReleaseTrains t ON t.WorkspaceId = m.WorkspaceId
+               WHERE t.Id = NEW.ReleaseTrainId AND m.UserId = NEW.ApprovedByUserId), '') NOT IN ('ReleaseManager','GovernanceOfficer')
 BEGIN SELECT RAISE(ABORT, 'Freeze overrides are approved by a Release Manager or Governance Officer'); END;
 
 -- Task reopen or insert decertifies its gate

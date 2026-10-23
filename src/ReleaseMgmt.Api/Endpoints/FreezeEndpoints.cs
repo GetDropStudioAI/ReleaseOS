@@ -28,6 +28,6 @@ public static class FreezeEndpoints
             return r.IsOk ? Results.Ok(new { notified = r.Value }) : r.ToHttp();
         }).RequireAuthorization(Policies.Plan);
 
-        api.MapGet("/gates/{id}/waivers", async (string id, WaiverService s, CancellationToken ct) => Results.Ok(await s.ListAsync(id, ct))).RequireAuthorization(Policies.Read);
+        api.MapGet("/gates/{id}/waivers", async (string id, WaiverService s, CancellationToken ct) => Results.Ok(await s.ListAsync(id, ct))).RequireAuthorization(Policies.Read).GateInRoute();
     }
 }

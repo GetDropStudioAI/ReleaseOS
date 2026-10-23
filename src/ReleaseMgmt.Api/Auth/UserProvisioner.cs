@@ -8,7 +8,8 @@ using ReleaseMgmt.Infrastructure.Services;
 namespace ReleaseMgmt.Api.Auth;
 
 /// <summary>
-/// Just-in-time provisioning (Q-003): keeps Users (read by the SoD triggers) in step with the role the user signs in with.
+/// Just-in-time provisioning (Q-003): keeps Users in step with the role the user signs in with, which is their role in the default workspace (REOS-105:
+/// the triggers and policies read the membership role).
 /// REOS-64 (rule 3): every real change is one <c>AuditEvents</c> row in the same transaction, acted by the user signing in (the identity provider vouched
 /// for them; Q-SEC-F2): <c>SignInCreate</c> for a new account, <c>SignInUpdate</c> with only the changed columns before and after, and a Version bump.
 /// A sign-in that changes nothing writes nothing.
@@ -61,6 +62,7 @@ public sealed class UserProvisioner(IDbContextFactory<ReleaseDbContext> dbf, Tim
         {
             OccurredAt = Now(),
             ActorUserId = userId, EntityType = "User", EntityId = userId, Action = action,
+            WorkspaceId = null,   // REOS-105: accounts are host-wide; the default workspace's auditors read these rows (Q-105c)
             BeforeJson = before is null ? null : JsonSerializer.Serialize(before),
             AfterJson = JsonSerializer.Serialize(after),
         });

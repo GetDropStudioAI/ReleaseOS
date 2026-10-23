@@ -19,7 +19,7 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
     private readonly TimeProvider _time = time;
     /// <summary>Late escalation (PROJECT_SCOPE 3): a Live step that starts this late after its plan warns its owner and the RTEs; this late, it also pages the Release Managers.</summary>
     public const int WarnLateMin = 5, CriticalLateMin = 30;
-    private sealed record StepEvent(string TrainId, string RunId, string Mode, string Action, string StepCode, string? OwnerUserId, string? OwnerTeamId, int LateMin);
+    private sealed record StepEvent(string WorkspaceId, string TrainId, string RunId, string Mode, string Action, string StepCode, string? OwnerUserId, string? OwnerTeamId, int LateMin);
 
     public static readonly string[] Outcomes = ["Completed", "RolledBack", "Aborted"];
 
@@ -114,7 +114,7 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
                 var shift = run.Mode == "Rehearsal" ? RunPlan.RehearsalShift(run.StartedAt, all.Select(x => (x.Section, x.PlannedStartAt))) : TimeSpan.Zero;
                 late = (int)Math.Floor((now - (step.PlannedStartAt + shift)).TotalMinutes);
             }
-            captured(new StepEvent(run.ReleaseTrainId, run.Id, run.Mode, action, step.StepCode, step.OwnerUserId, step.OwnerTeamId, late));
+            captured(new StepEvent(await db.Set<ReleaseTrains>().Where(t => t.Id == run.ReleaseTrainId).Select(t => t.WorkspaceId).SingleAsync(ct), run.ReleaseTrainId, run.Id, run.Mode, action, step.StepCode, step.OwnerUserId, step.OwnerTeamId, late));
             return ServiceResult<StepExecutions>.Ok(ex);
         }, ct);
 
@@ -153,7 +153,7 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
     {
         try
         {
-            if (_realtime is not null) await _realtime.ForecastChangedAsync(e.TrainId, e.RunId, ct);
+            if (_realtime is not null) await _realtime.ForecastChangedAsync(e.WorkspaceId, e.TrainId, e.RunId, ct);
             if (notifier is null || e.Mode != "Live") return;   // rehearsals never page anyone
 
             if (e.Action == "Start" && e.LateMin >= WarnLateMin)
@@ -195,7 +195,7 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
         var roles = new List<string>();
         if (includeRte) roles.Add(Roles.RTE);
         if (includeManagers) roles.Add(Roles.ReleaseManager);
-        foreach (var u in await db.Set<Users>().Where(x => x.IsActive && roles.Contains(x.Role)).Select(x => x.Id).ToListAsync(ct)) ids.Add(u);
+        foreach (var u in await Memberships.ActiveWithRole(db, [.. roles]).Select(x => x.Id).ToListAsync(ct)) ids.Add(u);
         return [.. ids.Order(StringComparer.Ordinal)];
     }
 

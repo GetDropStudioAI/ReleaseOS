@@ -12,7 +12,7 @@ SCHEMA = os.path.join(HERE, "..", "..", "db", "schema.sql")
 ANALYTICS = os.path.join(HERE, "..", "..", "db", "analytics.sql")
 FIX = os.path.join(HERE, "fixtures")
 AS_OF = "2026-09-28T12:00:00Z"
-PARAMS = {"from": "2026-01-01", "to": "2026-12-31", "now": AS_OF}
+PARAMS = {"from": "2026-01-01", "to": "2026-12-31", "now": AS_OF, "ws": "default"}   # ws: every metric reads one workspace (REOS-105)
 
 random.seed(7)                     # data stream
 idrng = random.Random(1234)        # id stream, separate so ids never shift the data
@@ -25,6 +25,7 @@ db.execute("PRAGMA foreign_keys=ON")
 db.executescript(open(SCHEMA).read())
 for u, r in [('rte','RTE'),('rm','ReleaseManager'),('gov1','GovernanceOfficer'),('gov2','GovernanceOfficer'),('qa','RTE')]:
     db.execute("INSERT INTO Users(Id,Email,DisplayName,Role) VALUES(?,?,?,?)", (u, u+'@x.com', u, r))
+    db.execute("INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('default',?,?,'2026-04-01T00:00:00Z')", (u, r))   # role triggers read it (REOS-105)
 
 products = ['Payments API','Card Portal','Ledger Svc','Fraud Engine','Notif Svc','Merchant UI']
 gates = [('Code Freeze','Standard',8,'Gated','rte'),('QA Sign-off','Standard',5,'Gated','qa'),
@@ -128,6 +129,26 @@ for i in range(1, len(blocks), 3):
     expected["metrics"][name] = {"key": title.split()[0], "columns": cols, "rows": [list(r) for r in rows]}
     print(f"\n{title}  [{name}]  {len(rows)} rows"); print("  ", cols)
     for r in rows[:6]: print("  ", r)
+
+# REOS-105: another workspace's records never reach these metrics. A second workspace with a completed train, an open blocker, a freeze and a
+# scheduled message leaves every default-workspace result unchanged, and shows up in its own workspace's results.
+other = sqlite3.connect(":memory:"); db.backup(other)
+other.executescript(f"""
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','Other','other','{AS_OF}');
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CurrentStatus,CreatedAt,UpdatedAt,ActualEndAt,CloseCode,WorkspaceId)
+  VALUES('w2t','Other train','2026-06-01','Complete','2026-05-01T00:00:00Z','2026-06-01T00:00:00Z','2026-06-01T08:00:00Z','Unsuccessful','w2');
+INSERT INTO Blockers(Id,ReleaseTrainId,Title,Severity,RaisedAt) VALUES('w2b','w2t','Other blocker','Critical','2026-09-01T00:00:00Z');
+INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId,WorkspaceId) VALUES('w2f','Other freeze','2026-07-01T00:00:00Z','2026-07-05T00:00:00Z','rm','w2');
+""")
+leaks, seen = [], 0
+for i in range(1, len(blocks), 3):
+    name, q = blocks[i+1], blocks[i+2].strip().rstrip(';')
+    rows = [list(r) for r in other.execute(q, {k: v for k, v in PARAMS.items() if ':'+k in q}).fetchall()]
+    if rows != expected["metrics"][name]["rows"]: leaks.append(name)
+    w2 = other.execute(q, {k: (v if k != "ws" else "w2") for k, v in PARAMS.items() if ':'+k in q}).fetchall()
+    seen += any(any(c is not None and c != 0 for c in r) for r in w2)
+print("\nworkspace isolation:", "every metric unchanged by another workspace's records" if not leaks else f"LEAK in {leaks}", f"({seen} metrics show the other workspace's own records)")
+if leaks or seen < 4: sys.exit(1)
 
 if "--write" in sys.argv:
     os.makedirs(FIX, exist_ok=True)

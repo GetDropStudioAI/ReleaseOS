@@ -88,10 +88,10 @@ internal static class SyncTestKit
     public sealed class RecordingRealtime : IRealtimePublisher
     {
         public List<string> Alerts { get; } = [];
-        public Task TrainChangedAsync(string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
-        public Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
-        public Task SyncAlertRaisedAsync(string alertId, CancellationToken ct = default) { lock (Alerts) Alerts.Add(alertId); return Task.CompletedTask; }
+        public Task TrainChangedAsync(string workspaceId, string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
+        public Task NotificationCreatedAsync(string workspaceId, string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ForecastChangedAsync(string workspaceId, string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default) { lock (Alerts) Alerts.Add(alertId); return Task.CompletedTask; }
     }
 
     public sealed class DbFactory(string path) : IDbContextFactory<ReleaseDbContext>

@@ -51,7 +51,7 @@ public static class SyncDevEndpoints
             foreach (var a in open) { a.IsResolved = true; a.ResolvedAt = now; a.Version++; }
             foreach (var c in await db.Set<ConnectorState>().ToListAsync(ct)) { c.ConsecutiveFailures = 0; c.Version++; }
             await db.SaveChangesAsync(ct);
-            await rt.SyncAlertRaisedAsync("reset", ct);
+            await rt.SyncAlertRaisedAsync(null, "reset", ct);
             return Results.Ok(new { resolved = open.Count });
         }).RequireAuthorization(Policies.Admin);
     }

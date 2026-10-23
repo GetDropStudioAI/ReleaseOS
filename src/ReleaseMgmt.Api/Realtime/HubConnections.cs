@@ -18,7 +18,7 @@ namespace ReleaseMgmt.Api.Realtime;
 /// </summary>
 public sealed class HubConnections(ILogger<HubConnections> log)
 {
-    public sealed record Entry(HubCallerContext Context, string? UserId, string? SessionId, DateTime? SignedInAt);
+    public sealed record Entry(HubCallerContext Context, string? UserId, string? SessionId, DateTime? SignedInAt, string? WorkspaceId = null);
 
     private readonly ConcurrentDictionary<string, Entry> _open = new();
 
@@ -27,7 +27,7 @@ public sealed class HubConnections(ILogger<HubConnections> log)
     public void Add(HubCallerContext ctx)
     {
         var u = ctx.User;
-        _open[ctx.ConnectionId] = new Entry(ctx, u?.FindFirst("uid")?.Value, u?.FindFirst(SessionLifetime.SessionClaim)?.Value, SignedInAt(u));
+        _open[ctx.ConnectionId] = new Entry(ctx, u?.FindFirst("uid")?.Value, u?.FindFirst(SessionLifetime.SessionClaim)?.Value, SignedInAt(u), u?.FindFirst(WorkspaceResolution.Claim)?.Value);
     }
 
     public void Remove(string connectionId) => _open.TryRemove(connectionId, out _);
@@ -99,14 +99,20 @@ public sealed class HubSessionMonitor(HubConnections connections, SessionLifetim
         if (open.Count == 0) return 0;
         var ids = open.Select(e => e.UserId).OfType<string>().Distinct().ToList();
         HashSet<string> active;
+        HashSet<(string, string)> members;   // REOS-105: a connection hears its workspace only while its user is still a member of it
         await using (var db = await dbf.CreateDbContextAsync(ct))
+        {
             active = [.. await db.Set<Users>().AsNoTracking().Where(u => ids.Contains(u.Id) && u.IsActive).Select(u => u.Id).ToListAsync(ct)];
+            members = [.. (await db.Set<WorkspaceMembers>().IgnoreQueryFilters().AsNoTracking().Where(m => ids.Contains(m.UserId)).Select(m => new { m.WorkspaceId, m.UserId }).ToListAsync(ct))
+                .Select(m => (m.WorkspaceId, m.UserId))];
+        }
         var now = time.GetUtcNow().UtcDateTime;
         var closed = 0;
         foreach (var e in open)
         {
             string? why = null;
             if (e.UserId is not null && !active.Contains(e.UserId)) why = "the user is deactivated or deleted";
+            else if (e.UserId is not null && e.WorkspaceId is { } ws && ws != WorkspaceResolution.Nowhere && !members.Contains((ws, e.UserId))) why = "the user is no longer a member of its workspace";
             else if (e.SessionId is not null && await sessions.IsSignedOutAsync(e.SessionId, ct)) why = "its session was signed out";
             else if (e.SignedInAt is { } at && now - at >= sessions.Absolute) why = "its session reached the absolute lifetime";
             if (why is not null) closed += connections.Abort(e, why);

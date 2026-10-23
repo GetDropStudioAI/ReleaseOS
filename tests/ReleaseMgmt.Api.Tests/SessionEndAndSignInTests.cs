@@ -97,7 +97,7 @@ public class SessionEndAndSignInTests
     private static async Task AssertNoFurtherPushes(WebApplicationFactory<Program> f, Live live)
     {
         while (live.Events.Reader.TryRead(out _)) { }
-        await f.Services.GetRequiredService<IRealtimePublisher>().TrainChangedAsync("t-after", 7);
+        await f.Services.GetRequiredService<IRealtimePublisher>().TrainChangedAsync("default", "t-after", 7);
         await Task.Delay(TimeSpan.FromSeconds(1.5));   // the factory pushes ServerTime every second too
         Assert.False(live.Events.Reader.TryRead(out var e), $"a closed connection received {e}");
         Assert.Equal(HubConnectionState.Disconnected, live.Hub.State);
@@ -155,7 +155,7 @@ public class SessionEndAndSignInTests
 
         await AssertClosesWithin(a, TimeSpan.FromSeconds(5));
         Assert.Equal(HubConnectionState.Connected, b.Hub.State);
-        await f.Services.GetRequiredService<IRealtimePublisher>().TrainChangedAsync("t-still", 1);
+        await f.Services.GetRequiredService<IRealtimePublisher>().TrainChangedAsync("default", "t-still", 1);
         await Next(b.Events, TrainsHub.TrainChanged + ":t-still");
     }
 

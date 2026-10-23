@@ -168,7 +168,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await form.locator('label:has-text("Name") input').fill(`${name} again`)
       await form.locator('label:has-text("Address") input').fill(`HTTPS://Hooks.Slack.com:443/services/T0/B0/${secret}`)
       await add.click()
-      await expect(section.locator('[role=alert]')).toContainText('already on the allowlist')
+      await expect(section.locator('[role=alert]')).toContainText('already registered on this server')
 
       await scan(page, `webhook allowlist (${scheme})`)
 

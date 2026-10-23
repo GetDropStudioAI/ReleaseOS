@@ -62,8 +62,15 @@ public sealed class SyncWatchdogService : BackgroundService
         }
     }
 
-    /// <summary>One check. Returns the sources that are stalled now.</summary>
+    /// <summary>One check of every workspace's connectors, each inside its workspace (REOS-105). Returns the sources that are stalled now.</summary>
     public async Task<IReadOnlyList<string>> CheckOnceAsync(CancellationToken ct = default)
+    {
+        var stalled = new List<string>();
+        await WorkspaceLoop.ForEachAsync(_dbf, async _ => stalled.AddRange(await CheckWorkspaceAsync(ct)), ct);
+        return stalled;
+    }
+
+    private async Task<IReadOnlyList<string>> CheckWorkspaceAsync(CancellationToken ct)
     {
         var now = Now;
         List<ConnectorState> states;

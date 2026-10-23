@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261023032948_Triggers")]
+    [Migration("20261023045703_Triggers")]
     partial class Triggers
     {
         /// <inheritdoc />

@@ -90,7 +90,7 @@ public sealed class MyWorkService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             .OrderBy(x => x.DueOn).Select(x => new WorkPirAction(x.Id, x.Text, x.DueOn, x.DueOn < today, x.PirId, x.TrainId, x.TrainTitle)).ToList();
 
         var reviews = new List<WorkReview>();
-        var role = await db.Set<Users>().AsNoTracking().Where(u => u.Id == userId).Select(u => u.Role).SingleOrDefaultAsync(ct);
+        var role = await Services.Memberships.RoleOf(db, userId, ct);   // the role in the current workspace (REOS-105)
         if (role is Roles.ReleaseManager or Roles.RTE)
         {
             var openPirs = await (from p in db.Set<PostImplementationReviews>().AsNoTracking()

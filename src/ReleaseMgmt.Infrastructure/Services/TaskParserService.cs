@@ -30,7 +30,7 @@ public sealed class TaskParserService(IDbContextFactory<ReleaseDbContext> dbf, T
             var gates = await db.Set<StageGates>().AsNoTracking().Where(g => g.ReleaseTrainId == trainId).OrderBy(g => g.SequenceOrder).ToListAsync(ct);
             var gateIds = gates.Select(g => g.Id).ToList();
             var existing = (await db.Set<ChecklistTasks>().AsNoTracking().Where(t => gateIds.Contains(t.StageGateId)).Select(t => new { t.StageGateId, t.TaskDescription }).ToListAsync(ct)).ToLookup(t => t.StageGateId, t => t.TaskDescription);
-            var people = await db.Set<Users>().AsNoTracking().ToListAsync(ct);
+            var people = await Memberships.Members(db).AsNoTracking().ToListAsync(ct);   // @handles resolve to the workspace's members (REOS-105)
             var teams = await db.Set<Teams>().AsNoTracking().ToListAsync(ct);
             var products = await db.Set<BundledProducts>().AsNoTracking().Where(p => p.ReleaseTrainId == trainId).ToListAsync(ct);
             string? OwnerName(StageGates g) => g.OwnerUserId is not null ? people.FirstOrDefault(u => u.Id == g.OwnerUserId)?.DisplayName : teams.FirstOrDefault(t => t.Id == g.OwnerTeamId) is { } tm ? "@" + tm.Handle : null;

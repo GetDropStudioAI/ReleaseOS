@@ -36,6 +36,7 @@ public class ImportExportTests
               ('u-dana','dana@x.com','Dana Ortiz','Viewer','dana',1),('u-off','off@x.com','Old Hand','Viewer',NULL,0),
               ('u-eq','eq@x.com','=SUM(1+1)','Viewer',NULL,1),('u-minus','minus@x.com','-Dash, "quoted"','Viewer',NULL,1),
               ('u-plus','plus@x.com','+plus','Viewer',NULL,1),('u-at','at@x.com','@at','Viewer',NULL,1),('u-apos','apos@x.com','''tis','Viewer',NULL,1);
+            INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) SELECT 'default', Id, Role, '2026-10-01T00:00:00Z' FROM Users WHERE Id LIKE 'u-%';
             INSERT INTO Teams(Id,Handle,Name) VALUES ('team-desk','desk','Support desk'),('team-web','web','Web');
             INSERT INTO TeamMembers(TeamId,UserId) VALUES ('team-desk','u-dana'),('team-desk','{rid}');
             DELETE FROM Holidays;

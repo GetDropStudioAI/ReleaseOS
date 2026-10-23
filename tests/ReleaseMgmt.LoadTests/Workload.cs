@@ -46,7 +46,10 @@ public sealed class Workload
         foreach (var (g, t) in seed.GateTrain) { if (!_trainGates.TryGetValue(t, out var l)) _trainGates[t] = l = []; l.Add(g); }
         _stepPool = new(seed.WriteSteps);
         _totalWeight = _mix.Sum(m => m.Weight);
-        for (var i = 0; i < seed.WriteTasks.Count; i++) users[i % users.Count].Tasks.Add(seed.WriteTasks[i]);
+        // Only planners (RTE, Release Manager) may tick any task (SEC-A, TaskDenial); a Viewer or Governance Officer who does not own one is refused 403,
+        // which is a correct answer, not load. The other roles do the read actions instead (REOS-105 found the run failing on main for this reason).
+        var planners = users.Where(x => x.CanPlan).ToList();
+        for (var i = 0; i < seed.WriteTasks.Count; i++) planners[i % planners.Count].Tasks.Add(seed.WriteTasks[i]);
     }
 
     public async Task IterationAsync(IScenarioContext ctx, VUser u)
@@ -57,6 +60,7 @@ public sealed class Workload
         var warm = ctx.ScenarioInfo.ScenarioOperation != ScenarioOperation.Bombing;
         if ((action == "liveStep" && (!u.CanPlan || warm)) ) action = "liveRead";
         if (action == "audit" && !u.CanAudit) action = "analytics";
+        if (action == "hotTask" && !u.CanPlan) action = "openTrain";
         switch (action)
         {
             case "stream": await Stream(ctx, u); break;

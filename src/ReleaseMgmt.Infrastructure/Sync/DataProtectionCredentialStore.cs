@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
+using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Sync;
 
 namespace ReleaseMgmt.Infrastructure.Sync;
@@ -10,6 +11,9 @@ namespace ReleaseMgmt.Infrastructure.Sync;
 /// <c>Sync:Credentials:Directory</c>, never in SQLite (the schema comment on ConnectorState says the same) and never in config. Protected on write,
 /// unprotected in memory only when a cycle needs them, and never returned, logged or audited. The key ring is part of the DR runbook (D12):
 /// without it the files cannot be read and the connector reports AuthFailed until the credentials are entered again.
+/// REOS-105: credentials belong to the current workspace's connector (<see cref="WorkspaceScope"/>). The default workspace keeps the files from before
+/// workspaces (<c>{source}.cred</c>); another workspace's are under <c>workspaces/{id}/</c> and protected with a purpose that names the workspace, so a
+/// file copied into another workspace's folder cannot be read there (Q-105f).
 /// </summary>
 public sealed class DataProtectionCredentialStore(IDataProtectionProvider provider, SyncOptions options) : ICredentialStore
 {
@@ -19,20 +23,27 @@ public sealed class DataProtectionCredentialStore(IDataProtectionProvider provid
 
     private sealed record Payload(string Kind, string Username, string Secret);
 
+    private static string? Workspace => WorkspaceScope.Current is { } ws && ws != WorkspaceIds.Default ? ws : null;
+
+    private IDataProtector Protector => Workspace is { } ws ? _protector.CreateProtector("workspace:" + ws) : _protector;
+
+    private string Directory_ => Workspace is { } ws ? Path.Combine(options.CredentialsDirectory, "workspaces", ws) : options.CredentialsDirectory;
+
     private string PathFor(string source)
     {
         if (!ExternalKeys.Sources.Contains(source)) throw new ArgumentException("Unknown source system", nameof(source));
-        return Path.Combine(options.CredentialsDirectory, source + ".cred");
+        if (Workspace is { } ws && !ws.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')) throw new InvalidOperationException("The workspace id cannot name a folder");
+        return Path.Combine(Directory_, source + ".cred");
     }
 
     public async Task SetAsync(string source, ConnectorCredentials c, CancellationToken ct = default)
     {
         var path = PathFor(source);
-        var blob = _protector.Protect(JsonSerializer.Serialize(new Payload(c.Kind, c.Username, c.Secret)));
+        var blob = Protector.Protect(JsonSerializer.Serialize(new Payload(c.Kind, c.Username, c.Secret)));
         await _gate.WaitAsync(ct);
         try
         {
-            Directory.CreateDirectory(options.CredentialsDirectory);
+            Directory.CreateDirectory(Directory_);
             var tmp = path + ".tmp";
             await File.WriteAllTextAsync(tmp, blob, ct);
             File.Move(tmp, path, overwrite: true);
@@ -64,7 +75,7 @@ public sealed class DataProtectionCredentialStore(IDataProtectionProvider provid
         await _gate.WaitAsync(ct);
         try { if (!File.Exists(path)) return null; blob = await File.ReadAllTextAsync(path, ct); }
         finally { _gate.Release(); }
-        try { return JsonSerializer.Deserialize<Payload>(_protector.Unprotect(blob)); }
+        try { return JsonSerializer.Deserialize<Payload>(Protector.Unprotect(blob)); }
         catch (Exception ex) when (ex is CryptographicException or JsonException)
         {
             if (tolerant) return null;   // listing must not fail because the key ring changed; the cycle reports it

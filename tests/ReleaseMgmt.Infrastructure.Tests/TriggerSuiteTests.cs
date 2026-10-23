@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Tests;
 
 /// <summary>
-/// Port of tests/reference/test_schema.py: same 157 cases, same order, same expected messages, run against the
+/// Port of tests/reference/test_schema.py: same 167 cases, same order, same expected messages, run against the
 /// EF-migrated database (not schema.sql directly). The Python oracle stays and must keep passing.
 /// Sections that share a database in the oracle share one in-order scenario here.
 /// </summary>
@@ -43,7 +43,8 @@ public sealed class TriggerSuiteFixture : IDisposable
         INSERT INTO RunbookSteps(Id,ReleaseTrainId,BundledProductId,StepCode,Section,Title,OwnerUserId,PlannedStartAt,PlannedDurationMin) VALUES
           ('s1','t1','p1','R-001','PreCheck','Health check','rte','2026-10-30T02:00:00Z',10),
           ('s2','t1','p1','R-002','Deploy','Deploy Payments API','rte','2026-10-30T02:10:00Z',30);
-        INSERT INTO StepDependencies(StepId,DependsOnStepId) VALUES('s2','s1');");
+        INSERT INTO StepDependencies(StepId,DependsOnStepId) VALUES('s2','s1');
+        INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) SELECT 'default', Id, Role, '{Now}' FROM Users;");   // the role triggers read the membership role (REOS-105)
     }
 
     public static SqliteConnection Open(string path)
@@ -431,5 +432,23 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         Exec(db6, "UPDATE StepExecutions SET Status='Scheduled',ActualStartAt=NULL WHERE Id='e7'");
         Exec(db6, "INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId) VALUES('f7','Year end','2026-10-01T00:00:00Z','2026-12-31T00:00:00Z','rm')");
         Check(db6, StartE7, false, "its own workspace's freeze does", expect: "Freeze window");
+        // Role triggers read the role held in the train's workspace (REOS-105), never Users.Role
+        Exec(db6, $@"
+        INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','gov1','Viewer','{Now}'),('w2','dev','GovernanceOfficer','{Now}'),('w2','gov2','RTE','{Now}');
+        INSERT INTO StageGates(Id,ReleaseTrainId,GateName,GateClass,SequenceOrder,OffsetDays,DueOn,OwnerUserId,Status,LastChangedByUserId) VALUES('gc','t2','EU Compliance','Compliance',2,2,'2026-11-28','dev','InProgress','dev');
+        INSERT INTO ChecklistTasks(Id,StageGateId,TaskDescription,OwnerUserId,SequenceOrder,IsCompleted,CompletedAt,CompletedByUserId) VALUES('kc','gc','EU evidence','rte',1,1,'{Now}','rte');
+        INSERT INTO GateWaivers(Id,StageGateId,Reason,RequestedByUserId,RequestedAt) VALUES('wv9','gc','EU regulator extension granted in writing','rte','{Now}');");
+        Check(db6, Certify("gc", "gov1"), false, "Compliance certifier who is only a Viewer in the train's workspace", expect: "Governance Officers only");
+        Check(db6, Certify("gc", "rm"), false, "Compliance certifier who is not a member of the train's workspace", expect: "Governance Officers only");
+        Check(db6, "UPDATE GateWaivers SET ApprovedByUserId='gov1',ApprovedAt=? WHERE Id='wv9'", false, "waiver approver who is a Governance Officer elsewhere only", [Now], "approved by a Governance Officer");
+        Check(db6, "INSERT INTO GateWaivers(Id,StageGateId,Reason,RequestedByUserId,ApprovedByUserId,RequestedAt,ApprovedAt) VALUES('wv8','gc','Inserted approved by an outsider','rte','gov2',?,?)", false, "waiver inserted pre-approved by an RTE of the workspace", [Now, Now], "approved by a Governance Officer");
+        Check(db6, "UPDATE GateWaivers SET ApprovedByUserId='dev',ApprovedAt=? WHERE Id='wv9'", true, "waiver approved by the workspace's Governance Officer (a Viewer by Users.Role)", [Now]);
+        Check(db6, Certify("gc", "dev"), true, "Compliance gate certified by the workspace's Governance Officer");
+        Check(db6, Override, false, "freeze override approved by someone who is not a member of the train's workspace", ["o8", "f2", "t2", "Emergency payments fix for EU", "gov2", "rm", Now, "2026-10-30T06:00:00Z"], "approved by a Release Manager or Governance Officer");
+        Check(db6, Override, false, "freeze override approved by a Viewer of the train's workspace", ["o8", "f2", "t2", "Emergency payments fix for EU", "gov2", "gov1", Now, "2026-10-30T06:00:00Z"], "approved by a Release Manager or Governance Officer");
+        Check(db6, Override, true, "freeze override approved by the workspace's Governance Officer", ["o8", "f2", "t2", "Emergency payments fix for EU", "gov2", "dev", Now, "2026-10-30T06:00:00Z"]);
+        Exec(db6, "UPDATE WorkspaceMembers SET Role='Viewer' WHERE WorkspaceId='default' AND UserId='gov2'");
+        Exec(db6, "UPDATE ChecklistTasks SET IsCompleted=1,CompletedAt=?,CompletedByUserId='gov1',LastChangedByUserId='gov1' WHERE Id='k2'", Now);
+        Check(db6, Certify("g2", "gov2"), false, "a Governance Officer by Users.Role whose membership is now Viewer", expect: "Governance Officers only");
     }
 }

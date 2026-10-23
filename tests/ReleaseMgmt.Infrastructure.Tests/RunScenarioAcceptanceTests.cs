@@ -29,10 +29,10 @@ public sealed class RunScenarioAcceptanceTests
     {
         public List<(string Train, string Run)> Forecasts { get; } = [];
         public List<string> Notified { get; } = [];
-        public Task TrainChangedAsync(string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
-        public Task NotificationCreatedAsync(string userId, string notificationId, CancellationToken ct = default) { lock (Notified) Notified.Add(userId); return Task.CompletedTask; }
-        public Task ForecastChangedAsync(string trainId, string runId, CancellationToken ct = default) { lock (Forecasts) Forecasts.Add((trainId, runId)); return Task.CompletedTask; }
-        public Task SyncAlertRaisedAsync(string alertId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task TrainChangedAsync(string workspaceId, string trainId, int version, CancellationToken ct = default) => Task.CompletedTask;
+        public Task NotificationCreatedAsync(string workspaceId, string userId, string notificationId, CancellationToken ct = default) { lock (Notified) Notified.Add(userId); return Task.CompletedTask; }
+        public Task ForecastChangedAsync(string workspaceId, string trainId, string runId, CancellationToken ct = default) { lock (Forecasts) Forecasts.Add((trainId, runId)); return Task.CompletedTask; }
+        public Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private static List<object?[]> Query(string path, string sql, params object?[] p)
@@ -65,6 +65,7 @@ public sealed class RunScenarioAcceptanceTests
         using (var c = TriggerSuiteFixture.Open(path))
         {
             foreach (var u in users) TriggerSuiteFixture.Run(c, "INSERT INTO Users(Id,Email,DisplayName,Role) VALUES(?,?,?,?)", u.Id, u.Email, u.Name, u.Role);
+            TriggerSuiteFixture.Run(c, "INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) SELECT 'default', Id, Role, '2026-10-01T00:00:00Z' FROM Users");   // roles are per workspace (REOS-105)
             foreach (var t in teams) TriggerSuiteFixture.Run(c, "INSERT INTO Teams(Id,Handle,Name) VALUES(?,?,?)", t.Id, t.Handle, t.Name);
             TriggerSuiteFixture.Run(c, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CurrentStatus,CreatedAt,UpdatedAt) VALUES('train','R26.24','2026-10-30','High','Executing','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')");
             var w = setup.GetProperty("deploymentWindow");

@@ -31,7 +31,8 @@ public sealed class ExportModelLoader(IDbContextFactory<ReleaseDbContext> dbf, A
         var users = await db.Set<Users>().AsNoTracking().ToDictionaryAsync(u => u.Id, ct);
         var teams = await db.Set<Teams>().AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct);
         string? Name(string? id) => id is not null && users.TryGetValue(id, out var u) ? u.DisplayName : id;
-        string? Role(string? id) => id is not null && users.TryGetValue(id, out var u) ? u.Role : null;
+        var roles = await db.Set<WorkspaceMembers>().IgnoreQueryFilters().AsNoTracking().Where(m => m.WorkspaceId == t.WorkspaceId).ToDictionaryAsync(m => m.UserId, m => m.Role, ct);
+        string? Role(string? id) => id is not null && roles.TryGetValue(id, out var r) ? r : null;   // the role held in the train's workspace (REOS-105)
         string? Owner(string? userId, string? teamId) => userId is not null ? Name(userId) : teamId is not null && teams.TryGetValue(teamId, out var tn) ? tn : null;
 
         var cr = await db.Set<ChangeRecords>().AsNoTracking().SingleOrDefaultAsync(x => x.ReleaseTrainId == trainId, ct);

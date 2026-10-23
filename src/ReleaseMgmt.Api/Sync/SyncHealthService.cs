@@ -173,7 +173,7 @@ public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, T
         if (!r.IsOk) return new ServiceResult<AlertRow>(r.Kind, null, r.Failures, r.Current, r.Missing);
         if (_realtime is not null)
         {
-            try { await _realtime.SyncAlertRaisedAsync(id, ct); }
+            try { await _realtime.SyncAlertRaisedAsync(r.Value!.WorkspaceId, id, ct); }
             catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "Alert {AlertId} was resolved but the live push failed", id); }
         }
         var page = await ListAlertsAsync(new AlertFilter(State: "resolved", Limit: MaxLimit), ct);
@@ -269,9 +269,11 @@ public sealed class SyncHealthService(IDbContextFactory<ReleaseDbContext> dbf, T
             var norm = checkedUrl.Value!;
             var k = string.IsNullOrWhiteSpace(kind) ? WebhookUrlPolicy.InferKind(norm.Host) : kind.Trim();
             if (k is not ("Teams" or "Slack" or "Generic")) return Bad(SyncGuards.WebhookInvalidInput, "Kind is Teams, Slack or Generic");
-            var dup = $"{norm.Host} with that exact address is already on the allowlist";
+            // REOS-105 (Q-104a): an address is one destination on the whole host. The message is the same whether this workspace or another one holds it,
+            // so it never says which workspace has the address, or that another workspace exists.
+            var dup = $"{norm.Host} with that exact address is already registered on this server. Create a new webhook address for this channel and add that";
             var stored = urlVault.Protect(norm.Normalised);   // Q-053e: encrypted at rest; the keyed hash finds a duplicate without decrypting anything
-            if (await db.Set<WebhookDestinations>().AnyAsync(w => w.UrlHmac == stored.UrlHmac, ct)) return Bad(SyncGuards.WebhookDuplicate, dup);
+            if (await db.Set<WebhookDestinations>().IgnoreQueryFilters().AnyAsync(w => w.UrlHmac == stored.UrlHmac, ct)) return Bad(SyncGuards.WebhookDuplicate, dup);
             var w = new WebhookDestinations { Name = name, Host = norm.Host, ProtectedUrl = stored.ProtectedUrl, UrlHmac = stored.UrlHmac, Kind = k };
             db.Set<WebhookDestinations>().Add(w);
             Audit(db, actor, null, "WebhookDestination", w.Id, "Create", null, new { w.Name, w.Kind, norm.Host });   // the URL is a secret: host only

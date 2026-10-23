@@ -21,6 +21,12 @@ public sealed class DbRuleExceptionHandler : IExceptionHandler
             await ctx.Response.WriteAsJsonAsync(new { guard = "BadRequest", message = "The request could not be read: a required value is missing or the body is not valid" }, ct);
             return true;
         }
+        if (ex is ReleaseMgmt.Infrastructure.Persistence.WorkspaceBoundaryException)   // REOS-105: a row of another workspace is a row that does not exist here
+        {
+            ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+            await ctx.Response.WriteAsJsonAsync(new { guard = "NotFound", message = "Not found" }, ct);
+            return true;
+        }
         if (!DbRules.TryGetMessage(ex, out var message)) return false;
         ctx.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
         await ctx.Response.WriteAsJsonAsync(new { guard = Guards.DbRule, message }, ct);

@@ -53,8 +53,8 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         await using var db = await dbf.CreateDbContextAsync(ct);
         foreach (var id in trainIds)
         {
-            var version = await db.Set<ReleaseTrains>().Where(t => t.Id == id).Select(t => (int?)t.Version).SingleOrDefaultAsync(ct);
-            if (version is int v) await realtime.TrainChangedAsync(id, v, ct);
+            var t = await db.Set<ReleaseTrains>().Where(t => t.Id == id).Select(t => new { t.Version, t.WorkspaceId }).SingleOrDefaultAsync(ct);
+            if (t is not null) await realtime.TrainChangedAsync(t.WorkspaceId, id, t.Version, ct);
         }
     }
 
@@ -63,18 +63,20 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
 
     protected static bool VersionMismatch(int? expected, int current) => expected is int v && v != current;
 
-    /// <summary>One AuditEvents row per service write (D27). A null actor is the system (scheduler, notifier, sync).</summary>
-    protected void Audit(ReleaseDbContext db, Actor? actor, string? trainId, string entityType, string entityId, string action, object? before = null, object? after = null)
+    /// <summary>One AuditEvents row per service write (D27). A null actor is the system (scheduler, notifier, sync). The row is filed under the context's
+    /// workspace (REOS-105); a caller recording a host-wide event (user accounts, backups) sets the returned row's WorkspaceId to null.</summary>
+    protected AuditEvents Audit(ReleaseDbContext db, Actor? actor, string? trainId, string entityType, string entityId, string action, object? before = null, object? after = null)
     {
         if (trainId is not null) Touched.Value?.Add(trainId);
-        db.Set<AuditEvents>().Add(new AuditEvents
+        return db.Set<AuditEvents>().Add(new AuditEvents
         {
             OccurredAt = Now, ActorUserId = actor?.UserId, ReleaseTrainId = trainId, EntityType = entityType, EntityId = entityId, Action = action,
             BeforeJson = before is null ? null : JsonSerializer.Serialize(before, Json),
             AfterJson = after is null ? null : JsonSerializer.Serialize(after, Json),
-        });
+        }).Entity;
     }
 
-    protected static async Task<string?> RoleOf(ReleaseDbContext db, string? userId) =>
-        userId is null ? null : await db.Set<Users>().Where(u => u.Id == userId).Select(u => u.Role).SingleOrDefaultAsync();
+    /// <summary>The role the person holds in the context's workspace (D45, REOS-105); null when they are not a member of it. Users.Role is not consulted:
+    /// it is the role from sign-in, kept equal to the default workspace's membership.</summary>
+    protected static Task<string?> RoleOf(ReleaseDbContext db, string? userId) => Memberships.RoleOf(db, userId);
 }

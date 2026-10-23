@@ -26,7 +26,7 @@ async function scan(page: Page, where: string) {
 const h1 = (text: string) => (p: Page) => expect(p.locator('main h1').first()).toHaveText(text)
 const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[] = [
   { name: 'overview', link: /^Overview$/, ready: h1('Overview') },
-  { name: 'calendar', link: /^Portfolio & calendar$/, ready: h1('Calendar') },
+  { name: 'calendar', link: /^Portfolio & calendar$/, ready: h1('Release portfolio') },
   { name: 'trains', link: /^Releases$/, ready: p => expect(p.locator('.stream-row').first()).toBeVisible() },
   { name: 'orchestration', link: /^Orchestration$/, ready: h1('Orchestration') },
   { name: 'approvals', link: /^Approvals/, ready: h1('Approvals') },

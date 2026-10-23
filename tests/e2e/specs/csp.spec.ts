@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { releaseRow } from './support'
 
 // SEC-E6: the page the app host serves (the built SPA in wwwroot, as production serves it) carries a Content-Security-Policy, and no screen breaks it.
 // The Vite dev server on :6273 serves its own page without the policy (HMR needs inline script), so this spec talks to the app host on :6080 directly.
@@ -41,9 +42,9 @@ test('the built app keeps its Content-Security-Policy and no screen violates it;
   await page.fill('input[type=email]', 'csp-rte@example.com')
   await page.selectOption('select', 'RTE')
   await page.click('button:has-text("Sign in (development)")')
-  await expect(page.locator('.stream-row').first()).toBeVisible()
+  await expect(releaseRow(page).first()).toBeVisible()
 
-  await page.locator('.stream-row').first().click()   // the train workspace: gates, checklist, inspector
+  await releaseRow(page).first().click()   // the train workspace: gates, checklist, inspector
   await expect(page.locator('main h1')).toBeVisible()
 
   const nav = page.getByRole('navigation', { name: 'Primary' })

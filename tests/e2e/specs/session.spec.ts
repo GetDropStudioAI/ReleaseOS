@@ -1,15 +1,15 @@
 import { expect, test } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { releaseRow, signIn, trainByTitle } from './support'
 
 // REOS-26: closing a tab mid-draft loses nothing; a deep link reopens the Inspector on that gate.
 test('closing a tab mid-draft and reopening keeps the draft, the train and the filter', async ({ browser }) => {
   const ctx = await browser.newContext()
   const a = await ctx.newPage()
   await signIn(a, 'session-user@example.com')
-  await a.click('.stream-row:has-text("Reporting")')
+  await a.getByLabel('Search the release list').fill('Rep')                       // the Releases table's filters are saved with the tab's UI state (REOS-125)
+  await releaseRow(a, 'Reporting').click()
   await expect(a.locator('h1')).toContainText('Reporting')
 
-  await a.fill('#flt', 'Rep')
   await a.click('.os-panel-head button:has-text("Add task")')
   await a.fill('input[placeholder="What has to happen"]', 'Half-typed task that must survive')
 
@@ -21,7 +21,8 @@ test('closing a tab mid-draft and reopening keeps the draft, the train and the f
   await b.goto('/')
   await expect(b.locator('h1')).toContainText('Reporting')               // the train comes back with no click
   await expect(b.locator('input[placeholder="What has to happen"]')).toHaveValue('Half-typed task that must survive')
-  await expect(b.locator('#flt')).toHaveValue('Rep')
+  await b.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /^Releases$/ }).click()
+  await expect(b.getByLabel('Search the release list')).toHaveValue('Rep')      // back on the list, the filter is as it was left
   await ctx.close()
 })
 

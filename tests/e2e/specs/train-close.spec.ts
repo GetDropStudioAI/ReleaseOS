@@ -53,7 +53,7 @@ test('a rolled-back live run requires a review with a due date, and Abort asks f
   await dialog.getByRole('button', { name: 'Abort release' }).click()
 
   await expect(dialog).toBeHidden()
-  await expect(page.locator('.stream-row[aria-current=true]')).toContainText('Aborted')
+  await expect(page.getByRole('group', { name: 'Release context' })).toContainText('Aborted')   // the release page's status chip (the Stream's row is gone, D50)
   await expect(page.getByRole('button', { name: 'Abort…' })).toHaveCount(0)
   await expect(pirSection(page)).toContainText('a live run was rolled back')       // the rollback's review stands; aborting adds no second one
 })
@@ -77,7 +77,7 @@ test('Complete asks for a close code; closing with issues requires a review', as
   await dialog.getByRole('button', { name: 'Complete release' }).click()
 
   await expect(dialog).toBeHidden()
-  await expect(page.locator('.stream-row[aria-current=true]')).toContainText('SuccessfulWithIssues')
+  await expect(page.getByRole('group', { name: 'Release context' })).toContainText('Complete · successful with issues')
   await expect(pirSection(page)).toContainText('close code SuccessfulWithIssues')
   await expect(page.getByRole('button', { name: 'Complete…' })).toHaveCount(0)
 })

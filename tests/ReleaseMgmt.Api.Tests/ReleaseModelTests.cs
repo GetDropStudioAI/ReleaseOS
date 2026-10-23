@@ -50,6 +50,34 @@ public class ReleaseModelTests
     }
 
     [Fact]
+    public async Task The_release_list_carries_the_key_owner_team_type_and_environments_of_every_row_for_any_role()
+    {
+        using var f = new ApiFactory();
+        var rte = await As(f, Roles.RTE, "rte@x.com");
+        var viewer = await As(f, Roles.Viewer, "v@x.com");
+        var rmId = UserId(f, "rte@x.com");
+        Sql(f, "INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Operations')");
+        var stg = await Env(rte, "Staging"); var prod = await Env(rte, "Production", "Production");
+        var certType = (await rte.GetFromJsonAsync<JsonElement>("/api/v1/release-types")).EnumerateArray().First(x => x.GetProperty("name").GetString() == "CERT").GetProperty("id").GetString()!;
+        var full = await Create(rte, "R27.01", new { OwnerUserId = rmId, OwnerTeamId = "tm1", ReleaseTypeId = certType, EnvironmentIds = new[] { stg, prod } });
+        var bare = await Create(rte, "R27.02");
+
+        var rows = (await viewer.GetFromJsonAsync<JsonElement>("/api/v1/trains")).EnumerateArray().ToDictionary(r => r.GetProperty("id").GetString()!);
+        var a = rows[full];
+        Assert.Equal("RLS-1", a.GetProperty("key").GetString());
+        Assert.Equal("rte", a.GetProperty("owner").GetProperty("name").GetString());
+        Assert.Equal("ops", a.GetProperty("ownerTeam").GetProperty("handle").GetString());
+        Assert.Equal("CERT", a.GetProperty("type").GetProperty("name").GetString());
+        Assert.Equal(new[] { "Staging", "Production" }, a.GetProperty("environments").EnumerateArray().Select(e => e.GetProperty("name").GetString()).ToArray());
+        var b = rows[bare];   // nothing recorded is null / empty, never invented
+        Assert.Equal("RLS-2", b.GetProperty("key").GetString());
+        Assert.Equal(JsonValueKind.Null, b.GetProperty("owner").ValueKind);
+        Assert.Equal(JsonValueKind.Null, b.GetProperty("ownerTeam").ValueKind);
+        Assert.Equal(JsonValueKind.Null, b.GetProperty("type").ValueKind);
+        Assert.Equal(0, b.GetProperty("environments").GetArrayLength());
+    }
+
+    [Fact]
     public async Task A_key_is_never_reused_even_after_an_archive_and_the_prefix_is_a_workspace_setting()
     {
         using var f = new ApiFactory();

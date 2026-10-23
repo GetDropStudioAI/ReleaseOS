@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { primaryNav, signIn } from './support'
+import { primaryNav, releaseRow, signIn } from './support'
 
 // REOS-106 (D45): the workspace switcher, creating a workspace and managing its members. Each test signs in as its own admin so the shared demo database
 // is only added to. A person with one workspace sees its name without a menu; with several, the switcher is a keyboard-operable menu that reloads
@@ -72,14 +72,14 @@ test('an admin creates a workspace, switches to it from the keyboard, and the ch
 
   // an empty workspace: no releases, and a reload stays in it
   await primaryNav(page).getByRole('link', { name: 'Releases' }).click()
-  await expect(page.getByText('No trains yet')).toBeVisible()
+  await expect(page.getByText('No releases yet')).toBeVisible()   // the Releases table's empty state (REOS-125)
   await page.reload()
   await expect(sidebar(page).locator('.os-workspace-name')).toHaveText(`Payments ${id}`)
 
   // and back, by the mouse
   await switcher(page).click()
   await page.getByRole('menuitemradio', { name: /^Default/ }).click()
-  await expect(page.locator('.stream-row').first()).toBeVisible()
+  await expect(releaseRow(page).first()).toBeVisible()
 })
 
 test('members: add, change role and remove with a confirmation; the last admin is refused in words', async ({ page }) => {

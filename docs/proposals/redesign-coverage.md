@@ -86,7 +86,7 @@ The routes come from `route.ts` (`View`). The sidebar labels come from `shell/na
 |---|---|---|---|---|---|
 | Overview | `/overview` | placeholder | REOS-95, REOS-108 (B2) | 6:4718 | `Covered` |
 | Portfolio & calendar | `/calendar` | `Calendar.tsx`: month and week grids; target dates, windows, gate due dates, ◆ milestones, freeze and chill ranges; the Subscribe panel (create, copy, rotate, revoke an ICS link) | REOS-96 | 6:4990, the week view by team only. The month view, the Timeline and Release list tabs, and the Subscribe panel are not drawn | `Partly` |
-| Releases (list) | `/` | the Stream: 272 px, grouped Executing / Gated / Planning / Complete, gate glyph string, blocker count, freeze footer | REOS-92 lists it; mapping says "Existing: the Stream" | None | `Not covered`: no story restyles the Stream or decides whether it survives the new shell |
+| Releases (list) | `/` | **Built (REOS-125, D50, Q-1119):** a full-width table with filters for status, team, environment and type; the Stream and its freeze footer are gone. Was: the Stream, 272 px, grouped by status, gate glyph string, blocker count, freeze footer | REOS-125 | None (built from the Deployments list pattern) | `Covered` |
 | Release detail | `/trains/{id}` | see section 5 | REOS-97 | 6:5279 | `Partly` (section 5) |
 | Orchestration | `/orchestration` | placeholder; runs live inside each release (Rehearsal and Live modes) | REOS-98 | 6:5552 | `Covered` for the pipeline; see 5.2 for what it drops |
 | Approvals | `/approvals` | interim queue table (`shell/Approvals.tsx`) | REOS-99, REOS-108 (B1), REOS-113 (B5) | 6:5838, Pending tab only | `Partly`: Decided, Exceptions and Policy library are not drawn |
@@ -135,7 +135,7 @@ The routes come from `route.ts` (`View`). The sidebar labels come from `shell/na
 | Exports panel: queue a PDF, job state, SHA-256, download | `ExportsPanel.tsx` | — | None | `Not covered` |
 | Release detail tabs Services, Dependencies, Approvals, Activity | none | REOS-97 | labels only (REOS-92) | `Not covered` as content: mapping section 5 assigns them, no story builds them |
 | Train-level evidence (attachments on the train) | `Evidence.tsx` | — | three evidence cards in 6:5838 only | `Not covered` |
-| No train selected: "Select a release in the Stream" / "No trains yet…" | `App.tsx` | — | None | `Not covered` |
+| No train selected: "Select a release in the Stream" / "No trains yet…" | `App.tsx` | REOS-125: the Releases table's empty state | None | `Covered` |
 
 ### 5.2 Rehearsal and Live modes (`LiveRun.tsx`)
 

@@ -4,11 +4,6 @@ import { pageName, type View } from './nav.ts'
 
 /** What each unbuilt destination will be, and where its work is done today. Copy for the descriptions follows the redesign. */
 const PAGES: Partial<Record<View, { description: string; today: string; links: { view: View; label: string }[] }>> = {
-  overview: {
-    description: 'A shared operational picture of your releases, teams, and production health.',
-    today: 'Until it is built, My work lists what is yours to do, Releases shows every release with its readiness, and Analytics has the trends.',
-    links: [{ view: 'work', label: 'My work' }, { view: 'trains', label: 'Releases' }, { view: 'analytics', label: 'Analytics' }],
-  },
   orchestration: {
     description: 'Runbook runs across your releases, stage by stage, with live progress.',
     today: 'Runbooks run from each release today: open a release and choose Rehearsal or Live runbook.',

@@ -47,14 +47,15 @@ for (const scheme of ['light', 'dark'] as const) {
 
       // the calendar shows it on its date, and a click opens the train
       await page.locator('nav[aria-label=Primary] a[href="/calendar"]').click()
-      await expect(page.locator('h1')).toHaveText('Calendar')
-      const caption = page.locator('.cal-caption')
+      await expect(page.locator('h1')).toHaveText('Release portfolio')
+      await page.getByRole('tab', { name: 'Month' }).click()
+      const caption = page.getByTestId('cal-title')
       for (let i = 0; i < 6 && (await caption.textContent()) !== monthTitle(due); i++) await page.getByRole('button', { name: /^Next month/ }).click()
       await expect(caption).toHaveText(monthTitle(due))
       const entry = page.locator(`td[data-date="${due}"]`).getByTestId('cal-milestone').filter({ hasText: name })
       await expect(entry).toBeVisible()
       await expect(entry).toContainText('◆')
-      await expect(entry).toContainText('open')
+      await expect(entry).toContainText('Open')
       await scan(page, `calendar with a milestone (${scheme})`)
       await entry.click()
       await expect(page).toHaveURL(new RegExp(`/trains/${t.id}`))

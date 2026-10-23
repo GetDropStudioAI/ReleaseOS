@@ -31,21 +31,33 @@ public static class IngestKeyAuthentication
 /// </summary>
 public sealed class IngestLimiter(TimeProvider time, IConfiguration config)
 {
-    private sealed class Bucket { public double Tokens; public long Last; public int Failures; public int Audits; public long WindowStart; }
+    private sealed class Bucket { public double Tokens; public long Last; public int Failures; public int Audits; public long WindowStart; public long Touched; }
     private readonly ConcurrentDictionary<string, Bucket> _buckets = new();
+    private long _calls;
+    private const int PruneEvery = 1000, PruneAbove = 5000;
     private double Rate => Math.Max(1, config.GetValue("Ingest:RequestsPerSecond", 100));
     private double Burst => Math.Max(Rate, config.GetValue("Ingest:Burst", 200));
     private int FailureBudget => Math.Max(1, config.GetValue("Ingest:FailedKeysPerMinute", 30));
     private int AuditBudget => Math.Max(0, config.GetValue("Ingest:RejectionAuditsPerMinute", 10));
     private long Now => time.GetTimestamp();
 
+    /// <summary>Addresses come from the caller: forget the idle ones now and then, so a client spreading refused keys over many addresses cannot grow this without bound.</summary>
+    private void Prune()
+    {
+        if (Interlocked.Increment(ref _calls) % PruneEvery != 0 || _buckets.Count < PruneAbove) return;
+        foreach (var (k, b) in _buckets)
+            if (time.GetElapsedTime(b.Touched, Now) > TimeSpan.FromMinutes(5)) _buckets.TryRemove(k, out _);
+    }
+
     /// <summary>Takes one request from the key's bucket; false with the seconds to wait when it is empty.</summary>
     public bool TryTake(string keyId, out int retryAfterSeconds)
     {
-        var b = _buckets.GetOrAdd("k:" + keyId, _ => new Bucket { Tokens = Burst, Last = Now });
+        Prune();
+        var b = _buckets.GetOrAdd("k:" + keyId, _ => new Bucket { Tokens = Burst, Last = Now, Touched = Now });
         lock (b)
         {
             var now = Now;
+            b.Touched = now;
             b.Tokens = Math.Min(Burst, b.Tokens + time.GetElapsedTime(b.Last, now).TotalSeconds * Rate);
             b.Last = now;
             if (b.Tokens >= 1) { b.Tokens -= 1; retryAfterSeconds = 0; return true; }
@@ -56,7 +68,9 @@ public sealed class IngestLimiter(TimeProvider time, IConfiguration config)
 
     private Bucket Window(string address)
     {
-        var b = _buckets.GetOrAdd("a:" + address, _ => new Bucket { WindowStart = Now });
+        Prune();
+        var b = _buckets.GetOrAdd("a:" + address, _ => new Bucket { WindowStart = Now, Touched = Now });
+        b.Touched = Now;
         if (time.GetElapsedTime(b.WindowStart, Now) >= TimeSpan.FromMinutes(1)) { b.WindowStart = Now; b.Failures = 0; b.Audits = 0; }
         return b;
     }

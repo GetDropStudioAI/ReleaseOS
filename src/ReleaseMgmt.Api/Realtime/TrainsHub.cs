@@ -19,6 +19,7 @@ public sealed class TrainsHub(TimeProvider time, HubConnections connections) : H
     public const string ServerTime = "ServerTime";
     public const string ForecastChanged = "ForecastChanged";
     public const string SyncAlertRaised = "SyncAlertRaised";
+    public const string DeploymentChanged = "DeploymentChanged";
 
     /// <summary>REOS-105: a connection joins its workspace's group (and its own group within it) and hears only that workspace's changes.</summary>
     public static string WorkspaceGroup(string workspaceId) => "ws:" + workspaceId;
@@ -65,6 +66,9 @@ public sealed class SignalRPublisher(IHubContext<TrainsHub> hub) : IRealtimePubl
 
     public Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default) =>
         (workspaceId is null ? hub.Clients.All : hub.Clients.Group(TrainsHub.WorkspaceGroup(workspaceId))).SendAsync(TrainsHub.SyncAlertRaised, alertId, ct);
+
+    public Task DeploymentChangedAsync(string workspaceId, string deploymentId, int version, string? trainId, CancellationToken ct = default) =>
+        hub.Clients.Group(TrainsHub.WorkspaceGroup(workspaceId)).SendAsync(TrainsHub.DeploymentChanged, deploymentId, version, trainId, ct);
 }
 
 /// <summary>

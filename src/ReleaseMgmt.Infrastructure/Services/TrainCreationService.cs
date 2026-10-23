@@ -16,11 +16,14 @@ public static class TrainCreationGuards
     public const string TemplateNotApproved = "TemplateNotApproved";
 }
 
-public sealed record NewProductInput(string? ProductName, string? VersionTag, string? ProjectCode);
+/// <summary><see cref="ServiceKey"/> (REOS-109) links the product to the workspace's service catalog entry with that key; optional.</summary>
+public sealed record NewProductInput(string? ProductName, string? VersionTag, string? ProjectCode, string? ServiceKey = null);
 
-/// <summary><c>POST /trains</c>: a blank train, or one built from an Approved template when <see cref="TemplateId"/> is set. Dates are strings so a bad one is a readable 422, not a 400.</summary>
+/// <summary><c>POST /trains</c>: a blank train, or one built from an Approved template when <see cref="TemplateId"/> is set. Dates are strings so a bad one is a readable 422, not a 400.
+/// REOS-107: the release's owner, team, branch, on-call, type and target environments are optional; a type's default template is used when no template is named.</summary>
 public sealed record NewTrainInput(string? Title, string? TargetReleaseDate, string? RiskTier, string? TemplateId = null, string? WindowStartsAt = null, string? WindowEndsAt = null,
-    IReadOnlyList<NewProductInput>? Products = null);
+    IReadOnlyList<NewProductInput>? Products = null, string? OwnerUserId = null, string? OwnerTeamId = null, string? ReleaseBranch = null, string? OnCallUserId = null,
+    string? OnCallTeamId = null, string? ReleaseTypeId = null, IReadOnlyList<string>? EnvironmentIds = null);
 
 /// <summary><c>POST /trains/{id}:clone</c>. The risk tier defaults to the source train's.</summary>
 public sealed record CloneTrainInput(string? Title, string? TargetReleaseDate, string? RiskTier = null);
@@ -29,7 +32,7 @@ public sealed record CreatedCounts(int Products, int Gates, int Tasks, int Steps
 
 /// <summary>What was created. <see cref="Notes"/> says what was deliberately not copied or was substituted, in words the drawer shows as they are.</summary>
 public sealed record CreatedTrain(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, string Source, string? TemplateId, string? ClonedFromTrainId,
-    int Version, CreatedCounts Created, IReadOnlyList<string> Notes);
+    int Version, CreatedCounts Created, IReadOnlyList<string> Notes, string? ReleaseKey = null);
 
 /// <summary>
 /// Creates a train three ways (PROJECT_SCOPE section 2: "Create, clone from template or prior train"; REOS-80, Q-038t3, Q-080a): blank, from an Approved template,
@@ -55,13 +58,30 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             if (input.RiskTier is not null && !Tiers.Contains(input.RiskTier)) f.Add(Bad($"Risk tier must be one of {string.Join(", ", Tiers)}"));
             var window = ParseWindow(input.WindowStartsAt, input.WindowEndsAt, f);
             var products = CheckProducts(input.Products ?? [], f);
+            var serviceIds = await ResolveServicesAsync(db, products, f, ct);
+            var fields = new NewReleaseFields(Blank(input.OwnerUserId), Blank(input.OwnerTeamId), Blank(input.ReleaseBranch), Blank(input.OnCallUserId), Blank(input.OnCallTeamId), Blank(input.ReleaseTypeId),
+                input.EnvironmentIds is { Count: > 0 } ? input.EnvironmentIds : null);
+            f.AddRange(await ReleaseModelService.ValidateAsync(db, fields.OwnerUserId, fields.OwnerTeamId, fields.ReleaseBranch, fields.OnCallUserId, fields.OnCallTeamId, fields.ReleaseTypeId, fields.EnvironmentIds, ct));
 
+            var notes = new List<string>();
             TrainTemplates? template = null;
-            if (!string.IsNullOrWhiteSpace(input.TemplateId))
+            var templateId = Blank(input.TemplateId);
+            var fromType = false;
+            if (templateId is null && fields.ReleaseTypeId is not null)
             {
-                template = await db.Set<TrainTemplates>().AsNoTracking().SingleOrDefaultAsync(t => t.Id == input.TemplateId, ct);
+                templateId = await db.Set<ReleaseTypes>().AsNoTracking().Where(x => x.Id == fields.ReleaseTypeId).Select(x => x.DefaultTemplateId).SingleOrDefaultAsync(ct);
+                fromType = templateId is not null;
+            }
+            if (templateId is not null)
+            {
+                template = await db.Set<TrainTemplates>().AsNoTracking().SingleOrDefaultAsync(t => t.Id == templateId, ct);
                 if (template is null) return ServiceResult<CreatedTrain>.NotFound("template");
-                if (template.Status != "Approved")
+                if (template.Status != "Approved" && fromType)
+                {
+                    notes.Add($"The release type's default template \"{template.Name}\" is {template.Status}, so the release started blank.");
+                    template = null;
+                }
+                else if (template.Status != "Approved")
                     f.Add(new(TrainCreationGuards.TemplateNotApproved, $"Template \"{template.Name}\" is {template.Status}; only an Approved template can start a train"));
             }
             if (f.Count > 0) return ServiceResult<CreatedTrain>.Fail(f);
@@ -71,11 +91,13 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             {
                 Id = Ids.New(), Title = title, TemplateId = template?.Id, TargetReleaseDate = target!.Value, RiskTier = input.RiskTier ?? template?.DefaultRiskTier ?? "Moderate",
                 CreatedAt = now, UpdatedAt = now, LastChangedByUserId = actor.UserId, LastChangedAt = now,
+                ReleaseKey = await ReleaseKeyAllocator.AllocateAsync(db, ct),
             };
+            ReleaseModelService.Apply(train, fields);
             db.Set<ReleaseTrains>().Add(train);
+            ReleaseModelService.AddEnvironments(db, train.Id, fields.EnvironmentIds);
             await db.SaveChangesAsync(ct);   // the parent first: every child references it
 
-            var notes = new List<string>();
             DeploymentWindows? win = null;
             if (window is { } w)
             {
@@ -85,9 +107,9 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             }
             foreach (var p in products)
             {
-                var row = new BundledProducts { Id = Ids.New(), ReleaseTrainId = train.Id, ProductName = p.ProductName!, VersionTag = p.VersionTag!, ProjectCode = p.ProjectCode! };
+                var row = new BundledProducts { Id = Ids.New(), ReleaseTrainId = train.Id, ProductName = p.ProductName!, VersionTag = p.VersionTag!, ProjectCode = p.ProjectCode!, CatalogServiceId = serviceIds.GetValueOrDefault(p.ProductName!) };
                 db.Set<BundledProducts>().Add(row);
-                Audit(db, actor, train.Id, "BundledProduct", row.Id, "Create", null, new { row.ProductName, row.VersionTag, row.ProjectCode });
+                Audit(db, actor, train.Id, "BundledProduct", row.Id, "Create", null, new { row.ProductName, row.VersionTag, row.ProjectCode, row.CatalogServiceId });
             }
 
             int gates = 0, steps = 0, schedule = 0, comms = 0;
@@ -135,6 +157,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             Audit(db, actor, train.Id, "ReleaseTrain", train.Id, "Create", null, new
             {
                 train.Title, targetReleaseDate = target.Value.ToString("yyyy-MM-dd"), train.RiskTier, source = template is null ? "Blank" : "Template", templateId = template?.Id, template = template?.Name,
+                release = ReleaseModelService.Snapshot(train, fields.EnvironmentIds ?? []),
             });
             await db.SaveChangesAsync(ct);
             return ServiceResult<CreatedTrain>.Ok(View(train, template is null ? "Blank" : "Template", new CreatedCounts(products.Count, gates, 0, steps, 0, comms, schedule, win is not null), notes));
@@ -165,8 +188,18 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             {
                 Id = Ids.New(), Title = title, ClonedFromTrainId = src.Id, TargetReleaseDate = newTarget, RiskTier = input.RiskTier ?? src.RiskTier,
                 CreatedAt = now, UpdatedAt = now, LastChangedByUserId = actor.UserId, LastChangedAt = now,
+                ReleaseKey = await ReleaseKeyAllocator.AllocateAsync(db, ct),
             };
+            // REOS-107: the copy keeps the source's team, branch, on-call, type and target environments; a person who left the workspace is dropped, with a note. The key is a new one.
+            var srcEnvIds = await db.Set<TrainEnvironments>().AsNoTracking().Where(e => e.ReleaseTrainId == src.Id).Select(e => e.EnvironmentId).ToListAsync(ct);
+            var liveEnvIds = (await db.Set<Environments>().AsNoTracking().Where(e => srcEnvIds.Contains(e.Id) && e.ArchivedAt == null).Select(e => e.Id).ToListAsync(ct));
+            var liveType = src.ReleaseTypeId is not null && await db.Set<ReleaseTypes>().AnyAsync(x => x.Id == src.ReleaseTypeId && x.ArchivedAt == null, ct);
+            string? KeepPerson(string? id) { if (id is null || active.Contains(id)) return id; notes.Add("The owner or on-call person of the original is no longer an active member of this workspace and was left empty."); return null; }
+            var cloneFields = new NewReleaseFields(KeepPerson(src.OwnerUserId), src.OwnerTeamId, src.ReleaseBranch, KeepPerson(src.OnCallUserId), src.OnCallTeamId, liveType ? src.ReleaseTypeId : null, liveEnvIds);
+            if (liveEnvIds.Count < srcEnvIds.Count) notes.Add("A target environment of the original is archived and was not copied.");
+            ReleaseModelService.Apply(train, cloneFields);
             db.Set<ReleaseTrains>().Add(train);
+            ReleaseModelService.AddEnvironments(db, train.Id, liveEnvIds);
             await db.SaveChangesAsync(ct);
 
             DeploymentWindows? win = null;
@@ -180,9 +213,9 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             var productMap = new Dictionary<string, string>();
             foreach (var p in await db.Set<BundledProducts>().AsNoTracking().Where(p => p.ReleaseTrainId == src.Id).OrderBy(p => p.ProductName).ToListAsync(ct))
             {
-                var row = new BundledProducts { Id = Ids.New(), ReleaseTrainId = train.Id, ProductName = p.ProductName, VersionTag = p.VersionTag, ProjectCode = p.ProjectCode };
+                var row = new BundledProducts { Id = Ids.New(), ReleaseTrainId = train.Id, ProductName = p.ProductName, VersionTag = p.VersionTag, ProjectCode = p.ProjectCode, CatalogServiceId = p.CatalogServiceId };
                 db.Set<BundledProducts>().Add(row); productMap[p.Id] = row.Id;
-                Audit(db, actor, train.Id, "BundledProduct", row.Id, "Create", null, new { row.ProductName, row.VersionTag, row.ProjectCode, fromTrain = src.Id });
+                Audit(db, actor, train.Id, "BundledProduct", row.Id, "Create", null, new { row.ProductName, row.VersionTag, row.ProjectCode, row.CatalogServiceId, fromTrain = src.Id });
             }
 
             var gateMap = new Dictionary<string, string>();
@@ -258,6 +291,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             Audit(db, actor, train.Id, "ReleaseTrain", train.Id, "Create", null, new
             {
                 train.Title, targetReleaseDate = newTarget.ToString("yyyy-MM-dd"), train.RiskTier, source = "Clone", clonedFromTrainId = src.Id, clonedFrom = src.Title, shiftDays,
+                release = ReleaseModelService.Snapshot(train, liveEnvIds),
             });
             await db.SaveChangesAsync(ct);
             return ServiceResult<CreatedTrain>.Ok(View(train, "Clone", new CreatedCounts(productMap.Count, gateMap.Count, tasks, stepMap.Count, deps.Count, comms, 0, win is not null), notes));
@@ -265,7 +299,23 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
 
     // ---- helpers
     private static CreatedTrain View(ReleaseTrains t, string source, CreatedCounts counts, List<string> notes) =>
-        new(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"), source, t.TemplateId, t.ClonedFromTrainId, t.Version, counts, notes);
+        new(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"), source, t.TemplateId, t.ClonedFromTrainId, t.Version, counts, notes, t.ReleaseKey);
+
+    private static string? Blank(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+
+    /// <summary>Product name to catalog service id for the products that name a service key; an unknown or archived key is a readable failure.</summary>
+    private static async Task<Dictionary<string, string>> ResolveServicesAsync(ReleaseDbContext db, List<NewProductInput> products, List<GuardFailure> f, CancellationToken ct)
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var p in products.Where(p => !string.IsNullOrWhiteSpace(p.ServiceKey)))
+        {
+            var s = await ServiceCatalogService.FindByKeyAsync(db, p.ServiceKey!.Trim(), ct);
+            if (s is null) f.Add(new(ReleaseModelGuards.UnknownService, $"{p.ProductName}: no service with the key \"{p.ServiceKey}\" is in the catalog"));
+            else if (s.ArchivedAt is not null) f.Add(new(ReleaseModelGuards.UnknownService, $"{p.ProductName}: the service \"{s.ServiceKey}\" is archived"));
+            else map[p.ProductName!] = s.Id;
+        }
+        return map;
+    }
 
     private static string Plural(int n, string w) => $"{n} {w}{(n == 1 ? "" : "s")}";
 
@@ -319,7 +369,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             void Need(string v, string what, int max) { if (v.Length == 0) { f.Add(Bad($"{at} needs a {what}")); ok = false; } else if (v.Length > max) { f.Add(Bad($"{at}: the {what} is limited to {max} characters")); ok = false; } }
             Need(name, "name", MaxProductName); Need(tag, "version tag", MaxVersionTag); Need(code, "project code", MaxProjectCode);
             if (name.Length > 0 && !names.Add(name)) { f.Add(Bad($"{at}: {name} is listed twice")); ok = false; }
-            if (ok) result.Add(new NewProductInput(name, tag, code));
+            if (ok) result.Add(new NewProductInput(name, tag, code, input[n].ServiceKey));
         }
         return result;
     }

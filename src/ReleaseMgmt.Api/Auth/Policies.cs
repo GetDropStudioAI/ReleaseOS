@@ -13,6 +13,7 @@ public static class Policies
     public const string GovernanceOfficer = "GovernanceOfficer";
     public const string AuditRead = "AuditRead";             // RTE, ReleaseManager, GovernanceOfficer
     public const string FreezeApprove = "FreezeApprove";     // ReleaseManager, GovernanceOfficer
+    public const string Ingest = "Ingest";                   // REOS-110: a workspace API key, no person and no role
 
     public static void Configure(AuthorizationOptions o)
     {
@@ -23,6 +24,7 @@ public static class Policies
         o.AddPolicy(GovernanceOfficer, p => p.RequireRole(Roles.GovernanceOfficer));
         o.AddPolicy(AuditRead, p => p.RequireRole(Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer));
         o.AddPolicy(FreezeApprove, p => p.RequireRole(Roles.ReleaseManager, Roles.GovernanceOfficer));
+        o.AddPolicy(Ingest, p => p.AddAuthenticationSchemes(IngestKeyAuthentication.Scheme).RequireAuthenticatedUser().RequireClaim(IngestKeyAuthentication.KeyClaim));
         o.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
     }
 }

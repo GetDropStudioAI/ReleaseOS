@@ -30,6 +30,8 @@ public interface IRealtimePublisher
     /// <summary>A SyncAlerts row was raised, repeated or resolved; clients refetch GET /sync/alerts and the connector-wide banner state. A null workspace
     /// is a host-wide alert, which every workspace shows.</summary>
     Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default);
+    /// <summary>A deployment was created, changed state or got events (REOS-110); clients on that workspace refetch GET /deployments/{id}. The train is the release it belongs to, if any.</summary>
+    Task DeploymentChangedAsync(string workspaceId, string deploymentId, int version, string? trainId, CancellationToken ct = default);
 }
 
 /// <summary>Used where no live channel exists (tests, tools).</summary>
@@ -39,4 +41,5 @@ public sealed class NullRealtimePublisher : IRealtimePublisher
     public Task NotificationCreatedAsync(string workspaceId, string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
     public Task ForecastChangedAsync(string workspaceId, string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
     public Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default) => Task.CompletedTask;
+    public Task DeploymentChangedAsync(string workspaceId, string deploymentId, int version, string? trainId, CancellationToken ct = default) => Task.CompletedTask;
 }

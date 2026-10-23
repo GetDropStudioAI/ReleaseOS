@@ -33,6 +33,7 @@ public sealed class RunScenarioAcceptanceTests
         public Task NotificationCreatedAsync(string workspaceId, string userId, string notificationId, CancellationToken ct = default) { lock (Notified) Notified.Add(userId); return Task.CompletedTask; }
         public Task ForecastChangedAsync(string workspaceId, string trainId, string runId, CancellationToken ct = default) { lock (Forecasts) Forecasts.Add((trainId, runId)); return Task.CompletedTask; }
         public Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task DeploymentChangedAsync(string workspaceId, string deploymentId, int version, string? trainId, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private static List<object?[]> Query(string path, string sql, params object?[] p)

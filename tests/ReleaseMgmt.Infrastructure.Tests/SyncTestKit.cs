@@ -92,6 +92,7 @@ internal static class SyncTestKit
         public Task NotificationCreatedAsync(string workspaceId, string userId, string notificationId, CancellationToken ct = default) => Task.CompletedTask;
         public Task ForecastChangedAsync(string workspaceId, string trainId, string runId, CancellationToken ct = default) => Task.CompletedTask;
         public Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default) { lock (Alerts) Alerts.Add(alertId); return Task.CompletedTask; }
+        public Task DeploymentChangedAsync(string workspaceId, string deploymentId, int version, string? trainId, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     public sealed class DbFactory(string path) : IDbContextFactory<ReleaseDbContext>

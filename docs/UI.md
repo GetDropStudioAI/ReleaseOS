@@ -38,7 +38,7 @@ Icons are Lucide (`lucide-react`, pinned), decorative (`aria-hidden`) unless the
   - search (Jump to; ⌘K / Ctrl+K focuses it);
   - the clock in UTC with the person's own time and zone beside it (D44, `shell/clock.ts`), and the connection state in words while it is not live;
   - the Inbox bell with its unread count.
-- **The page area.** Releases shows the Stream, the page and the Inspector; every other page uses the full width.
+- **The page area.** Every page uses the full width. Releases (`/`) is the table of releases (D50, REOS-125); an open release (`/trains/{id}`) has the Inspector beside it, and so does the list while the New train drawer is open. The 272 px Stream is gone.
 - **New destinations.** A destination with no screen yet opens a placeholder page (heading, "not built yet", where the work is done today), never a 404. Screens not yet restyled keep their own look inside the shell until their story, including the `--bg` surface they were contrast-checked on (`.shell`); only pages marked `redesigned` sit on `--color-bg-canvas`, where the old `--brand-title` titles would fall to 4.46:1.
 
 **Gallery.** `/gallery` (signed in) shows every component and variant in light and dark side by side, for review against the Figma frames; `tests/e2e/specs/gallery.spec.ts` checks it with axe in both themes, focus rings, keyboard tabs and rows, and the dialog.
@@ -60,7 +60,7 @@ No checkboxes, toggle switches, pills, badges or bordered boxes anywhere. That m
 - **No modals.** Detail opens inline or in the right drawer. Destructive confirms are inline ("Mark failed" → inline reason field + "Confirm").
 
 ## Look (D23)
-macOS feel: system font, soft greys, translucent toolbar and Stream (backdrop blur; flat fallback), hairline separators, system-blue accent, full dark mode following `prefers-color-scheme` with a manual override (`data-theme` on `<html>`) in the user menu. On Windows the same CSS yields Segoe UI Variable, Cascadia Mono and a Mica-like translucent sidebar. Built against macOS 26 conventions; macOS 27 specifics are unverified, and a change is a token edit.
+macOS feel: system font, soft greys, translucent toolbar and sidebar (backdrop blur; flat fallback), hairline separators, system-blue accent, full dark mode following `prefers-color-scheme` with a manual override (`data-theme` on `<html>`) in the user menu. On Windows the same CSS yields Segoe UI Variable, Cascadia Mono and a Mica-like translucent sidebar. Built against macOS 26 conventions; macOS 27 specifics are unverified, and a change is a token edit.
 
 **Brand (direction D, chosen 2026-09-30):** Fiserv Orange carries the main wording in both themes: page titles, drawer and inspector titles, section heads, the app name and the current-tab underline (`--brand-title` for titles and indicators, `--brand-text` for smaller wording; light mode uses the AA-safe shades `#C24E00` / `#B84A00` because exact `#FF6600` is 2.94:1 on white, and both meet 4.5:1 at any size; dark mode uses exact `#FF6600`). Blue (`--accent`) stays the colour of everything clickable and of the focus ring. Mockups: the "D · Command" page of the design canvas. A toolbar "Jump to" field (Ctrl/Cmd+K) opens any train or page by typing.
 
@@ -70,7 +70,7 @@ Type: 13 px body, 12 px captions and group headers (sentence case), 22 px drawer
 | Region | Width | Content |
 |---|---|---|
 | Toolbar | full, 44 px | app name, primary nav (Trains, Calendar, Analytics, Sync health, Imports & exports), clock + connector glyphs, My work, user menu |
-| Stream | 272 px | trains grouped Executing / Gated / Planning / Complete (30 days); each row: id, title, date · T-n, blocker count, gate glyph string (●●◐○); freeze footer |
+| Stream | removed (D50, REOS-125) | replaced by the Releases table: key, title, status chip with blockers, type, team and owner, environments, target date · T-n, gates passed; filters for status, team, environment and type |
 | Workspace | flexible | selected train or page |
 | Inspector / drawer | 380 px inspector; 560–620 px drawers | context detail; parser; comms |
 

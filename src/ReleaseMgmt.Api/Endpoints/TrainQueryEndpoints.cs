@@ -12,7 +12,8 @@ namespace ReleaseMgmt.Api.Endpoints;
 /// <summary>Read side for the Stream and the train header (REOS-22). Reads never change state.</summary>
 public static class TrainQueryEndpoints
 {
-    public sealed record StreamRow(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, int Blockers, string[] Gates, string? CloseCode, string? EndedOn, int Version);
+    public sealed record StreamRow(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, int Blockers, string[] Gates, string? CloseCode, string? EndedOn, int Version,
+        string? Key = null, PersonRef? Owner = null, TeamRef? OwnerTeam = null, NamedRef? Type = null, EnvironmentRef[]? Environments = null);   // REOS-125: the release model beside each row, for the Releases table's columns and filters
     public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, int TMinus, string RequiredBeforeStatus, string? OwnerName, string? CertifiedBy, string? CertifiedOn, int TasksDone, int TasksTotal, int Version, int SequenceOrder);   // SequenceOrder: REOS-81 (insert a gate before another)
     public sealed record TrainDetail(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, string? ChangeTicketNumber, string? CloseCode, bool RollbackRehearsed, string? NextStatus, int Version, GateRow[] Gates);
 
@@ -51,6 +52,19 @@ public static class TrainQueryEndpoints
             var gates = (await db.Set<StageGates>().AsNoTracking().Where(g => ids.Contains(g.ReleaseTrainId)).ToListAsync(ct))
                 .ToLookup(g => g.ReleaseTrainId);
             var rows = new List<StreamRow>();
+            // REOS-125: owner, team, type and environments for every listed release in four queries, not four per row.
+            var ownerIds = trains.Select(t => t.OwnerUserId).OfType<string>().Distinct().ToList();
+            var teamIds = trains.Select(t => t.OwnerTeamId).OfType<string>().Distinct().ToList();
+            var typeIds = trains.Select(t => t.ReleaseTypeId).OfType<string>().Distinct().ToList();
+            var people = await db.Set<Users>().AsNoTracking().Where(u => ownerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => new PersonRef(u.Id, u.DisplayName), ct);
+            var teamRefs = await db.Set<Teams>().AsNoTracking().Where(x => teamIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new TeamRef(x.Id, x.Handle, x.Name), ct);
+            var typeRefs = await db.Set<ReleaseTypes>().AsNoTracking().Where(x => typeIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new NamedRef(x.Id, x.Name), ct);
+            var envRows = await (from te in db.Set<TrainEnvironments>().AsNoTracking()
+                                 join e in db.Set<ReleaseMgmt.Domain.Entities.Environments>().AsNoTracking() on te.EnvironmentId equals e.Id
+                                 where ids.Contains(te.ReleaseTrainId)
+                                 orderby e.SortOrder, e.Name
+                                 select new { te.ReleaseTrainId, Ref = new EnvironmentRef(e.Id, e.Name, e.Kind, e.Region) }).ToListAsync(ct);
+            var envs = envRows.ToLookup(x => x.ReleaseTrainId, x => x.Ref);
             // Blockers for the next hop: the same guards :advance runs, counted for every train at once (a per-train readiness call took ~1 ms each: 230 ms for 200 trains; REOS-52).
             var blockerCounts = await lifecycle.NextHopBlockerCountsAsync(db, trains, ct);
             foreach (var t in trains)
@@ -58,7 +72,9 @@ public static class TrainQueryEndpoints
                 var blockers = blockerCounts[t.Id];
                 rows.Add(new StreamRow(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
                     BusinessDays.Between(today, t.TargetReleaseDate, holidays), blockers,
-                    [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, (t.CurrentStatus == "Aborted" ? t.UpdatedAt : t.ActualEndAt)?.ToString("yyyy-MM-dd"), t.Version));
+                    [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, (t.CurrentStatus == "Aborted" ? t.UpdatedAt : t.ActualEndAt)?.ToString("yyyy-MM-dd"), t.Version,
+                    t.ReleaseKey, t.OwnerUserId is { } o && people.TryGetValue(o, out var person) ? person : null, t.OwnerTeamId is { } tm && teamRefs.TryGetValue(tm, out var team) ? team : null,
+                    t.ReleaseTypeId is { } ty && typeRefs.TryGetValue(ty, out var type) ? type : null, [.. envs[t.Id]]));
             }
             return Results.Ok(rows);
         }).RequireAuthorization(Policies.Read);

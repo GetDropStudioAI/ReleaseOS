@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { signIn } from './support'
 
-// REOS-80: "New train" on the Stream opens the right drawer (no modal) with three ways to start: Blank, From template, Copy of a train.
+// REOS-80 / REOS-125: "New train" on the Releases page opens the right drawer (no modal) with three ways to start: Blank, From template, Copy of a train.
 // Each way creates a Planning train and opens its workspace. Adds its own trains and template to the shared demo database (unique names).
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']
@@ -33,7 +33,7 @@ async function approvedTemplate(page: Page, name: string) {
 const drawer = (page: Page) => page.locator('aside[aria-label=Inspector]')
 
 async function openDrawer(page: Page) {
-  await page.locator('aside[aria-label=Stream] button:text-is("New train")').click()
+  await page.getByRole('main').getByRole('button', { name: 'New train', exact: true }).first().click()
   await expect(drawer(page).locator('h2', { hasText: 'New train' })).toBeVisible()
 }
 
@@ -47,7 +47,7 @@ async function expectOpened(page: Page, title: string) {
   await expect(page.locator('main h1')).toHaveText(title)
   await expect(page).toHaveURL(/\/trains\/[0-9a-f-]{36}$/)
   await expect(page.locator('main')).toContainText('Planning')
-  await expect(page.locator('aside[aria-label=Stream] .stream-row', { hasText: title })).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('group', { name: 'Release context' })).toBeVisible()   // the new release's own page is open
 }
 
 test('a Release Manager creates a train blank, from an approved template and as a copy, and each opens', async ({ page }) => {
@@ -108,7 +108,8 @@ test('a Release Manager creates a train blank, from an approved template and as 
 
 test('a Viewer has no New train button', async ({ page }) => {
   await signIn(page, 'newtrain-viewer@example.com', 'Viewer')
-  await expect(page.locator('aside[aria-label=Stream] button:text-is("New train")')).toHaveCount(0)
+  await expect(page.getByRole('main').getByRole('button', { name: 'New train', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Releases', level: 1 })).toBeVisible()
 })
 
 for (const scheme of ['light', 'dark'] as const) {

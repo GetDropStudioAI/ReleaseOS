@@ -1,0 +1,9 @@
+/* The Releases table (REOS-125). Tokens only. */
+.rl-filters { display: flex; flex-wrap: wrap; gap: var(--gap-md); align-items: center; }
+.rl-filters .os-search { flex: 1 1 calc(var(--sidebar-width) * 1.2); max-width: calc(var(--sidebar-width) * 1.8); }
+.rl-keylink { font-weight: 600; color: var(--color-accent-text); text-decoration: none; }
+.rl-keylink:hover { text-decoration: underline; }
+.rl-keylink:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
+/* The search input shows its own ring (the keyboard tour checks the focused element), as on Audit history. */
+.rl-filters .os-search input:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; border-radius: var(--radius-xs); }
+.rl-filters .os-search:focus-within { outline: none; }

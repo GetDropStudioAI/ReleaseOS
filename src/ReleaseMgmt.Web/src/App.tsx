@@ -13,7 +13,8 @@ import { SyncHealth } from './SyncHealth'
 import { SyncBanner, notifySyncChanged, useSyncState } from './SyncBanner'
 import { Connectors } from './Connectors'
 import { CommLibrary } from './CommLibrary'
-import { FreezeFooter, Stream, TrainHeader, useStream } from './Trains'
+import { TrainHeader, useStream } from './Trains'
+import { Releases } from './releases/Releases'
 import { Inspector } from './Planning'
 import { LiveRun, RunStepDrawer, useRun } from './LiveRun'
 import { BulkDrawer, bulkKey, type BulkDraft } from './Bulk'
@@ -98,7 +99,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const session = useSession()
   const [zoneReady, setZoneReady] = useState(false)
   useEffect(() => { getConfig().then(c => setDisplayZone(c.displayTimeZone)).catch(() => { /* keep the D24 default */ }).finally(() => setZoneReady(true)) }, [])
-  const { rows, reload } = useStream(true)
+  const { rows, error: rowsError, loadedAt, reload } = useStream(true)
   const [rev, setRev] = useState(0)
   const refetch = () => { setRev(n => n + 1); reload() }
   const [unread, setUnread] = useState(0)
@@ -175,8 +176,10 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const canAdmin = adminRole(me.roles)
   const to = (r: Partial<Route>) => go({ ...route, ...r })
   const open = (r: Partial<Route>) => go({ ...ROOT, ...r })   // from My work / Inbox / Approvals: open a train (view resets to trains)
-  const toView = (v: Route['view']) => go(v === 'trains' ? { ...route, view: 'trains' } : { ...ROOT, view: v })
-  const releases = view === 'trains'   // the Stream and the Inspector belong to the Releases destination; every other page uses the full width
+  const toView = (v: Route['view']) => go({ ...ROOT, view: v })   // D50: the sidebar's Releases is the list (the Stream that kept a release open beside every page is gone)
+  const releases = view === 'trains'   // the Inspector belongs to the Releases destination; every other page uses the full width
+  // D50 (REOS-125): Releases is the full-width table until a release is open (or the New train drawer is); then the release page has the Inspector beside it. The Stream is gone.
+  const listPage = releases && !selected && !(newTrain?.open && canAdmin)
   const redesigned = view === 'approvals' || view === 'admin' || view === 'templates' || view === 'library' || view === 'connectors' || view === 'audit' || view === 'overview' || view === 'calendar' || view === 'deployments' || placeholderOf(view) !== undefined   // drawn with the redesign's page layout (shell.css .os-page), which has its own gutters
   return (
     <div className="os-app">
@@ -188,19 +191,14 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
         <UtilityBar workspaceName={workspace?.name ?? 'Workspace'} page={pageName(view)} rows={rows} targets={jumpTargets(me.roles)} unread={unread} live={live.state}
           onTrain={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} onGo={toView} />
         <SyncBanner sync={sync} onOpen={() => toView('sync')} />
-        <div className={releases ? 'shell' : 'shell full'}>
-          {releases && (
-            <aside className="stream" aria-label="Stream">
-              <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: rows?.find(r => r.id === id)?.status === 'Executing' ? mode : 'plan' })}
-                onNew={canAdmin ? () => setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }) : undefined} />
-              <FreezeFooter refreshKey={rev} />
-            </aside>
-          )}
-          <main id="workspace" ref={mainRef} tabIndex={-1} className={releases ? (selected && mode === 'plan' ? 'workspace redesigned' : 'workspace') : redesigned ? 'workspace wide redesigned' : 'workspace wide'}>
+        <div className={listPage || !releases ? 'shell full' : 'shell with-inspector'}>
+          <main id="workspace" ref={mainRef} tabIndex={-1} className={releases && !selected ? 'workspace wide redesigned' : releases ? (selected && mode === 'plan' ? 'workspace redesigned' : 'workspace') : redesigned ? 'workspace wide redesigned' : 'workspace wide'}>
             {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-            {view === 'deployments' ? <Deployments live={live.state} refreshKey={shellRev + rev} canControl={canAdmin} onOpenTrain={trainId => open({ trainId })} /> : view === 'overview' ? <Overview refreshKey={shellRev + rev} canCreate={canAdmin} onCreate={() => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : view === 'approvals' ? <Approvals refreshKey={shellRev + rev} canAudit={canAudit(me.roles)} onViewAudit={id => { toView('audit'); window.history.replaceState(null, '', auditPath(id)) }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : placeholderOf(view) ? <Placeholder view={view} onGo={toView} /> : view === 'gallery' ? <Suspense fallback={<p className="muted">Loading…</p>}><Gallery /></Suspense> : view === 'admin' ? <Admin canEdit={canAdmin} me={me} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} onOpenTrain={trainId => open({ trainId })} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} onOpen={open} onPlan={canAdmin ? () => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') } : undefined} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Releases</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a release in the Stream.'}</p></>)}
+            {view === 'deployments' ? <Deployments live={live.state} refreshKey={shellRev + rev} canControl={canAdmin} onOpenTrain={trainId => open({ trainId })} /> : view === 'overview' ? <Overview refreshKey={shellRev + rev} canCreate={canAdmin} onCreate={() => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : view === 'approvals' ? <Approvals refreshKey={shellRev + rev} canAudit={canAudit(me.roles)} onViewAudit={id => { toView('audit'); window.history.replaceState(null, '', auditPath(id)) }} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : placeholderOf(view) ? <Placeholder view={view} onGo={toView} /> : view === 'gallery' ? <Suspense fallback={<p className="muted">Loading…</p>}><Gallery /></Suspense> : view === 'admin' ? <Admin canEdit={canAdmin} me={me} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} onOpenTrain={trainId => open({ trainId })} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} onOpen={open} onPlan={canAdmin ? () => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); toView('trains') } : undefined} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <Releases rows={rows} error={rowsError} live={live.state} loadedAt={loadedAt} canCreate={canAdmin} onReload={reload}
+                onOpen={id => go({ view: 'trains', trainId: id, selection: null, mode: rows?.find(r => r.id === id)?.status === 'Executing' ? mode : 'plan' })}
+                onNew={() => setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true })} onImport={() => to({ view: 'importexport' })} />)}
           </main>
-          {releases && (
+          {releases && !listPage && (
             <aside className="inspector" aria-label="Inspector">
               {newTrain?.open && canAdmin
                 ? <NewTrainDrawer trains={rows ?? []}

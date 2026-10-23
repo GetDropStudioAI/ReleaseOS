@@ -5,8 +5,12 @@ export async function signIn(page: Page, email: string, role = 'RTE') {
   await page.fill('input[type=email]', email)
   await page.selectOption('select', role)
   await page.click('button:has-text("Sign in (development)")')
-  await expect(page.locator('.stream-row').first()).toBeVisible()
+  await expect(releaseRow(page).first()).toBeVisible()
 }
+
+/** The Releases table (REOS-125, D50) and its rows: the rows that hold a release, not the "no match" line. */
+export const releasesTable = (page: Page) => page.getByRole('table', { name: 'Releases' })
+export const releaseRow = (page: Page, text?: string | RegExp) => releasesTable(page).locator('tbody tr:not(:has(.os-table-empty))', text === undefined ? {} : { hasText: text })
 
 /** The shell (REOS-94): the sidebar's destinations, the Inbox bell in the utility bar, and the control-plane card that opens Sync health. */
 export const primaryNav = (page: Page) => page.getByRole('navigation', { name: 'Primary' })

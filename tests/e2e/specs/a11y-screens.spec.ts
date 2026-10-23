@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { openPage, signIn, trainByTitle } from './support'
+import { openPage, releaseRow, signIn, trainByTitle } from './support'
 
 // REOS-53 (M8): accessibility pass over EVERY view in route.ts, in light and dark, driven and checked from the keyboard.
 //   1. Keyboard-only tour: from the top of the page Tab to each primary-navigation link and press Enter, in navigation order; the view must open,
@@ -27,7 +27,7 @@ const h1 = (text: string) => (p: Page) => expect(p.locator('main h1').first()).t
 const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[] = [
   { name: 'overview', link: /^Overview$/, ready: h1('Overview') },
   { name: 'calendar', link: /^Portfolio & calendar$/, ready: h1('Release portfolio') },
-  { name: 'trains', link: /^Releases$/, ready: p => expect(p.locator('.stream-row').first()).toBeVisible() },
+  { name: 'trains', link: /^Releases$/, ready: p => expect(releaseRow(p).first()).toBeVisible() },
   { name: 'orchestration', link: /^Orchestration$/, ready: h1('Orchestration') },
   { name: 'approvals', link: /^Approvals/, ready: h1('Approvals') },
   { name: 'deployments', link: /^Deployments$/, ready: h1('Deployments') },
@@ -140,7 +140,7 @@ for (const scheme of ['light', 'dark'] as const) {
       const gate = t.gates.find(g => g.name === 'Compliance Sign-off')!
       for (const mode of ['', '/rehearsal', '/live']) {
         await openPage(page, `/trains/${t.id}${mode}`)
-        await expect(page.locator('.stream-row').first()).toBeVisible()
+        await expect(page.locator('aside[aria-label=Inspector]')).toBeVisible()   // the release page with its Inspector beside it
         await page.waitForTimeout(400)   // let the readiness line, timeline and run data settle
         await scan(page, `train ${mode || 'plan'} (${scheme})`)
         checkStops(await tabThrough(page), `train ${mode || 'plan'} (${scheme}) tab order`)

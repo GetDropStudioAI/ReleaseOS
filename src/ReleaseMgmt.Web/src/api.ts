@@ -52,7 +52,13 @@ export async function getAuthConfig(): Promise<AuthConfig> {
   try { return await get<AuthConfig>('/auth/config') } catch { return { organisationSignIn: true, passwordResetUrl: null } }
 }
 
-export interface StreamRow { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; blockers: number; gates: string[]; closeCode: string | null; endedOn: string | null; version: number }
+export interface PersonRef { id: string; name: string }
+export interface TeamRef { id: string; handle: string; name: string }
+export interface NamedRef { id: string; name: string }
+export interface EnvironmentRef { id: string; name: string; kind: string; region: string | null }
+/** One release in the list (GET /trains). REOS-125: the release model rides along (key, owner, team, type, environments); each is null or empty when nothing is recorded. */
+export interface StreamRow { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; blockers: number; gates: string[]; closeCode: string | null; endedOn: string | null; version: number
+  key: string | null; owner: PersonRef | null; ownerTeam: TeamRef | null; type: NamedRef | null; environments: EnvironmentRef[] }
 export interface GateRow { id: string; name: string; class: string; status: string; dueOn: string; tMinus: number; requiredBeforeStatus: string; ownerName: string | null; certifiedBy: string | null; certifiedOn: string | null; tasksDone: number; tasksTotal: number; version: number }
 export interface TrainDetail { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; changeTicketNumber: string | null; closeCode: string | null; rollbackRehearsed: boolean; nextStatus: string | null; version: number; gates: GateRow[] }
 export interface Blocker { hop: string; failure: { guard: string; message: string; items?: string[] | null } }

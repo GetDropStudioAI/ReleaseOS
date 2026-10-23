@@ -1,7 +1,8 @@
 * { box-sizing: border-box; }
 h1 { font-size: var(--text-title); letter-spacing: var(--tracking-title); margin: 0 0 8px; font-weight: 600; }
-/* The page area under the utility bar (REOS-94, shell/shell.css): Stream | page | Inspector on Releases; the page alone everywhere else. */
-.shell { display: grid; grid-template-columns: var(--stream-width) minmax(0, 1fr) var(--inspector-width); min-height: 0; }
+/* The page area under the utility bar (REOS-94, shell/shell.css): the page alone, or the page and the Inspector beside an open release (D50, REOS-125: the Stream is gone). */
+.shell { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.shell.with-inspector { grid-template-columns: minmax(0, 1fr) var(--inspector-width); }
 .shell.full { grid-template-columns: minmax(0, 1fr); }
 .shell > * { min-height: 0; }
 /* Screens not yet restyled keep the surface they were built and contrast-checked on (--bg: --brand-title titles are 4.79:1 there, 4.46:1 on the
@@ -11,16 +12,13 @@ h1 { font-size: var(--text-title); letter-spacing: var(--tracking-title); margin
 .tabs { display: inline-flex; gap: 16px; }
 .tabs a, .tabs .choice { font: inherit; color: var(--secondary); background: none; border: 0; padding: 0 0 4px; cursor: pointer; text-decoration: none; border-bottom: 2px solid transparent; }
 .tabs .choice[aria-pressed="true"] { color: var(--label); border-bottom-color: var(--accent); }
-.stream { border-right: 1px solid var(--separator); padding: 16px; overflow: auto; position: relative; display: flex; flex-direction: column; }
-.stream section { margin-bottom: 20px; }
-.stream h2 { margin: 0 0 4px; }
 .empty { margin: 0; }
 .workspace { padding: 24px var(--pad-x); overflow: auto; }
 .inspector { border-left: 1px solid var(--separator); padding: 16px; background: var(--panel); overflow: auto; }
 .signin { max-width: 420px; margin: 12vh auto; padding: 0 var(--pad-x); }
 select.line { border: 0; border-bottom: 1px solid var(--tertiary); background: transparent; font: inherit; color: inherit; padding: 4px 0; }
 a { color: var(--accent); }
-@media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .inspector, .stream { border: 0; } }
+@media (max-width: 900px) { .shell, .shell.with-inspector { grid-template-columns: 1fr; } .inspector { border: 0; } }
 
 .shell.full .workspace { grid-column: 1 / -1; }
 .split { display: grid; grid-template-columns: 1fr var(--inspector-width); gap: 24px; }
@@ -32,17 +30,10 @@ table.grid tbody tr { cursor: default; }
 table.grid td { white-space: nowrap; }
 .session-controls { display: inline-flex; gap: 12px; align-items: baseline; }
 
-.stream-row { display: grid; width: 100%; text-align: left; font: inherit; color: var(--label); background: none; border: 0; border-bottom: 1px solid var(--separator); padding: 8px 4px; cursor: pointer; gap: 2px; }
-.stream-row:hover, .stream-row[aria-current="true"] { background: var(--selection); }
-.stream-title { font-weight: 600; }
-.stream-meta { font-size: var(--text-caption); }
-.stream-gates { letter-spacing: 0.2em; }
 .plain { list-style: none; padding: 0; margin: 4px 0 16px; }
 .gate-row { padding: 6px 0; border-bottom: 1px solid var(--separator); }
 
-.stream-top, .stream-bottom, .header-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.stream-top { font-size: 11px; } .stream-bottom { font-size: var(--text-caption); }
-.stream-gates { letter-spacing: 2px; }
+.header-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .cap { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--secondary); }
 .label { color: var(--label); }
 .block { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; }
@@ -81,12 +72,9 @@ section > h2.cap { margin: 22px 0 6px; }
 .timeline .tl-hit { fill: transparent; }
 .conflict { margin: 8px 0; } .conflict p { margin: 4px 0; } .conflict-actions { display: flex; gap: 16px; }
 /* secondary text on the selection tint fell just under 4.5:1 (axe); the selected row uses the label colour instead */
-.stream-row[aria-current="true"] .muted { color: var(--label); }
 .inline-form input.narrow { width: 4em; } .inline-form.stack { display: grid; gap: 8px; } h3.cap { margin: 14px 0 4px; font-size: 11px; font-weight: 600; }
 .grammar { font-family: var(--font-mono); font-size: 12px; color: var(--secondary); margin: 4px 0 12px; white-space: pre; }
 .bulk-text { display: block; width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 12.5px; color: inherit; background: transparent; border: 0; border-bottom: 1px solid var(--tertiary); padding: 6px 0; resize: vertical; }
-.stream .freeze-footer { position: sticky; bottom: -16px; margin: auto -16px -16px; padding: 12px 16px 14px; border-top: 1px solid var(--separator); font-size: var(--text-caption); background: var(--sidebar-fallback); }
-.stream > section:last-of-type { margin-bottom: 20px; }
 
 .metrics { display: flex; flex-wrap: wrap; gap: 8px 36px; border-top: 1px solid var(--separator-strong); border-bottom: 1px solid var(--separator); padding: 10px 0; margin: 12px 0; }
 .metrics .big { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
@@ -161,7 +149,7 @@ pre.preview.src { font-family: var(--font-mono); font-size: 12px; line-height: 1
 label.block textarea.bulk-text { margin-top: 4px; }
 
 /* REOS-45 communication drawer (mockups/Comms.html): the drawer column is 620 px wide while it is open; tokens only */
-@media (min-width: 901px) { .shell:has(.comms-drawer) { grid-template-columns: var(--stream-width) 1fr calc(var(--drawer-width) + 60px); } }
+@media (min-width: 901px) { .shell:has(.comms-drawer) { grid-template-columns: 1fr calc(var(--drawer-width) + 60px); } }
 .comms-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
 .comms-rule { border-top: 1px solid var(--separator-strong); padding-top: 6px; margin-top: 2px; }
 .comms-drawer .src { font-family: var(--font-mono); font-size: 12px; line-height: 19px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -225,9 +213,7 @@ input.line:focus, input.line:focus-within, textarea.line:focus, .inline-form inp
 .workspace:focus { outline: none; } .workspace h1[tabindex="-1"]:focus { outline: none; }
 /* 1.4.11: selection is more than a 1.16:1 tint: a 3px accent edge on the selected row, day or train */
 table.grid tr.selected td:first-child, table.grid tr[aria-selected="true"] td:first-child, table.grid tr[aria-current="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 6px; }
-.stream-row[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); }
 /* 1.4.3: muted text on the hover tint is 4.38:1; use the label colour there as on the selected row */
-.stream-row:hover .muted { color: var(--label); }
 /* inline confirm (ConfirmInline.tsx) */
 .confirm-inline { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .confirm-inline input.line { min-width: 14em; }
@@ -237,11 +223,10 @@ table.grid tr.selected td:first-child, table.grid tr[aria-selected="true"] td:fi
    Tokens: --brand-title (22px+ and indicators), --brand-text (smaller headings). Contrast is AA in light and dark (docs/review/ACCESSIBILITY_AUDIT.md). */
 h1 { color: var(--brand-title); }
 .detail h2, h2.file-name, h2.aside-title, .drawer-title, .inspector h2:not(.cap) { color: var(--brand-title); }
-h2.cap, h3.cap, .section-head h2, .stream h2, .an-title, .cal-caption, .runtable tr.sec td, .runtable tr.sec th { color: var(--brand-text); }
+h2.cap, h3.cap, .section-head h2, .an-title, .cal-caption, .runtable tr.sec td, .runtable tr.sec th { color: var(--brand-text); }
 .tabs a[aria-current="page"], .tabs .choice[aria-pressed="true"], .sync-window button[aria-pressed="true"] { border-bottom-color: var(--brand-title); }
 /* section rows became <th scope="rowgroup"> (WCAG 1.3.1): keep them left-aligned like the old cells */
 .runtable tr.sec th { text-align: left; font-weight: 600; }
-.stream-head { margin-top: 0; } /* REOS-80: "New train" above the Stream filter */
 /* Train milestones (Q-0843): a ◆ in its own lane under the gate timeline, joined to the axis by a dotted hairline. Words carry the state; colour repeats it. */
 .timeline .tl-ms-tick { stroke: var(--separator-strong); }
 .timeline .tl-ms-glyph { font-size: 12px; fill: var(--secondary); }

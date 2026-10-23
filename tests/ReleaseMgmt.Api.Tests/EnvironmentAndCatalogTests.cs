@@ -106,7 +106,7 @@ public class EnvironmentAndCatalogTests
 
         // A train's product links to the service: at creation by key, afterwards by key or id, and unlinks with {}
         var train = await rte.PostAsJsonAsync("/api/v1/trains", new { title = "R27.01", targetReleaseDate = Target(), riskTier = "Low",
-            products = new[] { new { productName = "Payments API", versionTag = "4.5.0", projectCode = "PAY", serviceKey = "PAYMENTS-api" }, new { productName = "Card Portal", versionTag = "2.1.0", projectCode = "CRD", serviceKey = (string?)null } } });
+            products = new[] { new { productName = "Payments API", versionTag = "4.5.0", projectCode = "PAY", serviceKey = "PAYMENTS-api" }, new { productName = "Card Portal", versionTag = "2.1.0", projectCode = "CRD", serviceKey = "" } } });
         Assert.Equal(HttpStatusCode.OK, train.StatusCode);
         var trainId = (await Json(train)).GetProperty("id").GetString()!;
         Assert.Equal(id, Scalar(f, $"SELECT CatalogServiceId FROM BundledProducts WHERE ReleaseTrainId='{trainId}' AND ProductName='Payments API'"));

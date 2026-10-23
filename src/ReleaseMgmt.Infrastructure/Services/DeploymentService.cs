@@ -40,6 +40,7 @@ public sealed class DeploymentService(IDbContextFactory<ReleaseDbContext> dbf, T
 {
     private const string Entity = "Deployment";
     private static readonly JsonSerializerOptions CanaryJson = new();
+    private readonly IRealtimePublisher? _live = realtime;   // a field, not the captured parameter: the base class keeps its own copy
 
     private static GuardFailure Bad(string m) => new(ReleaseModelGuards.DeploymentInvalid, m);
     private static string? Iso(DateTime? t) => t?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
@@ -68,10 +69,10 @@ public sealed class DeploymentService(IDbContextFactory<ReleaseDbContext> dbf, T
 
     private async Task PublishAsync(string workspaceId, string deploymentId, int version, CancellationToken ct)
     {
-        if (realtime is null) return;
+        if (_live is null) return;
         await using var db = await OpenAsync(ct);
         var trainId = await db.Set<Deployments>().Where(x => x.Id == deploymentId).Select(x => x.ReleaseTrainId).SingleOrDefaultAsync(ct);
-        await realtime.DeploymentChangedAsync(workspaceId, deploymentId, version, trainId, ct);
+        await _live.DeploymentChangedAsync(workspaceId, deploymentId, version, trainId, ct);
     }
 
     private static string? ValidExternalId(string? id, string what) =>

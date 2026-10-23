@@ -217,8 +217,8 @@ M10 and M15 are labelled release-level, not DORA (no CI/CD commit data in v1). Q
 ### CSV import
 | Kind | Upsert key | Required | Optional |
 |---|---|---|---|
-| Trains | Title | Title, TargetReleaseDate, RiskTier | Template, ChangeTicketNumber, WindowStart, WindowEnd |
-| Products | Train + ProductName | Train, ProductName, VersionTag, ProjectCode | — |
+| Trains | Title | Title, TargetReleaseDate, RiskTier | Template, ChangeTicketNumber, WindowStart, WindowEnd, Owner (email), Team (handle), Branch, OnCall (email or @team), ReleaseType, Environments (names, comma separated); the export adds a read-only `#Key` (REOS-107) |
+| Products | Train + ProductName | Train, ProductName, VersionTag, ProjectCode | ServiceKey (a service of the catalog, REOS-109) |
 | Gates | Train + SequenceOrder | Train, GateName, SequenceOrder, OffsetDays, RequiredBefore, Owner | GateClass |
 | Tasks | Train + Gate + Description | Train, Gate, Description, Owner | Product, Order |
 | RunbookSteps | Train + StepCode | Train, StepCode, Title, Section, PlannedStart, DurationMin, Owner | Product, DependsOn, Instructions |

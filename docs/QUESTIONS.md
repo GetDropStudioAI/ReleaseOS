@@ -580,6 +580,42 @@ Context: the M8 acceptance ("the pilot RTE runs a real release without a spreads
 Found while building the Figma variables (REOS-103): the design's tertiary text colour `#8C97A8` (timestamps, IDs, "Due in 28m", table captions, 10–12 px monospace) is **2.95:1 on white and 2.75:1 on the page background**, below AA's 4.5:1. The dark values chosen for the same role pass (5.8:1). Kept as designed in Figma for now. **Say which you want:** (a) darken `text/tertiary` in Light to about `#67738A` (4.5:1 on the page background; close to `text/secondary`, so captions and secondary text look nearly the same), or (b) keep it and accept the failure for these captions, or (c) use `text/secondary` for any caption that carries information and keep tertiary for decoration only. REOS-102 will report it either way.
 **Done meanwhile (REOS-93):** `text/secondary` Light is `#626F84` instead of the design's `#657287` (3 steps darker per channel, not visible), in Figma and in code, because the design's grey on the grey chip background (neutral chips such as Planned and Queued, the shortcut hint) was 4.38:1 and is now 4.57:1. Until (a), (b) or (c) is chosen, the components use `text/secondary` for every caption that carries information (option c), so the screens stay AA; `text/tertiary` is used only for decoration.
 
+## Q-094a · REOS-94 · The app shell: what it was built to
+**Built to these choices (say if wrong):**
+- **Navigation.**
+  - The design's Workspace group comes first, in its order and with its icons: Overview, Portfolio & calendar, Releases, Orchestration, Approvals, Deployments, Audit history.
+  - The design's Management list follows: Service catalog, Environments, Teams & settings (the Admin page).
+  - The screens the design does not place are kept reachable. Templates, Comm library and Connectors are added after Teams & settings. My work, Analytics and Imports & exports form a **More** group.
+  - Sync health is the control-plane card, and the Inbox is the bell.
+  - Say if any should move (for example My work into the Workspace group, or Templates under Teams & settings).
+- **Placeholders.** Overview, Orchestration, Deployments, Service catalog and Environments have no screen yet. Each opens a page with its heading, "This screen is not built yet", and where that work is done today.
+- **Approvals.**
+  - The badge needs a real count, so the approval queue (B1) is built here. It is `GET /approvals`, backed by `ApprovalQueueService`. REOS-108 keeps the overview endpoint.
+  - The queue lists what waits for the person, with the same role and separation-of-duties rules as the actions:
+    - Compliance gates ready to certify (a Governance Officer who completed none of the gate's tasks);
+    - waivers and freeze-override requests from someone else;
+    - Go/No-Go for a Gated train without a Go (a Release Manager);
+    - the person's open Go conditions.
+  - Due: the gate's date; the deployment window's start (or the freeze's start) for an override or a Go/No-Go; the condition's expiry.
+  - Until REOS-99, the Approvals page lists the queue and opens the release where each decision is made.
+- **Workspace block.** It shows the name, then "Workspace" and the region (`Workspace:Region`). There is no dropdown until REOS-106: a chevron that opens nothing would mislead.
+- **Utility bar.**
+  - The breadcrumb is "workspace / page". The design's "Acme / Production workspace" has no organisation entity behind it.
+  - Search says "Search releases and pages…" rather than the design's "Search releases, services…", because there are no services to search yet (B8). The shortcut hint is ⌘ K on a Mac and Ctrl K elsewhere.
+- **Clock.**
+  - It reads "23 OCT 2026 · 14:32 UTC", then the person's own time and zone from the browser, such as "09:32 CDT" (D44). It uses the server's clock (pushed over SignalR) and changes each minute.
+  - Timestamps elsewhere keep the display zone until each screen is restyled (REOS-95 to 101). D44 is applied screen by screen.
+- **Control-plane card**, worst first:
+  - **Service disruption:** the server does not answer, `/healthz` is Unhealthy (database, poller or watchdog), or live updates are offline.
+  - **Degraded:** sync alerts are open, a connector is failing, sync has stalled, or live updates are reconnecting.
+  - **All systems operational:** none of the above.
+
+  It ends with "CONTROL PLANE / region" and opens Sync health.
+- **Account panel.** The user card (initials, name, role) opens it: Appearance (Auto, Light, Dark), Sign out, and Reset/Exit when `start.py` supervises the app. These were in the old toolbar.
+- **Connection state.** It is shown in words beside the clock only while live updates are not connected ("Reconnecting…", "Offline: reload to reconnect").
+- **The Stream** shows on Releases only; every other page uses the full width.
+- **Fixed on the way.** `FreezeService.FindBlockingAsync`, the service-side twin of the freeze-lockout trigger, now reads only the train's own workspace's freezes, as the trigger has done since REOS-104.
+
 ## Q-104a · REOS-104 · Workspaces: how the schema carries them (D45)
 **Built to these choices (say if wrong):**
 - **Tables.** `Workspaces` holds the name, URL slug, region label and archived date. `WorkspaceMembers` holds workspace, user and one of the four roles. Every database has the `default` workspace (id `default`, a documented exception to UUIDv7). An upgraded database (`db/upgrades/004_workspaces.sql`) puts every existing row in it, and every existing user, inactive ones too, becomes a member with their current role.

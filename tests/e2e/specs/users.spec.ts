@@ -8,7 +8,7 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']
 test('a Release Manager adds a user, a duplicate is refused inline, and the new user is offered as a task owner', async ({ page }) => {
   const email = `quinn.added.${Date.now()}@example.com`
   await signIn(page, 'users-rm@example.com', 'ReleaseManager')
-  await page.click('nav[aria-label=Primary] a:has-text("Admin")')
+  await page.click('nav[aria-label=Primary] a:has-text("Teams & settings")')
   await expect(page.locator('main h1')).toHaveText('Admin')
 
   await page.locator('button:text-is("Add user")').click()

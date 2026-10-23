@@ -1,19 +1,17 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Search } from 'lucide-react'
 import type { StreamRow } from './api'
-import type { Route } from './route'
-
-type View = Route['view']
-const VIEWS: { name: string; view: View }[] = [
-  { name: 'My work', view: 'work' }, { name: 'Inbox', view: 'inbox' }, { name: 'Calendar', view: 'calendar' }, { name: 'Analytics', view: 'analytics' },
-  { name: 'Imports & exports', view: 'importexport' }, { name: 'Sync health', view: 'sync' }, { name: 'Comm library', view: 'library' }, { name: 'Templates', view: 'templates' },
-]
+import type { View } from './route'
+import { shortcutHint } from './ui'
 
 /**
- * "Jump to…" (design direction D, workflow review recommendation 4): one field in the toolbar that opens any train or page by typing,
- * so a frequent destination is one keystroke plus a few letters instead of a scroll through the Stream or the nav.
- * Ctrl+K / Cmd+K focuses it from anywhere (not while typing elsewhere). A native <datalist> keeps it accessible without a custom listbox.
+ * Search in the utility bar (REOS-94; "Jump to", design direction D, workflow review recommendation 4): opens any release or page by typing, so a
+ * frequent destination is one keystroke plus a few letters. Ctrl+K / Cmd+K focuses it from anywhere. A native <datalist> keeps it accessible without a
+ * custom listbox. The pages offered are the ones the sidebar offers this person (shell/nav.ts).
  */
-export function JumpTo({ rows, onTrain, onView }: { rows: StreamRow[] | null; onTrain: (id: string) => void; onView: (v: View) => void }) {
+export function JumpTo({ rows, targets, onTrain, onView }: {
+  rows: StreamRow[] | null; targets: { name: string; view: View }[]; onTrain: (id: string) => void; onView: (v: View) => void
+}) {
   const [q, setQ] = useState('')
   const [miss, setMiss] = useState(false)
   const input = useRef<HTMLInputElement>(null)
@@ -27,7 +25,7 @@ export function JumpTo({ rows, onTrain, onView }: { rows: StreamRow[] | null; on
   const go = (text: string) => {
     const t = text.trim().toLowerCase()
     if (!t) return
-    const view = VIEWS.find(v => v.name.toLowerCase() === t) ?? VIEWS.find(v => v.name.toLowerCase().startsWith(t))
+    const view = targets.find(v => v.name.toLowerCase() === t) ?? targets.find(v => v.name.toLowerCase().startsWith(t))
     const train = (rows ?? []).find(r => trainLabel(r).toLowerCase() === t) ?? (rows ?? []).find(r => r.title.toLowerCase().includes(t) || r.id.toLowerCase().startsWith(t))
     if (train && (!view || trainLabel(train).toLowerCase() === t)) onTrain(train.id)
     else if (view) onView(view.view)
@@ -35,19 +33,18 @@ export function JumpTo({ rows, onTrain, onView }: { rows: StreamRow[] | null; on
     setMiss(false); setQ(''); input.current?.blur()
   }
   return (
-    <form className="jump" role="search" onSubmit={e => { e.preventDefault(); go(q) }}>
-      <label>Jump to{' '}
-        <input ref={input} className="line" list={listId} value={q} placeholder="Train or page" aria-keyshortcuts="Control+K Meta+K"
-          aria-invalid={miss || undefined} aria-describedby={miss ? hintId : undefined}
-          onChange={e => { setQ(e.target.value); setMiss(false); const v = e.target.value; if ((rows ?? []).some(r => trainLabel(r) === v) || VIEWS.some(x => x.name === v)) go(v) }}
-          onKeyDown={e => { if (e.key === 'Escape') { setQ(''); setMiss(false); input.current?.blur() } }} />
-      </label>
-      <kbd aria-hidden="true">Ctrl K</kbd>
+    <form className="os-search os-jump" role="search" aria-label="Jump to" onSubmit={e => { e.preventDefault(); go(q) }}>
+      <Search className="os-search-icon" size={14} strokeWidth={1.6} aria-hidden="true" />
+      <input ref={input} list={listId} value={q} placeholder="Search releases and pages…" aria-label="Search releases and pages" aria-keyshortcuts="Control+K Meta+K"
+        aria-invalid={miss || undefined} aria-describedby={miss ? hintId : undefined}
+        onChange={e => { setQ(e.target.value); setMiss(false); const v = e.target.value; if ((rows ?? []).some(r => trainLabel(r) === v) || targets.some(x => x.name === v)) go(v) }}
+        onKeyDown={e => { if (e.key === 'Escape') { setQ(''); setMiss(false); input.current?.blur() } }} />
+      <kbd className="os-kbd" aria-hidden="true">{shortcutHint()}</kbd>
       <datalist id={listId}>
         {(rows ?? []).map(r => <option key={r.id} value={trainLabel(r)} />)}
-        {VIEWS.map(v => <option key={v.view} value={v.name} />)}
+        {targets.map(v => <option key={v.view} value={v.name} />)}
       </datalist>
-      {miss && <span id={hintId} className="bad small" role="alert">✗ Nothing matches “{q}”</span>}
+      {miss && <span id={hintId} className="os-jump-miss" role="alert">✗ Nothing matches “{q}”</span>}
     </form>
   )
 }

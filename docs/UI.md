@@ -23,8 +23,22 @@ The visual reference is the Figma redesign [uxMlQ7LTNoW8sIKWSIeY98](https://www.
 | `FilterSelect` | the design's filter dropdown, a native select underneath |
 | `SearchField` | leading icon and the platform's shortcut hint (⌘ K or Ctrl K); the shell owns the binding |
 | `ConfirmDialog` | the only dialog: destructive or irreversible actions (Rollback, Pause run); starts on Cancel, Escape cancels, focus returns |
+| `PageHeading` | breadcrumb trail, the page's h1, a one-line description, up to two actions (secondary + primary) on the right |
 
 Icons are Lucide (`lucide-react`, pinned), decorative (`aria-hidden`) unless they are the only content of a control, 16 px at stroke 1.6. **Rules that stay:** status is never colour alone; every interactive element has the visible focus ring; no checkboxes or toggle switches; times are UTC and labelled, with the person's local time alongside (D44). **Contrast:** components use `text/secondary` for any caption that carries information and `text/tertiary` only for decoration, until QUESTIONS Q-090f is decided.
+
+**Shell (REOS-94, `src/ReleaseMgmt.Web/src/shell/`).** Every signed-in page sits in it:
+- **Sidebar** (216 px, `aside` "Workspace"):
+  - brand, then the workspace's name and region;
+  - the Primary navigation (`shell/nav.ts`: the design's Workspace group in order with its Lucide icons, the Management list, and a More group for screens the design does not place, Q-094a). The Approvals item carries the count of decisions waiting for the person (`GET /approvals`), hidden at zero;
+  - in the footer, the control-plane card (`shell/health.ts`: operational, degraded or service disruption, from `/healthz`, the sync state and the live connection; a link to Sync health) and the user card, which opens the account panel (Appearance, Sign out, Reset/Exit under `start.py`).
+- **Utility bar** (64 px, the `banner`):
+  - where you are (workspace / page);
+  - search (Jump to; ⌘K / Ctrl+K focuses it);
+  - the clock in UTC with the person's own time and zone beside it (D44, `shell/clock.ts`), and the connection state in words while it is not live;
+  - the Inbox bell with its unread count.
+- **The page area.** Releases shows the Stream, the page and the Inspector; every other page uses the full width.
+- **New destinations.** A destination with no screen yet opens a placeholder page (heading, "not built yet", where the work is done today), never a 404. Screens not yet restyled keep their own look inside the shell until their story, including the `--bg` surface they were contrast-checked on (`.shell`); only pages marked `redesigned` sit on `--color-bg-canvas`, where the old `--brand-title` titles would fall to 4.46:1.
 
 **Gallery.** `/gallery` (signed in) shows every component and variant in light and dark side by side, for review against the Figma frames; `tests/e2e/specs/gallery.spec.ts` checks it with axe in both themes, focus rings, keyboard tabs and rows, and the dialog.
 

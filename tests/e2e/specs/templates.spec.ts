@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { signIn } from './support'
+import { signIn, signOut } from './support'
 
 // REOS-38: governed train templates, entirely inline (no modals). Draft -> Approved -> Retired.
 test('a Release Manager drafts, approves and retires a template; a Viewer sees it read only', async ({ page }) => {
@@ -51,8 +51,7 @@ test('an RTE can draft but not approve; a Viewer has no actions', async ({ page 
   await expect(page.locator('button:text-is("Approve")')).toHaveCount(0)
 
   await page.goto('/')
-  await page.click('button:text-is("Sign out")')
-  await expect(page.locator('input[type=email]')).toBeVisible()   // the logout request has finished; navigating earlier can abort it and keep the session
+  await signOut(page)   // waits for the sign-in page: the logout request has finished; navigating earlier can abort it and keep the session
   await signIn(page, 'templates-viewer@example.com', 'Viewer')
   await page.click('nav[aria-label=Primary] a:has-text("Templates")')
   await expect(page.locator('button:text-is("New template")')).toHaveCount(0)

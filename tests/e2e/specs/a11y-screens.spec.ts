@@ -19,21 +19,30 @@ async function scan(page: Page, where: string) {
   expect(bad, `axe violations on ${where}:\n${detail}`).toEqual([])
 }
 
-/** The primary navigation in DOM order, with the heading each view shows (route.ts: every value of Route.view). */
+/**
+ * The sidebar's Primary navigation in DOM order (REOS-94, shell/nav.ts; an RTE sees every item), with what each page shows when it is ready. Sync health
+ * (the control-plane card) and the Inbox (the bell) are reached outside the list and checked after the tour.
+ */
+const h1 = (text: string) => (p: Page) => expect(p.locator('main h1').first()).toHaveText(text)
 const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[] = [
-  { name: 'trains', link: /^Trains$/, ready: p => expect(p.locator('.stream-row').first()).toBeVisible() },
-  { name: 'work', link: /^My work$/, ready: p => expect(p.locator('main h1')).toHaveText('My work') },
-  { name: 'inbox', link: /^Inbox/, ready: p => expect(p.locator('main h1')).toHaveText('Inbox') },
-  { name: 'calendar', link: /^Calendar$/, ready: p => expect(p.locator('main h1')).toHaveText('Calendar') },
-  { name: 'analytics', link: /^Analytics$/, ready: p => expect(p.locator('main h1')).toHaveText('Analytics') },
-  { name: 'importexport', link: /^Imports & exports$/, ready: p => expect(p.locator('main h1')).toHaveText('Imports & exports') },
-  { name: 'sync', link: /^Sync health$/, ready: p => expect(p.locator('main h1')).toHaveText('Sync health') },
-  { name: 'library', link: /^Comm library$/, ready: p => expect(p.locator('main h1')).toHaveText('Comm library') },
-  { name: 'connectors', link: /^Connectors$/, ready: p => expect(p.locator('main h1')).toHaveText('Connectors') },
-  { name: 'templates', link: /^Templates$/, ready: p => expect(p.locator('main h1')).toHaveText('Train templates') },
-  { name: 'audit', link: /^Audit$/, ready: p => expect(p.locator('main h1')).toHaveText('Audit') },
-  { name: 'admin', link: /^Admin$/, ready: p => expect(p.locator('main h1')).toHaveText('Admin') },
+  { name: 'overview', link: /^Overview$/, ready: h1('Overview') },
+  { name: 'calendar', link: /^Portfolio & calendar$/, ready: h1('Calendar') },
+  { name: 'trains', link: /^Releases$/, ready: p => expect(p.locator('.stream-row').first()).toBeVisible() },
+  { name: 'orchestration', link: /^Orchestration$/, ready: h1('Orchestration') },
+  { name: 'approvals', link: /^Approvals/, ready: h1('Approvals') },
+  { name: 'deployments', link: /^Deployments$/, ready: h1('Deployments') },
+  { name: 'audit', link: /^Audit history$/, ready: h1('Audit') },
+  { name: 'services', link: /^Service catalog$/, ready: h1('Service catalog') },
+  { name: 'environments', link: /^Environments$/, ready: h1('Environments') },
+  { name: 'admin', link: /^Teams & settings$/, ready: h1('Admin') },
+  { name: 'templates', link: /^Templates$/, ready: h1('Train templates') },
+  { name: 'library', link: /^Comm library$/, ready: h1('Comm library') },
+  { name: 'connectors', link: /^Connectors$/, ready: h1('Connectors') },
+  { name: 'work', link: /^My work$/, ready: h1('My work') },
+  { name: 'analytics', link: /^Analytics$/, ready: h1('Analytics') },
+  { name: 'importexport', link: /^Imports & exports$/, ready: h1('Imports & exports') },
 ]
+const byName = (n: string) => VIEWS.find(v => v.name === n)!
 
 const nameOf = () => {
   const el = document.activeElement as HTMLElement | null
@@ -114,6 +123,15 @@ for (const scheme of ['light', 'dark'] as const) {
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
         await page.locator('nav[aria-label="Primary"] a[aria-current="page"]').focus()   // continue the keyboard tour from this link: Tab moves on to the next
       }
+      // Sync health from the control-plane card, then the Inbox from the bell, from the keyboard as well
+      for (const [name, link, heading] of [['sync', /Open Sync health/, 'Sync health'], ['inbox', /^Inbox/, 'Inbox']] as const) {
+        await tabTo(page, link)
+        await page.keyboard.press('Enter')
+        await expect(page.locator('main h1').first()).toHaveText(heading)
+        await scan(page, `${name} (${scheme})`)
+        checkStops(await tabThrough(page), `${name} (${scheme}) tab order`)
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+      }
     })
 
     test('train workspace in Plan, Rehearsal and Live mode, gate Inspector and both drawers', async ({ page }) => {
@@ -160,11 +178,13 @@ for (const [os, pick] of [['light', 'Dark'], ['dark', 'Light']] as const) {
     const ctx = await browser.newContext({ colorScheme: os })
     const page = await ctx.newPage()
     await signIn(page, `a11y-theme-${pick.toLowerCase()}@example.com`)
+    await tabTo(page, /account and appearance/)   // the user card opens the account panel (REOS-94)
+    await page.keyboard.press('Enter')
     await tabTo(page, new RegExp(`^${pick}$`))
     await page.keyboard.press('Enter')
     await expect(page.locator('html')).toHaveAttribute('data-theme', pick.toLowerCase())
-    await expect(page.getByRole('button', { name: pick })).toHaveAttribute('aria-pressed', 'true')
-    for (const v of [VIEWS[0], VIEWS[4], VIEWS[6]]) {   // Trains, Analytics (charts), Sync health
+    await expect(page.getByRole('button', { name: pick, exact: true })).toHaveAttribute('aria-pressed', 'true')
+    for (const v of [byName('trains'), byName('analytics'), byName('approvals')]) {   // Releases, Analytics (charts), Approvals (the redesign's page)
       await page.locator('nav[aria-label="Primary"]').getByRole('link', { name: v.link }).click()
       await v.ready(page)
       await page.waitForTimeout(300)

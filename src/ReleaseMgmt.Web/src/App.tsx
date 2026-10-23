@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { devLogin, getAuthConfig, getMe, logout, type AuthConfig, type Me } from './api'
-import { loadTheme, saveTheme, type ThemeChoice } from './theme'
+import { devLogin, getAuthConfig, getMe, type AuthConfig, type Me } from './api'
 import { signInMessage, withoutSignInReason } from './signinReason'
 import Admin from './Admin'
 import { MyWork } from './MyWork'
@@ -24,94 +23,24 @@ import { getTrain, getUnreadCount, type TrainDetail } from './api'
 import { useDraft } from './session'
 import { parsePath, ROOT, useRoute, type Route } from './route'
 import { SessionProvider, useSession } from './session'
-import { useLive, type LiveState } from './live'
-import { fmtDayTime, setDisplayZone, zoneAbbr } from './time'
+import { useLive } from './live'
+import { setDisplayZone } from './time'
 import { getConfig } from './api'
-import { controlStatus, requestExit, requestReset, waitUntilReady, type ControlStatus } from './control'
 import { Announcer } from './announce'
-import { JumpTo } from './JumpTo'
+import { ThemeChoices } from './shell/UserMenu'
+import { Sidebar } from './shell/Sidebar'
+import { UtilityBar } from './shell/UtilityBar'
+import { Placeholder } from './shell/Placeholder'
+import { Approvals } from './shell/Approvals'
+import { useApprovalCount, useHostHealth, useWorkspace } from './shell/useShell'
+import { canAdmin as adminRole, jumpTargets, pageName, placeholderOf } from './shell/nav.ts'
+import { controlPlane } from './shell/health.ts'
+import './shell/shell.css'
 
 // The component gallery is a review page (REOS-93): loaded only when opened, so it adds nothing to the app's first load.
 const Gallery = lazy(() => import('./Gallery').then(m => ({ default: m.Gallery })))
 
 const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
-const NAV = ['Trains']
-
-function ThemeChoices() {
-  const [choice, setChoice] = useState<ThemeChoice>(loadTheme())
-  const pick = (c: ThemeChoice) => { setChoice(c); saveTheme(c) }
-  return (
-    <span className="tabs" role="group" aria-label="Appearance">
-      {(['auto', 'light', 'dark'] as const).map(c => (
-        <button key={c} type="button" className="choice" aria-pressed={choice === c} onClick={() => pick(c)}>
-          {c[0].toUpperCase() + c.slice(1)}
-        </button>
-      ))}
-    </span>
-  )
-}
-
-/** Reset and Exit, shown only when start.py is supervising the app. Confirmation is inline (no modals). */
-function SessionControls({ onSignedOut, onStopped }: { onSignedOut: () => void; onStopped: () => void }) {
-  const [status, setStatus] = useState<ControlStatus | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [confirmExit, setConfirmExit] = useState(false)
-
-  useEffect(() => { controlStatus().then(setStatus) }, [])
-  if (!status) return null
-
-  const reset = async () => {
-    setError(null); setBusy('Pulling the latest code…')
-    const r = await requestReset()
-    if (!r.ok) { setBusy(null); setError(r.message); return }
-    const result = await waitUntilReady(s => setBusy(s?.message ?? 'Restarting…'))
-    if (result === 'ready') { location.reload(); return }
-    setBusy(null)
-    setError(result === 'error' ? ((await controlStatus())?.message ?? 'Reset failed') : 'Reset is taking too long; check the terminal running start.py')
-  }
-  const exit = async () => {
-    setError(null); setBusy('Signing out and stopping…')
-    await logout()
-    onSignedOut()
-    const r = await requestExit()
-    if (!r.ok) { setBusy(null); setError(r.message); return }
-    onStopped() // App shows the stopped page; this component is gone after sign-out, so the notice must live above it
-  }
-
-  return (
-    <span className="session-controls">
-      {busy && <span className="muted" role="status">{busy}</span>}
-      {error && <span className="bad" role="alert">✗ {error}</span>}
-      {!busy && !confirmExit && (
-        <>
-          <button type="button" className="text" onClick={reset}>Reset</button>
-          <button type="button" className="text" onClick={() => setConfirmExit(true)}>Exit</button>
-        </>
-      )}
-      {!busy && confirmExit && (
-        <span>
-          Sign out and stop the app?{' '}
-          <button type="button" className="text destructive" onClick={exit}>Sign out and exit</button>{' '}
-          <button type="button" className="text" onClick={() => setConfirmExit(false)}>Cancel</button>
-        </span>
-      )}
-    </span>
-  )
-}
-
-const LIVE: Record<LiveState, { g: string; cls: string; word: string }> = {
-  connecting: { g: '◐', cls: 'muted', word: 'Connecting…' }, live: { g: '●', cls: 'ok', word: 'Live' },
-  reconnecting: { g: '◐', cls: 'warn', word: 'Reconnecting…' }, offline: { g: '○', cls: 'bad', word: 'Offline: reload to reconnect' },
-}
-// Server clock pushed every 10 s, so every tab shows the same time; the state is words + glyph, never a badge.
-function LiveStatus({ state, time }: { state: LiveState; time: string | null }) {
-  const x = LIVE[state]
-  const when = time ? `${fmtDayTime(time)} ${zoneAbbr(time)}` : null
-  // Only the connection state is a live region; the clock ticks every 10 s and must not be read out on every screen (WCAG 4.1.3).
-  return <span className="muted live">{when && <>{when} · </>}<span className={x.cls} role="status"><span aria-hidden="true">{x.g}</span> {x.word}</span></span>
-}
-
 function SignIn({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState('dev@example.com')
   const [role, setRole] = useState('RTE')
@@ -173,7 +102,13 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const refreshUnread = () => { getUnreadCount().then(c => setUnread(c.unread)).catch(() => { /* the nav count is a hint; the Inbox shows real errors */ }) }
   useEffect(refreshUnread, [])
   const sync = useSyncState(true)   // REOS-42: connector-wide banner state; refetches on notifySyncChanged, every minute, and after a reconnect
-  const live = useLive(true, { onTrainChanged: refetch, onResync: () => { refetch(); refreshUnread(); setNotifRev(n => n + 1); notifySyncChanged() }, onForecastChanged: refetch, onNotification: () => { refreshUnread(); setNotifRev(n => n + 1) }, onSyncAlert: notifySyncChanged })
+  // REOS-94: the shell's sources. A train change or a notification may add or settle a decision (the Approvals badge); a reconnect re-reads everything.
+  const [shellRev, setShellRev] = useState(0)
+  const bumpShell = () => setShellRev(n => n + 1)
+  const workspace = useWorkspace()
+  const approvals = useApprovalCount(shellRev)
+  const host = useHostHealth(shellRev)
+  const live = useLive(true, { onTrainChanged: () => { refetch(); bumpShell() }, onResync: () => { refetch(); refreshUnread(); setNotifRev(n => n + 1); notifySyncChanged(); bumpShell() }, onForecastChanged: refetch, onNotification: () => { refreshUnread(); setNotifRev(n => n + 1); bumpShell() }, onSyncAlert: notifySyncChanged })
   const { view, trainId: selected, selection } = route
   const mode = route.mode ?? 'plan'
   const runData = useRun(selected, mode, rev)
@@ -198,8 +133,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   // WCAG 2.4.2 / 2.4.3: every view has its own document title, and a navigation the user made moves focus to the new page.
   const trainTitle = rows?.find(r => r.id === selected)?.title
   useEffect(() => {
-    const names: Record<Route['view'], string> = { trains: 'Trains', admin: 'Admin', work: 'My work', inbox: 'Inbox', audit: 'Audit', templates: 'Templates', sync: 'Sync health', connectors: 'Connectors', library: 'Comm library', analytics: 'Analytics', calendar: 'Calendar', importexport: 'Imports & exports', gallery: 'Component gallery' }
-    const page = view === 'trains' && trainTitle ? `${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live runbook' : 'Rehearsal'}` : ''}` : names[view]
+    const page = view === 'trains' && trainTitle ? `${trainTitle}${mode !== 'plan' ? ` · ${mode === 'live' ? 'Live runbook' : 'Rehearsal'}` : ''}` : pageName(view)
     document.title = `${page} · ReleaseOS`
   }, [view, trainTitle, mode])
   // docs/UI.md: Esc closes the Inspector or step drawer. Keys typed into a field, or already handled (the Comms drawer, confirms), are left alone.
@@ -234,61 +168,50 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
 
   if (!session.ready || !zoneReady) return <main className="signin"><p className="muted">Loading…</p></main>
 
-  const canAdmin = me.roles.includes('RTE') || me.roles.includes('ReleaseManager')
+  const canAdmin = adminRole(me.roles)
   const to = (r: Partial<Route>) => go({ ...route, ...r })
-  const open = (r: Partial<Route>) => go({ ...ROOT, ...r })   // from My work / Inbox: open a train (view resets to trains)
+  const open = (r: Partial<Route>) => go({ ...ROOT, ...r })   // from My work / Inbox / Approvals: open a train (view resets to trains)
+  const toView = (v: Route['view']) => go(v === 'trains' ? { ...route, view: 'trains' } : { ...ROOT, view: v })
+  const releases = view === 'trains'   // the Stream and the Inspector belong to the Releases destination; every other page uses the full width
+  const redesigned = view === 'approvals' || placeholderOf(view) !== undefined   // drawn with the redesign's page layout (shell.css .os-page), which has its own gutters
   return (
-    <div className="shell">
-      <a className="skip-link" href="#workspace" onClick={e => { e.preventDefault(); const m = document.getElementById('workspace'); m?.focus() }}>Skip to workspace</a>
+    <div className="os-app">
+      <a className="skip-link" href="#workspace" onClick={e => { e.preventDefault(); const m = document.getElementById('workspace'); m?.focus() }}>Skip to content</a>
       <Announcer />
-      <header className="toolbar">
-        <strong className="app-name">ReleaseOS</strong>
-        <nav aria-label="Primary" className="tabs">
-          {NAV.map((n, i) => <a key={n} href="/" onClick={e => { e.preventDefault(); to({ view: 'trains' }) }} aria-current={view === 'trains' && i === 0 ? 'page' : undefined}>{n}</a>)}
-          <a href="/work" onClick={e => { e.preventDefault(); to({ view: 'work' }) }} aria-current={view === 'work' ? 'page' : undefined}>My work</a>
-          <a href="/inbox" onClick={e => { e.preventDefault(); to({ view: 'inbox' }) }} aria-current={view === 'inbox' ? 'page' : undefined}>{unread > 0 ? `Inbox (${unread})` : 'Inbox'}</a>
-          <a href="/calendar" onClick={e => { e.preventDefault(); to({ view: 'calendar' }) }} aria-current={view === 'calendar' ? 'page' : undefined}>Calendar</a>
-          <a href="/analytics" onClick={e => { e.preventDefault(); to({ view: 'analytics' }) }} aria-current={view === 'analytics' ? 'page' : undefined}>Analytics</a>
-          <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }} aria-current={view === 'importexport' ? 'page' : undefined}>Imports &amp; exports</a>
-          <a href="/sync" onClick={e => { e.preventDefault(); to({ view: 'sync' }) }} aria-current={view === 'sync' ? 'page' : undefined}>Sync health</a>
-          <a href="/library" onClick={e => { e.preventDefault(); to({ view: 'library' }) }} aria-current={view === 'library' ? 'page' : undefined}>Comm library</a>
-          {canAdmin && <a href="/connectors" onClick={e => { e.preventDefault(); to({ view: 'connectors' }) }} aria-current={view === 'connectors' ? 'page' : undefined}>Connectors</a>}
-          <a href="/templates" onClick={e => { e.preventDefault(); to({ view: 'templates' }) }} aria-current={view === 'templates' ? 'page' : undefined}>Templates</a>
-          {me.roles.some(r => r === 'RTE' || r === 'ReleaseManager' || r === 'GovernanceOfficer') && <a href="/audit" onClick={e => { e.preventDefault(); to({ view: 'audit' }) }} aria-current={view === 'audit' ? 'page' : undefined}>Audit</a>}
-          {canAdmin && <a href="/admin" onClick={e => { e.preventDefault(); to({ view: 'admin' }) }} aria-current={view === 'admin' ? 'page' : undefined}>Admin</a>}
-        </nav>
-        <span className="spacer" />
-        <JumpTo rows={rows} onTrain={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} onView={v => to({ view: v })} />
-        <LiveStatus state={live.state} time={live.serverTime} />
-        <ThemeChoices />
-        <span className="muted">{me.name} · {me.roles.join(', ')}</span>
-        <button type="button" className="text" onClick={async () => { await logout(); onSignedOut() }}>Sign out</button>
-        <SessionControls onSignedOut={onSignedOut} onStopped={onStopped} />
-      </header>
-      <SyncBanner sync={sync} onOpen={() => to({ view: 'sync' })} />
-      <aside className="stream" aria-label="Stream">
-        <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: rows?.find(r => r.id === id)?.status === 'Executing' ? mode : 'plan' })}
-          onNew={canAdmin ? () => { setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }); if (view !== 'trains') go({ ...route, view: 'trains' }) } : undefined} />
-        <FreezeFooter refreshKey={rev} />
-      </aside>
-      <main id="workspace" ref={mainRef} tabIndex={-1} className={view !== 'trains' ? 'workspace wide' : 'workspace'}>
-        {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
-        {view === 'gallery' ? <Suspense fallback={<p className="muted">Loading…</p>}><Gallery /></Suspense> : view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Trains</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a train in the Stream.'}</p></>)}
-      </main>
-      {view === 'trains' && (
-        <aside className="inspector" aria-label="Inspector">
-          {newTrain?.open && canAdmin
-            ? <NewTrainDrawer trains={rows ?? []}
-                onCreated={t => { reload(); go({ view: 'trains', trainId: t.id, selection: null, mode: 'plan' }) }} />
-            : selected && comms?.open
-            ? <CommsDrawer trainId={selected} canDispatch={canAdmin} refreshKey={rev} onClose={() => setComms(undefined)} onChanged={refetch} />
-            : selected && bulk?.open && canAdmin
-            ? <BulkDrawer trainId={selected} gates={gates} onClose={() => setBulk(bulk && bulk.text ? { ...bulk, open: false } : undefined)} onChanged={refetch} />
-            : selected && mode !== 'plan' && selection?.kind === 'step'
-              ? <RunStepDrawer stepId={selection.id} data={runData} onClose={() => to({ selection: null })} onChanged={refetch} />
-              : <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />}
-        </aside>
-      )}
+      <Sidebar me={me} view={view} workspace={workspace} approvals={approvals} plane={controlPlane(host, sync.state, live.state)} onGo={toView}
+        onSignedOut={onSignedOut} onStopped={onStopped} />
+      <div className="os-main">
+        <UtilityBar workspaceName={workspace?.name ?? 'Workspace'} page={pageName(view)} rows={rows} targets={jumpTargets(me.roles)} unread={unread} live={live.state}
+          onTrain={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} onGo={toView} />
+        <SyncBanner sync={sync} onOpen={() => toView('sync')} />
+        <div className={releases ? 'shell' : 'shell full'}>
+          {releases && (
+            <aside className="stream" aria-label="Stream">
+              <Stream rows={rows} selected={selected} onSelect={id => go({ view: 'trains', trainId: id, selection: null, mode: rows?.find(r => r.id === id)?.status === 'Executing' ? mode : 'plan' })}
+                onNew={canAdmin ? () => setNewTrain({ ...(newTrain ?? emptyNewTrain()), open: true }) : undefined} />
+              <FreezeFooter refreshKey={rev} />
+            </aside>
+          )}
+          <main id="workspace" ref={mainRef} tabIndex={-1} className={releases ? 'workspace' : redesigned ? 'workspace wide redesigned' : 'workspace wide'}>
+            {session.saveError && <p className="warn" role="alert">▲ {session.saveError}</p>}
+            {view === 'approvals' ? <Approvals refreshKey={shellRev + rev} onOpen={(trainId, gateId) => open({ trainId, selection: gateId ? { kind: 'gate', id: gateId } : null })} /> : placeholderOf(view) ? <Placeholder view={view} onGo={toView} /> : view === 'gallery' ? <Suspense fallback={<p className="muted">Loading…</p>}><Gallery /></Suspense> : view === 'admin' ? <Admin canEdit={canAdmin} /> : view === 'work' ? <MyWork me={me} onOpen={open} refreshKey={rev + notifRev} /> : view === 'inbox' ? <Inbox me={me} onOpen={open} onChanged={refreshUnread} refreshKey={notifRev} /> : view === 'audit' ? <AuditViewer me={me} /> : view === 'templates' ? <Templates me={me} /> : view === 'sync' ? <SyncHealth me={me} /> : view === 'analytics' ? <Analytics me={me} /> : view === 'calendar' ? <Calendar me={me} trainId={lastTrain} /> : view === 'importexport' ? <ImportExport me={me} /> : view === 'connectors' ? <Connectors me={me} /> : view === 'library' ? <CommLibrary me={me} trainId={lastTrain} /> : (selected && mode !== 'plan' ? <LiveRun trainId={selected} mode={mode} canPlan={canAdmin} data={runData} selection={selection} onSelect={s => to({ selection: s })} onMode={m => to({ mode: m, selection: null })} onChanged={refetch} /> : selected ? <TrainHeader id={selected} refreshKey={rev} onChanged={refetch} selection={selection} onSelect={s => to({ selection: s })} canPlan={canAdmin} canDecide={me.roles.includes('ReleaseManager')} onMode={m => to({ mode: m, selection: null })} /> : <><h1>Releases</h1><p className="muted">{rows && rows.length === 0 ? <>No trains yet. Import trains from a CSV to start planning. <a href="/importexport" onClick={e => { e.preventDefault(); to({ view: 'importexport' }) }}>Open imports &amp; exports</a></> : 'Select a release in the Stream.'}</p></>)}
+          </main>
+          {releases && (
+            <aside className="inspector" aria-label="Inspector">
+              {newTrain?.open && canAdmin
+                ? <NewTrainDrawer trains={rows ?? []}
+                    onCreated={t => { reload(); go({ view: 'trains', trainId: t.id, selection: null, mode: 'plan' }) }} />
+                : selected && comms?.open
+                ? <CommsDrawer trainId={selected} canDispatch={canAdmin} refreshKey={rev} onClose={() => setComms(undefined)} onChanged={refetch} />
+                : selected && bulk?.open && canAdmin
+                ? <BulkDrawer trainId={selected} gates={gates} onClose={() => setBulk(bulk && bulk.text ? { ...bulk, open: false } : undefined)} onChanged={refetch} />
+                : selected && mode !== 'plan' && selection?.kind === 'step'
+                  ? <RunStepDrawer stepId={selection.id} data={runData} onClose={() => to({ selection: null })} onChanged={refetch} />
+                  : <Inspector selection={selection} trainId={selected} canPlan={canAdmin} refreshKey={rev} onClose={() => to({ selection: null })} onChanged={refetch} />}
+            </aside>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

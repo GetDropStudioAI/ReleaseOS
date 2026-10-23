@@ -4,18 +4,21 @@ import { expect, test } from '@playwright/test'
 // The Vite dev server on :6273 serves its own page without the policy (HMR needs inline script), so this spec talks to the app host on :6080 directly.
 const APP = 'http://127.0.0.1:6080'
 
-const SCREENS: { link: RegExp; heading: RegExp }[] = [
-  { link: /^My work$/, heading: /^My work$/ },
-  { link: /^Inbox/, heading: /^Inbox$/ },
-  { link: /^Calendar$/, heading: /^Calendar$/ },
-  { link: /^Analytics$/, heading: /^Analytics$/ },
-  { link: /^Imports & exports$/, heading: /^Imports & exports$/ },
-  { link: /^Sync health$/, heading: /^Sync health$/ },
+// Every destination of the shell (REOS-94): the sidebar's links, the Inbox bell and the control-plane card (Sync health).
+const SCREENS: { link: RegExp; heading: RegExp; where?: 'bell' | 'card' }[] = [
+  { link: /^Overview$/, heading: /^Overview$/ },
+  { link: /^Portfolio & calendar$/, heading: /^Calendar$/ },
+  { link: /^Approvals/, heading: /^Approvals$/ },
+  { link: /^Audit history$/, heading: /^Audit$/ },
+  { link: /^Teams & settings$/, heading: /^Admin$/ },
+  { link: /^Templates$/, heading: /^Train templates$/ },
   { link: /^Comm library$/, heading: /^Comm library$/ },
   { link: /^Connectors$/, heading: /^Connectors$/ },
-  { link: /^Templates$/, heading: /^Train templates$/ },
-  { link: /^Audit$/, heading: /^Audit$/ },
-  { link: /^Admin$/, heading: /^Admin$/ },
+  { link: /^My work$/, heading: /^My work$/ },
+  { link: /^Analytics$/, heading: /^Analytics$/ },
+  { link: /^Imports & exports$/, heading: /^Imports & exports$/ },
+  { link: /^Inbox/, heading: /^Inbox$/, where: 'bell' },
+  { link: /Open Sync health/, heading: /^Sync health$/, where: 'card' },
 ]
 
 test('the built app keeps its Content-Security-Policy and no screen violates it; the live connection still opens', async ({ page }) => {
@@ -45,8 +48,9 @@ test('the built app keeps its Content-Security-Policy and no screen violates it;
 
   const nav = page.getByRole('navigation', { name: 'Primary' })
   for (const s of SCREENS) {
-    await nav.getByRole('link', { name: s.link }).click()
-    await expect(page.locator('main h1')).toHaveText(s.heading)
+    const scope = s.where === 'bell' ? page.getByRole('banner') : s.where === 'card' ? page.getByRole('complementary', { name: 'Workspace' }) : nav
+    await scope.getByRole('link', { name: s.link }).click()
+    await expect(page.locator('main h1').first()).toHaveText(s.heading)
     if (s.heading.test('Analytics')) await expect(page.getByText('Loading chart…')).toHaveCount(0)
   }
 

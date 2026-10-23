@@ -1,4 +1,4 @@
-import { useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { Tone } from './tone.ts'
 
 /**
@@ -98,6 +98,25 @@ export function TabPanel({ id, group, children }: { id: string; group: string; c
   return <div role="tabpanel" id={`${group}-panel-${id}`} aria-labelledby={`${group}-tab-${id}`} className="os-tabpanel">{children}</div>
 }
 
+/**
+ * The sideways-scrolling wrapper of a wide table. A scrolling region must be reachable by keyboard (WCAG 2.1.1; axe scrollable-region-focusable), so it takes a
+ * tab stop, as a labelled region, only while its content overflows. Use it for any table that can be wider than its panel.
+ */
+export function ScrollRegion({ label, children }: { label: string; children: ReactNode }) {
+  const wrap = useRef<HTMLDivElement>(null)
+  const [scrolls, setScrolls] = useState(false)
+  useEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const measure = () => setScrolls(el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)   // overflow-x: auto makes the other axis auto too: a pixel of height counts for axe
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el); if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
+  })
+  return <div ref={wrap} className="os-table-wrap" {...(scrolls ? { tabIndex: 0, role: 'region', 'aria-label': `${label} (scrollable)` } : {})}>{children}</div>
+}
+
 export interface Column<T> { key: string; header: ReactNode; cell: (row: T) => ReactNode; align?: 'start' | 'end'; mono?: boolean; width?: string }
 
 /**
@@ -116,7 +135,7 @@ export function DataTable<T>({ columns, rows, rowKey, caption, footer, selectedK
     sibling?.focus()
   }
   return (
-    <div className="os-table-wrap">
+    <ScrollRegion label={caption}>
       <table className={`os-table${onSelect ? ' selectable' : ''}`}>
         <caption className="sr-only">{caption}</caption>
         <thead><tr>{columns.map(c => <th key={c.key} scope="col" className={c.align === 'end' ? 'end' : undefined} style={c.width ? { width: c.width } : undefined}>{c.header}</th>)}</tr></thead>
@@ -135,6 +154,6 @@ export function DataTable<T>({ columns, rows, rowKey, caption, footer, selectedK
         </tbody>
       </table>
       {footer && <div className="os-table-foot">{footer}</div>}
-    </div>
+    </ScrollRegion>
   )
 }

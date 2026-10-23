@@ -104,4 +104,5 @@
 .rd .os-panel .mono { font-family: var(--font-mono); }
 .rd .os-panel .scroll-x { overflow-x: auto; }
 .rd .os-panel .conflict { margin: var(--gap-md) 0; }
-.rd .os-panel-body { overflow-x: auto; }
+.rd .os-panel-body:not(:has(.rd-scroll)) { overflow-x: auto; }   /* a panel with a scrolling table must not become the scroll container its sticky headings stick to */
+.rd-scroll .os-table-wrap { overflow: visible; }   /* the sticky headings stick to .rd-scroll, not to the table's own wrapper */

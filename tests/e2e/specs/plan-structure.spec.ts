@@ -20,7 +20,7 @@ test('a product and a gate are added, edited and removed from the workspace', as
 
   // ---- product: add inline, edit in its row, remove with an inline confirm
   const products = page.locator('section[aria-label="Bundled products"]')
-  await products.locator('.section-head button:text-is("Add product")').click()
+  await products.locator('.os-panel-head button:text-is("Add product")').click()
   const form = products.getByRole('group', { name: 'New product' })
   await form.locator('label:has-text("Product") input').fill('Search Svc')
   await form.locator('label:has-text("Version") input').fill('1.0.0')
@@ -47,7 +47,7 @@ test('a product and a gate are added, edited and removed from the workspace', as
 
   // ---- gate: add under the timeline, edit in the Inspector, remove (Pending only) with an inline confirm
   const timeline = page.locator('section[aria-label="Gate timeline"]')
-  await timeline.locator('.section-head button:text-is("Add gate")').click()
+  await timeline.locator('.os-panel-head button:text-is("Add gate")').click()
   const gateForm = timeline.getByRole('group', { name: 'New gate' })
   await gateForm.locator('label:has-text("Gate") input').fill('Docs review')
   await gateForm.getByLabel('Business days before the target').fill('2')
@@ -94,8 +94,8 @@ for (const scheme of ['light', 'dark'] as const) {
       const gate = t.gates.find(g => g.status === 'Pending')!
       await page.goto(`/trains/${t.id}/gates/${gate.id}`)
       await expect(page.locator('.inspector h2')).toHaveText(gate.name)
-      await page.locator('section[aria-label="Bundled products"] .section-head button:text-is("Add product")').click()
-      await page.locator('section[aria-label="Gate timeline"] .section-head button:text-is("Add gate")').click()
+      await page.locator('section[aria-label="Bundled products"] .os-panel-head button:text-is("Add product")').click()
+      await page.locator('section[aria-label="Gate timeline"] .os-panel-head button:text-is("Add gate")').click()
       await page.locator('section[aria-label="Bundled products"]').getByRole('button', { name: 'Edit Ledger Svc' }).click()
       await page.locator('.inspector button:text-is("Edit gate")').click()
       await page.locator('.inspector button:text-is("Remove gate")').waitFor({ state: 'detached' })

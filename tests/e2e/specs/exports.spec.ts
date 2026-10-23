@@ -13,7 +13,7 @@ test('an RTE generates a release report, sees it finish and its SHA-256 matches 
   const t = await trainByTitle(page, 'Reporting')
   await page.goto(`/trains/${t.id}`)
 
-  await page.locator('.header-line button:text-is("Export")').click()      // scrolls to the Exports section
+  await page.locator('[aria-label="Release actions"] button:text-is("Export")').click()      // scrolls to the Exports section
   const panel = page.locator('section[aria-label="Exports"]')
   await expect(panel).toBeInViewport()
   await expect(panel.locator('button:text-is("Generate evidence pack")')).toBeVisible()   // RTE has audit rights

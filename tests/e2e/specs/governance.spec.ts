@@ -1,16 +1,17 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { openTab, signIn, trainByTitle } from './support'
 
 // REOS-33: the change record and the Go/No-Go record, entirely inline (no modals). Decisions are immutable.
 test('a Release Manager records Go with conditions inline; an RTE cannot; the change record saves', async ({ page }) => {
   await signIn(page, 'rm@example.com', 'ReleaseManager')
   const t = await trainByTitle(page, 'Reporting')
   await page.goto(`/trains/${t.id}`)
+  await openTab(page, 'Approvals')                                                      // the Go/No-Go record and the change record are on Approvals
 
   const go = page.locator('section[aria-label="Go/No-Go"]')
   await expect(go).toContainText('No Go/No-Go recorded yet')
-  await page.locator('.header-line button:text-is("Record Go/No-Go")').click()
+  await page.locator('[aria-label="Release actions"] button:text-is("Record Go/No-Go")').click()
   await go.locator('button', { hasText: 'Go with conditions' }).click()
   await go.locator('label:has-text("Condition") input').fill('Patch the payment gateway')
   await go.locator('button:text-is("Record decision")').click()
@@ -20,11 +21,11 @@ test('a Release Manager records Go with conditions inline; an RTE cannot; the ch
   await expect(go.locator('[role=group][aria-label="Confirm decision"]')).toContainText('with 1 condition')   // decisions are immutable: a summary + Confirm first
   await go.locator('button:text-is("Confirm decision")').click()
   await expect(go).toContainText('Go with conditions')
-  await expect(go.locator('tr', { hasText: 'Patch the payment gateway' })).toContainText('○ open')
+  await expect(go.locator('tr', { hasText: 'Patch the payment gateway' })).toContainText('Open')
 
   await go.locator('button:text-is("Close")').click()
   await go.locator('button:text-is("Close condition")').click()                                // inline confirm
-  await expect(go.locator('tr', { hasText: 'Patch the payment gateway' })).toContainText('✓ closed')
+  await expect(go.locator('tr', { hasText: 'Patch the payment gateway' })).toContainText('Closed')
 
   // the change record
   const cr = page.locator('section[aria-label="Change record"]')
@@ -44,6 +45,7 @@ test('an RTE sees the Go/No-Go but has no button to record it', async ({ page })
   await signIn(page, 'rte2@example.com', 'RTE')
   const t = await trainByTitle(page, 'Reporting')
   await page.goto(`/trains/${t.id}`)
+  await openTab(page, 'Approvals')
   await expect(page.locator('section[aria-label="Go/No-Go"]')).toBeVisible()
   await expect(page.locator('button:text-is("Record Go/No-Go")')).toHaveCount(0)
 })

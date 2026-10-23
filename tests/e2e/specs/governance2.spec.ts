@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { openTab, signIn, trainByTitle } from './support'
 
 // REOS-34/35/36: evidence upload from the gate Inspector, and the freeze / close-out panels pass axe in both themes.
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']
@@ -35,11 +35,14 @@ for (const scheme of ['light', 'dark'] as const) {
       const t = await trainByTitle(page, 'Card portal')
       const gate = t.gates.find(g => g.name === 'Compliance Sign-off')!
       await page.goto(`/trains/${t.id}/gates/${gate.id}`)
+      await expect(page.locator('section[aria-label=Evidence]')).toBeVisible()                  // the gate Inspector
+      await openTab(page, 'Approvals')
       await expect(page.locator('section[aria-label="Freeze windows"]')).toBeVisible()
       await expect(page.locator('section[aria-label="Rollback rehearsal"]')).toBeVisible()
+      await scan(page, `governance panels, approvals (${scheme})`)
+      await openTab(page, 'Activity')
       await expect(page.locator('section[aria-label="Known issues and hypercare"]')).toBeVisible()
-      await expect(page.locator('section[aria-label=Evidence]')).toBeVisible()
-      await scan(page, `governance panels (${scheme})`)
+      await scan(page, `governance panels, activity (${scheme})`)
     })
   })
 }

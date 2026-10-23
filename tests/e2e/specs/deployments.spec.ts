@@ -115,7 +115,13 @@ for (const scheme of ['light', 'dark'] as const) {
       const first = await page.locator('.dp-readout').first().innerText()
       await page.keyboard.press('ArrowLeft')
       await expect(page.locator('.dp-readout').first()).not.toHaveText(first)
-      await page.getByText('View data').first().click()
+      // The data behind the chart is a closed <details>. On the Windows runner the first click was twice not followed by an open section, and the log could not
+      // say why, so the click is retried until the section reports itself open, and the failure message carries its state.
+      const data = page.locator('details.os-chart-data').first()
+      await expect(async () => {
+        if (!(await data.evaluate(d => (d as HTMLDetailsElement).open))) await data.locator('summary').click()
+        expect(await data.evaluate(d => (d as HTMLDetailsElement).open), `View data open; markup: ${(await data.evaluate(d => d.outerHTML)).slice(0, 400)}`).toBe(true)
+      }).toPass({ timeout: 10_000 })
       await expect(page.getByRole('table', { name: /Request error rate: samples in the range \(UTC\)/ }).locator('tbody tr')).not.toHaveCount(0)
 
       // the table of this release's services in this environment, and the events panel

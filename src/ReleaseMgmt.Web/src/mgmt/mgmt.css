@@ -27,3 +27,15 @@ textarea.mg-input { resize: vertical; }
 .mg-input.mid { min-width: calc(var(--sidebar-width) * 0.9); }
 .mg-sections { display: flex; flex-direction: column; gap: var(--gap-lg); }
 .mg-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--sidebar-width) * 0.9), 1fr)); gap: var(--gap-md); }
+
+/* Comm library: template source with tokens marked, and the hydrated preview. Status is always words as well as colour (the problems are underlined). */
+.mg-summary { display: flex; justify-content: space-between; align-items: baseline; gap: var(--gap-md); }
+.mg-src { margin: 0; padding: var(--gap-md); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-bg-subtle); font-family: var(--font-mono); font-size: var(--type-mono-small); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.mg-preview { margin: 0; padding: var(--gap-md); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-md); font: inherit; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.mg-preview.src { font-family: var(--font-mono); font-size: var(--type-mono-small); line-height: 1.6; }
+.mg-tk { color: var(--color-accent-text); font-weight: 600; }
+.mg-tkbad { color: var(--color-status-danger); text-decoration: underline wavy; text-underline-offset: 3px; }
+.mg-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap-xl); align-items: start; }
+@media (max-width: 1100px) { .mg-cols { grid-template-columns: minmax(0, 1fr); } }
+.mg-body { font-family: var(--font-mono); font-size: var(--type-mono-small); min-height: 16em; }
+.mg-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md); }

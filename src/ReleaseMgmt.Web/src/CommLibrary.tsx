@@ -7,13 +7,14 @@ import {
 import { announce } from './announce'
 import { CommSchedule } from './CommSchedule'
 import { scan } from './commTokens'
-import { Conflict, isConflict } from './Conflict'
+import { isConflict } from './Conflict'
 import { useFocusWhen } from './focus'
-import { fmtHM } from './time'
+import { Button, ConflictNotice, DataTable, FilterSelect, LoadingState, PageHeading, Panel, StatusChip, TwoLine, type Column } from './ui'
+import { Field, Problem, SelectInput, TextInput } from './mgmt/forms'
 
 // REOS-43/44: the comm template library, full width (UI.md: "as Comms drawer, full width"; layout and copy from mockups/Comms.html).
 // Library entries are shared source text; a train gets its own editable copy that locks once anything was sent from it.
-// Status is words, glyphs and coloured text; actions are text buttons; the selected row is tinted; nothing is a box, pill or modal.
+// REOS-129 (G7): restyled as tables and panels (D41). Status is a chip or words, never colour alone; the token problems are underlined as well as coloured.
 
 interface Draft { name: string; templateType: string; audience: string; subjectLine: string; markdownBody: string }
 type Sel = { kind: 'library'; id: string } | { kind: 'new' } | { kind: 'train'; id: string } | null
@@ -38,16 +39,16 @@ function TokenCheck({ text, allow, label }: { text: string; allow: string[]; lab
     return () => window.clearTimeout(t)
   }, [summary, label])
   return (
-    <div>
-      <div className="token-summary">
-        <h3 className="cap">{label}</h3>{' '}
-        <span className={s.problems.length === 0 ? 'ok small' : 'bad small'}>{summary}</span>
+    <div className="mg-stack">
+      <div className="mg-summary token-summary">
+        <h3 className="mg-subhead">{label}</h3>
+        <span className={s.problems.length === 0 ? 'mg-ok' : 'mg-problem'}>{summary}</span>
       </div>
-      <pre className="src" role="group" aria-label={`${label}, tokens marked`}>
-        {s.segs.map((g, i) => g.kind === 'token' ? <span key={i} className="tk">{g.text}</span> : g.kind === 'bad' ? <span key={i} className="tkbad">{g.text}</span> : g.text)}
-        {text === '' && <span className="muted">Nothing yet.</span>}
+      <pre className="mg-src" role="group" aria-label={`${label}, tokens marked`}>
+        {s.segs.map((g, i) => g.kind === 'token' ? <span key={i} className="mg-tk tk">{g.text}</span> : g.kind === 'bad' ? <span key={i} className="mg-tkbad tkbad">{g.text}</span> : g.text)}
+        {text === '' && <span className="os-muted">Nothing yet.</span>}
       </pre>
-      {s.problems.length > 0 && <ul className="plain small">{s.problems.map((p, i) => <li key={i} className="bad">✗ {p.message}</li>)}</ul>}
+      {s.problems.length > 0 && <ul className="mg-list">{s.problems.map((p, i) => <li key={i} className="mg-problem">✗ {p.message}</li>)}</ul>}
     </div>
   )
 }
@@ -81,29 +82,25 @@ function Preview({ trainId, draft, onAsk }: { trainId: string; draft: Draft; onA
   }, [trainId, p])
 
   return (
-    <div>
-      <div className="token-summary">
-        <h3 className="cap">Preview</h3>{' '}
-        {p && <span className="muted small">data as of {fmtHM(p.asOf)} · train v{p.trainVersion}</span>}{' '}
-        <button type="button" className="text" onClick={() => { setTick(n => n + 1); onAsk?.() }}>Refresh</button>
+    <div className="mg-stack">
+      <div className="mg-summary token-summary">
+        <h3 className="mg-subhead">Preview</h3>
+        {p && <span className="mg-note">data as of {p.asOf.slice(11, 16)} UTC · train v{p.trainVersion}</span>}
       </div>
-      <p className="inline-form small">
-        <label>Show as{' '}
-          <select className="line" value={target} onChange={e => setTarget(e.target.value as CommTarget)}>
-            {TARGETS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </select>
-        </label>
-      </p>
-      {!trainId && <p className="muted">Choose a train above to preview this message with its live data.</p>}
-      {problem && <p className="bad" role="alert">✗ {problem}</p>}
+      <div className="mg-toolbar">
+        <FilterSelect label="Show as" value={target} onChange={v => setTarget(v as CommTarget)} options={TARGETS.map(t => ({ value: t.value, label: t.label }))} />
+        <Button onClick={() => { setTick(n => n + 1); onAsk?.() }}>Refresh</Button>
+      </div>
+      {!trainId && <p className="mg-note">Choose a train above to preview this message with its live data.</p>}
+      <Problem message={problem} />
       {moved !== null && p && (
-        <p className="warn small">▲ The train changed since this preview (v{p.trainVersion}, now v{moved}). <button type="button" className="text" onClick={() => setTick(n => n + 1)}>Refresh the preview</button></p>
+        <p className="mg-problem">▲ The train changed since this preview (v{p.trainVersion}, now v{moved}). <Button onClick={() => setTick(n => n + 1)}>Refresh the preview</Button></p>
       )}
       {p && (
         <>
-          {p.tokenErrors.length > 0 && <p className="bad small">✗ Cannot be sent: {p.tokenErrors.length} template {p.tokenErrors.length === 1 ? 'problem' : 'problems'} (see the source on the left).</p>}
-          {p.subject !== null && <p className="preview-subject"><span className="muted small">Subject</span><span className="sr-only">:</span><br /><strong>{p.subject || <span className="muted">Empty</span>}</strong></p>}
-          <pre className={target === 'PlainText' ? 'preview' : 'preview src'} role="group" aria-label="Hydrated message">{p.text || 'Empty'}</pre>
+          {p.tokenErrors.length > 0 && <p className="mg-problem">✗ Cannot be sent: {p.tokenErrors.length} template {p.tokenErrors.length === 1 ? 'problem' : 'problems'} (see the source on the left).</p>}
+          {p.subject !== null && <p className="preview-subject"><span className="mg-note">Subject</span><span className="sr-only">:</span><br /><strong>{p.subject || <span className="os-muted">Empty</span>}</strong></p>}
+          <pre className={target === 'PlainText' ? 'mg-preview' : 'mg-preview src'} role="group" aria-label="Hydrated message">{p.text || 'Empty'}</pre>
         </>
       )}
     </div>
@@ -112,22 +109,15 @@ function Preview({ trainId, draft, onAsk }: { trainId: string; draft: Draft; onA
 
 function Tokens({ tokens, onInsert, canInsert }: { tokens: CommToken[]; onInsert: (t: string) => void; canInsert: boolean }) {
   const [open, setOpen] = useState(false)
+  const columns: Column<CommToken>[] = [
+    { key: 'token', header: 'Token', cell: t => <span className="mg-tk tk">{`{${t.name}}`}</span>, mono: true },
+    { key: 'what', header: 'What it prints', cell: t => t.description },
+    { key: 'ins', header: <span className="sr-only">Insert</span>, align: 'end', cell: t => (canInsert ? <Button aria-label={`Insert ${t.name}`} onClick={() => onInsert(`{${t.name}}`)}>Insert</Button> : null) },
+  ]
   return (
-    <div>
-      <p><button type="button" className="text" aria-expanded={open} aria-controls={open ? 'comm-token-list' : undefined} onClick={() => setOpen(o => !o)}>{open ? 'Hide tokens' : 'Show the tokens you can use'}</button></p>
-      {open && (
-        <table className="grid" id="comm-token-list">
-          <thead><tr><th>Token</th><th>What it prints</th><th><span className="sr-only">Insert</span></th></tr></thead>
-          <tbody>
-            {tokens.map(t => (
-              <tr key={t.name}>
-                <td className="mono tk">{`{${t.name}}`}</td><td>{t.description}</td>
-                <td>{canInsert && <button type="button" className="text" aria-label={`Insert ${t.name}`} onClick={() => onInsert(`{${t.name}}`)}>Insert</button>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+    <div className="mg-stack">
+      <div className="mg-actions"><Button aria-expanded={open} aria-controls={open ? 'comm-token-list' : undefined} onClick={() => setOpen(o => !o)}>{open ? 'Hide tokens' : 'Show the tokens you can use'}</Button></div>
+      {open && <div id="comm-token-list"><DataTable caption="Tokens you can use" columns={columns} rows={tokens} rowKey={t => t.name} /></div>}
     </div>
   )
 }
@@ -242,119 +232,96 @@ export function CommLibrary({ me, trainId: current }: { me: Me; trainId?: string
   const valid = draft.subjectLine.trim() !== '' && draft.markdownBody.trim() !== '' && (sel?.kind === 'train' || (draft.name.trim() !== '' && draft.templateType.trim() !== ''))
   const set = (k: keyof Draft, v: string) => setDraft(d => ({ ...d, [k]: v }))
   const trainTitle = trains.find(t => t.id === trainId)?.title
-  const tokenState = (ok: boolean, n: number) => ok ? <span className="ok">✓ all known</span> : <span className="bad">✗ {n} {n === 1 ? 'problem' : 'problems'}</span>
+  const tokenState = (ok: boolean, n: number) => <StatusChip tone={ok ? 'success' : 'danger'}>{ok ? 'All known' : `${n} ${n === 1 ? 'problem' : 'problems'}`}</StatusChip>
+
+  const columnsLib: Column<LibraryTemplate>[] = [
+    { key: 'name', header: 'Name', cell: l => <TwoLine primary={l.name} secondary={l.templateType} /> },
+    { key: 'aud', header: 'Audience', cell: l => l.audience },
+    { key: 'subject', header: 'Subject', cell: l => l.subjectLine },
+    { key: 'tokens', header: 'Tokens', cell: l => tokenState(l.valid, l.tokenErrors.length) },
+    { key: 'trains', header: 'In trains', align: 'end', mono: true, cell: l => l.trainCopies },
+    { key: 'version', header: 'Version', align: 'end', mono: true, cell: l => l.version },
+  ]
+  const columnsMsg: Column<TrainMessage>[] = [
+    { key: 'name', header: 'Message', cell: m => m.libraryName ?? m.templateType },
+    { key: 'aud', header: 'Audience', cell: m => m.audience },
+    { key: 'subject', header: 'Subject', cell: m => m.subjectLine },
+    { key: 'tokens', header: 'Tokens', cell: m => tokenState(m.valid, m.tokenErrors.length) },
+    { key: 'state', header: 'State', cell: m => (m.dispatched ? <StatusChip tone="neutral">{`Sent ${m.dispatchCount}×, read only`}</StatusChip> : <StatusChip tone="info">Editable</StatusChip>) },
+  ]
+  const editorTitle = !sel ? '' : sel.kind === 'new' ? 'New library template' : sel.kind === 'library' ? `Edit ${source?.draft.name ?? ''}` : `${trainTitle ?? 'Train'} · ${inTrain?.libraryName ?? inTrain?.templateType ?? 'message'}`
 
   return (
-    <section>
-      <h1>Comm library</h1>
-      <p className="muted">Message templates for stakeholder updates. A train gets its own copy to tailor; tokens such as {'{ReleaseTitle}'} are filled from the train&apos;s live data. An unknown token blocks sending.</p>
-      {problem && <p className="bad" role="alert">✗ {problem}</p>}
+    <div className="os-page">
+      <PageHeading trail={['Management', 'Comm library']} title="Comm library"
+        description="Message templates for stakeholder updates. A train gets its own copy to tailor; tokens such as {ReleaseTitle} are filled from the train's live data. An unknown token blocks sending."
+        actions={canEdit ? <Button variant="primary" onClick={startNew}>New template</Button> : undefined} />
+      <Problem message={problem} />
 
-      <p className="inline-form">
-        <label>Preview and schedule for train{' '}
-          <select className="line" value={trainId} onChange={e => setTrainId(e.target.value)} disabled={trains.length === 0}>
-            {trains.length === 0 && <option value="">No trains</option>}
-            {trains.map(t => <option key={t.id} value={t.id}>{t.title} ({t.status})</option>)}
-          </select>
-        </label>
-      </p>
-
-      <div className="section-head">
-        <h2 className="cap">Library templates</h2>
-        {canEdit && <button type="button" className="text" onClick={startNew}>New template</button>}
+      <div className="mg-toolbar">
+        <FilterSelect label="Preview and schedule for train" value={trainId} onChange={setTrainId}
+          options={trains.length === 0 ? [{ value: '', label: 'No trains' }] : trains.map(t => ({ value: t.id, label: `${t.title} (${t.status})` }))} />
       </div>
-      <table className="grid">
-        <thead><tr><th>Name</th><th>Type</th><th>Audience</th><th>Subject</th><th>Tokens</th><th className="n">In trains</th><th className="n">Version</th></tr></thead>
-        <tbody>
-          {library?.map(l => {
-            const on = sel?.kind === 'library' && sel.id === l.id
-            return (
-              <tr key={l.id} className={on ? 'selected' : undefined}>
-                <td><button type="button" className="text plainlink" aria-expanded={on} aria-controls={on ? 'comm-editor' : undefined} onClick={() => pickLibrary(l)}>{l.name}</button></td><td className="mono">{l.templateType}</td><td>{l.audience}</td><td>{l.subjectLine}</td>
-                <td>{tokenState(l.valid, l.tokenErrors.length)}</td><td className="n">{l.trainCopies}</td><td className="n">{l.version}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {library?.length === 0 && <p className="muted">The library is empty. {canEdit ? 'Create the first template.' : 'An RTE or Release Manager can add templates.'}</p>}
+
+      <Panel title="Library templates" subtitle="Shared source text; each train gets its own editable copy" meta={library ? `${library.length} ${library.length === 1 ? 'template' : 'templates'}` : undefined}>
+        {library === null && !problem ? <LoadingState what="the library" /> : (
+          <DataTable caption="Library templates" columns={columnsLib} rows={library ?? []} rowKey={l => l.id} selectedKey={sel?.kind === 'library' ? sel.id : null} onSelect={pickLibrary}
+            empty={`The library is empty. ${canEdit ? 'Create the first template.' : 'An RTE or Release Manager can add templates.'}`} />
+        )}
+      </Panel>
 
       {sel && source && (
         <div id="comm-editor">
-          <div className="section-head">
-            <h2 className="cap">
-              {sel.kind === 'new' ? 'New library template' : sel.kind === 'library' ? `Edit ${source.draft.name}` : `${trainTitle ?? 'Train'} · ${inTrain?.libraryName ?? inTrain?.templateType ?? 'message'}`}
-            </h2>
-            <span className="muted small">{sel.kind === 'train' ? 'This train\'s own copy' : sel.kind === 'library' ? `Version ${source.version}` : ''}</span>
-          </div>
-          {locked && <p className="warn">▲ Sent {inTrain!.dispatchCount} {inTrain!.dispatchCount === 1 ? 'time' : 'times'}, so this copy is read only. Copy the library template into the train again for a new message.</p>}
-          {!canEdit && <p className="muted">Only an RTE or Release Manager edits templates.</p>}
-          {conflict && (
-            <Conflict error={conflict} what={sel.kind === 'train' ? 'message' : 'template'}>
-              <button type="button" className="text" onClick={() => void reload()}>Reload theirs</button>
-              <button type="button" className="text" onClick={keepMine}>Keep mine and save over it</button>
-            </Conflict>
-          )}
-          <div className="comm-cols">
-            <div>
-              <div className="inline-form stack">
-                {sel.kind !== 'train' && (
-                  <label>Name <input ref={nameRef} className="line wide" value={draft.name} readOnly={!editable} onChange={e => set('name', e.target.value)} /></label>
-                )}
-                {sel.kind !== 'train' && (
-                  <label>Type <input className="line" list="comm-types" value={draft.templateType} readOnly={!editable} onChange={e => set('templateType', e.target.value)} />
-                    <datalist id="comm-types"><option value="Tminus7" /><option value="Tminus3" /><option value="GoNoGo" /><option value="Cutover" /><option value="Complete" /><option value="HypercareExit" /></datalist>
-                  </label>
-                )}
-                <label>Audience{' '}
-                  <select className="line" value={draft.audience} disabled={!editable} onChange={e => set('audience', e.target.value)}>
-                    {COMM_AUDIENCES.map(a => <option key={a}>{a}</option>)}
-                  </select>
-                </label>
-                <label>Subject <input className="line wide" value={draft.subjectLine} readOnly={!editable} onChange={e => set('subjectLine', e.target.value)} /></label>
-                <label className="block">Body (Markdown, use ** for bold)
-                  <textarea ref={body} className="bulk-text" rows={16} value={draft.markdownBody} readOnly={!editable} onChange={e => set('markdownBody', e.target.value)} />
-                </label>
+          <Panel title={editorTitle} subtitle={sel.kind === 'train' ? "This train's own copy" : sel.kind === 'library' ? `Version ${source.version}` : undefined}>
+            <div className="mg-stack">
+              {locked && <p className="mg-problem">▲ Sent {inTrain!.dispatchCount} {inTrain!.dispatchCount === 1 ? 'time' : 'times'}, so this copy is read only. Copy the library template into the train again for a new message.</p>}
+              {!canEdit && <p className="mg-note">Only an RTE or Release Manager edits templates.</p>}
+              {conflict && <ConflictNotice onUseTheirs={() => void reload()} onOverwrite={keepMine} />}
+              <div className="mg-cols comm-cols">
+                <div className="mg-stack">
+                  <div className="mg-form">
+                    {sel.kind !== 'train' && <Field label="Name"><TextInput ref={nameRef} value={draft.name} readOnly={!editable} onChange={e => set('name', e.target.value)} /></Field>}
+                    {sel.kind !== 'train' && (
+                      <Field label="Type">
+                        <TextInput list="comm-types" value={draft.templateType} readOnly={!editable} onChange={e => set('templateType', e.target.value)} />
+                        <datalist id="comm-types"><option value="Tminus7" /><option value="Tminus3" /><option value="GoNoGo" /><option value="Cutover" /><option value="Complete" /><option value="HypercareExit" /></datalist>
+                      </Field>
+                    )}
+                    <Field label="Audience"><SelectInput value={draft.audience} disabled={!editable} onChange={e => set('audience', e.target.value)} options={COMM_AUDIENCES.map(a => ({ value: a, label: a }))} /></Field>
+                    <Field label="Subject"><TextInput value={draft.subjectLine} readOnly={!editable} onChange={e => set('subjectLine', e.target.value)} /></Field>
+                    <Field label="Body (Markdown, use ** for bold)">
+                      <textarea ref={body} className="mg-input mg-body" rows={16} value={draft.markdownBody} readOnly={!editable} onChange={e => set('markdownBody', e.target.value)} />
+                    </Field>
+                  </div>
+                  <TokenCheck text={`Subject: ${draft.subjectLine}\n${draft.markdownBody}`} allow={allow} label="Template" />
+                  <Tokens tokens={tokens} onInsert={insert} canInsert={editable} />
+                  <div className="mg-actions">
+                    {editable && <Button variant="primary" disabled={!!busy || !valid || (!dirty && sel.kind !== 'new')} aria-describedby={!valid ? 'comm-why' : undefined} onClick={() => void save()}>{busy === 'Creating…' || busy === 'Saving…' ? busy : sel.kind === 'new' ? 'Create template' : 'Save changes'}</Button>}
+                    {editable && dirty && sel.kind !== 'new' && <Button onClick={() => { setDraft(source.draft); setConflict(null); setProblem(null) }}>Discard changes</Button>}
+                    {sel.kind === 'library' && canEdit && trainId && <Button disabled={!!busy || dirty} aria-describedby={dirty ? 'comm-add-why' : undefined} onClick={() => void addToTrain()}>{busy === 'Adding…' ? busy : `Add to ${trainTitle ?? 'the train'}`}</Button>}
+                    <Button onClick={close}>Close</Button>
+                  </div>
+                  {editable && !valid && <p id="comm-why" className="mg-note">{sel.kind === 'train' ? 'Subject and body are required.' : 'Name, type, subject and body are required.'}</p>}
+                  {sel.kind === 'library' && dirty && <p id="comm-add-why" className="mg-note">Save your changes first: Add to train copies the saved version, not your unsaved changes.</p>}
+                </div>
+                <Preview trainId={trainId} draft={draft} />
               </div>
-              <TokenCheck text={`Subject: ${draft.subjectLine}\n${draft.markdownBody}`} allow={allow} label="Template" />
-              <Tokens tokens={tokens} onInsert={insert} canInsert={editable} />
-              <p>
-                {editable && <button type="button" className="text strong" disabled={!!busy || !valid || (!dirty && sel.kind !== 'new')} aria-describedby={!valid && editable ? 'comm-why' : undefined} onClick={() => void save()}>{busy === 'Creating…' || busy === 'Saving…' ? busy : sel.kind === 'new' ? 'Create template' : 'Save changes'}</button>}{' '}
-                {editable && dirty && sel.kind !== 'new' && <button type="button" className="text" onClick={() => { setDraft(source.draft); setConflict(null); setProblem(null) }}>Discard changes</button>}{' '}
-                {sel.kind === 'library' && canEdit && trainId && <button type="button" className="text" disabled={!!busy || dirty} aria-describedby={dirty ? 'comm-add-why' : undefined} onClick={() => void addToTrain()}>{busy === 'Adding…' ? busy : `Add to ${trainTitle ?? 'the train'}`}</button>}{' '}
-                <button type="button" className="text" onClick={close}>Close</button>
-              </p>
-              {editable && !valid && <p id="comm-why" className="muted small">{sel.kind === 'train' ? 'Subject and body are required.' : 'Name, type, subject and body are required.'}</p>}
-              {sel.kind === 'library' && dirty && <p id="comm-add-why" className="muted small">Save your changes first: Add to train copies the saved version, not your unsaved changes.</p>}
             </div>
-            <Preview trainId={trainId} draft={draft} />
-          </div>
+          </Panel>
         </div>
       )}
 
       {trainId && (
         <>
-          <div className="section-head"><h2 className="cap">Messages in {trainTitle ?? 'this train'}</h2></div>
-          <table className="grid">
-            <thead><tr><th>Message</th><th>Audience</th><th>Subject</th><th>Tokens</th><th>State</th></tr></thead>
-            <tbody>
-              {messages.map(m => {
-                const on = sel?.kind === 'train' && sel.id === m.id
-                return (
-                  <tr key={m.id} className={on ? 'selected' : undefined}>
-                    <td><button type="button" className="text plainlink" aria-expanded={on} aria-controls={on ? 'comm-editor' : undefined} onClick={() => pickMessage(m)}>{m.libraryName ?? m.templateType}</button></td><td>{m.audience}</td><td>{m.subjectLine}</td><td>{tokenState(m.valid, m.tokenErrors.length)}</td>
-                    <td>{m.dispatched ? <span className="muted">● sent {m.dispatchCount}×, read only</span> : <span>○ editable</span>}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {messages.length === 0 && <p className="muted">No messages in this train yet. Select a library template and choose Add to train, or create the schedule below from a train template.</p>}
-
-          <div className="section-head"><h2 className="cap">T-minus schedule · {trainTitle}</h2></div>
-          <CommSchedule trainId={trainId} me={me} refreshKey={scheduleKey} onChanged={() => { setScheduleKey(k => k + 1); void loadMessages(trainId); void loadLibrary() }} />
+          <Panel title={`Messages in ${trainTitle ?? 'this train'}`} subtitle="The train's own copies of library templates" meta={`${messages.length}`}>
+            <DataTable caption="Messages in this train" columns={columnsMsg} rows={messages} rowKey={m => m.id} selectedKey={sel?.kind === 'train' ? sel.id : null} onSelect={pickMessage}
+              empty="No messages in this train yet. Select a library template and choose Add to train, or create the schedule below from a train template." />
+          </Panel>
+          <Panel title={`T-minus schedule · ${trainTitle ?? ''}`} subtitle="Messages due before and after the target date">
+            <CommSchedule trainId={trainId} me={me} refreshKey={scheduleKey} onChanged={() => { setScheduleKey(k => k + 1); void loadMessages(trainId); void loadLibrary() }} />
+          </Panel>
         </>
       )}
-    </section>
+    </div>
   )
 }

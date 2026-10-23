@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { DataTable, PageHeading, Panel, StatusChip, TwoLine, type Column } from '../ui'
-import { KIND, dueText, getApprovals, type ApprovalItem, type ApprovalQueue } from './approvals.ts'
+import { KIND, dueText, getApprovals, type ApprovalItem, type ApprovalQueue } from './approvalsApi.ts'
 
 /**
  * The Approvals destination (REOS-94): the decisions waiting for the signed-in person, from GET /approvals, the same queue whose total is the sidebar badge.

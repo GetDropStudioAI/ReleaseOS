@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { get } from '../api'
 import { onSyncChanged } from '../SyncBanner'
-import { getApprovals } from './approvals.ts'
+import { getApprovals } from './approvalsApi.ts'
 import type { HostHealth } from './health.ts'
 import type { WorkspaceInfo } from './Sidebar'
 

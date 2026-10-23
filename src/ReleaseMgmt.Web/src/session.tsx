@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, get } from './api'
 import type { Route } from './route'
+import { currentWorkspace } from './workspace'
 
 /**
  * Session engine (PROJECT_SCOPE 5.4): UI state and unsent drafts are saved per (user, tab) to the server, so closing a tab
@@ -10,7 +11,8 @@ export const SCHEMA_VERSION = 1
 const CLIENT_KEY = 'reos.clientId'
 const DEBOUNCE_MS = 1000
 
-interface Ui { layout: { filter?: string }; drafts: Record<string, unknown>; route?: Route }
+/** The saved route names the workspace it was in: a train id means nothing in another one (REOS-106, Q-106c). */
+interface Ui { layout: { filter?: string }; drafts: Record<string, unknown>; route?: Route & { workspace?: string } }
 const empty = (): Ui => ({ layout: {}, drafts: {} })
 
 function clientId(): string {
@@ -65,7 +67,7 @@ export function SessionProvider({ enabled, children }: { enabled: boolean; child
     if (!enabled) { setReady(false); return }
     let live = true
     get<{ schemaVersion: number; activeTrainId: string | null; ui: unknown }>(`/api/v1/me/session/${id}`)
-      .then(s => { if (!live) return; ui.current = migrate(s.schemaVersion, s.ui); activeTrainId.current = s.activeTrainId; setRestored(ui.current.route) })
+      .then(s => { if (!live) return; ui.current = migrate(s.schemaVersion, s.ui); activeTrainId.current = s.activeTrainId; setRestored(ui.current.route?.workspace === (currentWorkspace() ?? undefined) ? ui.current.route : undefined) })
       .catch(e => { if (!(e instanceof ApiError && e.status === 404)) console.warn('Could not load saved session state', e) })
       .finally(() => { if (live) { bump(n => n + 1); setReady(true) } })
     return () => { live = false }
@@ -111,9 +113,10 @@ export function SessionProvider({ enabled, children }: { enabled: boolean; child
       ui.current = { ...ui.current, drafts }; touch()
     },
     saveRoute: r => {
-      const same = JSON.stringify(ui.current.route) === JSON.stringify(r)
+      const tagged = { ...r, workspace: currentWorkspace() ?? undefined }
+      const same = JSON.stringify(ui.current.route) === JSON.stringify(tagged)
       if (same && activeTrainId.current === r.trainId) return
-      ui.current = { ...ui.current, route: r }; activeTrainId.current = r.trainId; touch()
+      ui.current = { ...ui.current, route: tagged }; activeTrainId.current = r.trainId; touch()
     },
   }
   return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { announce } from './announce'
-import { ConfirmInline } from './ConfirmInline'
 import { ApiError, getCommSchedule, getTemplates, markCommSent, seedCommSchedule, type Me, type ScheduleItem, type TemplateRow } from './api'
-import { Conflict, isConflict } from './Conflict'
-import { fmtDay, fmtDayTime, fmtHM, serverNow, zoneAbbr } from './time'
+import { isConflict } from './Conflict'
+import { serverNow } from './time'
+import { Button, ConfirmDialog, ConflictNotice, DataTable, EmptyState, LoadingState, StatusChip, type Column, type Tone } from './ui'
+import { Field, Problem, SelectInput, When } from './mgmt/forms'
 
-// REOS-43: a train's T-minus schedule. Status is words, glyphs and coloured text (rule 9); the only actions are text buttons.
-// Exported for the Comms drawer (REOS-45); this file does not mount itself anywhere.
+// REOS-43 / REOS-129: a train's T-minus schedule as a table. A status is a chip (dot and words); recording a send asks for confirmation in a dialog.
+// Times are UTC with the person's own time beside them (D44).
 
 /** 43 min, 1 h 25 min, 2 h, 3 days 4 h. */
 export function span(totalMin: number): string {
@@ -18,20 +19,22 @@ export function span(totalMin: number): string {
   return hh === 0 ? `${d} days` : `${d} days ${hh} h`
 }
 
-/** "sent 08:51", or "sent Tue 27 Oct 08:51" when it went out on another day than it was due. */
+const utcHM = (iso: string) => `${iso.slice(11, 16)} UTC`
+const utcDay = (iso: string) => iso.slice(0, 10)
+/** "sent 08:51 UTC", or "sent 2026-10-27 08:51 UTC" when it went out on another day than it was due. */
 const sentText = (i: ScheduleItem) => {
   const s = i.sentAt!
-  return fmtDay(s) === fmtDay(i.dueAt) ? `sent ${fmtHM(s)}` : `sent ${fmtDay(s)} ${fmtHM(s)}`
+  return utcDay(s) === utcDay(i.dueAt) ? `sent ${utcHM(s)}` : `sent ${utcDay(s)} ${utcHM(s)}`
 }
 
 export function StatusText({ item, now }: { item: ScheduleItem; now: number }) {
-  switch (item.state) {
-    case 'Sent': return <span className="ok">✓ {sentText(item)}, on time</span>
-    case 'SentLate': return <span className="warn">▲ {sentText(item)}, {span(item.lateMinutes)} late</span>
-    case 'Overdue': return <span className="warn">▲ overdue by {span((now - Date.parse(item.dueAt)) / 60000)}</span>
-    case 'Ready': return <span className="accent">● ready to send</span>
-    default: return <span className="muted">○ scheduled</span>
-  }
+  const [tone, text]: [Tone, string] =
+    item.state === 'Sent' ? ['success', `Sent ${sentText(item).slice(5)}, on time`]
+    : item.state === 'SentLate' ? ['warning', `Sent ${sentText(item).slice(5)}, ${span(item.lateMinutes)} late`]
+    : item.state === 'Overdue' ? ['danger', `Overdue by ${span((now - Date.parse(item.dueAt)) / 60000)}`]
+    : item.state === 'Ready' ? ['info', 'Ready to send']
+    : ['neutral', 'Scheduled']
+  return <StatusChip tone={tone}>{text}</StatusChip>
 }
 
 export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { trainId: string; me: Me; refreshKey?: number; onChanged?: () => void }) {
@@ -44,6 +47,7 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
   const [problem, setProblem] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ApiError | null>(null)
   const [now, setNow] = useState(serverNow())
+  const [confirm, setConfirm] = useState<ScheduleItem | 'all' | null>(null)
 
   const load = useCallback(async () => {
     try { setItems(await getCommSchedule(trainId)); setProblem(null) } catch (e) { setProblem((e as Error).message) }
@@ -64,7 +68,7 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
   const run = async (f: () => Promise<unknown>, done?: string) => {
     if (busy) return
     setBusy(true); setProblem(null); setConflict(null)
-    try { await f(); await load(); onChanged?.(); if (done) announce(done) } catch (e) { focusId.current = null; fail(e) } finally { setBusy(false) }
+    try { await f(); await load(); onChanged?.(); if (done) announce(done) } catch (e) { focusId.current = null; fail(e) } finally { setBusy(false); setConfirm(null) }
   }
   const markSent = (i: ScheduleItem) => run(async () => { focusId.current = i.id; await markCommSent(i.id, i.version) }, `${i.label} ${i.name} recorded as sent.`)
   const overdue = items?.filter(i => !i.sentAt && i.state === 'Overdue') ?? []
@@ -74,57 +78,45 @@ export function CommSchedule({ trainId, me, refreshKey = 0, onChanged }: { train
     try { for (const i of overdue) await markCommSent(i.id, i.version) } catch (e) { focusId.current = null; await load(); throw e }   // show what did get recorded
   }, `${overdue.length} overdue ${overdue.length === 1 ? 'message' : 'messages'} recorded as sent.`)
 
+  const columns: Column<ScheduleItem>[] = [
+    { key: 'when', header: 'When', mono: true, cell: i => i.label },
+    { key: 'msg', header: 'Message', cell: i => i.name },
+    { key: 'aud', header: 'Audience', cell: i => i.audience },
+    { key: 'due', header: 'Due (UTC)', cell: i => <When iso={i.dueAt} /> },
+    { key: 'status', header: 'Status', cell: i => <span id={`cs-status-${i.id}`} tabIndex={-1}><StatusText item={i} now={now} /></span> },
+    { key: 'act', header: <span className="sr-only">Actions</span>, align: 'end', cell: i => (canEdit && !i.sentAt
+      ? <Button aria-label={`Mark sent: ${i.label} ${i.name}`} disabled={busy} onClick={() => setConfirm(i)}>Mark sent</Button> : null) },
+  ]
+
   return (
-    <div>
-      {problem && <p className="bad" role="alert">✗ {problem}</p>}
-      {conflict && <Conflict error={conflict} what="schedule item"><button type="button" className="text" onClick={() => { setConflict(null); void load() }}>Reload</button></Conflict>}
-      {items === null && !problem && <p className="muted">Loading the schedule.</p>}
+    <div className="mg-stack">
+      <Problem message={problem} />
+      {conflict && <ConflictNotice onUseTheirs={() => { setConflict(null); void load() }} />}
+      {items === null && !problem && <LoadingState what="the schedule" />}
       {items?.length === 0 && (
-        <div>
-          <p className="muted">This train has no T-minus schedule yet.</p>
-          {canEdit && (templates.length === 0
-            ? <p className="muted">No train template has a T-minus plan to seed from. Add messages to a template&apos;s T-minus plan first.</p>
-            : (
-              <p className="inline-form">
-                <label>Seed from template{' '}
-                  <select className="line" value={pick} onChange={e => setPick(e.target.value)}>
-                    {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.scheduleCount} messages)</option>)}
-                  </select>
-                </label>
-                <button type="button" className="text strong" disabled={busy || !pick} onClick={() => run(() => seedCommSchedule(trainId, pick), 'Schedule created.')}>{busy ? 'Creating…' : 'Create schedule'}</button>
-              </p>
-            ))}
+        <EmptyState title="This train has no T-minus schedule yet">
+          {canEdit && templates.length === 0 && <>No train template has a T-minus plan to seed from. Add messages to a template&apos;s T-minus plan first.</>}
+        </EmptyState>
+      )}
+      {items?.length === 0 && canEdit && templates.length > 0 && (
+        <div className="mg-form">
+          <Field label="Seed from template">
+            <SelectInput value={pick} onChange={e => setPick(e.target.value)} options={templates.map(t => ({ value: t.id, label: `${t.name} (${t.scheduleCount} messages)` }))} />
+          </Field>
+          <div className="mg-actions"><Button variant="primary" disabled={busy || !pick} onClick={() => run(() => seedCommSchedule(trainId, pick), 'Schedule created.')}>{busy ? 'Creating…' : 'Create schedule'}</Button></div>
         </div>
       )}
       {items && items.length > 0 && (
         <>
-          <table className="grid">
-            <thead><tr><th>When</th><th>Message</th><th>Audience</th><th>Due ({zoneAbbr()})</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>
-              {items.map(i => (
-                <tr key={i.id}>
-                  <td className="mono">{i.label}</td>
-                  <td>{i.name}</td>
-                  <td>{i.audience}</td>
-                  <td className="mono">{fmtDayTime(i.dueAt)}</td>
-                  <td id={`cs-status-${i.id}`} tabIndex={-1}><StatusText item={i} now={now} /></td>
-                  <td>
-                    {canEdit && !i.sentAt && (
-                      <ConfirmInline label="Mark sent" triggerLabel={`Mark sent: ${i.label} ${i.name}`} question="Record as sent now?" confirmLabel="Confirm" pendingLabel="Recording…"
-                        destructive={false} disabled={busy} onConfirm={() => markSent(i)} />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {canEdit && overdue.length > 1 && (
-            <p><ConfirmInline label={`Mark all ${overdue.length} overdue sent`} question={`Record ${overdue.length} overdue messages as sent now? Each counts as late.`} confirmLabel="Confirm" pendingLabel="Recording…"
-              destructive={false} disabled={busy} onConfirm={markAllOverdue} /></p>
-          )}
-          <p className="muted small">Due times are business days before the target date, in {zoneAbbr()}. A message counts as on time when it is sent at or before its due time.</p>
+          <DataTable caption="T-minus schedule" columns={columns} rows={items} rowKey={i => i.id} />
+          {canEdit && overdue.length > 1 && <div className="mg-actions"><Button disabled={busy} onClick={() => setConfirm('all')}>{`Mark all ${overdue.length} overdue sent`}</Button></div>}
+          <p className="mg-note">Due times are business days before the target date. They are shown in UTC with your own time beside them. A message counts as on time when it is sent at or before its due time.</p>
         </>
       )}
+      <ConfirmDialog open={confirm !== null} title={confirm === 'all' ? `Record ${overdue.length} overdue messages as sent now?` : 'Record as sent now?'} confirmLabel="Record as sent" pendingLabel="Recording…" pending={busy}
+        onCancel={() => setConfirm(null)} onConfirm={() => void (confirm === 'all' ? markAllOverdue() : confirm ? markSent(confirm) : undefined)}>
+        {confirm === 'all' ? 'Each counts as late.' : confirm ? `${confirm.label} ${confirm.name}. The time of sending is recorded against its due time and cannot be changed.` : null}
+      </ConfirmDialog>
     </div>
   )
 }

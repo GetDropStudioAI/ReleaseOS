@@ -1,0 +1,41 @@
+/* Management screens (REOS-129, G7): a table on the left, a panel on the right. Tokens only (docs/ui/tokens.css). */
+.mg-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--gap-lg); align-items: start; }
+.mg-side { display: flex; flex-direction: column; gap: var(--gap-lg); min-width: 0; }
+.mg-stack { display: flex; flex-direction: column; gap: var(--gap-md); }
+.mg-form { display: flex; flex-direction: column; gap: var(--gap-md); }
+.mg-field { display: flex; flex-direction: column; gap: var(--gap-xs); font-size: var(--type-small); font-weight: 600; color: var(--color-text-primary); }
+.mg-field .mg-hint { font-weight: 400; color: var(--color-text-secondary); }
+.mg-input {
+  font: var(--type-body) var(--font-sans); color: var(--color-text-primary); background: var(--color-bg-surface);
+  border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md); padding: var(--gap-sm) var(--gap-md); width: 100%; box-sizing: border-box;
+}
+.mg-input::placeholder { color: var(--color-text-secondary); }
+.mg-input:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 1px; }
+.mg-input[aria-invalid="true"] { border-color: var(--color-status-danger); }
+textarea.mg-input { resize: vertical; }
+.mg-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--gap-md); }
+.mg-note { margin: 0; font-size: var(--type-small); color: var(--color-text-secondary); }
+.mg-problem { margin: 0; font-size: var(--type-small); color: var(--color-status-danger); }
+.mg-ok { margin: 0; font-size: var(--type-small); color: var(--color-status-success); }
+.mg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap-sm); }
+.mg-subhead { margin: 0; font: 600 var(--type-body) / 1.3 var(--font-sans); }
+.mg-mono { font-family: var(--font-mono); font-size: var(--type-mono-small); }
+.mg-tablewrap { display: flex; flex-direction: column; gap: var(--gap-md); min-width: 0; }
+@media (max-width: 1100px) { .mg-split { grid-template-columns: 1fr; } }
+.mg-warn { color: var(--color-status-warning); font-weight: 600; }
+.mg-input.narrow { max-width: calc(var(--sidebar-width) * 0.5); }
+.mg-input.mid { min-width: calc(var(--sidebar-width) * 0.9); }
+.mg-sections { display: flex; flex-direction: column; gap: var(--gap-lg); }
+.mg-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--sidebar-width) * 0.9), 1fr)); gap: var(--gap-md); }
+
+/* Comm library: template source with tokens marked, and the hydrated preview. Status is always words as well as colour (the problems are underlined). */
+.mg-summary { display: flex; justify-content: space-between; align-items: baseline; gap: var(--gap-md); }
+.mg-src { margin: 0; padding: var(--gap-md); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-bg-subtle); font-family: var(--font-mono); font-size: var(--type-mono-small); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.mg-preview { margin: 0; padding: var(--gap-md); border: var(--border-width) solid var(--color-border-subtle); border-radius: var(--radius-md); font: inherit; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.mg-preview.src { font-family: var(--font-mono); font-size: var(--type-mono-small); line-height: 1.6; }
+.mg-tk { color: var(--color-accent-text); font-weight: 600; }
+.mg-tkbad { color: var(--color-status-danger); text-decoration: underline wavy; text-underline-offset: 3px; }
+.mg-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap-xl); align-items: start; }
+@media (max-width: 1100px) { .mg-cols { grid-template-columns: minmax(0, 1fr); } }
+.mg-body { font-family: var(--font-mono); font-size: var(--type-mono-small); min-height: 16em; }
+.mg-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md); }

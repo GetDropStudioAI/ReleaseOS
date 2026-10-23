@@ -9,11 +9,12 @@ test('a Release Manager adds a user, a duplicate is refused inline, and the new 
   const email = `quinn.added.${Date.now()}@example.com`
   await signIn(page, 'users-rm@example.com', 'ReleaseManager')
   await page.click('nav[aria-label=Primary] a:has-text("Teams & settings")')
-  await expect(page.locator('main h1')).toHaveText('Admin')
+  await expect(page.locator('main h1')).toHaveText('Teams & settings')
 
-  await page.locator('button:text-is("Add user")').click()
+  await page.getByRole('button', { name: 'Add user', exact: true }).click()
   const form = page.locator('[role=group][aria-label="Add user"]')
-  await expect(form.locator('button:text-is("Add user")')).toBeDisabled()
+  const submit = form.getByRole('button', { name: 'Add user', exact: true })
+  await expect(submit).toBeDisabled()
   await expect(form).toContainText('Enter the email they sign in with and their name.')   // a disabled action says why
   await form.locator('label:has-text("Email") input').fill(`  ${email.toUpperCase()} `)
   await form.locator('label:has-text("Name") input').fill('Quinn Added')
@@ -23,21 +24,21 @@ test('a Release Manager adds a user, a duplicate is refused inline, and the new 
     const r = await new AxeBuilder({ page }).withTags(TAGS).analyze()
     expect(r.violations.filter(v => v.impact === 'serious' || v.impact === 'critical'), `add user form (${scheme})`).toEqual([])
   }
-  await form.locator('button:text-is("Add user")').click()
+  await submit.click()
   await expect(page.locator('main [role=status]', { hasText: 'Quinn Added' })).toContainText(`Quinn Added (${email}) added`)
-  const row = page.locator('table.grid tr', { hasText: email })                   // stored trimmed and in lower case
+  const row = page.locator('table.os-table tr', { hasText: email })                   // stored trimmed and in lower case
   await expect(row).toContainText('Quinn Added')
   await expect(row).toContainText('RTE')
-  await expect(row).toContainText('● active')
+  await expect(row).toContainText('Active')
 
   // the same email again, in another case: refused inline with the reason, nothing added
-  await page.locator('button:text-is("Add user")').click()
+  await page.getByRole('button', { name: 'Add user', exact: true }).click()
   await form.locator('label:has-text("Email") input').fill(email.replace('quinn', 'QUINN'))
   await form.locator('label:has-text("Name") input').fill('Quinn Twice')
-  await form.locator('button:text-is("Add user")').click()
+  await submit.click()
   await expect(form.locator('[role=alert]')).toContainText('is already a user')
-  await expect(page.locator('table.grid tr', { hasText: 'Quinn Twice' })).toHaveCount(0)
-  await form.locator('button:text-is("Cancel")').click()
+  await expect(page.locator('table.os-table tr', { hasText: 'Quinn Twice' })).toHaveCount(0)
+  await form.getByRole('button', { name: 'Cancel', exact: true }).click()
 
   // pick them as a task owner on a train's checklist
   const t = await trainByTitle(page, 'Payments platform')
@@ -53,7 +54,8 @@ test('a Release Manager adds a user, a duplicate is refused inline, and the new 
 test('a Viewer sees the users table without Add user', async ({ page }) => {
   await signIn(page, 'users-viewer@example.com', 'Viewer')
   await page.goto('/admin')
-  await expect(page.locator('main h1')).toHaveText('Admin')
-  await expect(page.locator('table.grid')).toBeVisible()
-  await expect(page.locator('button:text-is("Add user")')).toHaveCount(0)
+  await expect(page.locator('main h1')).toHaveText('Teams & settings')
+  await expect(page.locator('table.os-table')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add user' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Workspace' })).toHaveCount(0)      // member management is for RTEs and Release Managers
 })

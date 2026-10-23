@@ -30,7 +30,7 @@ Icons are Lucide (`lucide-react`, pinned), decorative (`aria-hidden`) unless the
 
 **Shell (REOS-94, `src/ReleaseMgmt.Web/src/shell/`).** Every signed-in page sits in it:
 - **Sidebar** (216 px, `aside` "Workspace"):
-  - brand, then the workspace's name and region;
+  - brand, then the workspace's name and region (REOS-106: with more than one workspace it is the switcher, a menu of the person's workspaces; with one it is plain text; Q-106e);
   - the Primary navigation (`shell/nav.ts`: the design's Workspace group in order with its Lucide icons, the Management list, and a More group for screens the design does not place, Q-094a). The Approvals item carries the count of decisions waiting for the person (`GET /approvals`), hidden at zero;
   - in the footer, the control-plane card (`shell/health.ts`: operational, degraded or service disruption, from `/healthz`, the sync state and the live connection; a link to Sync health) and the user card, which opens the account panel (Appearance, Sign out, Reset/Exit under `start.py`).
 - **Utility bar** (64 px, the `banner`):

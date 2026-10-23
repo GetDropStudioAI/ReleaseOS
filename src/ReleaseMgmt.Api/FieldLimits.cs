@@ -123,6 +123,9 @@ public static class FieldLimits
         [typeof(MilestoneEndpoints.AddMilestoneBody)] = new() { ["Name"] = MilestoneRules.MaxName, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Note"] = MilestoneRules.MaxNote },
         [typeof(MilestoneEndpoints.PatchMilestoneBody)] = new() { ["Name"] = MilestoneRules.MaxName, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Note"] = MilestoneRules.MaxNote },
         // REOS-83: add a user ahead of first sign-in (email as Users.Email, import limit)
+        [typeof(WorkspaceAdminEndpoints.NewWorkspace)] = new() { ["Name"] = WorkspaceService.MaxNameLength, ["Slug"] = WorkspaceMembersService.MaxSlugLength, ["Region"] = WorkspaceService.MaxRegionLength },   // REOS-106
+        [typeof(WorkspaceAdminEndpoints.NewMember)] = new() { ["Email"] = UserCreationService.MaxEmailLength, ["DisplayName"] = UserCreationService.MaxNameLength, ["Role"] = Code },
+        [typeof(WorkspaceAdminEndpoints.RoleBody)] = new() { ["Role"] = Code },
         [typeof(UserCreationEndpoints.NewUser)] = new() { ["Email"] = UserCreationService.MaxEmailLength, ["DisplayName"] = UserCreationService.MaxNameLength, ["Role"] = Code, ["Handle"] = Handle },
         // REOS-81: a train's products and gates
         [typeof(PlanStructureEndpoints.ProductBody)] = new() { ["Name"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag },

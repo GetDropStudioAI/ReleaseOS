@@ -1,4 +1,4 @@
-export interface Me { id: string; email: string; name: string; roles: string[] }
+export interface Me { id: string; email: string; name: string; roles: string[]; workspaceId?: string | null }
 export interface UserRow { id: string; email: string; displayName: string; role: string; handle: string | null; isActive: boolean; version: number }
 export interface TeamRow { id: string; handle: string; name: string; version: number; memberIds: string[] }
 export interface HolidayRow { day: string; name: string; version: number }
@@ -25,7 +25,7 @@ async function call<T>(method: string, url: string, body?: unknown, ifMatch?: nu
 export const get = <T,>(url: string) => call<T>('GET', url)
 export const post = <T,>(url: string, body?: unknown, ifMatch?: number) => call<T>('POST', url, body ?? {}, ifMatch)
 export const patch = <T,>(url: string, body: unknown, ifMatch?: number) => call<T>('PATCH', url, body, ifMatch)
-export const del = <T,>(url: string) => call<T>('DELETE', url)
+export const del = <T,>(url: string, ifMatch?: number) => call<T>('DELETE', url, undefined, ifMatch)
 
 export async function getMe(): Promise<Me | null> {
   const r = await fetch('/api/v1/me')

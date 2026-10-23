@@ -34,7 +34,7 @@ const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[]
   { name: 'audit', link: /^Audit history$/, ready: h1('Audit history') },
   { name: 'services', link: /^Service catalog$/, ready: h1('Service catalog') },
   { name: 'environments', link: /^Environments$/, ready: h1('Environments') },
-  { name: 'admin', link: /^Teams & settings$/, ready: h1('Admin') },
+  { name: 'admin', link: /^Teams & settings$/, ready: h1('Teams & settings') },
   { name: 'templates', link: /^Templates$/, ready: h1('Train templates') },
   { name: 'library', link: /^Comm library$/, ready: h1('Comm library') },
   { name: 'connectors', link: /^Connectors$/, ready: h1('Connectors') },

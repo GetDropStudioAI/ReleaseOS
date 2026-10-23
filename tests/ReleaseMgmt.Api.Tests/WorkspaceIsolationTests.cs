@@ -111,7 +111,7 @@ public class WorkspaceIsolationTests
             ["trains"] = "ta", ["gates"] = "ga", ["tasks"] = "ka", ["steps"] = "sa", ["products"] = "pa", ["runs"] = "ra", ["conditions"] = "ca", ["gonogo"] = "da",
             ["pir-actions"] = "paa", ["milestones"] = "ma", ["attachments"] = "aa", ["comm-library"] = "la", ["comm-templates"] = "cta", ["comm-schedule"] = "csa",
             ["dispatches"] = "dsa", ["export-jobs"] = "xa", ["freezes"] = "fa", ["links"] = "lka", ["notifications"] = "na", ["alerts"] = "sya", ["webhook-allowlist"] = "wha",
-            ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
+            ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["userId"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
             ["release-types"] = "rta", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika", ["approval-requests"] = "apa", ["approval-policies"] = "pola",
             ["ciId"] = "cia", ["issueId"] = "kia", ["stepId"] = "sa", ["jobId"] = "ija", ["trainId"] = "ta", ["day"] = "2026-12-24",
             ["audit"] = Scalar(f, "SELECT Id FROM AuditEvents WHERE ReleaseTrainId='ta' AND EntityType='Train'"),   // GET /audit/{id}: one of A's events

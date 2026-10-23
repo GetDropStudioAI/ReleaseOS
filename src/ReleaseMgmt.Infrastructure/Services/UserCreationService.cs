@@ -57,6 +57,7 @@ public sealed partial class UserCreationService(IDbContextFactory<ReleaseDbConte
             db.Set<Users>().Add(u);
             WorkspaceService.Join(db, u, ws, role, Now);
             Audit(db, actor, null, "User", u.Id, "Create", null, new { u.Email, u.DisplayName, u.Role, u.Handle, u.IsActive, workspaceId = ws }).WorkspaceId = null;   // accounts are host-wide
+            Audit(db, actor, null, "WorkspaceMember", u.Id, "Add", null, new { workspaceId = ws, role });   // REOS-106: the membership is the workspace's own audit row (the account row above is host-wide)
             await db.SaveChangesAsync(ct);
             return ServiceResult<Users>.Ok(u);
         }, ct);

@@ -113,3 +113,16 @@
 .os-attention-title { font-weight: 600; }
 .os-attention-detail, .os-attention-due { font-size: var(--type-small); color: var(--color-text-secondary); }
 .os-attention-due { grid-column: 2; }
+
+/* REOS-106: the workspace switcher. A button where there is more than one workspace; the menu is a popover under it. */
+.os-ws-switcher { position: relative; padding: 10px 12px; }
+.os-ws-button { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); width: 100%; padding: 8px 10px; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.os-ws-button:hover { background: var(--color-bg-subtle); }
+.os-ws-text, .os-ws-item-text { display: flex; flex-direction: column; gap: var(--gap-sm); min-width: 0; }
+.os-ws-chevron { flex: none; color: var(--color-text-secondary); }
+.os-ws-menu { position: absolute; z-index: 20; inset-inline: 12px; top: calc(100% - 4px); display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); box-shadow: 0 8px 24px color-mix(in srgb, var(--color-text-primary) 18%, transparent); }
+.os-ws-item { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); padding: 8px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--color-text-primary); font: inherit; text-align: start; cursor: pointer; }
+.os-ws-item:hover, .os-ws-item:focus-visible { background: var(--color-bg-subtle); }
+.os-ws-item[aria-checked="true"] { background: var(--color-bg-accent-subtle); color: var(--color-accent-text); }
+.os-ws-item-name { font-weight: 600; font-size: var(--type-body); }
+.os-ws-item-detail { font-size: var(--type-caption); color: var(--color-text-secondary); }

@@ -130,16 +130,13 @@ public class ReleaseModelExchangeTests
     }
 
     [Fact]
-    public async Task The_calendar_titles_a_releases_events_with_its_key_and_the_documents_print_its_fields()
+    public async Task The_calendar_titles_a_releases_events_with_its_key()
     {
         var (f, rte) = await World(); using var _ = f;
-        var id = (await Json(await rte.PostAsJsonAsync("/api/v1/trains", new { title = "R27.01", targetReleaseDate = Date(), riskTier = "Low", ownerTeamId = "tm1", releaseBranch = "release/27.01" }))).GetProperty("id").GetString()!;
+        await Json(await rte.PostAsJsonAsync("/api/v1/trains", new { title = "R27.01", targetReleaseDate = Date(), riskTier = "Low", ownerTeamId = "tm1", releaseBranch = "release/27.01" }));
         var path = (await Json(await rte.PostAsJsonAsync("/api/v1/me/ics-tokens", new { scope = "all" }))).GetProperty("path").GetString()!;
         var ics = await f.CreateClient().GetStringAsync(path);
         Assert.Contains("SUMMARY:RLS-1 R27.01: target release date", ics);
         Assert.DoesNotContain("release/27.01", ics);   // titles and times only: the branch and the people are not put in a link anyone can open
-        // the evidence pack and release report generate with the release line (their text is in the PDF; generation failing would fail PdfExportTests too)
-        var job = await rte.PostAsJsonAsync($"/api/v1/trains/{id}/export-jobs", new { kind = "ReleaseReportPdf" });
-        Assert.True(job.IsSuccessStatusCode, await job.Content.ReadAsStringAsync());
     }
 }

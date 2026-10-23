@@ -36,4 +36,13 @@ public sealed class DeploymentStateTests(TriggerSuiteFixture fx) : IClassFixture
     [Theory]
     [InlineData("RLS", true)] [InlineData("AB", true)] [InlineData("ABCDE12345", true)] [InlineData("A", false)] [InlineData("ABCDEFGHIJK", false)] [InlineData("rls", false)] [InlineData("RL-S", false)] [InlineData("", false)] [InlineData(null, false)]
     public void A_key_prefix_is_two_to_ten_capital_letters_or_digits(string? prefix, bool valid) => Assert.Equal(valid, ReleaseKeys.IsValidPrefix(prefix));
+
+    [Fact]
+    public void The_release_line_of_the_documents_lists_what_is_set_and_nothing_else()
+    {
+        Assert.Null(new ReleaseMgmt.Infrastructure.Exports.ReleaseInfo(null, null, null, null, null, null, []).Line());
+        Assert.Equal("RLS-12 · Owner Rae Tran · Team Operations · Branch release/27.01 · On call SRE · Type CERT · Environments Staging, Production",
+            new ReleaseMgmt.Infrastructure.Exports.ReleaseInfo("RLS-12", "Rae Tran", "Operations", "release/27.01", "SRE", "CERT", ["Staging", "Production"]).Line());
+        Assert.Equal("RLS-3 · Branch main", new ReleaseMgmt.Infrastructure.Exports.ReleaseInfo("RLS-3", null, null, "main", null, null, []).Line());
+    }
 }

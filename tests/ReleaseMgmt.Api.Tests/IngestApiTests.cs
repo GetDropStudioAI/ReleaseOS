@@ -373,6 +373,7 @@ public class IngestApiTests
 
         var seconds = int.TryParse(Environment.GetEnvironmentVariable("REOS_INGEST_LOAD_SECONDS"), out var secs) && secs > 0 ? secs : 3; const int perSecond = 50;
         var failures = 0;
+        var refused = new System.Collections.Concurrent.ConcurrentBag<string>();   // status and body of every refused event, so a CI failure says why
         var ingestTimes = new System.Collections.Concurrent.ConcurrentBag<double>();
         using var stop = new CancellationTokenSource();
         var reader = Task.Run(async () => await P95(async () => (await rte.GetAsync("/api/v1/trains")).EnsureSuccessStatusCode(), seconds * 20));
@@ -383,11 +384,11 @@ public class IngestApiTests
             var sw = Stopwatch.StartNew();
             var r = await ingest.PostAsJsonAsync("/api/v1/ingest/events", new { deploymentExternalId = "ci-load", events = new[] { new { level = "Info", message = $"event {i}", externalId = $"load-{i}" } } });
             ingestTimes.Add(sw.Elapsed.TotalMilliseconds);
-            if (r.StatusCode != HttpStatusCode.OK) Interlocked.Increment(ref failures);
+            if (r.StatusCode != HttpStatusCode.OK) { Interlocked.Increment(ref failures); refused.Add($"event {i}: {(int)r.StatusCode} {(await r.Content.ReadAsStringAsync())[..Math.Min(200, (await r.Content.ReadAsStringAsync()).Length)]}"); }
         }).ToArray();
         await Task.WhenAll(senders);
         var during = await reader;
-        Assert.Equal(0, failures);
+        Assert.True(failures == 0, $"{failures} events were refused: {string.Join(" | ", refused.Take(5))}");
         Assert.Equal(perSecond * seconds, Count(f, "SELECT COUNT(*) FROM DeploymentEvents"));
         // Generous bounds for a shared CI runner; the 50/s figure is the sustained rate above, and docs/LOAD_TEST.md has the long run.
         Assert.True(during < Math.Max(baseline * 6, 750), $"GET /trains p95 went from {baseline:F0} ms to {during:F0} ms while 50 events/s were ingested");

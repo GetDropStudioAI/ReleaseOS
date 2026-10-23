@@ -106,3 +106,21 @@ Design: [Figma uxMlQ7LTNoW8sIKWSIeY98](https://www.figma.com/design/uxMlQ7LTNoW8
 | Tablet and mobile | Decide; today the app is designed for desktop widths and UI.md specifies nothing narrower |
 | Dark mode | Decision C |
 | "AUTOSAVED" vs "READ-ONLY RUN VIEW" | A run view is read-only (actuals come from step actions; the plan is edited in the runbook); drop "AUTOSAVED" |
+
+## 6. Decided 2026-10-23, and the build order
+
+Owner answers: **A** the redesign replaces the UI rules (D41); **B** build the deployment and monitoring functionality, telemetry by **push ingest API**, control by **outbound webhook** per environment (D42); **C** dark mode stays, designed in Figma first (D43); **D** **multiple workspaces** (D45); **E** UTC standard with the person's zone and local time alongside (D44); **F** follows from C: the Figma variables are created from the frames and become the tokens. Details and the assumptions built to are in QUESTIONS Q-090a to Q-090e.
+
+Build order (each step needs the ones before it):
+
+1. **Figma:** Color variables (Light and Dark) from the frames, frames bound to them, dark versions of the seven frames (REOS-92 / D43).
+2. **REOS-93** foundation: `tokens.css` from those variables, the component set, the gallery page; UI.md rewritten.
+3. **Workspaces** (D45): workspace and membership model, existing data moved into a default workspace, every query and permission scoped, isolation tests. Before any new table, so nothing is built twice.
+4. **REOS-94** app shell: sidebar with the workspace switcher, utility bar with the UTC and local clock, Jump to, Inbox bell, approvals badge (needs B1), host health card.
+5. Release model additions (B3: key, owner, team, environments, branch, on-call), **B2** overview endpoint, **B1** approval queue; then **REOS-95** Overview, **REOS-96** Portfolio, **REOS-97** Release detail, **REOS-101** Audit (table and filters).
+6. **Deployments** (D42): environments and service catalog (B6, B8), deployments and rollout state, the push ingest API with per-workspace keys, metric samples, thresholds and SLOs, the control webhooks and automatic rollback, live updates; then **REOS-98** Orchestration and **REOS-100** Deployment monitoring.
+7. **B5** several approvers, Request changes, policies and exceptions; then **REOS-99** Approvals.
+8. **B4** hash-chained audit; the Audit integrity banner.
+9. **REOS-102** QA across all of it.
+
+This is more than one sprint: Sprint 6 covers steps 1 to 4 at least; the rest goes to the backlog as stories under REOS-90.

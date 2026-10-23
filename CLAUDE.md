@@ -45,7 +45,7 @@ tests/reference/   Python oracle tests; must keep passing against db/schema.sql
 6. **Ids:** UUIDv7 as TEXT (`Guid.CreateVersion7()`). Rows created by triggers use random hex ids: a documented exception.
 7. **Actuals never overwrite the plan.** Runbook actuals live in `StepExecutions`; baselines in `Baselines` are immutable.
 8. **Fail fast, never silent.** Any background failure becomes a `SyncAlerts` row and a SignalR push. No `catch {}` without logging and surfacing.
-9. **UI rule:** no checkboxes, toggle switches, pills, badges or bordered boxes. Status is words, glyphs (✓ ✗ ● ◐ ○ ▲) and coloured text; actions are text buttons; selection is a full-width row tint. Use tokens from `docs/ui/tokens.css`; no hard-coded colours. No modals: inline expansion or the right drawer.
+9. **UI rule (D41, 2026-10-23):** the Figma redesign (REOS-90) is the visual reference: sidebar and utility bar, status chips (dot + label), count badges, panels and metric cards, filled primary / outlined secondary buttons, confirmation dialogs for destructive actions. Status is never colour alone; no checkboxes or toggle switches. Use tokens from `docs/ui/tokens.css` (from the Figma variables, light and dark); no hard-coded colours. Times are UTC, labelled, with the person's local time alongside (D44).
 10. **Fonts come from the OS** (SF on macOS, Segoe UI Variable on Windows). Never bundle SF Pro.
 11. Credentials only via ASP.NET Data Protection / OS secret store, never in SQLite or appsettings committed to git.
 

@@ -1,5 +1,7 @@
 # UI specification
 
+> **Superseded in part (2026-10-23, D41):** the Figma redesign ([uxMlQ7LTNoW8sIKWSIeY98](https://www.figma.com/design/uxMlQ7LTNoW8sIKWSIeY98)) replaces the no-pills/badges/boxes/modals rules below. This file and `tokens.css` are rewritten in REOS-93; until then, where they disagree, the redesign wins for new screens.
+
 Tokens: `docs/ui/tokens.css` (import it as the base stylesheet). Mockups: `docs/ui/mockups/*.html` (open in a browser; fonts resolve to your OS) and `*.png` renders. Mockup data is illustrative; match layout, density, copy and behaviour.
 
 Figma: [ReleaseOS — UI](https://www.figma.com/design/nlfpTZHvRakSyUGpZ3N0Xr) holds the same tokens as variables (Color: Light/Dark, Layout), the text styles, the core components (Text button, Status, Tab, Line input, Stream row, Gate dot, Section head, Inspector field) and the Main train workspace in light and dark. `tokens.css` stays the source of truth; a token change is made there first and mirrored in Figma. Figma uses Inter and Roboto Mono as stand-ins because SF Pro / SF Mono are not served to its renderer; the app still uses the OS fonts (rule 10). See `docs/QUESTIONS.md` Q-085.

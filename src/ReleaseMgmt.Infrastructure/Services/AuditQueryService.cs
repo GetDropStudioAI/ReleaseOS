@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Infrastructure.Persistence;
 
@@ -16,16 +17,18 @@ public sealed record AuditRow(long Id, DateTime OccurredAt, string? ActorUserId,
 public sealed record AuditPage(IReadOnlyList<AuditRow> Items, string? NextCursor, int Limit, long? Total = null);
 
 /// <summary>
-/// What the audit screen's integrity banner can truthfully say (REOS-101). There is no hash chain yet (REOS-114), so this is the protection the log does have:
-/// the two triggers that make AuditEvents append-only, checked in the live database, and the extent of the log in this workspace.
+/// What the audit screen's integrity banner says (REOS-101, REOS-114): the protection of the log (the two triggers that make AuditEvents append-only, checked in the live
+/// database), the extent of the log in this workspace, and its hash chain: <see cref="Status"/> is Verified, Failed (with <see cref="FirstBad"/>, the first row that does not
+/// verify, and why) or Unverified; <see cref="SealedRows"/> are chained, <see cref="PendingRows"/> are written and waiting to be sealed; <see cref="VerifiedAt"/> is the last full check.
 /// </summary>
-public sealed record AuditIntegrity(bool AppendOnly, IReadOnlyList<string> MissingTriggers, bool HashChained, long RetainedEvents, DateTime? OldestAt, DateTime? NewestAt, DateTime CheckedAt);
+public sealed record AuditIntegrity(bool AppendOnly, IReadOnlyList<string> MissingTriggers, bool HashChained, long RetainedEvents, DateTime? OldestAt, DateTime? NewestAt, DateTime CheckedAt,
+    string Status = "Unverified", long SealedRows = 0, long PendingRows = 0, ChainBreak? FirstBad = null, DateTime? VerifiedAt = null, long? HeadId = null, string? HeadHash = null);
 
 /// <summary>
 /// Read-only view of AuditEvents (REOS-38, Q-038a..c). Deliberately has no write path: the table is append-only by trigger and reading it is not itself audited.
 /// Newest first by Id (keyset paging: stable while new rows arrive, no gaps or duplicates, unlike OFFSET).
 /// </summary>
-public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf)
+public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf, Microsoft.Extensions.Configuration.IConfiguration? config = null)
 {
     public const int DefaultLimit = 100, MaxLimit = 500;
 
@@ -105,7 +108,7 @@ public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf)
     /// <summary>Names of the triggers that keep AuditEvents append-only (db/schema.sql); the integrity check fails when the live database lacks one.</summary>
     public static readonly string[] AppendOnlyTriggers = ["trg_Audit_NoUpdate", "trg_Audit_NoDelete"];
 
-    public async Task<AuditIntegrity> IntegrityAsync(TimeProvider time, CancellationToken ct = default)
+    public async Task<AuditIntegrity> IntegrityAsync(TimeProvider time, CancellationToken ct = default, AuditChainService? chain = null, bool recheck = false)
     {
         await using var db = await dbf.CreateDbContextAsync(ct);
         var present = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'AuditEvents'").ToListAsync(ct);
@@ -114,7 +117,9 @@ public sealed class AuditQueryService(IDbContextFactory<ReleaseDbContext> dbf)
         var count = await events.LongCountAsync(ct);
         var oldest = count == 0 ? (DateTime?)null : await events.MinAsync(a => a.OccurredAt, ct);
         var newest = count == 0 ? (DateTime?)null : await events.MaxAsync(a => a.OccurredAt, ct);
-        return new AuditIntegrity(missing.Count == 0, missing, HashChained: false, count, oldest, newest, time.GetUtcNow().UtcDateTime);
+        if (chain is null) return new AuditIntegrity(missing.Count == 0, missing, HashChained: false, count, oldest, newest, time.GetUtcNow().UtcDateTime);
+        var c = await chain.IntegrityAsync(recheck, TimeSpan.FromMinutes(Math.Max(1, config?.GetValue("Audit:Verify:MaxAgeMinutes", 70) ?? 70)), ct);
+        return new AuditIntegrity(missing.Count == 0, missing, HashChained: true, count, oldest, newest, time.GetUtcNow().UtcDateTime, c.Status, c.SealedRows, c.PendingRows, c.FirstBad, c.VerifiedAt, c.HeadId, c.HeadHash);
     }
 
     public async Task<long> CountAsync(AuditFilter f, CancellationToken ct = default)

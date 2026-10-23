@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Domain.Services;
+using ReleaseMgmt.Infrastructure.Comms;
 using ReleaseMgmt.Infrastructure.Persistence;
 
 namespace ReleaseMgmt.Infrastructure.Services;
@@ -9,22 +10,23 @@ namespace ReleaseMgmt.Infrastructure.Services;
 public sealed record WebhookRef(string Id, string Name, string Host);
 public sealed record EnvironmentView(string Id, string Name, string? Region, string Kind, int SortOrder, WebhookRef? ControlWebhook,
     double? ErrorRateMaxPct, double? LatencyP95MaxMs, double? AvailabilityMinPct, double? SloAvailabilityPct, double? SloLatencyP95Ms, double? SloErrorRatePct,
-    bool Archived, int ActiveDeployments, int Version);
+    bool Archived, int ActiveDeployments, int Version, int ThresholdForSeconds = 120, int CanaryObservationSeconds = 600, bool ControlWebhookSigned = false);
 
 public sealed record NewEnvironment(string? Name, string? Kind, string? Region = null, int? SortOrder = null, string? ControlWebhookDestinationId = null,
-    double? ErrorRateMaxPct = null, double? LatencyP95MaxMs = null, double? AvailabilityMinPct = null, double? SloAvailabilityPct = null, double? SloLatencyP95Ms = null, double? SloErrorRatePct = null);
+    double? ErrorRateMaxPct = null, double? LatencyP95MaxMs = null, double? AvailabilityMinPct = null, double? SloAvailabilityPct = null, double? SloLatencyP95Ms = null, double? SloErrorRatePct = null,
+    int? ThresholdForSeconds = null, int? CanaryObservationSeconds = null);
 
 /// <summary>Null leaves a field as it is. <see cref="Clear"/> names the optional fields to empty (region, controlWebhookDestinationId and the six limits), since null cannot say "empty".</summary>
 public sealed record EnvironmentPatch(string? Name = null, string? Kind = null, string? Region = null, int? SortOrder = null, string? ControlWebhookDestinationId = null,
     double? ErrorRateMaxPct = null, double? LatencyP95MaxMs = null, double? AvailabilityMinPct = null, double? SloAvailabilityPct = null, double? SloLatencyP95Ms = null, double? SloErrorRatePct = null,
-    IReadOnlyList<string>? Clear = null);
+    IReadOnlyList<string>? Clear = null, int? ThresholdForSeconds = null, int? CanaryObservationSeconds = null);
 
 /// <summary>
 /// Environments of a workspace (REOS-109, B6, D42): name, region, kind (Staging or Production), order, the control webhook destination that pause, promote and rollback will call, and
 /// the thresholds and SLOs the environment is held to. Planners create, edit and archive; every write is one transaction with one <c>Environment</c> audit row and a Version bump (If-Match
 /// on edits). An archived environment cannot be chosen for a release or deployed to, and stays on what already uses it.
 /// </summary>
-public sealed class EnvironmentService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
+public sealed class EnvironmentService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, IControlSigningSecrets? signingSecrets = null) : ServiceBase(dbf, time, realtime)
 {
     public static readonly string[] Kinds = ["Staging", "Production"];
     public static readonly string[] Clearable = ["region", "controlWebhookDestinationId", "errorRateMaxPct", "latencyP95MaxMs", "availabilityMinPct", "sloAvailabilityPct", "sloLatencyP95Ms", "sloErrorRatePct"];
@@ -46,20 +48,24 @@ public sealed class EnvironmentService(IDbContextFactory<ReleaseDbContext> dbf, 
         return row is null ? null : (await ViewsAsync(db, [row], ct))[0];
     }
 
-    private static async Task<List<EnvironmentView>> ViewsAsync(ReleaseDbContext db, List<Environments> rows, CancellationToken ct)
+    private async Task<List<EnvironmentView>> ViewsAsync(ReleaseDbContext db, List<Environments> rows, CancellationToken ct)
     {
         var hookIds = rows.Select(r => r.ControlWebhookDestinationId).OfType<string>().Distinct().ToList();
         var hooks = await db.Set<WebhookDestinations>().AsNoTracking().Where(w => hookIds.Contains(w.Id)).ToDictionaryAsync(w => w.Id, w => new WebhookRef(w.Id, w.Name, w.Host), ct);
         var active = await db.Set<Deployments>().AsNoTracking().Where(d => d.State == DeploymentStates.Running || d.State == DeploymentStates.Paused)
             .GroupBy(d => d.EnvironmentId).Select(g => new { Id = g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Id, x => x.N, ct);
+        var signed = new HashSet<string>();
+        if (signingSecrets is not null)
+            foreach (var id in hookIds) if (await signingSecrets.ExistsAsync(id, ct)) signed.Add(id);
         return [.. rows.Select(e => new EnvironmentView(e.Id, e.Name, e.Region, e.Kind, e.SortOrder, e.ControlWebhookDestinationId is not null && hooks.TryGetValue(e.ControlWebhookDestinationId, out var h) ? h : null,
-            e.ErrorRateMaxPct, e.LatencyP95MaxMs, e.AvailabilityMinPct, e.SloAvailabilityPct, e.SloLatencyP95Ms, e.SloErrorRatePct, e.ArchivedAt is not null, active.GetValueOrDefault(e.Id), e.Version))];
+            e.ErrorRateMaxPct, e.LatencyP95MaxMs, e.AvailabilityMinPct, e.SloAvailabilityPct, e.SloLatencyP95Ms, e.SloErrorRatePct, e.ArchivedAt is not null, active.GetValueOrDefault(e.Id), e.Version,
+            e.ThresholdForSeconds, e.CanaryObservationSeconds, e.ControlWebhookDestinationId is not null && signed.Contains(e.ControlWebhookDestinationId)))];
     }
 
     private static object Snapshot(Environments e) => new
     {
         e.Name, e.Kind, e.Region, e.SortOrder, e.ControlWebhookDestinationId, e.ErrorRateMaxPct, e.LatencyP95MaxMs, e.AvailabilityMinPct, e.SloAvailabilityPct, e.SloLatencyP95Ms, e.SloErrorRatePct,
-        archived = e.ArchivedAt is not null, e.Version,
+        e.ThresholdForSeconds, e.CanaryObservationSeconds, archived = e.ArchivedAt is not null, e.Version,
     };
 
     private static async Task<List<GuardFailure>> CheckAsync(ReleaseDbContext db, Environments e, Environments? original, CancellationToken ct)
@@ -73,6 +79,8 @@ public sealed class EnvironmentService(IDbContextFactory<ReleaseDbContext> dbf, 
         static bool NonNeg(double? v) => v is null || v >= 0;
         if (!Pct(e.ErrorRateMaxPct) || !Pct(e.AvailabilityMinPct) || !Pct(e.SloAvailabilityPct) || !Pct(e.SloErrorRatePct)) f.Add(Bad("A percentage is between 0 and 100"));
         if (!NonNeg(e.LatencyP95MaxMs) || !NonNeg(e.SloLatencyP95Ms)) f.Add(Bad("A latency is 0 or more milliseconds"));
+        if (e.ThresholdForSeconds is < 0 or > 86400) f.Add(Bad("A threshold must be exceeded for 0 to 86,400 seconds before it is a breach"));
+        if (e.CanaryObservationSeconds is < 30 or > 86400) f.Add(Bad("A canary step is observed for 30 to 86,400 seconds"));
         if (e.ControlWebhookDestinationId is not null && e.ControlWebhookDestinationId != original?.ControlWebhookDestinationId
             && !await db.Set<WebhookDestinations>().AnyAsync(w => w.Id == e.ControlWebhookDestinationId, ct)) f.Add(Bad("The control webhook destination does not exist in this workspace"));
         return f;
@@ -89,6 +97,7 @@ public sealed class EnvironmentService(IDbContextFactory<ReleaseDbContext> dbf, 
                 ControlWebhookDestinationId = string.IsNullOrWhiteSpace(n.ControlWebhookDestinationId) ? null : n.ControlWebhookDestinationId,
                 ErrorRateMaxPct = n.ErrorRateMaxPct, LatencyP95MaxMs = n.LatencyP95MaxMs, AvailabilityMinPct = n.AvailabilityMinPct,
                 SloAvailabilityPct = n.SloAvailabilityPct, SloLatencyP95Ms = n.SloLatencyP95Ms, SloErrorRatePct = n.SloErrorRatePct,
+                ThresholdForSeconds = n.ThresholdForSeconds ?? 120, CanaryObservationSeconds = n.CanaryObservationSeconds ?? 600,
                 CreatedAt = now, LastChangedByUserId = actor.UserId, LastChangedAt = now,
             };
             var f = await CheckAsync(db, e, null, ct);
@@ -117,6 +126,7 @@ public sealed class EnvironmentService(IDbContextFactory<ReleaseDbContext> dbf, 
             if (p.ControlWebhookDestinationId is not null) e.ControlWebhookDestinationId = p.ControlWebhookDestinationId;
             e.ErrorRateMaxPct = p.ErrorRateMaxPct ?? e.ErrorRateMaxPct; e.LatencyP95MaxMs = p.LatencyP95MaxMs ?? e.LatencyP95MaxMs; e.AvailabilityMinPct = p.AvailabilityMinPct ?? e.AvailabilityMinPct;
             e.SloAvailabilityPct = p.SloAvailabilityPct ?? e.SloAvailabilityPct; e.SloLatencyP95Ms = p.SloLatencyP95Ms ?? e.SloLatencyP95Ms; e.SloErrorRatePct = p.SloErrorRatePct ?? e.SloErrorRatePct;
+            e.ThresholdForSeconds = p.ThresholdForSeconds ?? e.ThresholdForSeconds; e.CanaryObservationSeconds = p.CanaryObservationSeconds ?? e.CanaryObservationSeconds;
             if (clear.Contains("region")) e.Region = null;
             if (clear.Contains("controlWebhookDestinationId")) e.ControlWebhookDestinationId = null;
             if (clear.Contains("errorRateMaxPct")) e.ErrorRateMaxPct = null;
@@ -150,5 +160,20 @@ public sealed class EnvironmentService(IDbContextFactory<ReleaseDbContext> dbf, 
             Audit(db, actor, null, Entity, e.Id, archived ? "Archive" : "Unarchive", before, Snapshot(e));
             await db.SaveChangesAsync(ct);
             return ServiceResult<Environments>.Ok(e);
+        }, ct);
+
+    /// <summary>The key a receiver verifies the environment's control calls with (REOS-112). Created, or replaced, on request; returned this once and never stored where SQLite or a log can see it.</summary>
+    public Task<ServiceResult<string>> RotateSigningSecretAsync(string id, Actor actor, CancellationToken ct = default) =>
+        RunAsync(async db =>
+        {
+            if (signingSecrets is null) return ServiceResult<string>.Fail(Bad("Control webhook signing is not available on this host"));
+            var e = await db.Set<Environments>().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (e is null) return ServiceResult<string>.NotFound("environment");
+            if (e.ControlWebhookDestinationId is null) return ServiceResult<string>.Fail(new GuardFailure(DeploymentGuards.NoControlWebhook, $"Choose a control webhook for {e.Name} before creating its signing key"));
+            var had = await signingSecrets.ExistsAsync(e.ControlWebhookDestinationId, ct);
+            var secret = await signingSecrets.RotateAsync(e.ControlWebhookDestinationId, ct);
+            Audit(db, actor, null, Entity, e.Id, had ? "RotateSigningKey" : "CreateSigningKey", null, new { environment = e.Name });   // never the key
+            await db.SaveChangesAsync(ct);
+            return ServiceResult<string>.Ok(secret);
         }, ct);
 }

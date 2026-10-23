@@ -14,6 +14,8 @@ public sealed record ServiceResult<T>(ResultKind Kind, T? Value, IReadOnlyList<G
     public static ServiceResult<T> Fail(IEnumerable<GuardFailure> failures) => new(ResultKind.GuardFailed, default, [.. failures]);
     public static ServiceResult<T> Conflict(object current) => new(ResultKind.Conflict, default, [], current);
     public static ServiceResult<T> NotFound(string what) => new(ResultKind.NotFound, default, [], Missing: what);
+    /// <summary>The same failure (guards, conflict or not found) for a call that returns another type. Only for a result that is not Ok.</summary>
+    public ServiceResult<TOut> Failed<TOut>() => IsOk ? throw new InvalidOperationException("An Ok result has no failure to carry") : new(Kind, default, Failures, Current, Missing);
 }
 
 /// <summary>Who is acting. The user's role is read from Users, the same source the database triggers use.</summary>

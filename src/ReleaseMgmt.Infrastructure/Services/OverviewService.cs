@@ -165,7 +165,7 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         var openGateIds = openGates.Keys.ToList();
         var waivers = await (from w in db.Set<GateWaivers>().AsNoTracking()
                              join u in db.Set<Users>().AsNoTracking() on w.RequestedByUserId equals u.Id
-                             where w.ApprovedAt == null && openGateIds.Contains(w.StageGateId)
+                             where w.ApprovedAt == null && w.DeclinedAt == null && openGateIds.Contains(w.StageGateId)
                              select new { w.Id, w.StageGateId, u.DisplayName }).ToListAsync(ct);
         foreach (var w in waivers)
         {

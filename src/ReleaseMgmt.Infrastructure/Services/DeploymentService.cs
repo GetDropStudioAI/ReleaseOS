@@ -20,10 +20,11 @@ public sealed record IngestEventsResult(string DeploymentId, string ExternalId, 
 
 public sealed record DeploymentView(string Id, string ExternalId, string ServiceId, string ServiceKey, string ServiceName, string EnvironmentId, string EnvironmentName, string EnvironmentKind,
     string? TrainId, string? ReleaseKey, string? TrainTitle, string? RunId, string ReleaseVersion, string Strategy, IReadOnlyList<double>? CanarySteps, string State, double TrafficPercent,
-    int? ReadyPods, int? DesiredPods, string? StartedAt, string? FinishedAt, string? LastEventAt, string CreatedAt, string UpdatedAt, int Version);
+    int? ReadyPods, int? DesiredPods, string? StartedAt, string? FinishedAt, string? LastEventAt, string CreatedAt, string UpdatedAt, int Version,
+    string? StepStartedAt = null, bool AutoRollbackArmed = false);
 public sealed record DeploymentEventView(long Id, string OccurredAt, string ReceivedAt, string Level, string Message);
 public sealed record DeploymentDetail(DeploymentView Deployment, IReadOnlyList<DeploymentEventView> Events);
-public sealed record DeploymentFilter(string? EnvironmentId = null, string? ServiceId = null, string? TrainId = null, string? State = null, int Take = 100);
+public sealed record DeploymentFilter(string? EnvironmentId = null, string? ServiceId = null, string? TrainId = null, string? State = null, int Take = 100, string? RunId = null);
 
 public sealed record ServiceEnvironmentCell(string EnvironmentId, string State, string? DeploymentId, string? ReleaseVersion, double? TrafficPercent, string? UpdatedAt);
 public sealed record ServiceEnvironmentRow(string ServiceId, string ServiceKey, string ServiceName, IReadOnlyList<ServiceEnvironmentCell> Cells);
@@ -126,7 +127,7 @@ public sealed class DeploymentService(IDbContextFactory<ReleaseDbContext> dbf, T
                 Strategy = strategy, CanarySteps = d.CanarySteps is null ? null : JsonSerializer.Serialize(d.CanarySteps, CanaryJson), State = state,
                 TrafficPercent = d.TrafficPercent ?? (state == DeploymentStates.Successful ? 100 : 0), ReadyPods = d.ReadyPods, DesiredPods = d.DesiredPods, IngestKeyId = key.KeyId, CreatedAt = now, UpdatedAt = now,
             };
-            if (state != DeploymentStates.Queued) dep.StartedAt = d.StartedAt ?? now;
+            if (state != DeploymentStates.Queued) { dep.StartedAt = d.StartedAt ?? now; dep.StepStartedAt = dep.StartedAt; }
             if (DeploymentStates.IsTerminal(state)) dep.FinishedAt = d.FinishedAt ?? now;
             if (train is not null) dep.RunId = await OpenLiveRunAsync(db, train.Id, ct);
             db.Set<Deployments>().Add(dep);
@@ -155,19 +156,31 @@ public sealed class DeploymentService(IDbContextFactory<ReleaseDbContext> dbf, T
                 return ServiceResult<IngestResult>.Fail(new GuardFailure(ReleaseModelGuards.IllegalDeploymentTransition, $"A deployment cannot move from {existing.State} to {d.State}", [existing.State]));
             existing.State = d.State;
             if (existing.StartedAt is null && d.State != DeploymentStates.Queued) existing.StartedAt = d.StartedAt ?? now;
+            if (d.State == DeploymentStates.Running) existing.StepStartedAt = now;   // REOS-111: (re)started or resumed: the canary step's observation window starts again
             if (DeploymentStates.IsTerminal(d.State) && existing.FinishedAt is null) existing.FinishedAt = d.FinishedAt ?? now;
             if (d.State == DeploymentStates.Successful && d.TrafficPercent is null) existing.TrafficPercent = 100;
         }
         if (d.Strategy is not null) existing.Strategy = d.Strategy;
         if (d.CanarySteps is not null) existing.CanarySteps = JsonSerializer.Serialize(d.CanarySteps, CanaryJson);
         else if (d.Strategy is not null && d.Strategy != "Canary") existing.CanarySteps = null;
-        if (d.TrafficPercent is { } t) existing.TrafficPercent = t;
+        if (d.TrafficPercent is { } t)
+        {
+            if (Math.Abs(t - existing.TrafficPercent) > 1e-9) existing.StepStartedAt = now;   // REOS-111: a new canary step began
+            existing.TrafficPercent = t;
+        }
         if (d.ReadyPods is { } rp) existing.ReadyPods = rp;
         if (d.DesiredPods is { } dp) existing.DesiredPods = dp;
         if (d.StartedAt is { } sa && existing.StartedAt is null) existing.StartedAt = sa;
         if (train is not null && existing.ReleaseTrainId is null) { existing.ReleaseTrainId = train.Id; existing.RunId = await OpenLiveRunAsync(db, train.Id, ct); }
 
         if (!db.Entry(existing).Properties.Any(p => p.IsModified)) return ServiceResult<IngestResult>.Ok(new(existing.Id, existing.ExternalId, existing.State, existing.Version, Created: false, Changed: false));   // a replay
+        if (existing.State != oldState && DeploymentStates.IsTerminal(existing.State))
+        {
+            // REOS-111/112: a finished deployment has no breach left to watch and nothing left to roll back automatically
+            existing.AutoRollbackArmedAt = null;
+            foreach (var b in await db.Set<ThresholdBreaches>().Where(b => b.DeploymentId == existing.Id && b.ResolvedAt == null).ToListAsync(ct))
+            { b.ResolvedAt = b.StartedAt > now ? b.StartedAt : now; b.Version++; }
+        }
         existing.Version++; existing.UpdatedAt = now;
         Audit(db, null, existing.ReleaseTrainId, Entity, existing.Id, existing.State != oldState ? "State" : "Update", before, Snapshot(existing, key));
         await db.SaveChangesAsync(ct);
@@ -233,6 +246,7 @@ public sealed class DeploymentService(IDbContextFactory<ReleaseDbContext> dbf, T
         if (filter.ServiceId is not null) q = q.Where(d => d.CatalogServiceId == filter.ServiceId);
         if (filter.TrainId is not null) q = q.Where(d => d.ReleaseTrainId == filter.TrainId);
         if (filter.State is not null) q = q.Where(d => d.State == filter.State);
+        if (filter.RunId is not null) q = q.Where(d => d.RunId == filter.RunId);
         var rows = await q.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Take(Math.Clamp(filter.Take, 1, 500)).ToListAsync(ct);
         return await ViewsAsync(db, rows, ct);
     }
@@ -261,7 +275,7 @@ public sealed class DeploymentService(IDbContextFactory<ReleaseDbContext> dbf, T
             var t = r.ReleaseTrainId is not null && trains.TryGetValue(r.ReleaseTrainId, out var tt) ? tt : null;
             return new DeploymentView(r.Id, r.ExternalId, s.Id, s.ServiceKey, s.Name, e.Id, e.Name, e.Kind, r.ReleaseTrainId, t?.ReleaseKey, t?.Title, r.RunId, r.ReleaseVersion, r.Strategy,
                 r.CanarySteps is null ? null : JsonSerializer.Deserialize<double[]>(r.CanarySteps), r.State, r.TrafficPercent, r.ReadyPods, r.DesiredPods, Iso(r.StartedAt), Iso(r.FinishedAt),
-                Iso(r.LastEventAt), Iso(r.CreatedAt)!, Iso(r.UpdatedAt)!, r.Version);
+                Iso(r.LastEventAt), Iso(r.CreatedAt)!, Iso(r.UpdatedAt)!, r.Version, Iso(r.StepStartedAt), r.AutoRollbackArmedAt is not null);
         })];
     }
 

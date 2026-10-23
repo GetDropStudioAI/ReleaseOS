@@ -239,6 +239,9 @@ public class GateWaivers
     public DateTime RequestedAt { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public int Version { get; set; } = 1;
+    public string? DeclinedByUserId { get; set; }
+    public DateTime? DeclinedAt { get; set; }
+    public string? DeclineNote { get; set; }
 }
 
 public class ChecklistTasks
@@ -306,6 +309,9 @@ public class RunbookRuns
     public DateTime? EndedAt { get; set; }
     public string? Outcome { get; set; }
     public int Version { get; set; } = 1;
+    public DateTime? PausedAt { get; set; }
+    public string? PausedByUserId { get; set; }
+    public string? PauseReason { get; set; }
 }
 
 public class StepExecutions
@@ -642,6 +648,8 @@ public class AuditEvents
     public string? BeforeJson { get; set; }
     public string? AfterJson { get; set; }
     public string? WorkspaceId { get; set; } = "default";
+    public string? PrevHash { get; set; }
+    public string? Hash { get; set; }
 }
 
 public class TrainMilestones
@@ -692,6 +700,8 @@ public class Environments
     public DateTime CreatedAt { get; set; }
     public int Version { get; set; } = 1;
     public string WorkspaceId { get; set; } = "default";
+    public int ThresholdForSeconds { get; set; } = 120;
+    public int CanaryObservationSeconds { get; set; } = 600;
 }
 
 public class TrainEnvironments
@@ -754,6 +764,8 @@ public class Deployments
     public DateTime UpdatedAt { get; set; }
     public int Version { get; set; } = 1;
     public string WorkspaceId { get; set; } = "default";
+    public DateTime? StepStartedAt { get; set; }
+    public DateTime? AutoRollbackArmedAt { get; set; }
 }
 
 public class DeploymentEvents
@@ -765,4 +777,144 @@ public class DeploymentEvents
     public string Level { get; set; } = "";
     public string Message { get; set; } = "";
     public string? ExternalId { get; set; }
+}
+
+public class MetricSamples
+{
+    public long Id { get; set; }
+    public string DeploymentId { get; set; } = "";
+    public string Series { get; set; } = "";
+    public DateTime SampledAt { get; set; }
+    public DateTime ReceivedAt { get; set; }
+    public double? ErrorRatePct { get; set; }
+    public double? LatencyP95Ms { get; set; }
+    public double? AvailabilityPct { get; set; }
+    public long? RequestCount { get; set; }
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class MetricRollups
+{
+    public string DeploymentId { get; set; } = "";
+    public string Series { get; set; } = "";
+    public DateTime BucketAt { get; set; }
+    public int Samples { get; set; }
+    public double? ErrorRateAvgPct { get; set; }
+    public double? ErrorRateMaxPct { get; set; }
+    public double? LatencyP95AvgMs { get; set; }
+    public double? LatencyP95MaxMs { get; set; }
+    public double? AvailabilityAvgPct { get; set; }
+    public double? AvailabilityMinPct { get; set; }
+    public long? RequestCount { get; set; }
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class ThresholdBreaches
+{
+    public string Id { get; set; } = Ids.New();
+    public string DeploymentId { get; set; } = "";
+    public string Series { get; set; } = "";
+    public string Metric { get; set; } = "";
+    public double ThresholdValue { get; set; }
+    public int ForSeconds { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? ConfirmedAt { get; set; }
+    public DateTime? DetectedAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+    public double PeakValue { get; set; }
+    public double LastValue { get; set; }
+    public int SampleCount { get; set; } = 1;
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class DeploymentControlActions
+{
+    public string Id { get; set; } = Ids.New();
+    public string DeploymentId { get; set; } = "";
+    public string Action { get; set; } = "";
+    public string Source { get; set; } = "";
+    public string? RequestedByUserId { get; set; }
+    public DateTime RequestedAt { get; set; }
+    public string? Reason { get; set; }
+    public string? BreachId { get; set; }
+    public string Status { get; set; } = "Pending";
+    public int? HttpStatus { get; set; }
+    public string? ErrorMessage { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class ApprovalPolicies
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public string? EnvironmentKind { get; set; }
+    public string? MinRiskTier { get; set; }
+    public bool RequireGatesCertified { get; set; } = false;
+    public bool RequireOpenWindow { get; set; } = false;
+    public DateTime? ArchivedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class ApprovalPolicyRequirements
+{
+    public string Id { get; set; } = Ids.New();
+    public string PolicyId { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string EligibleKind { get; set; } = "";
+    public string? EligibleValue { get; set; }
+    public int DueHours { get; set; } = 24;
+    public int SortOrder { get; set; } = 0;
+}
+
+public class Approvals
+{
+    public string Id { get; set; } = Ids.New();
+    public string ReleaseTrainId { get; set; } = "";
+    public string EnvironmentId { get; set; } = "";
+    public string Status { get; set; } = "Pending";
+    public int Round { get; set; } = 1;
+    public string RequestedByUserId { get; set; } = "";
+    public DateTime RequestedAt { get; set; }
+    public DateTime DueAt { get; set; }
+    public DateTime? DecidedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class ApprovalDecisions
+{
+    public string Id { get; set; } = Ids.New();
+    public string ApprovalId { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string EligibleKind { get; set; } = "";
+    public string? EligibleValue { get; set; }
+    public DateTime DueAt { get; set; }
+    public string? Decision { get; set; }
+    public string? DecidedByUserId { get; set; }
+    public DateTime? DecidedAt { get; set; }
+    public string? Note { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class AuditChainHeads
+{
+    public string ChainId { get; set; } = "";
+    public long LastId { get; set; }
+    public string LastHash { get; set; } = "";
+    public long SealedCount { get; set; }
+    public DateTime SealedAt { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public long? VerifiedRows { get; set; }
+    public string? VerifiedStatus { get; set; }
+    public long? FirstBadId { get; set; }
+    public string? FirstBadReason { get; set; }
 }

@@ -8,8 +8,9 @@
 -- Conventions: ids are UUIDv7 TEXT; timestamps are UTC ISO-8601 TEXT 'YYYY-MM-DDTHH:MM:SSZ';
 -- dates are 'YYYY-MM-DD'; booleans are INTEGER 0/1 with CHECK; every user-editable table has Version.
 -- Version-exempt: append-only/immutable tables (AuditEvents, GateTransitions, Baselines, GoNoGoDecisions,
--- CommDispatches, FreezeOverrides, MetricSnapshots, TeamMembers, TrainEnvironments, DeploymentEvents) and system-owned rows with last-write-wins
--- by design (UserSessionState per tab, ParsePreviews, IcsTokens, SessionRevocations).
+-- CommDispatches, FreezeOverrides, MetricSnapshots, TeamMembers, TrainEnvironments, DeploymentEvents, MetricSamples, MetricRollups, ApprovalPolicyRequirements)
+-- and system-owned rows with last-write-wins
+-- by design (UserSessionState per tab, ParsePreviews, IcsTokens, SessionRevocations, AuditChainHeads).
 -- Trigger ORDER matters: SQLite fires same-event triggers newest-first. Apply them in file order.
 -- Triggers are the backstop; the domain service is the primary enforcement point.
 
@@ -267,6 +268,9 @@ CREATE TABLE GateWaivers (
     RequestedAt TEXT NOT NULL,
     ApprovedAt TEXT,
     Version INTEGER NOT NULL DEFAULT 1,
+    DeclinedByUserId TEXT REFERENCES Users(Id) CHECK (DeclinedByUserId IS NULL OR ApprovedByUserId IS NULL),   -- REOS-113: a waiver is approved or declined, never both
+    DeclinedAt TEXT CHECK ((DeclinedAt IS NULL) = (DeclinedByUserId IS NULL)),
+    DeclineNote TEXT CHECK ((DeclinedAt IS NULL) = (DeclineNote IS NULL) AND (DeclineNote IS NULL OR length(trim(DeclineNote)) >= 1)),   -- a declined waiver says why
     CHECK (ApprovedByUserId IS NULL OR ApprovedByUserId <> RequestedByUserId)   -- D10 two distinct people
 );
 
@@ -338,7 +342,10 @@ CREATE TABLE RunbookRuns (
     StartedByUserId TEXT NOT NULL REFERENCES Users(Id),
     EndedAt TEXT,
     Outcome TEXT CHECK (Outcome IN ('Completed','RolledBack','Aborted')),
-    Version INTEGER NOT NULL DEFAULT 1
+    Version INTEGER NOT NULL DEFAULT 1,
+    PausedAt TEXT CHECK (PausedAt IS NULL OR EndedAt IS NULL),   -- REOS-112: while set, no step of the run can start (service and trg_Step_RunPaused); ending the run clears it
+    PausedByUserId TEXT REFERENCES Users(Id) CHECK ((PausedAt IS NULL) = (PausedByUserId IS NULL)),
+    PauseReason TEXT CHECK ((PausedAt IS NULL) = (PauseReason IS NULL) AND (PauseReason IS NULL OR length(trim(PauseReason)) BETWEEN 1 AND 500))
 );
 CREATE UNIQUE INDEX UX_RunbookRuns_OneOpenLive ON RunbookRuns(ReleaseTrainId) WHERE Mode = 'Live' AND EndedAt IS NULL;
 
@@ -490,8 +497,8 @@ CREATE TABLE ExternalLinks (
 CREATE TABLE SyncAlerts (
     Id TEXT PRIMARY KEY,
     ReleaseTrainId TEXT REFERENCES ReleaseTrains(Id) ON DELETE CASCADE,  -- NULL = system-wide. Every background failure lands here
-    SourceSystem TEXT NOT NULL CHECK (SourceSystem IN ('Jira','ServiceNow','SyncEngine','Backup','Export','Webhook','Notifications')),
-    Kind TEXT NOT NULL CHECK (Kind IN ('AuthFailed','Unreachable','NotFound','Mismatch','RateLimited','ParseError','Stalled','BackupFailed','ExportFailed','DeliveryFailed')),
+    SourceSystem TEXT NOT NULL CHECK (SourceSystem IN ('Jira','ServiceNow','SyncEngine','Backup','Export','Webhook','Notifications','Deployment','Audit','Telemetry')),
+    Kind TEXT NOT NULL CHECK (Kind IN ('AuthFailed','Unreachable','NotFound','Mismatch','RateLimited','ParseError','Stalled','BackupFailed','ExportFailed','DeliveryFailed','ControlFailed','IntegrityFailed','RetentionFailed')),
     Fingerprint TEXT NOT NULL,                            -- hash(system, kind, key); dedups repeats
     ErrorMessage TEXT NOT NULL,
     OccurrenceCount INTEGER NOT NULL DEFAULT 1,
@@ -678,7 +685,9 @@ CREATE TABLE AuditEvents (
     Action TEXT NOT NULL,
     BeforeJson TEXT,
     AfterJson TEXT,
-    WorkspaceId TEXT DEFAULT 'default'                    -- NULL = host-wide (accounts, backups); no foreign key, like ReleaseTrainId: the log outlives what it describes
+    WorkspaceId TEXT DEFAULT 'default',                   -- NULL = host-wide (accounts, backups); no foreign key, like ReleaseTrainId: the log outlives what it describes
+    PrevHash TEXT CHECK (PrevHash IS NULL OR (length(PrevHash) = 64 AND PrevHash NOT GLOB '*[^0-9a-f]*')),   -- REOS-114: the previous row's Hash in this row's chain (a workspace, or the host-wide rows); written once by the app's sealer
+    Hash TEXT CHECK ((Hash IS NULL) = (PrevHash IS NULL) AND (Hash IS NULL OR (length(Hash) = 64 AND Hash NOT GLOB '*[^0-9a-f]*')))   -- SHA-256 over PrevHash and this row's canonical content; NULL until sealed
 );
 
 -- =====================================================================
@@ -735,6 +744,8 @@ CREATE TABLE Environments (                               -- B6: where releases 
     CreatedAt TEXT NOT NULL,
     Version INTEGER NOT NULL DEFAULT 1,
     WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    ThresholdForSeconds INTEGER NOT NULL DEFAULT 120 CHECK (ThresholdForSeconds BETWEEN 0 AND 86400),   -- REOS-111: a threshold is breached when it is exceeded for this long (error rate above 0.5 % for 2 minutes)
+    CanaryObservationSeconds INTEGER NOT NULL DEFAULT 600 CHECK (CanaryObservationSeconds BETWEEN 30 AND 86400),   -- how long a canary step is watched before the next promotion
     UNIQUE (WorkspaceId, Name)
 );
 
@@ -797,6 +808,8 @@ CREATE TABLE Deployments (                                -- B7/D42: service x e
     UpdatedAt TEXT NOT NULL,
     Version INTEGER NOT NULL DEFAULT 1,
     WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    StepStartedAt TEXT,                                   -- REOS-111: when the current canary step began (traffic last changed): the observation window runs from here
+    AutoRollbackArmedAt TEXT,                             -- REOS-112: set = a confirmed threshold breach calls the environment's rollback webhook, once per breach
     UNIQUE (WorkspaceId, ExternalId),
     CHECK (Strategy = 'Canary' OR CanarySteps IS NULL),
     CHECK (State NOT IN ('Running','Paused') OR StartedAt IS NOT NULL),
@@ -815,10 +828,169 @@ CREATE TABLE DeploymentEvents (                           -- append-only; what t
 );
 
 -- =====================================================================
+-- 9d. Telemetry, deployment control, approvals and the audit chain (REOS-111, 112, 113, 114; D42)
+-- =====================================================================
+CREATE TABLE MetricSamples (                              -- REOS-111: what the deployment tool pushed; kept for Telemetry:RetentionDays, then summarised into MetricRollups and dropped
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    DeploymentId TEXT NOT NULL REFERENCES Deployments(Id) ON DELETE CASCADE,
+    Series TEXT NOT NULL CHECK (Series IN ('Canary','Stable')),
+    SampledAt TEXT NOT NULL,                              -- the tool's clock
+    ReceivedAt TEXT NOT NULL,                             -- ours
+    ErrorRatePct REAL CHECK (ErrorRatePct IS NULL OR ErrorRatePct BETWEEN 0 AND 100),
+    LatencyP95Ms REAL CHECK (LatencyP95Ms IS NULL OR LatencyP95Ms >= 0),
+    AvailabilityPct REAL CHECK (AvailabilityPct IS NULL OR AvailabilityPct BETWEEN 0 AND 100),
+    RequestCount INTEGER CHECK (RequestCount IS NULL OR RequestCount >= 0),
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    UNIQUE (DeploymentId, Series, SampledAt),             -- a replayed sample is the same sample
+    CHECK (ErrorRatePct IS NOT NULL OR LatencyP95Ms IS NOT NULL OR AvailabilityPct IS NOT NULL OR RequestCount IS NOT NULL)
+);
+
+CREATE TABLE MetricRollups (                              -- REOS-111: one row per deployment, series and hour for samples past retention: enough for SLO and error-budget maths
+    DeploymentId TEXT NOT NULL REFERENCES Deployments(Id) ON DELETE CASCADE,
+    Series TEXT NOT NULL CHECK (Series IN ('Canary','Stable')),
+    BucketAt TEXT NOT NULL,                               -- the start of the UTC hour
+    Samples INTEGER NOT NULL CHECK (Samples >= 1),
+    ErrorRateAvgPct REAL,
+    ErrorRateMaxPct REAL,
+    LatencyP95AvgMs REAL,
+    LatencyP95MaxMs REAL,
+    AvailabilityAvgPct REAL,
+    AvailabilityMinPct REAL,
+    RequestCount INTEGER,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    PRIMARY KEY (DeploymentId, Series, BucketAt)
+);
+
+CREATE TABLE ThresholdBreaches (                          -- REOS-111: a metric beyond its environment's threshold. Watching until it has lasted ThresholdForSeconds, then confirmed; resolved by the first sample back inside
+    Id TEXT PRIMARY KEY,
+    DeploymentId TEXT NOT NULL REFERENCES Deployments(Id) ON DELETE CASCADE,
+    Series TEXT NOT NULL CHECK (Series IN ('Canary','Stable')),
+    Metric TEXT NOT NULL CHECK (Metric IN ('ErrorRate','LatencyP95','Availability')),
+    ThresholdValue REAL NOT NULL,                         -- the threshold when the breach began
+    ForSeconds INTEGER NOT NULL CHECK (ForSeconds >= 0),   -- the duration it had to last
+    StartedAt TEXT NOT NULL,                              -- the sample time of the first sample beyond the threshold
+    ConfirmedAt TEXT,                                     -- the sample time of the sample that completed the duration; NULL while Watching
+    DetectedAt TEXT,                                      -- our clock when it was confirmed
+    ResolvedAt TEXT,
+    PeakValue REAL NOT NULL,
+    LastValue REAL NOT NULL,
+    SampleCount INTEGER NOT NULL DEFAULT 1 CHECK (SampleCount >= 1),
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    CHECK ((ConfirmedAt IS NULL) = (DetectedAt IS NULL)),
+    CHECK (ConfirmedAt IS NULL OR ConfirmedAt >= StartedAt),
+    CHECK (ResolvedAt IS NULL OR ResolvedAt >= StartedAt)
+);
+
+CREATE TABLE DeploymentControlActions (                   -- REOS-112: pause, resume, promote and rollback calls to the environment's webhook, and what came of them. Id is the delivery id the receiver sees
+    Id TEXT PRIMARY KEY,
+    DeploymentId TEXT NOT NULL REFERENCES Deployments(Id) ON DELETE CASCADE,
+    Action TEXT NOT NULL CHECK (Action IN ('Pause','Resume','Promote','Rollback')),
+    Source TEXT NOT NULL CHECK (Source IN ('Manual','Automatic')),
+    RequestedByUserId TEXT REFERENCES Users(Id),          -- NULL = the system (automatic rollback)
+    RequestedAt TEXT NOT NULL,
+    Reason TEXT CHECK (Reason IS NULL OR length(trim(Reason)) BETWEEN 1 AND 500),
+    BreachId TEXT REFERENCES ThresholdBreaches(Id),       -- the breach an automatic rollback answers: one rollback per breach (UX_ControlActions_OneRollbackPerBreach)
+    Status TEXT NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Succeeded','Failed')),
+    HttpStatus INTEGER CHECK (HttpStatus IS NULL OR HttpStatus BETWEEN 100 AND 599),
+    ErrorMessage TEXT CHECK (ErrorMessage IS NULL OR length(ErrorMessage) <= 500),   -- never the URL: it is a secret
+    CompletedAt TEXT,
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    CHECK ((Source = 'Manual') = (RequestedByUserId IS NOT NULL)),
+    CHECK ((Status = 'Pending') = (CompletedAt IS NULL)),
+    CHECK (Status <> 'Failed' OR ErrorMessage IS NOT NULL),
+    CHECK (BreachId IS NULL OR (Source = 'Automatic' AND Action = 'Rollback'))
+);
+
+CREATE TABLE ApprovalPolicies (                           -- REOS-113: which roles must approve a release going to an environment, by environment kind and risk tier
+    Id TEXT PRIMARY KEY,
+    Name TEXT NOT NULL COLLATE NOCASE CHECK (length(trim(Name)) BETWEEN 1 AND 100),
+    EnvironmentKind TEXT CHECK (EnvironmentKind IS NULL OR EnvironmentKind IN ('Staging','Production')),   -- NULL = any environment
+    MinRiskTier TEXT CHECK (MinRiskTier IS NULL OR MinRiskTier IN ('Low','Moderate','High','VeryHigh')),   -- NULL = any risk tier; else this tier and above
+    RequireGatesCertified INTEGER NOT NULL DEFAULT 0 CHECK (RequireGatesCertified IN (0,1)),   -- policy check: every gate of the release is Certified or Waived
+    RequireOpenWindow INTEGER NOT NULL DEFAULT 0 CHECK (RequireOpenWindow IN (0,1)),   -- policy check: the release has a deployment window that has not ended
+    ArchivedAt TEXT,
+    LastChangedByUserId TEXT REFERENCES Users(Id),
+    LastChangedAt TEXT,
+    CreatedAt TEXT NOT NULL,
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    UNIQUE (WorkspaceId, Name)
+);
+
+CREATE TABLE ApprovalPolicyRequirements (                 -- the seats of a policy; replaced as a whole with the policy (its Version)
+    Id TEXT PRIMARY KEY,
+    PolicyId TEXT NOT NULL REFERENCES ApprovalPolicies(Id) ON DELETE CASCADE,
+    Label TEXT NOT NULL COLLATE NOCASE CHECK (length(trim(Label)) BETWEEN 1 AND 100),   -- "Security reviewer", "SRE approver"
+    EligibleKind TEXT NOT NULL CHECK (EligibleKind IN ('WorkspaceRole','ReleaseOwner','Team')),
+    EligibleValue TEXT,                                   -- the workspace role, or the team's id; NULL for the release owner
+    DueHours INTEGER NOT NULL DEFAULT 24 CHECK (DueHours BETWEEN 1 AND 720),
+    SortOrder INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (PolicyId, Label),
+    CHECK ((EligibleKind = 'ReleaseOwner') = (EligibleValue IS NULL)),
+    CHECK (EligibleKind <> 'WorkspaceRole' OR EligibleValue IN ('Viewer','ReleaseManager','RTE','GovernanceOfficer'))
+);
+
+CREATE TABLE Approvals (                                  -- REOS-113: one request to take a release to an environment, created from the matching policies
+    Id TEXT PRIMARY KEY,
+    ReleaseTrainId TEXT NOT NULL REFERENCES ReleaseTrains(Id) ON DELETE CASCADE,
+    EnvironmentId TEXT NOT NULL REFERENCES Environments(Id),
+    Status TEXT NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Approved','ChangesRequested','Cancelled')),
+    Round INTEGER NOT NULL DEFAULT 1 CHECK (Round >= 1),   -- raised by each resubmit after Request changes
+    RequestedByUserId TEXT NOT NULL REFERENCES Users(Id),
+    RequestedAt TEXT NOT NULL,
+    DueAt TEXT NOT NULL,                                  -- the earliest due time of its decisions
+    DecidedAt TEXT,                                       -- when the last seat approved
+    LastChangedByUserId TEXT REFERENCES Users(Id),
+    LastChangedAt TEXT,
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    CHECK ((Status = 'Approved') = (DecidedAt IS NOT NULL))
+);
+
+CREATE TABLE ApprovalDecisions (                          -- one per seat of an approval; the seat is copied from the policy, so a later policy edit does not change an approval under way
+    Id TEXT PRIMARY KEY,
+    ApprovalId TEXT NOT NULL REFERENCES Approvals(Id) ON DELETE CASCADE,
+    Label TEXT NOT NULL COLLATE NOCASE,
+    EligibleKind TEXT NOT NULL CHECK (EligibleKind IN ('WorkspaceRole','ReleaseOwner','Team')),
+    EligibleValue TEXT,
+    DueAt TEXT NOT NULL,
+    Decision TEXT CHECK (Decision IS NULL OR Decision IN ('Approved','ChangesRequested')),
+    DecidedByUserId TEXT REFERENCES Users(Id),
+    DecidedAt TEXT,
+    Note TEXT CHECK (Note IS NULL OR length(Note) <= 2000),
+    Version INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (ApprovalId, Label),
+    CHECK ((Decision IS NULL) = (DecidedByUserId IS NULL) AND (Decision IS NULL) = (DecidedAt IS NULL)),
+    CHECK (Decision IS NULL OR Decision <> 'ChangesRequested' OR (Note IS NOT NULL AND length(trim(Note)) >= 1))   -- Request changes needs a note
+);
+
+CREATE TABLE AuditChainHeads (                            -- REOS-114: where each audit chain has been sealed to, and what the last check found; system-owned, last write wins
+    ChainId TEXT PRIMARY KEY,                             -- the workspace's id, or '*' for the host-wide rows (AuditEvents.WorkspaceId NULL)
+    LastId INTEGER NOT NULL,                              -- the last sealed AuditEvents row
+    LastHash TEXT NOT NULL CHECK (length(LastHash) = 64),
+    SealedCount INTEGER NOT NULL CHECK (SealedCount >= 0),
+    SealedAt TEXT NOT NULL,
+    VerifiedAt TEXT,
+    VerifiedRows INTEGER,
+    VerifiedStatus TEXT CHECK (VerifiedStatus IS NULL OR VerifiedStatus IN ('Verified','Failed')),
+    FirstBadId INTEGER,
+    FirstBadReason TEXT,
+    CHECK ((VerifiedStatus IS NULL) = (VerifiedAt IS NULL))
+);
+
+-- =====================================================================
 -- 10. Enforcement triggers
 -- =====================================================================
 -- Append-only tables
-CREATE TRIGGER trg_Audit_NoUpdate BEFORE UPDATE ON AuditEvents BEGIN SELECT RAISE(ABORT, 'AuditEvents is append-only'); END;
+-- The only update an audit row allows is the sealer writing its hash pair once (REOS-114); every content column must stay as it is.
+CREATE TRIGGER trg_Audit_NoUpdate BEFORE UPDATE ON AuditEvents
+WHEN NOT (OLD.Hash IS NULL AND NEW.Hash IS NOT NULL AND NEW.PrevHash IS NOT NULL
+      AND NEW.Id IS OLD.Id AND NEW.OccurredAt IS OLD.OccurredAt AND NEW.ActorUserId IS OLD.ActorUserId AND NEW.ReleaseTrainId IS OLD.ReleaseTrainId
+      AND NEW.EntityType IS OLD.EntityType AND NEW.EntityId IS OLD.EntityId AND NEW.Action IS OLD.Action AND NEW.BeforeJson IS OLD.BeforeJson
+      AND NEW.AfterJson IS OLD.AfterJson AND NEW.WorkspaceId IS OLD.WorkspaceId)
+BEGIN SELECT RAISE(ABORT, 'AuditEvents is append-only'); END;
 CREATE TRIGGER trg_Audit_NoDelete BEFORE DELETE ON AuditEvents BEGIN SELECT RAISE(ABORT, 'AuditEvents is append-only'); END;
 CREATE TRIGGER trg_GateTrans_NoUpdate BEFORE UPDATE ON GateTransitions BEGIN SELECT RAISE(ABORT, 'GateTransitions is append-only'); END;
 CREATE TRIGGER trg_GateTrans_NoDelete BEFORE DELETE ON GateTransitions BEGIN SELECT RAISE(ABORT, 'GateTransitions is append-only'); END;
@@ -1001,6 +1173,21 @@ WHEN NEW.ApprovedByUserId IS NOT NULL
                WHERE g.Id = NEW.StageGateId AND m.UserId = NEW.ApprovedByUserId), '') <> 'GovernanceOfficer'
 BEGIN SELECT RAISE(ABORT, 'Waivers are approved by a Governance Officer'); END;
 
+-- A waiver is approved or declined (REOS-113): by a Governance Officer other than the requester, and never both.
+CREATE TRIGGER trg_Waiver_DeclineRole BEFORE UPDATE OF DeclinedByUserId ON GateWaivers
+WHEN NEW.DeclinedByUserId IS NOT NULL
+ AND COALESCE((SELECT m.Role FROM WorkspaceMembers m JOIN ReleaseTrains t ON t.WorkspaceId = m.WorkspaceId JOIN StageGates g ON g.ReleaseTrainId = t.Id
+               WHERE g.Id = NEW.StageGateId AND m.UserId = NEW.DeclinedByUserId), '') <> 'GovernanceOfficer'
+BEGIN SELECT RAISE(ABORT, 'Waivers are declined by a Governance Officer'); END;
+
+CREATE TRIGGER trg_Waiver_DeclineDistinct BEFORE UPDATE OF DeclinedByUserId ON GateWaivers
+WHEN NEW.DeclinedByUserId IS NOT NULL AND NEW.DeclinedByUserId = NEW.RequestedByUserId
+BEGIN SELECT RAISE(ABORT, 'A waiver needs two distinct people: the requester cannot decline it'); END;
+
+CREATE TRIGGER trg_Waiver_ApprovedOrDeclined BEFORE UPDATE OF ApprovedByUserId, DeclinedByUserId ON GateWaivers
+WHEN (NEW.ApprovedByUserId IS NOT NULL AND NEW.DeclinedByUserId IS NOT NULL) OR (OLD.DeclinedAt IS NOT NULL AND NEW.ApprovedByUserId IS NOT NULL)
+BEGIN SELECT RAISE(ABORT, 'A waiver is approved or declined, not both'); END;
+
 CREATE TRIGGER trg_Override_NoUpdate BEFORE UPDATE ON FreezeOverrides
 BEGIN SELECT RAISE(ABORT, 'Freeze overrides are immutable; renew with a new row'); END;
 CREATE TRIGGER trg_Override_NoDelete BEFORE DELETE ON FreezeOverrides
@@ -1094,6 +1281,56 @@ BEGIN
              OR (OLD.State IN ('Successful','Failed') AND NEW.State = 'RolledBack'));
 END;
 CREATE TRIGGER trg_DeploymentEvent_NoUpdate BEFORE UPDATE ON DeploymentEvents BEGIN SELECT RAISE(ABORT, 'DeploymentEvents is append-only'); END;
+
+-- Run pause (REOS-112): while a run is paused no step of it can start. Created after the other step triggers so its message is the one a caller sees.
+CREATE TRIGGER trg_Step_RunPaused BEFORE UPDATE OF Status ON StepExecutions
+WHEN NEW.Status = 'Running' AND (SELECT PausedAt FROM RunbookRuns WHERE Id = NEW.RunId) IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'The run is paused: no step can start until it is resumed'); END;
+
+-- Approvals (REOS-113). Eligibility and separation of duties are the database's rules too; the service checks them first for a readable reason.
+CREATE TRIGGER trg_Approval_ApprovedNeedsAll BEFORE UPDATE OF Status ON Approvals
+WHEN NEW.Status = 'Approved' AND (NOT EXISTS (SELECT 1 FROM ApprovalDecisions d WHERE d.ApprovalId = NEW.Id)
+                               OR EXISTS (SELECT 1 FROM ApprovalDecisions d WHERE d.ApprovalId = NEW.Id AND d.Decision IS NOT 'Approved'))
+BEGIN SELECT RAISE(ABORT, 'Every required approver must approve first'); END;
+
+CREATE TRIGGER trg_Approval_Final BEFORE UPDATE OF Status ON Approvals
+WHEN OLD.Status IN ('Approved','Cancelled') AND NEW.Status <> OLD.Status
+BEGIN SELECT RAISE(ABORT, 'An approved or cancelled approval is final'); END;
+
+CREATE TRIGGER trg_ApprovalDecision_ApprovalOpen BEFORE UPDATE ON ApprovalDecisions
+WHEN (SELECT Status FROM Approvals WHERE Id = NEW.ApprovalId) IN ('Approved','Cancelled')
+BEGIN SELECT RAISE(ABORT, 'The approval is closed'); END;
+
+CREATE TRIGGER trg_ApprovalDecision_Final BEFORE UPDATE OF Decision ON ApprovalDecisions
+WHEN OLD.Decision IS NOT NULL AND NEW.Decision IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'A decision is final; the requester resubmits the approval for a new round'); END;
+
+CREATE TRIGGER trg_ApprovalDecision_Eligible BEFORE UPDATE OF Decision ON ApprovalDecisions
+WHEN NEW.Decision IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Not an eligible approver for this seat')
+     WHERE NOT EXISTS (
+        SELECT 1 FROM Approvals a JOIN ReleaseTrains t ON t.Id = a.ReleaseTrainId
+         WHERE a.Id = NEW.ApprovalId
+           AND EXISTS (SELECT 1 FROM WorkspaceMembers m WHERE m.WorkspaceId = a.WorkspaceId AND m.UserId = NEW.DecidedByUserId)
+           AND ((NEW.EligibleKind = 'ReleaseOwner' AND t.OwnerUserId = NEW.DecidedByUserId)
+             OR (NEW.EligibleKind = 'WorkspaceRole' AND EXISTS (SELECT 1 FROM WorkspaceMembers m WHERE m.WorkspaceId = a.WorkspaceId AND m.UserId = NEW.DecidedByUserId AND m.Role = NEW.EligibleValue))
+             OR (NEW.EligibleKind = 'Team' AND EXISTS (SELECT 1 FROM TeamMembers tm WHERE tm.TeamId = NEW.EligibleValue AND tm.UserId = NEW.DecidedByUserId))));
+END;
+
+CREATE TRIGGER trg_ApprovalDecision_Separation BEFORE UPDATE OF Decision ON ApprovalDecisions
+WHEN NEW.Decision = 'Approved'
+BEGIN
+    SELECT RAISE(ABORT, 'Separation of duties: you cannot approve a change you requested')
+     WHERE EXISTS (SELECT 1 FROM Approvals a WHERE a.Id = NEW.ApprovalId AND a.RequestedByUserId = NEW.DecidedByUserId);
+    SELECT RAISE(ABORT, 'Separation of duties: on a Production change the release owner approves only the release owner seat')
+     WHERE NEW.EligibleKind <> 'ReleaseOwner'
+       AND EXISTS (SELECT 1 FROM Approvals a JOIN ReleaseTrains t ON t.Id = a.ReleaseTrainId JOIN Environments e ON e.Id = a.EnvironmentId
+                    WHERE a.Id = NEW.ApprovalId AND e.Kind = 'Production' AND t.OwnerUserId = NEW.DecidedByUserId);
+    SELECT RAISE(ABORT, 'Separation of duties: one person cannot hold two seats on a Production change')
+     WHERE EXISTS (SELECT 1 FROM ApprovalDecisions d JOIN Approvals a ON a.Id = d.ApprovalId JOIN Environments e ON e.Id = a.EnvironmentId
+                    WHERE d.ApprovalId = NEW.ApprovalId AND d.Id <> NEW.Id AND d.Decision = 'Approved' AND d.DecidedByUserId = NEW.DecidedByUserId AND e.Kind = 'Production');
+END;
 
 -- =====================================================================
 -- 10b. Workspace boundary (D45, REOS-104)
@@ -1494,6 +1731,65 @@ BEGIN
      WHERE EXISTS (SELECT 1 FROM RunbookRuns x WHERE x.Id = NEW.RunId AND x.ReleaseTrainId IS NOT NEW.ReleaseTrainId);
 END;
 
+-- REOS-111 to 114: telemetry, control actions, approvals
+CREATE TRIGGER trg_Ws_MetricSamples_Insert BEFORE INSERT ON MetricSamples
+BEGIN
+    SELECT RAISE(ABORT, 'The deployment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Deployments x WHERE x.Id = NEW.DeploymentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_MetricRollups_Insert BEFORE INSERT ON MetricRollups
+BEGIN
+    SELECT RAISE(ABORT, 'The deployment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Deployments x WHERE x.Id = NEW.DeploymentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ThresholdBreaches_Insert BEFORE INSERT ON ThresholdBreaches
+BEGIN
+    SELECT RAISE(ABORT, 'The deployment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Deployments x WHERE x.Id = NEW.DeploymentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ControlActions_Insert BEFORE INSERT ON DeploymentControlActions
+BEGIN
+    SELECT RAISE(ABORT, 'The deployment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Deployments x WHERE x.Id = NEW.DeploymentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'The breach belongs to another deployment')
+     WHERE EXISTS (SELECT 1 FROM ThresholdBreaches x WHERE x.Id = NEW.BreachId AND x.DeploymentId IS NOT NEW.DeploymentId);
+END;
+CREATE TRIGGER trg_Ws_MetricSamples_Update BEFORE UPDATE OF WorkspaceId ON MetricSamples WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_MetricRollups_Update BEFORE UPDATE OF WorkspaceId ON MetricRollups WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_ThresholdBreaches_Update BEFORE UPDATE OF WorkspaceId ON ThresholdBreaches WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_DeploymentControlActions_Update BEFORE UPDATE OF WorkspaceId ON DeploymentControlActions WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_ApprovalPolicies_Update BEFORE UPDATE OF WorkspaceId ON ApprovalPolicies WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_PolicyRequirements_Insert BEFORE INSERT ON ApprovalPolicyRequirements
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE NEW.EligibleKind = 'Team'
+       AND NOT EXISTS (SELECT 1 FROM Teams x JOIN ApprovalPolicies p ON p.Id = NEW.PolicyId WHERE x.Id = NEW.EligibleValue AND x.WorkspaceId = p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_PolicyRequirements_Update BEFORE UPDATE OF PolicyId, EligibleKind, EligibleValue ON ApprovalPolicyRequirements
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE NEW.EligibleKind = 'Team'
+       AND NOT EXISTS (SELECT 1 FROM Teams x JOIN ApprovalPolicies p ON p.Id = NEW.PolicyId WHERE x.Id = NEW.EligibleValue AND x.WorkspaceId = p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Approvals_Insert BEFORE INSERT ON Approvals
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'The environment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Environments x WHERE x.Id = NEW.EnvironmentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Approvals_Update BEFORE UPDATE OF WorkspaceId, ReleaseTrainId, EnvironmentId ON Approvals
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'An approval keeps its release and environment')
+     WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId OR NEW.EnvironmentId IS NOT OLD.EnvironmentId;
+END;
+
 -- =====================================================================
 -- 11. Indexes
 -- =====================================================================
@@ -1522,3 +1818,12 @@ CREATE INDEX IX_Deployments_Env ON Deployments(WorkspaceId, EnvironmentId, State
 CREATE INDEX IX_Deployments_Service ON Deployments(CatalogServiceId, EnvironmentId, CreatedAt);
 CREATE INDEX IX_Deployments_Train ON Deployments(ReleaseTrainId) WHERE ReleaseTrainId IS NOT NULL;
 CREATE INDEX IX_DeploymentEvents_Deployment ON DeploymentEvents(DeploymentId, OccurredAt);
+CREATE INDEX IX_MetricSamples_Time ON MetricSamples(SampledAt);
+CREATE UNIQUE INDEX UX_Breaches_Open ON ThresholdBreaches(DeploymentId, Series, Metric) WHERE ResolvedAt IS NULL;
+CREATE INDEX IX_Breaches_Deployment ON ThresholdBreaches(DeploymentId, StartedAt);
+CREATE INDEX IX_ControlActions_Deployment ON DeploymentControlActions(DeploymentId, RequestedAt);
+CREATE UNIQUE INDEX UX_ControlActions_OneRollbackPerBreach ON DeploymentControlActions(BreachId) WHERE BreachId IS NOT NULL;
+CREATE UNIQUE INDEX UX_Approvals_OneOpenPerTarget ON Approvals(ReleaseTrainId, EnvironmentId) WHERE Status IN ('Pending','ChangesRequested');
+CREATE INDEX IX_Approvals_Workspace ON Approvals(WorkspaceId, Status, DueAt);
+CREATE INDEX IX_Audit_Chain ON AuditEvents(WorkspaceId, Id);
+CREATE INDEX IX_Audit_Unsealed ON AuditEvents(Id) WHERE Hash IS NULL;

@@ -32,6 +32,28 @@ public sealed class WaiverService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             return ServiceResult<GateWaivers>.Ok(w);
         }, ct);
 
+    /// <summary>A Governance Officer other than the requester declines a waiver, saying why (REOS-113). A declined waiver is final; the requester may ask again with a new one.</summary>
+    public Task<ServiceResult<GateWaivers>> DeclineAsync(string waiverId, string? note, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
+        RunAsync(async db =>
+        {
+            var w = await db.Set<GateWaivers>().SingleOrDefaultAsync(x => x.Id == waiverId, ct);
+            if (w is null) return ServiceResult<GateWaivers>.NotFound("waiver");
+            if (VersionMismatch(expectedVersion, w.Version)) return ServiceResult<GateWaivers>.Conflict(w);
+            var f = new List<GuardFailure>();
+            if (w.ApprovedByUserId is not null) f.Add(new(ApprovalGuards.WaiverAlreadyDecided, "Waiver is already approved"));
+            else if (w.DeclinedAt is not null) f.Add(new(ApprovalGuards.WaiverAlreadyDecided, "Waiver is already declined"));
+            if (w.RequestedByUserId == actor.UserId) f.Add(new(ApprovalGuards.WaiverDeclineSelf, "A waiver needs two distinct people: you cannot decline your own request"));
+            if (await RoleOf(db, actor.UserId) != Roles.GovernanceOfficer) f.Add(new(ApprovalGuards.WaiverDeclineRole, "Waivers are declined by a Governance Officer"));
+            var text = (note ?? "").Trim();
+            if (text.Length is 0 or > 2000) f.Add(new(ApprovalGuards.DeclineNote, "Say why the waiver is declined (1 to 2,000 characters)"));
+            if (f.Count > 0) return ServiceResult<GateWaivers>.Fail(f);
+            var trainId = await db.Set<StageGates>().Where(g => g.Id == w.StageGateId).Select(g => g.ReleaseTrainId).SingleAsync(ct);
+            w.DeclinedByUserId = actor.UserId; w.DeclinedAt = Now; w.DeclineNote = text; w.Version++;
+            Audit(db, actor, trainId, "GateWaiver", w.Id, "Decline", null, new { gateId = w.StageGateId, note = text });
+            await db.SaveChangesAsync(ct);
+            return ServiceResult<GateWaivers>.Ok(w);
+        }, ct);
+
     public Task<ServiceResult<GateWaivers>> ApproveAsync(string waiverId, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
         RunAsync(async db =>
         {
@@ -40,6 +62,7 @@ public sealed class WaiverService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             if (VersionMismatch(expectedVersion, w.Version)) return ServiceResult<GateWaivers>.Conflict(w);
             var f = new List<GuardFailure>();
             if (w.ApprovedByUserId is not null) f.Add(new(Guards.WaiverAlreadyDecided, "Waiver is already approved"));
+            if (w.DeclinedAt is not null) f.Add(new(Guards.WaiverAlreadyDecided, "Waiver was declined; request a new one"));
             if (w.RequestedByUserId == actor.UserId) f.Add(new(Guards.WaiverSelfApproval, "A waiver needs two distinct people: you cannot approve your own request"));
             if (await RoleOf(db, actor.UserId) != Roles.GovernanceOfficer) f.Add(new(Guards.WaiverApproverRole, "Waivers are approved by a Governance Officer"));
             if (f.Count > 0) return ServiceResult<GateWaivers>.Fail(f);

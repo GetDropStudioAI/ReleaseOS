@@ -16,6 +16,8 @@ DATE_SUFFIXES = ("On", "Date")
 DATE_EXACT = {"Day", "TargetReleaseDate", "CabDate", "ReviewDueOn", "DueOn", "PlannedReleaseDate", "NewTargetReleaseDate", "PeriodStart", "PeriodEnd"}
 # Columns that are timestamps although they do not end in "At".
 TIMESTAMP_EXACT = set()
+# INTEGER columns that need 64 bits: request counts of a sample, and the audit chain's row ids and counters.
+LONG_EXACT = {"RequestCount", "LastId", "FirstBadId", "VerifiedRows", "SealedCount"}
 
 def strip_comments(s):
     return re.sub(r"--[^\n]*", "", s)
@@ -54,7 +56,7 @@ def cs_type(t, c):
     if c["sql"] == "REAL": base = "double"
     elif c["sql"] == "INTEGER":
         if re.search(r"CHECK \(\w+ IN \(0,\s*1\)\)", rest): base = "bool"
-        elif "PRIMARY KEY" in rest or n.endswith(("Bytes", "Size")) or n == "Id": base = "long"
+        elif "PRIMARY KEY" in rest or n.endswith(("Bytes", "Size")) or n == "Id" or n in LONG_EXACT: base = "long"
         else: base = "int"
     else:
         if n in DATE_EXACT or n.endswith(DATE_SUFFIXES): base = "DateOnly"

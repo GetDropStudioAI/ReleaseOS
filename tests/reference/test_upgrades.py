@@ -49,6 +49,7 @@ def baseline_db():
         INSERT INTO StageGates (Id, ReleaseTrainId, GateName, SequenceOrder, OffsetDays, DueOn, OwnerTeamId) VALUES ('g1', 'r1', 'CAB', 1, 2, '2026-10-28', 'tm1');
         INSERT INTO FreezeWindows (Id, Name, StartsAt, EndsAt, CreatedByUserId) VALUES ('f1', 'Year end', '2026-12-20T00:00:00Z', '2027-01-02T00:00:00Z', 'u1');
         INSERT INTO AuditEvents (OccurredAt, ActorUserId, ReleaseTrainId, EntityType, EntityId, Action) VALUES ('2026-09-01T00:00:00Z', 'u1', 'r1', 'Train', 'r1', 'Created');
+        INSERT INTO SyncAlerts (Id, SourceSystem, Kind, Fingerprint, ErrorMessage, FirstOccurredAt, LastOccurredAt, OccurrenceCount, Version) VALUES ('sa1', 'Jira', 'Stalled', 'fp-old', 'Jira has not answered', '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z', 3, 2);
     """)
     return db
 
@@ -149,6 +150,26 @@ try:
     check(False, "006: the new tables' foreign keys are enforced")
 except sqlite3.IntegrityError as e:
     check("FOREIGN KEY" in str(e), "006: the new tables' foreign keys are enforced")
+
+# Upgrade 007 (REOS-111 to 114): existing audit rows are untouched and unsealed, the rebuilt alert table keeps its rows and takes the new sources, the new tables start empty
+check(db.execute("SELECT count(*), count(Hash), count(PrevHash) FROM AuditEvents WHERE EntityId = 'r1' AND Action = 'Created'").fetchone() == (1, 0, 0), "007: existing audit rows keep their content and are not sealed yet")
+check(db.execute("SELECT Id, SourceSystem, Kind, OccurrenceCount, Version, WorkspaceId FROM SyncAlerts").fetchall() == [("sa1", "Jira", "Stalled", 3, 2, "default")], "007: the rebuilt alert table keeps its rows")
+db.execute("INSERT INTO SyncAlerts (Id, SourceSystem, Kind, Fingerprint, ErrorMessage, FirstOccurredAt, LastOccurredAt) VALUES ('sa2', 'Deployment', 'ControlFailed', 'fp-new', 'x', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z')")
+try:
+    db.execute("INSERT INTO SyncAlerts (Id, SourceSystem, Kind, Fingerprint, ErrorMessage, FirstOccurredAt, LastOccurredAt) VALUES ('sa3', 'Jira', 'Stalled', 'fp-old', 'again', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z')")
+    check(False, "007: the open-alert fingerprint is still unique")
+except sqlite3.IntegrityError as e:
+    check("UNIQUE" in str(e), "007: the open-alert fingerprint is still unique")
+check(all(db.execute(f"SELECT count(*) FROM {t}").fetchone() == (0,) for t in ("MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions", "ApprovalPolicies",
+      "ApprovalPolicyRequirements", "Approvals", "ApprovalDecisions", "AuditChainHeads")), "007: the new tables start empty")
+db.execute("UPDATE AuditEvents SET PrevHash = printf('%064d', 0), Hash = printf('%064d', 1) WHERE EntityId = 'r1' AND Action = 'Created'")
+try:
+    db.execute("UPDATE AuditEvents SET Action = 'Edited' WHERE EntityId = 'r1'")
+    check(False, "007: a sealed audit row stays append-only")
+except sqlite3.IntegrityError as e:
+    check("append-only" in str(e), "007: a sealed audit row stays append-only")
+db.execute("INSERT INTO RunbookRuns (Id, ReleaseTrainId, Mode, StartedAt, StartedByUserId) VALUES ('run1', 'r1', 'Rehearsal', '2026-09-03T00:00:00Z', 'u1')")
+check(db.execute("SELECT PausedAt, PausedByUserId, PauseReason FROM RunbookRuns WHERE Id = 'run1'").fetchone() == (None, None, None), "007: a run starts unpaused")
 
 again = baseline_db()
 for s in SCRIPTS:

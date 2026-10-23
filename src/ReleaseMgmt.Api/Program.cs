@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Api;
 using ReleaseMgmt.Api.Auth;
+using ReleaseMgmt.Api.Control;
 using ReleaseMgmt.Api.Endpoints;
 using ReleaseMgmt.Api.Exports;
 using ReleaseMgmt.Api.Reminders;
@@ -23,6 +24,18 @@ if (args is ["restore", var backupFile, var targetDb])
     BackupRunner.Restore(backupFile, targetDb);
     Console.WriteLine($"Restored {backupFile} -> {targetDb}; integrity_check: {BackupRunner.IntegrityCheck(targetDb)}");
     return 0;
+}
+
+// CLI verb: `ReleaseMgmt.Api verify-audit <database file>` (REOS-114) checks the audit hash chain of a database file, or of a copy, without starting the app.
+// Prints each chain and, for a broken one, the first row that does not verify; exit code 0 when every chain verifies, 1 when one does not.
+if (args is ["verify-audit", var auditDb])
+{
+    var chains = await ReleaseMgmt.Infrastructure.Services.AuditChainService.VerifyFileAsync(auditDb);
+    foreach (var c in chains)
+        Console.WriteLine(c.Status == "Verified"
+            ? $"{(c.ChainId == "*" ? "host-wide rows" : c.ChainId)}: verified, {c.SealedRows} sealed rows, {c.PendingRows} pending"
+            : $"{(c.ChainId == "*" ? "host-wide rows" : c.ChainId)}: FAILED at row {c.FirstBad!.Id}: {c.FirstBad.Reason}");
+    return chains.Any(c => c.Status != "Verified") ? 1 : 0;
 }
 
 var builder = WebApplication.CreateBuilder(args);
@@ -100,6 +113,7 @@ builder.Services.AddSingleton<IAnalyticsConnectionFactory>(new SqliteAnalyticsCo
 builder.Services.AddSingleton<ReleaseMgmt.Api.Sync.SyncHealthService>();   // REOS-42 sync health, connector-wide banner state, webhook allowlist
 builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration
 builder.Services.AddSyncEngine(config, builder.Environment.IsDevelopment());   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
+builder.Services.AddDeploymentControl(config);   // REOS-111 to 114: telemetry, control webhooks, approvals, the audit hash chain
 // REOS-74 (Q-052e): the key ring is encrypted at rest (certificate, or DPAPI on Windows); outside Development an unprotected ring refuses to start unless opted in.
 var keyRing = KeyRingEncryption.Configure(builder.Services.AddDataProtection(), config, builder.Environment);
 builder.Services.AddSingleton<AdvisoryService>(); builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
@@ -249,6 +263,8 @@ api.MapOverview();   // REOS-108 (B2)
 api.MapReleaseModel();   // REOS-107 / RT1
 api.MapEnvironmentsAndServices();   // REOS-109
 api.MapDeployments();   // REOS-110
+api.MapDeploymentOps();   // REOS-111/112 telemetry, control, run pause
+api.MapApprovals();   // REOS-113
 
 // Dev-only fake login: POST /auth/dev-login {email, name, role}. Never mapped outside Development; see DevSignIn for when it exists and who may call it.
 if (devTools)

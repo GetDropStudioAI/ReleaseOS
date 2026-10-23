@@ -73,6 +73,8 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
             var step = await db.Set<RunbookSteps>().SingleOrDefaultAsync(s => s.Id == stepId && s.ReleaseTrainId == run.ReleaseTrainId, ct);
             if (step is null) return ServiceResult<StepExecutions>.NotFound("step");
             if (run.EndedAt is not null) return ServiceResult<StepExecutions>.Fail(new GuardFailure(Guards.RunEnded, "This run has ended"));
+            if (action == "Start" && run.PausedAt is not null)   // REOS-112: a readable 422 before trg_Step_RunPaused (the backstop)
+                return ServiceResult<StepExecutions>.Fail(new GuardFailure(DeploymentGuards.RunPaused, $"This run has been paused since {run.PausedAt:yyyy-MM-dd HH:mm}Z ({run.PauseReason}); resume it before starting a step"));
 
             var ex = await db.Set<StepExecutions>().SingleOrDefaultAsync(e => e.RunId == runId && e.StepId == stepId, ct);
             if (ex is null)   // a step added to the plan after this (rehearsal) run began
@@ -137,8 +139,9 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
                 if (open.Count > 0) return ServiceResult<RunbookRuns>.Fail(new GuardFailure(Guards.StepsIncomplete, $"These steps are not Done or Skipped: {string.Join(", ", open)}", open));
             }
 
-            var before = new { run.Version };
+            var before = new { run.Version, paused = run.PausedAt is not null };
             run.EndedAt = Now; run.Outcome = outcome; run.Version++;
+            run.PausedAt = null; run.PausedByUserId = null; run.PauseReason = null;   // an ended run is not paused (the schema's CHECK)
             Audit(db, actor, run.ReleaseTrainId, "RunbookRun", run.Id, "End", before, new { outcome, run.Version, run.Mode });
             // REOS-87: a Live run rolled back requires the train's PIR, due within Pir:DueBusinessDays (PirDue); rehearsals never do.
             if (outcome == "RolledBack" && run.Mode == "Live" && await PirDue.CreateIfMissingAsync(db, run.ReleaseTrainId, PirDue.RollbackPerformed, ct) is { } pir)
@@ -146,6 +149,88 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
             await db.SaveChangesAsync(ct);
             return ServiceResult<RunbookRuns>.Ok(run);
         }, ct);
+
+    // ---- pause and resume (REOS-112) --------------------------------------------------------------------------------------------------------
+    private static readonly List<string> Planners = [Roles.RTE, Roles.ReleaseManager];
+
+    /// <summary>Pauses a run: while it is paused no step can start (service guard and trg_Step_RunPaused); steps already running can still finish or fail. RTE and Release Manager; a reason is required.</summary>
+    public Task<ServiceResult<RunbookRuns>> PauseAsync(string runId, string? reason, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
+        RunAsync(async db =>
+        {
+            var run = await db.Set<RunbookRuns>().SingleOrDefaultAsync(r => r.Id == runId, ct);
+            if (run is null) return ServiceResult<RunbookRuns>.NotFound("run");
+            if (VersionMismatch(expectedVersion, run.Version)) return ServiceResult<RunbookRuns>.Conflict(run);
+            var f = new List<GuardFailure>();
+            if (!Planners.Contains(await RoleOf(db, actor.UserId) ?? "")) f.Add(new(DeploymentGuards.ControlRole, "A run is paused by an RTE or Release Manager"));
+            if (run.EndedAt is not null) f.Add(new(Guards.RunEnded, "This run has ended"));
+            else if (run.PausedAt is not null) f.Add(new(DeploymentGuards.RunAlreadyPaused, "This run is already paused"));
+            var text = (reason ?? "").Trim();
+            if (text.Length is 0 or > 500) f.Add(new(DeploymentGuards.PauseInvalid, "Say why the run is paused (1 to 500 characters)"));
+            if (f.Count > 0) return ServiceResult<RunbookRuns>.Fail(f);
+            var before = new { run.Version, paused = false };
+            run.PausedAt = Now; run.PausedByUserId = actor.UserId; run.PauseReason = text; run.Version++;
+            Audit(db, actor, run.ReleaseTrainId, "RunbookRun", run.Id, "Pause", before, new { run.Version, reason = text, run.Mode });
+            await db.SaveChangesAsync(ct);
+            return ServiceResult<RunbookRuns>.Ok(run);
+        }, ct);
+
+    public Task<ServiceResult<RunbookRuns>> ResumeAsync(string runId, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
+        RunAsync(async db =>
+        {
+            var run = await db.Set<RunbookRuns>().SingleOrDefaultAsync(r => r.Id == runId, ct);
+            if (run is null) return ServiceResult<RunbookRuns>.NotFound("run");
+            if (VersionMismatch(expectedVersion, run.Version)) return ServiceResult<RunbookRuns>.Conflict(run);
+            var f = new List<GuardFailure>();
+            if (!Planners.Contains(await RoleOf(db, actor.UserId) ?? "")) f.Add(new(DeploymentGuards.ControlRole, "A run is resumed by an RTE or Release Manager"));
+            if (run.EndedAt is not null) f.Add(new(Guards.RunEnded, "This run has ended"));
+            else if (run.PausedAt is null) f.Add(new(DeploymentGuards.RunNotPaused, "This run is not paused"));
+            if (f.Count > 0) return ServiceResult<RunbookRuns>.Fail(f);
+            var heldMin = (int)(Now - run.PausedAt!.Value).TotalMinutes;
+            var before = new { run.Version, paused = true, reason = run.PauseReason };
+            run.PausedAt = null; run.PausedByUserId = null; run.PauseReason = null; run.Version++;
+            Audit(db, actor, run.ReleaseTrainId, "RunbookRun", run.Id, "Resume", before, new { run.Version, pausedMinutes = heldMin, run.Mode });
+            await db.SaveChangesAsync(ct);
+            return ServiceResult<RunbookRuns>.Ok(run);
+        }, ct);
+
+    // ---- stage summaries (the Orchestration screen) -----------------------------------------------------------------------------------------
+
+    /// <summary>One section of the runbook as a stage card: how many of its steps are in each state, its planned and actual span (a rehearsal's plan is shifted, D28) and how far behind plan it is.</summary>
+    public sealed record StageSummary(string Section, int Order, int Steps, int Scheduled, int Running, int Done, int Failed, int Skipped, string Status,
+        string? PlannedStartAt, string? PlannedEndAt, string? ActualStartAt, string? ActualEndAt, int? StartDelayMin);
+
+    public sealed record RunStageSummary(string RunId, string TrainId, string Mode, int Version, string StartedAt, string? EndedAt, string? Outcome, bool Paused, string? PausedAt, string? PausedBy, string? PauseReason,
+        int Steps, int StepsDone, IReadOnlyList<StageSummary> Stages);
+
+    private static readonly string[] SectionOrder = ["PreCheck", "Deploy", "Verify", "Rollback", "Hypercare"];
+
+    public async Task<RunStageSummary?> StagesAsync(string runId, CancellationToken ct = default)
+    {
+        await using var db = await OpenAsync(ct);
+        var run = await db.Set<RunbookRuns>().AsNoTracking().SingleOrDefaultAsync(r => r.Id == runId, ct);
+        if (run is null) return null;
+        var steps = await db.Set<RunbookSteps>().AsNoTracking().Where(s => s.ReleaseTrainId == run.ReleaseTrainId).ToListAsync(ct);
+        var execs = (await db.Set<StepExecutions>().AsNoTracking().Where(e => e.RunId == runId).ToListAsync(ct)).ToDictionary(e => e.StepId);
+        var shift = run.Mode == "Rehearsal" ? RunPlan.RehearsalShift(run.StartedAt, steps.Select(s => (s.Section, s.PlannedStartAt))) : TimeSpan.Zero;
+        static string? Iso(DateTime? t) => t?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        var stages = steps.GroupBy(s => s.Section).Select(g =>
+        {
+            var rows = g.Select(s => (Step: s, Exec: execs.GetValueOrDefault(s.Id))).ToList();
+            int N(string st) => rows.Count(r => (r.Exec?.Status ?? "Scheduled") == st);
+            var plannedStart = g.Min(s => s.PlannedStartAt) + shift;
+            var plannedEnd = g.Max(s => s.PlannedStartAt.AddMinutes(s.PlannedDurationMin)) + shift;
+            var started = rows.Where(r => r.Exec?.ActualStartAt is not null).Select(r => r.Exec!.ActualStartAt!.Value).ToList();
+            var ended = rows.Where(r => r.Exec?.ActualEndAt is not null).Select(r => r.Exec!.ActualEndAt!.Value).ToList();
+            var done = N("Done") + N("Skipped");
+            var status = N("Failed") > 0 ? "Failed" : N("Running") > 0 ? "Running" : done == rows.Count ? "Done" : done > 0 ? "Running" : "Pending";
+            var actualStart = started.Count == 0 ? (DateTime?)null : started.Min();
+            return new StageSummary(g.Key, Array.IndexOf(SectionOrder, g.Key) is var i && i >= 0 ? i : SectionOrder.Length, rows.Count, N("Scheduled"), N("Running"), N("Done"), N("Failed"), N("Skipped"), status,
+                Iso(plannedStart), Iso(plannedEnd), Iso(actualStart), done == rows.Count && ended.Count > 0 ? Iso(ended.Max()) : null, actualStart is { } a ? (int)Math.Round((a - plannedStart).TotalMinutes) : null);
+        }).OrderBy(s => s.Order).ThenBy(s => s.PlannedStartAt, StringComparer.Ordinal).ToList();
+        var people = run.PausedByUserId is null ? null : await db.Set<Users>().AsNoTracking().Where(u => u.Id == run.PausedByUserId).Select(u => u.DisplayName).SingleOrDefaultAsync(ct);
+        return new(run.Id, run.ReleaseTrainId, run.Mode, run.Version, Iso(run.StartedAt)!, Iso(run.EndedAt), run.Outcome, run.PausedAt is not null, Iso(run.PausedAt), people, run.PauseReason,
+            steps.Count, execs.Values.Count(e => e.Status is "Done" or "Skipped"), stages);
+    }
 
     // ---- after a committed step event: push the new forecast, and escalate ------------------------------------------------------------------
     // The step is already saved, so nothing here may undo it; but nothing is swallowed either: a failed push or notification is raised through IAlertSink (rule 8).

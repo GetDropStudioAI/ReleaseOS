@@ -33,8 +33,11 @@ public static class AuditEndpoints
             return Results.Ok(await s.QueryAsync(f, cursor, limit, ct, includeTotal: req.Query["total"] == "true"));
         }).RequireAuthorization(Policies.AuditRead);
 
-        // GET /audit/integrity -> { appendOnly, missingTriggers[], hashChained, retainedEvents, oldestAt, newestAt, checkedAt }: a real check of the append-only triggers (no hash chain yet, REOS-114)
-        api.MapGet("/audit/integrity", async (AuditQueryService s, TimeProvider time, CancellationToken ct) => Results.Ok(await s.IntegrityAsync(time, ct))).RequireAuthorization(Policies.AuditRead);
+        // GET /audit/integrity[?recheck=true] -> { appendOnly, missingTriggers[], hashChained, retainedEvents, oldestAt, newestAt, checkedAt, status, sealedRows, pendingRows, firstBad{id,reason}, verifiedAt, headId, headHash }:
+        // the append-only triggers (REOS-101) and the hash chain (REOS-114). status is Verified or Failed (firstBad names the first row that does not verify); verifiedAt is the last full check,
+        // which recheck=true runs now instead of reading the hourly job's result.
+        api.MapGet("/audit/integrity", async (bool? recheck, AuditQueryService s, AuditChainService chain, TimeProvider time, CancellationToken ct) =>
+            Results.Ok(await s.IntegrityAsync(time, ct, chain, recheck == true))).RequireAuthorization(Policies.AuditRead);
 
         // GET /audit/{id} -> one event (a shared link to an event that is not on the loaded page), 404 when it is not in this workspace
         api.MapGet("/audit/{id}", async (string id, AuditQueryService s, CancellationToken ct) =>

@@ -36,6 +36,7 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             if (result.IsOk)
             {
                 await tx.CommitAsync(ct);
+                AuditSealSignal.Notify();   // REOS-114: the sealer chains the rows this commit wrote; the writer does not wait for it
                 await PublishAsync(touched, ct);
             }
             return result;

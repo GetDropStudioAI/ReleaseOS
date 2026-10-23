@@ -15,10 +15,11 @@ public static class RunEndpoints
     public sealed record StartRunBody(string Mode);
     public sealed record StepActionBody(string? Note);
     public sealed record EndRunBody(string Outcome);
-    public sealed record RunSummary(string Id, string Mode, string StartedAt, string? EndedAt, string? Outcome, int Version);
+    public sealed record RunSummary(string Id, string Mode, string StartedAt, string? EndedAt, string? Outcome, int Version, string? PausedAt = null);
     public sealed record RunStep(string StepId, string StepCode, string Section, string Title, string? OwnerName, string PlannedStartAt, string PlannedEndAt, int PlannedDurationMin,
                                  string Status, string? ActualStartAt, string? ActualEndAt, string? ActorName, string? Note, string[] DependsOn, string[] Blocks, string? Instructions, bool CanAct, int Version);
-    public sealed record RunDetail(string Id, string TrainId, string Mode, string StartedAt, string? StartedBy, string? EndedAt, string? Outcome, int ShiftMinutes, int Version, RunStep[] Steps);
+    public sealed record RunDetail(string Id, string TrainId, string Mode, string StartedAt, string? StartedBy, string? EndedAt, string? Outcome, int ShiftMinutes, int Version, RunStep[] Steps,
+                                   string? PausedAt = null, string? PausedBy = null, string? PauseReason = null);
 
     private const string Iso = "yyyy-MM-dd'T'HH:mm:ss'Z'";
     private static Actor ActorOf(ClaimsPrincipal u) => new(u.FindFirstValue("uid") ?? throw new InvalidOperationException("Signed-in user has no uid claim"));
@@ -36,7 +37,7 @@ public static class RunEndpoints
             await using var db = await dbf.CreateDbContextAsync(ct);
             if (!await db.Set<ReleaseTrains>().AnyAsync(t => t.Id == id, ct)) return Results.NotFound(new { message = "Train not found" });
             var runs = (await db.Set<RunbookRuns>().AsNoTracking().Where(r => r.ReleaseTrainId == id).ToListAsync(ct)).OrderByDescending(r => r.StartedAt);
-            return Results.Ok(runs.Select(r => new RunSummary(r.Id, r.Mode, r.StartedAt.ToString(Iso), r.EndedAt?.ToString(Iso), r.Outcome, r.Version)));
+            return Results.Ok(runs.Select(r => new RunSummary(r.Id, r.Mode, r.StartedAt.ToString(Iso), r.EndedAt?.ToString(Iso), r.Outcome, r.Version, r.PausedAt?.ToString(Iso))));
         }).RequireAuthorization(Policies.Read);
 
         api.MapGet("/runs/{id}", async (string id, ClaimsPrincipal u, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
@@ -104,6 +105,7 @@ public static class RunEndpoints
                 [.. deps[s.Id].Select(d => code[d.DependsOnStepId]).Order(StringComparer.Ordinal)],
                 [.. steps.Where(o => deps[o.Id].Any(d => d.DependsOnStepId == s.Id)).Select(o => o.StepCode).Order(StringComparer.Ordinal)], s.Instructions, run.EndedAt is null && await CanActAsync(db, s, u, ct), e?.Version ?? 1));
         }
-        return new RunDetail(run.Id, run.ReleaseTrainId, run.Mode, run.StartedAt.ToString(Iso), people.GetValueOrDefault(run.StartedByUserId), run.EndedAt?.ToString(Iso), run.Outcome, (int)shift.TotalMinutes, run.Version, [.. rows]);
+        return new RunDetail(run.Id, run.ReleaseTrainId, run.Mode, run.StartedAt.ToString(Iso), people.GetValueOrDefault(run.StartedByUserId), run.EndedAt?.ToString(Iso), run.Outcome, (int)shift.TotalMinutes, run.Version, [.. rows],
+            run.PausedAt?.ToString(Iso), run.PausedByUserId is null ? null : people.GetValueOrDefault(run.PausedByUserId), run.PauseReason);
     }
 }

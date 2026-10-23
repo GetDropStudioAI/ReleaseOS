@@ -25,6 +25,8 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
     public const int MinReasonLength = 20;
     /// <summary>SEC-A1: the named requester has no unconsumed override request for this window and train.</summary>
     public const string OverrideNotRequested = "OverrideNotRequested";
+    /// <summary>The audit action that closes an override request without granting it (REOS-113).</summary>
+    public const string DeclineAction = "DeclineOverride";
 
     /// <summary>
     /// Config key <c>Freeze:OverrideRequiresRequest</c> (default true; SEC-A1, Q-SEC-A1): a grant must name someone who actually filed an override request for
@@ -140,7 +142,7 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         [.. (await OpenRequestsAsync(db, windowId, trainId, ct)).Select(r => r.RequesterId)];
 
     /// <summary>One open override request: the last unconsumed <c>RequestOverride</c> of a requester for a window and train.</summary>
-    public sealed record OpenRequest(string WindowId, string TrainId, string RequesterId, DateTime RequestedAt);
+    public sealed record OpenRequest(string WindowId, string TrainId, string RequesterId, DateTime RequestedAt, string? Reason = null);
 
     /// <summary>
     /// The open override requests (see <see cref="OpenRequestersAsync"/> for the rule), for one window and train or, with both null, for all of them
@@ -166,7 +168,61 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             if (after.TryGetProperty("windowId", out var win) && win.GetString() is { } w && after.TryGetProperty("requestedBy", out var by) && by.GetString() is { } uid)
                 lastGrant[(w, g.TrainId, uid)] = Math.Max(lastGrant.GetValueOrDefault((w, g.TrainId, uid)), g.Id);
         }
-        return [.. lastRequest.Where(r => r.Last > lastGrant.GetValueOrDefault((r.EntityId, r.TrainId, r.UserId))).Select(r => new OpenRequest(r.EntityId, r.TrainId, r.UserId, r.At))];
+        // REOS-113: a declined request is closed too; the decline names the window (its entity), the train and the requester
+        var declines = await db.Set<AuditEvents>().AsNoTracking()
+            .Where(a => a.EntityType == "FreezeWindow" && a.Action == DeclineAction && a.ReleaseTrainId != null && trains.Contains(a.ReleaseTrainId) && a.AfterJson != null)
+            .Select(a => new { a.Id, a.EntityId, TrainId = a.ReleaseTrainId!, a.AfterJson }).ToListAsync(ct);
+        foreach (var d in declines)
+        {
+            using var doc = JsonDocument.Parse(d.AfterJson!);
+            if (doc.RootElement.TryGetProperty("requestedBy", out var by) && by.GetString() is { } uid)
+                lastGrant[(d.EntityId, d.TrainId, uid)] = Math.Max(lastGrant.GetValueOrDefault((d.EntityId, d.TrainId, uid)), d.Id);
+        }
+        var open = lastRequest.Where(r => r.Last > lastGrant.GetValueOrDefault((r.EntityId, r.TrainId, r.UserId))).ToList();
+        var lastIds = open.Select(r => r.Last).ToList();
+        var reasons = new Dictionary<long, string?>();
+        foreach (var a in await db.Set<AuditEvents>().AsNoTracking().Where(a => lastIds.Contains(a.Id)).Select(a => new { a.Id, a.AfterJson }).ToListAsync(ct))
+        {
+            if (a.AfterJson is null) continue;
+            using var doc = JsonDocument.Parse(a.AfterJson);
+            reasons[a.Id] = doc.RootElement.TryGetProperty("reason", out var rs) ? rs.GetString() : null;
+        }
+        return [.. open.Select(r => new OpenRequest(r.EntityId, r.TrainId, r.UserId, r.At, reasons.GetValueOrDefault(r.Last)))];
+    }
+
+    /// <summary>A Release Manager or Governance Officer other than the requester declines an open override request, saying why (REOS-113). Like the request, the decline lives in the audit log (Q-034b); it closes the request.</summary>
+    public async Task<ServiceResult<int>> DeclineOverrideAsync(string windowId, string trainId, string requestedByUserId, string? note, Actor actor, CancellationToken ct = default)
+    {
+        var message = "";
+        var r = await RunAsync(async db =>
+        {
+            var w = await db.Set<FreezeWindows>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == windowId, ct);
+            if (w is null) return ServiceResult<int>.NotFound("freeze window");
+            var t = await db.Set<ReleaseTrains>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == trainId, ct);
+            if (t is null) return ServiceResult<int>.NotFound("train");
+            var f = new List<GuardFailure>();
+            if (!Approvers.Contains(await RoleOf(db, actor.UserId) ?? "")) f.Add(new(ApprovalGuards.OverrideDeclineRole, "Override requests are declined by a Release Manager or Governance Officer"));
+            if (requestedByUserId == actor.UserId) f.Add(new(ApprovalGuards.OverrideDeclineSelf, "An override needs two distinct people: you cannot decline your own request"));
+            var text = (note ?? "").Trim();
+            if (text.Length is 0 or > 2000) f.Add(new(ApprovalGuards.DeclineNote, "Say why the request is declined (1 to 2,000 characters)"));
+            if (f.Count > 0) return ServiceResult<int>.Fail(f);
+            if (!(await OpenRequestsAsync(db, windowId, trainId, ct)).Any(o => o.RequesterId == requestedByUserId))
+                return ServiceResult<int>.Fail(new GuardFailure(ApprovalGuards.OverrideRequestNotFound, $"There is no open request for '{w.Name}' on {t.Title} from that person; it may already have been granted or declined"));
+            Audit(db, actor, trainId, "FreezeWindow", windowId, DeclineAction, null, new { requestedBy = requestedByUserId, window = w.Name, note = text });
+            message = $"Your freeze override request for {t.Title} ('{w.Name}') was declined: {text}";
+            await db.SaveChangesAsync(ct);
+            return ServiceResult<int>.Ok(1);
+        }, ct);
+        if (r.IsOk && notifier is not null)
+        {
+            try { await notifier.NotifyAsync(new NotificationRequest(requestedByUserId, "FreezeOverrideDeclined", "FreezeWindow", windowId, message, 1), ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                if (alerts is null) throw;
+                await alerts.RaiseAsync("Notifications", "DeliveryFailed", $"freeze-decline:{windowId}", $"Declining the override request for window {windowId} was saved but notifying {requestedByUserId} failed: {ex.Message}", ct: ct);
+            }
+        }
+        return r;
     }
 
     /// <summary>An RTE or Release Manager asks for an override. Nothing is stored beyond the audit row: the approvers are notified and one of them grants it (Q-034b).</summary>

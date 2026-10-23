@@ -1,7 +1,19 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using ReleaseMgmt.Infrastructure.Comms;
 
 namespace ReleaseMgmt.Api.Tests;
+
+/// <summary>Stands in for the control webhook sender in every test host (REOS-112): records each signed call and answers as told. The real sender has its own tests.</summary>
+public sealed class RecordingControlSender : IControlWebhookSender
+{
+    public ConcurrentQueue<(CommWebhookTarget Target, ControlDelivery Delivery)> Sent { get; } = new();
+    public Func<ControlDelivery, ControlSendResult> Answer { get; set; } = _ => new(true, 200, "deploy.example.com", null);
+    public Task<ControlSendResult> SendAsync(CommWebhookTarget target, ControlDelivery delivery, CancellationToken ct) { Sent.Enqueue((target, delivery)); return Task.FromResult(Answer(delivery)); }
+}
 
 public sealed class ApiFactory(string environment = "Development", bool demoData = false, string? passwordResetUrl = null, bool requireIfMatch = false, long? attachmentMaxBytes = null, IReadOnlyDictionary<string, string>? settings = null) : WebApplicationFactory<Program>
 {
@@ -9,6 +21,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
     public string DbPath => Path.Combine(_dir, "app.db");
     public string AttachmentsDir => Path.Combine(_dir, "attachments");
     public const string TestHosts = "localhost;releases.example.com";
+    public RecordingControlSender ControlSender { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -26,6 +39,9 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         builder.UseSetting("Realtime:ServerTimeSeconds", "1");
         builder.UseSetting("Attachments:Directory", AttachmentsDir);
         if (attachmentMaxBytes is long mb) builder.UseSetting("Attachments:MaxBytes", mb.ToString());
+        // REOS-111 to 114: the background workers (audit sealing and verification, telemetry housekeeping) are driven by their own tests; running them in every host would change rows under tests that compare databases.
+        builder.UseSetting("Audit:Seal:Enabled", "false");
+        builder.UseSetting("Telemetry:Maintenance:Enabled", "false");
         foreach (var (k, v) in settings ?? new Dictionary<string, string>()) builder.UseSetting(k, v);
         builder.UseSetting("Notifications:ScanSeconds", "3600");   // the scheduler is driven by its own tests; keep it quiet here
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));
@@ -35,6 +51,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         if (environment != "Development") builder.UseSetting("AllowedHosts", TestHosts);
         // REOS-74: outside Development an unencrypted key ring refuses to start; tests that boot Production opt in (KeyRingEncryptionTests cover the refusal).
         builder.UseSetting("DataProtection:AllowUnprotectedKeys", "true");
+        builder.ConfigureTestServices(services => services.AddSingleton<IControlWebhookSender>(ControlSender));
     }
 
     protected override void Dispose(bool disposing)

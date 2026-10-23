@@ -40,6 +40,8 @@ public class EndpointRoleMatrixTests
         // Ingest (REOS-110): the push ingest API takes a workspace API key and nothing else. No role passes, a session cookie included: all of them get 401, not 403
         // (the key is checked in IngestApiTests: missing, wrong, revoked and rate-limited keys, and a valid one).
         ["Ingest"] = [],
+        // Approval policies (REOS-113): the roles that govern releases. Approval requests are decided by whoever holds a seat, in any role ("Owned": the service says who may).
+        ["PolicyManage"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],
     };
 
     // Endpoints mapped only when the host environment is Development.
@@ -280,6 +282,41 @@ public class EndpointRoleMatrixTests
         POST /api/v1/ingest-keys/{id}:revoke                     Admin
         POST /api/v1/ingest/deployments                          Ingest
         POST /api/v1/ingest/events                               Ingest
+        POST /api/v1/ingest/metrics                              Ingest
+        GET /api/v1/deployments/{id}/metrics                     Read
+        GET /api/v1/deployments/{id}/breaches                    Read
+        GET /api/v1/deployments/{id}/canary                      Read
+        GET /api/v1/deployments/{id}/monitoring                  Read
+        GET /api/v1/deployments/{id}/control-actions             Read
+        GET /api/v1/deployments/{id}/rollback                    Read
+        GET /api/v1/environments/{id}/slo                        Read
+        POST /api/v1/deployments/{id}:pause                      Plan
+        POST /api/v1/deployments/{id}:resume                     Plan
+        POST /api/v1/deployments/{id}:promote                    Plan
+        POST /api/v1/deployments/{id}:rollback                   Plan
+        POST /api/v1/deployments/{id}:arm-rollback               Plan
+        POST /api/v1/deployments/{id}:disarm-rollback            Plan
+        POST /api/v1/environments/{id}/control-webhook:signing-key   Admin
+        POST /api/v1/runs/{id}:pause                             Plan
+        POST /api/v1/runs/{id}:resume                            Plan
+        GET /api/v1/runs/{id}/stages                             Read
+        GET /api/v1/approval-policies                            Read
+        GET /api/v1/approval-policies/coverage                   Read
+        GET /api/v1/approval-policies/{id}                       Read
+        POST /api/v1/approval-policies                           PolicyManage
+        PATCH /api/v1/approval-policies/{id}                     PolicyManage
+        POST /api/v1/approval-policies/{id}:archive              PolicyManage
+        POST /api/v1/approval-policies/{id}:unarchive            PolicyManage
+        GET /api/v1/approval-requests                            Read
+        GET /api/v1/approval-requests/{id}                       Read
+        GET /api/v1/trains/{id}/approval-requests                Read
+        POST /api/v1/approval-requests                           Plan
+        POST /api/v1/approval-requests/{id}:decide               Owned
+        POST /api/v1/approval-requests/{id}:resubmit             Owned
+        POST /api/v1/approval-requests/{id}:cancel               Owned
+        GET /api/v1/exceptions                                   Read
+        POST /api/v1/waivers/{id}:decline                        GovernanceOfficer
+        POST /api/v1/freezes/{id}/override-requests:decline      FreezeApprove
         """);
 
     private static Dictionary<string, string> Parse(string table) =>

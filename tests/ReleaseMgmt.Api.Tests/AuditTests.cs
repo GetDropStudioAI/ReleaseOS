@@ -347,7 +347,10 @@ public class AuditTests
         Ev(f, Ts(1), rteId, null, "R", "1", "A");
         var ok = await Json(await rte.GetAsync("/api/v1/audit/integrity"));
         Assert.True(ok.GetProperty("appendOnly").GetBoolean());
-        Assert.False(ok.GetProperty("hashChained").GetBoolean());        // no chain until REOS-114: the banner must not claim one
+        Assert.True(ok.GetProperty("hashChained").GetBoolean());         // REOS-114: the log is hash-chained; the sealer runs behind the writes, so a fresh row is pending, never a failure
+        Assert.Equal("Verified", ok.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, ok.GetProperty("firstBad").ValueKind);
+        Assert.True(ok.GetProperty("pendingRows").GetInt64() >= 1);
         Assert.Empty(ok.GetProperty("missingTriggers").EnumerateArray());
         Assert.True(ok.GetProperty("retainedEvents").GetInt64() >= 1);
         Assert.Equal(HttpStatusCode.Forbidden, (await (await As(f, Roles.Viewer, "v@x.com")).GetAsync("/api/v1/audit/integrity")).StatusCode);

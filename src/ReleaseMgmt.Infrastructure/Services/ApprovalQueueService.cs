@@ -9,7 +9,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>One decision waiting for the signed-in person. A gate or a waiver is due on a date; an override, a Go/No-Go or a condition at a time.</summary>
 public sealed record ApprovalItem(string Kind, string Id, string Title, string? Detail, string TrainId, string TrainTitle, DateOnly? DueOn, DateTime? DueAt, bool Overdue, string? GateId = null);
-public sealed record ApprovalCounts(int Certify, int Waivers, int Overrides, int GoNoGo, int Conditions, int Total);
+public sealed record ApprovalCounts(int Certify, int Waivers, int Overrides, int GoNoGo, int Conditions, int Total, int Seats = 0);
 public sealed record ApprovalQueue(ApprovalCounts Counts, IReadOnlyList<ApprovalItem> Items);
 
 /// <summary>
@@ -26,9 +26,9 @@ public sealed record ApprovalQueue(ApprovalCounts Counts, IReadOnlyList<Approval
 /// </list>
 /// The role is the one held in the current workspace (REOS-105), and every row comes from that workspace. Read-only; sorted by due time, soonest first.
 /// </summary>
-public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config)
+public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IConfiguration config, ApprovalService? approvals = null)
 {
-    public const string CertifyGate = "CertifyGate", ApproveWaiver = "ApproveWaiver", GrantOverride = "GrantOverride", RecordGoNoGo = "RecordGoNoGo", CloseCondition = "CloseCondition";
+    public const string CertifyGate = "CertifyGate", ApproveWaiver = "ApproveWaiver", GrantOverride = "GrantOverride", RecordGoNoGo = "RecordGoNoGo", CloseCondition = "CloseCondition", DecideApproval = "DecideApproval";
     private static readonly string[] Open = ["Planning", "Gated", "Executing"];
     private readonly DisplayClock _clock = DisplayClock.From(config);
 
@@ -66,7 +66,7 @@ public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf
             }
             var byId = gates.ToDictionary(g => g.Id);
             var waivers = await db.Set<GateWaivers>().AsNoTracking()
-                .Where(w => w.ApprovedByUserId == null && w.RequestedByUserId != userId && gateIds.Contains(w.StageGateId)).ToListAsync(ct);
+                .Where(w => w.ApprovedByUserId == null && w.DeclinedAt == null && w.RequestedByUserId != userId && gateIds.Contains(w.StageGateId)).ToListAsync(ct);
             foreach (var w in waivers.Where(w => !passed.Contains(byId[w.StageGateId].Status)))
             {
                 var g = byId[w.StageGateId]; var t = trains[g.ReleaseTrainId];
@@ -105,6 +105,14 @@ public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf
             }
         }
 
+        if (role is not null && approvals is not null)
+        {
+            // REOS-113: the seats of pending approvals this person may decide now (the same eligibility and separation-of-duties rules as the decision itself)
+            foreach (var s in await approvals.SeatsWaitingAsync(userId, ct))
+                if (trains.ContainsKey(s.TrainId))
+                    items.Add(AtTime(DecideApproval, $"{s.ApprovalId}:{s.DecisionId}", $"Approval: {s.Label}", $"{s.EnvironmentName} · round {s.Round}", s.TrainId, s.TrainTitle, s.DueAt));
+        }
+
         if (role is not null)
         {
             var latestIds = (await db.Set<GoNoGoDecisions>().AsNoTracking().Select(d => new { d.Id, d.ReleaseTrainId, d.DecidedAt }).ToListAsync(ct))
@@ -124,6 +132,6 @@ public sealed class ApprovalQueueService(IDbContextFactory<ReleaseDbContext> dbf
         DateTime Key(ApprovalItem i) => i.DueAt ?? TimeZoneInfo.ConvertTimeToUtc(i.DueOn!.Value.ToDateTime(TimeOnly.MinValue), _clock.Zone);
         var sorted = items.OrderBy(Key).ThenBy(i => i.TrainTitle, StringComparer.Ordinal).ThenBy(i => i.Title, StringComparer.Ordinal).ToList();
         int N(string kind) => sorted.Count(i => i.Kind == kind);
-        return new ApprovalQueue(new ApprovalCounts(N(CertifyGate), N(ApproveWaiver), N(GrantOverride), N(RecordGoNoGo), N(CloseCondition), sorted.Count), sorted);
+        return new ApprovalQueue(new ApprovalCounts(N(CertifyGate), N(ApproveWaiver), N(GrantOverride), N(RecordGoNoGo), N(CloseCondition), sorted.Count, N(DecideApproval)), sorted);
     }
 }

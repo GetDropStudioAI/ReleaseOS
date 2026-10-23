@@ -257,7 +257,8 @@ roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='t
          if 'WorkspaceId' in [c[1] for c in db6.execute(f"PRAGMA table_info({t})")]]
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
-            'ReleaseTypes','Environments','CatalogServices','IngestKeys','Deployments']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
+            'ReleaseTypes','Environments','CatalogServices','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
+            'ApprovalPolicies','Approvals']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
 check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','Payments-EU',?)", False, "workspace slug with capitals", (NOW,), expect="CHECK")
@@ -463,6 +464,156 @@ check(db7, "INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Leve
 check(db7, "UPDATE DeploymentEvents SET Message='edited' WHERE Id=1", False, "an event edited", expect="append-only")
 check(db7, "DELETE FROM Deployments WHERE Id='d3'", True, "deleting a deployment removes its events with it")
 assert_true(db7.execute("SELECT count(*) FROM DeploymentEvents").fetchone() == (0,), "no orphan events")
+
+# ---- Telemetry, deployment control, approvals and the audit chain (REOS-111, 112, 113, 114) ----
+print("\nTelemetry, deployment control, approvals, audit chain")
+db8 = db_fresh()
+db8.executescript("""
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','2026-10-20T14:00:00Z');
+INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','sec','Security');
+INSERT INTO Teams(Id,Handle,Name,WorkspaceId) VALUES('tm2','eusec','EU Security','w2');
+INSERT INTO TeamMembers(TeamId,UserId) VALUES('tm1','dev'),('tm1','gov1');
+INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','rm','ReleaseManager','2026-10-20T14:00:00Z');
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,WorkspaceId) VALUES('t2','EU R1','2026-11-30','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z','w2');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt) VALUES('e1','Staging','Staging','2026-10-20T14:00:00Z'),('e2','Prod','Production','2026-10-20T14:00:00Z');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt,WorkspaceId) VALUES('e9','Prod EU','Production','2026-10-20T14:00:00Z','w2');
+INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt) VALUES('sv1','payments-api','Payments API','2026-10-20T14:00:00Z');
+INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt,WorkspaceId) VALUES('sv9','payments-api','Payments API EU','2026-10-20T14:00:00Z','w2');
+INSERT INTO Deployments(Id,ExternalId,CatalogServiceId,EnvironmentId,ReleaseTrainId,ReleaseVersion,CreatedAt,UpdatedAt) VALUES('d1','ci-1','sv1','e2','t1','4.5.0','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z');
+INSERT INTO Deployments(Id,ExternalId,CatalogServiceId,EnvironmentId,ReleaseTrainId,ReleaseVersion,CreatedAt,UpdatedAt,WorkspaceId) VALUES('d9','ci-9','sv9','e9','t2','4.5.0','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z','w2');
+UPDATE ReleaseTrains SET OwnerUserId='rm' WHERE Id='t1';
+""")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,ErrorRatePct,LatencyP95Ms) VALUES('d1','Canary','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z',0.2,120)", True, "a metric sample")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,ErrorRatePct) VALUES('d1','Canary','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z',0.3)", False, "the same sample twice (deployment, series, time)", expect="UNIQUE")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,ErrorRatePct) VALUES('d1','Stable','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z',0.1)", True, "the same time in the other series")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt) VALUES('d1','Canary','2026-10-20T14:00:30Z','2026-10-20T14:00:00Z')", False, "a sample with no metric at all", expect="CHECK")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,ErrorRatePct) VALUES('d1','Canary','2026-10-20T14:00:30Z','2026-10-20T14:00:00Z',120)", False, "an error rate over 100 %", expect="CHECK")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,LatencyP95Ms) VALUES('d1','Canary','2026-10-20T14:00:30Z','2026-10-20T14:00:00Z',-1)", False, "a negative latency", expect="CHECK")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,ErrorRatePct) VALUES('d1','Beta','2026-10-20T14:00:30Z','2026-10-20T14:00:00Z',1)", False, "a series outside canary and stable", expect="CHECK")
+check(db8, "INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,ErrorRatePct,WorkspaceId) VALUES('d1','Canary','2026-10-20T14:00:30Z','2026-10-20T14:00:00Z',1,'w2')", False, "a sample filed under another workspace than its deployment", expect="deployment belongs to another workspace")
+check(db8, "UPDATE MetricSamples SET WorkspaceId='w2' WHERE Id=1", False, "a sample moved to another workspace", expect="cannot move to another workspace")
+check(db8, "INSERT INTO MetricRollups(DeploymentId,Series,BucketAt,Samples,ErrorRateAvgPct,ErrorRateMaxPct) VALUES('d1','Canary','2026-09-01T10:00:00Z',120,0.2,0.9)", True, "an hourly rollup")
+check(db8, "INSERT INTO MetricRollups(DeploymentId,Series,BucketAt,Samples) VALUES('d1','Canary','2026-09-01T10:00:00Z',1)", False, "a rollup bucket twice", expect="UNIQUE")
+check(db8, "INSERT INTO MetricRollups(DeploymentId,Series,BucketAt,Samples) VALUES('d1','Stable','2026-09-01T10:00:00Z',0)", False, "a rollup of no samples", expect="CHECK")
+check(db8, "INSERT INTO MetricRollups(DeploymentId,Series,BucketAt,Samples,WorkspaceId) VALUES('d1','Stable','2026-09-01T10:00:00Z',1,'w2')", False, "a rollup filed under another workspace than its deployment", expect="deployment belongs to another workspace")
+check(db8, "UPDATE Environments SET ThresholdForSeconds=-1 WHERE Id='e2'", False, "a threshold duration below zero", expect="CHECK")
+check(db8, "UPDATE Environments SET CanaryObservationSeconds=5 WHERE Id='e2'", False, "a canary observation window under 30 seconds", expect="CHECK")
+check(db8, "UPDATE Environments SET ThresholdForSeconds=120, CanaryObservationSeconds=300 WHERE Id='e2'", True, "a threshold duration and observation window")
+check(db8, "INSERT INTO ThresholdBreaches(Id,DeploymentId,Series,Metric,ThresholdValue,ForSeconds,StartedAt,PeakValue,LastValue) VALUES('b1','d1','Canary','ErrorRate',0.5,120,'2026-10-20T14:00:00Z',0.9,0.9)", True, "a threshold breach, watching")
+check(db8, "INSERT INTO ThresholdBreaches(Id,DeploymentId,Series,Metric,ThresholdValue,ForSeconds,StartedAt,PeakValue,LastValue) VALUES('b2','d1','Canary','ErrorRate',0.5,120,'2026-10-20T14:00:00Z',0.9,0.9)", False, "a second open breach of one metric in one series", expect="UNIQUE")
+check(db8, "INSERT INTO ThresholdBreaches(Id,DeploymentId,Series,Metric,ThresholdValue,ForSeconds,StartedAt,PeakValue,LastValue) VALUES('b3','d1','Canary','LatencyP95',300,120,'2026-10-20T14:00:00Z',410,410)", True, "an open breach of another metric")
+check(db8, "UPDATE ThresholdBreaches SET ConfirmedAt='2026-10-20T14:02:00Z' WHERE Id='b1'", False, "a breach confirmed without a detection time", expect="CHECK")
+check(db8, "UPDATE ThresholdBreaches SET ConfirmedAt='2026-10-20T14:02:00Z', DetectedAt='2026-10-20T14:02:01Z' WHERE Id='b1'", True, "a breach confirmed")
+check(db8, "UPDATE ThresholdBreaches SET ResolvedAt='2026-10-20T13:00:00Z' WHERE Id='b1'", False, "a breach resolved before it started", expect="CHECK")
+check(db8, "UPDATE ThresholdBreaches SET ResolvedAt='2026-10-20T14:05:00Z' WHERE Id='b1'", True, "a breach resolved")
+check(db8, "INSERT INTO ThresholdBreaches(Id,DeploymentId,Series,Metric,ThresholdValue,ForSeconds,StartedAt,PeakValue,LastValue) VALUES('b2','d1','Canary','ErrorRate',0.5,120,'2026-10-20T14:10:00Z',0.9,0.9)", True, "a new breach once the earlier one is resolved")
+check(db8, "INSERT INTO ThresholdBreaches(Id,DeploymentId,Series,Metric,ThresholdValue,ForSeconds,StartedAt,PeakValue,LastValue,WorkspaceId) VALUES('b8','d1','Stable','ErrorRate',0.5,120,'2026-10-20T14:00:00Z',0.9,0.9,'w2')", False, "a breach filed under another workspace than its deployment", expect="deployment belongs to another workspace")
+check(db8, "INSERT INTO ThresholdBreaches(Id,DeploymentId,Series,Metric,ThresholdValue,ForSeconds,StartedAt,PeakValue,LastValue,WorkspaceId) VALUES('b9','d9','Canary','ErrorRate',0.5,120,'2026-10-20T14:00:00Z',0.9,0.9,'w2')", True, "a breach of the other workspace's deployment")
+check(db8, "UPDATE ThresholdBreaches SET WorkspaceId='w2' WHERE Id='b2'", False, "a breach moved to another workspace", expect="cannot move to another workspace")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt,Reason) VALUES('ca1','d1','Pause','Manual','rte','2026-10-20T14:00:00Z','Error rate is climbing')", True, "a manual pause call")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedAt) VALUES('ca2','d1','Pause','Manual','2026-10-20T14:00:00Z')", False, "a manual call with nobody who asked", expect="CHECK")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt) VALUES('ca2','d1','Rollback','Automatic','rte','2026-10-20T14:00:00Z')", False, "an automatic call that names a person", expect="CHECK")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt) VALUES('ca2','d1','Abort','Manual','rte','2026-10-20T14:00:00Z')", False, "a control action outside pause, resume, promote and rollback", expect="CHECK")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt,Status,CompletedAt) VALUES('ca2','d1','Pause','Manual','rte','2026-10-20T14:00:00Z','Failed','2026-10-20T14:00:00Z')", False, "a failed call without its error", expect="CHECK")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt,CompletedAt) VALUES('ca2','d1','Pause','Manual','rte','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z')", False, "a pending call that has a completion time", expect="CHECK")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt,Status,CompletedAt,ErrorMessage,HttpStatus) VALUES('ca3','d1','Resume','Manual','rte','2026-10-20T14:00:00Z','Failed','2026-10-20T14:00:00Z','HTTP 503',503)", True, "a failed call with its error")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt,BreachId) VALUES('ca2','d1','Rollback','Manual','rte','2026-10-20T14:00:00Z','b2')", False, "a breach named on a manual call", expect="CHECK")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedAt,BreachId) VALUES('ca4','d1','Rollback','Automatic','2026-10-20T14:00:00Z','b2')", True, "an automatic rollback for a breach")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedAt,BreachId) VALUES('ca5','d1','Rollback','Automatic','2026-10-20T14:00:00Z','b2')", False, "a second automatic rollback for the same breach", expect="UNIQUE")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedAt,BreachId) VALUES('ca5','d1','Rollback','Automatic','2026-10-20T14:00:00Z','b9')", False, "an automatic rollback naming another deployment's breach", expect="breach belongs to another deployment")
+check(db8, "INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt,WorkspaceId) VALUES('ca5','d1','Pause','Manual','rte','2026-10-20T14:00:00Z','w2')", False, "a control action filed under another workspace than its deployment", expect="deployment belongs to another workspace")
+check(db8, "UPDATE DeploymentControlActions SET WorkspaceId='w2' WHERE Id='ca1'", False, "a control action moved to another workspace", expect="cannot move to another workspace")
+check(db8, "UPDATE Deployments SET AutoRollbackArmedAt='2026-10-20T14:00:00Z', StepStartedAt='2026-10-20T14:00:00Z' WHERE Id='d1'", True, "a deployment armed for automatic rollback")
+db8.executescript("""
+INSERT INTO RunbookRuns(Id,ReleaseTrainId,Mode,StartedAt,StartedByUserId) VALUES('r1','t1','Rehearsal','2026-10-20T14:00:00Z','rte');
+INSERT INTO StepExecutions(Id,RunId,StepId) VALUES('x1','r1','s1'),('x2','r1','s2');
+""")
+check(db8, "UPDATE RunbookRuns SET PausedAt='2026-10-20T14:00:00Z', PauseReason='Hold for the incident' WHERE Id='r1'", False, "a run paused with nobody who paused it", expect="CHECK")
+check(db8, "UPDATE RunbookRuns SET PausedAt='2026-10-20T14:00:00Z', PausedByUserId='rte' WHERE Id='r1'", False, "a run paused without a reason", expect="CHECK")
+check(db8, "UPDATE RunbookRuns SET PausedAt='2026-10-20T14:00:00Z', PausedByUserId='rte', PauseReason='Hold for the incident' WHERE Id='r1'", True, "a run paused")
+check(db8, "UPDATE StepExecutions SET Status='Running', ActualStartAt='2026-10-20T14:00:00Z', ActorUserId='rte' WHERE Id='x1'", False, "a step started in a paused run", expect="run is paused")
+check(db8, "UPDATE StepExecutions SET Status='Running', ActualStartAt='2026-10-20T14:00:00Z', ActorUserId='rte' WHERE Id='x2'", False, "a second step started in a paused run", expect="run is paused")
+check(db8, "UPDATE StepExecutions SET Status='Skipped', Note='not needed' WHERE Id='x2'", True, "a step skipped in a paused run (not a start)")
+check(db8, "UPDATE RunbookRuns SET PausedAt=NULL, PausedByUserId=NULL, PauseReason=NULL WHERE Id='r1'", True, "a run resumed")
+check(db8, "UPDATE StepExecutions SET Status='Running', ActualStartAt='2026-10-20T14:00:00Z', ActorUserId='rte' WHERE Id='x1'", True, "a step started once the run is resumed")
+check(db8, "UPDATE RunbookRuns SET EndedAt='2026-10-20T14:00:00Z', Outcome='Aborted', PausedAt='2026-10-20T14:00:00Z', PausedByUserId='rte', PauseReason='x' WHERE Id='r1'", False, "a run that has ended and is still paused", expect="CHECK")
+db8.executescript("""
+INSERT INTO GateWaivers(Id,StageGateId,Reason,RequestedByUserId,RequestedAt) VALUES
+ ('wv1','g1','This gate cannot be met before the freeze','gov2','2026-10-20T14:00:00Z'),('wv2','g1','This gate cannot be met before the freeze','rte','2026-10-20T14:00:00Z'),('wv3','g1','This gate cannot be met before the freeze','rte','2026-10-20T14:00:00Z');
+""")
+check(db8, "UPDATE GateWaivers SET DeclinedByUserId='rm', DeclinedAt='2026-10-20T14:00:00Z', DeclineNote='No' WHERE Id='wv2'", False, "a waiver declined by a Release Manager", expect="declined by a Governance Officer")
+check(db8, "UPDATE GateWaivers SET DeclinedByUserId='gov2', DeclinedAt='2026-10-20T14:00:00Z', DeclineNote='Withdrawn' WHERE Id='wv1'", False, "a waiver declined by the person who asked for it", expect="two distinct people")
+check(db8, "UPDATE GateWaivers SET DeclinedByUserId='gov1', DeclinedAt='2026-10-20T14:00:00Z' WHERE Id='wv2'", False, "a waiver declined without a note", expect="CHECK")
+check(db8, "UPDATE GateWaivers SET DeclinedByUserId='gov1', DeclinedAt='2026-10-20T14:00:00Z', DeclineNote='The risk is not covered' WHERE Id='wv2'", True, "a waiver declined with a note")
+check(db8, "UPDATE GateWaivers SET ApprovedByUserId='gov1', ApprovedAt='2026-10-20T14:00:00Z' WHERE Id='wv2'", False, "a declined waiver approved", expect="approved or declined")
+check(db8, "UPDATE GateWaivers SET ApprovedByUserId='gov1', ApprovedAt='2026-10-20T14:00:00Z' WHERE Id='wv3'", True, "a waiver approved")
+check(db8, "UPDATE GateWaivers SET DeclinedByUserId='gov2', DeclinedAt='2026-10-20T14:00:00Z', DeclineNote='Changed my mind' WHERE Id='wv3'", False, "an approved waiver declined", expect="approved or declined")
+check(db8, "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt) VALUES('al1','Deployment','ControlFailed','fp1','The rollback call failed','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z')", True, "an alert from the deployment side")
+check(db8, "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt) VALUES('al2','Audit','IntegrityFailed','fp2','Audit row 5 does not verify','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z')", True, "an alert from the audit chain")
+check(db8, "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt) VALUES('al3','Telemetry','RetentionFailed','fp3','Summarising failed','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z')", True, "an alert from telemetry retention")
+check(db8, "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt) VALUES('al4','Pager','ControlFailed','fp4','x','2026-10-20T14:00:00Z','2026-10-20T14:00:00Z')", False, "an alert from a source that does not exist", expect="CHECK")
+check(db8, "INSERT INTO ApprovalPolicies(Id,Name,EnvironmentKind,MinRiskTier,RequireGatesCertified,CreatedAt) VALUES('pol1','Production','Production','High',1,'2026-10-20T14:00:00Z')", True, "an approval policy")
+check(db8, "INSERT INTO ApprovalPolicies(Id,Name,CreatedAt) VALUES('pol2','production','2026-10-20T14:00:00Z')", False, "a policy name twice in a workspace (any case)", expect="UNIQUE")
+check(db8, "INSERT INTO ApprovalPolicies(Id,Name,CreatedAt,WorkspaceId) VALUES('pol9','Production','2026-10-20T14:00:00Z','w2')", True, "the same policy name in another workspace")
+check(db8, "INSERT INTO ApprovalPolicies(Id,Name,EnvironmentKind,CreatedAt) VALUES('pol2','Dev','Dev','2026-10-20T14:00:00Z')", False, "a policy for an environment kind that does not exist", expect="CHECK")
+check(db8, "INSERT INTO ApprovalPolicies(Id,Name,MinRiskTier,CreatedAt) VALUES('pol2','Risky','Severe','2026-10-20T14:00:00Z')", False, "a policy for a risk tier that does not exist", expect="CHECK")
+check(db8, "UPDATE ApprovalPolicies SET WorkspaceId='w2' WHERE Id='pol1'", False, "a policy moved to another workspace", expect="cannot move to another workspace")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue,DueHours,SortOrder) VALUES('rq1','pol1','Security reviewer','Team','tm1',24,1)", True, "a policy seat for a team")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,DueHours,SortOrder) VALUES('rq2','pol1','Release owner','ReleaseOwner',24,2)", True, "a policy seat for the release owner")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue,DueHours,SortOrder) VALUES('rq3','pol1','SRE approver','WorkspaceRole','RTE',8,3)", True, "a policy seat for a workspace role")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue) VALUES('rq4','pol1','EU security','Team','tm2')", False, "a policy seat for another workspace's team", expect="team belongs to another workspace")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue) VALUES('rq4','pol1','SRE','WorkspaceRole','SRE')", False, "a policy seat for a role that does not exist", expect="CHECK")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue) VALUES('rq4','pol1','Owner again','ReleaseOwner','rm')", False, "a release owner seat that names a value", expect="CHECK")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue,DueHours) VALUES('rq4','pol1','Quick','WorkspaceRole','RTE',0)", False, "a policy seat due in 0 hours", expect="CHECK")
+check(db8, "INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue) VALUES('rq4','pol1','sre approver','WorkspaceRole','RTE')", False, "a seat label twice in a policy (any case)", expect="UNIQUE")
+check(db8, "INSERT INTO Approvals(Id,ReleaseTrainId,EnvironmentId,Status,RequestedByUserId,RequestedAt,DueAt) VALUES('ap0','t1','e2','Approved','gov2','2026-10-20T14:00:00Z','2026-10-21T14:00:00Z')", False, "an approval that is approved without a decision time", expect="CHECK")
+check(db8, "INSERT INTO Approvals(Id,ReleaseTrainId,EnvironmentId,RequestedByUserId,RequestedAt,DueAt) VALUES('ap1','t1','e2','gov2','2026-10-20T14:00:00Z','2026-10-21T14:00:00Z')", True, "an approval requested for a release and environment")
+check(db8, "INSERT INTO Approvals(Id,ReleaseTrainId,EnvironmentId,RequestedByUserId,RequestedAt,DueAt) VALUES('ap2','t1','e2','gov2','2026-10-20T14:00:00Z','2026-10-21T14:00:00Z')", False, "a second open approval for the same release and environment", expect="UNIQUE")
+check(db8, "INSERT INTO Approvals(Id,ReleaseTrainId,EnvironmentId,RequestedByUserId,RequestedAt,DueAt) VALUES('ap2','t1','e1','gov2','2026-10-20T14:00:00Z','2026-10-21T14:00:00Z')", True, "an open approval for the same release in another environment")
+check(db8, "INSERT INTO Approvals(Id,ReleaseTrainId,EnvironmentId,RequestedByUserId,RequestedAt,DueAt) VALUES('ap3','t1','e9','gov2','2026-10-20T14:00:00Z','2026-10-21T14:00:00Z')", False, "an approval for another workspace's environment", expect="environment belongs to another workspace")
+check(db8, "INSERT INTO Approvals(Id,ReleaseTrainId,EnvironmentId,RequestedByUserId,RequestedAt,DueAt) VALUES('ap3','t2','e2','gov2','2026-10-20T14:00:00Z','2026-10-21T14:00:00Z')", False, "an approval for another workspace's release", expect="train belongs to another workspace")
+check(db8, "UPDATE Approvals SET EnvironmentId='e1' WHERE Id='ap1'", False, "an approval moved to another environment", expect="keeps its release and environment")
+db8.executescript("""
+INSERT INTO ApprovalDecisions(Id,ApprovalId,Label,EligibleKind,EligibleValue,DueAt) VALUES
+ ('dc1','ap1','Security reviewer','Team','tm1','2026-10-21T14:00:00Z'),('dc2','ap1','Release owner','ReleaseOwner',NULL,'2026-10-21T14:00:00Z'),
+ ('dc3','ap1','SRE approver','WorkspaceRole','RTE','2026-10-20T22:00:00Z'),('dc4','ap1','Second reviewer','Team','tm1','2026-10-21T14:00:00Z');
+""")
+check(db8, "UPDATE ApprovalDecisions SET Decision='ChangesRequested', DecidedByUserId='dev', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc1'", False, "Request changes without a note", expect="CHECK")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc1'", False, "a decision that names no decider", expect="Not an eligible approver")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='rte', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc1'", False, "an approval by a workspace member who does not hold the seat", expect="Not an eligible approver")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='gov2', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc3'", False, "an approval by the person who requested the change", expect="you cannot approve a change you requested")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='rm', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc1'", False, "the release owner approving a Production seat that is not theirs", expect="release owner approves only the release owner seat")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='rm', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc2'", True, "the release owner approving the release owner seat")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='dev', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc1'", True, "a team member approving the security seat")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='dev', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc4'", False, "one person approving a second seat of a Production change", expect="two seats on a Production change")
+check(db8, "UPDATE ApprovalDecisions SET Decision='ChangesRequested', DecidedByUserId='dev', DecidedAt='2026-10-20T14:00:00Z', Note='Changed my mind' WHERE Id='dc1'", False, "a decision changed once made", expect="A decision is final")
+check(db8, "UPDATE Approvals SET Status='Approved', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='ap1'", False, "an approval approved while seats are open", expect="Every required approver must approve first")
+check(db8, "UPDATE ApprovalDecisions SET Decision='ChangesRequested', DecidedByUserId='rte', DecidedAt='2026-10-20T14:00:00Z', Note='Rollback plan is missing' WHERE Id='dc3'", True, "Request changes with a note")
+check(db8, "UPDATE Approvals SET Status='ChangesRequested', Version=Version+1 WHERE Id='ap1'", True, "the approval marked as changes requested")
+check(db8, "UPDATE ApprovalDecisions SET Decision=NULL, DecidedByUserId=NULL, DecidedAt=NULL, Note=NULL WHERE Id='dc3'", True, "a seat reset for a new round")
+check(db8, "UPDATE Approvals SET Status='Pending', Round=2 WHERE Id='ap1'", True, "the approval back to pending for the new round")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='gov1', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc4'", True, "a second team member approving the other team seat")
+check(db8, "UPDATE ApprovalDecisions SET Decision='Approved', DecidedByUserId='rte', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='dc3'", True, "the SRE seat approved by an RTE who did not request it")
+check(db8, "UPDATE Approvals SET Status='Approved', DecidedAt='2026-10-20T14:00:00Z' WHERE Id='ap1'", True, "the approval approved once every seat has")
+check(db8, "UPDATE Approvals SET Status='Pending', DecidedAt=NULL WHERE Id='ap1'", False, "an approved approval reopened", expect="final")
+check(db8, "UPDATE ApprovalDecisions SET Note='late edit' WHERE Id='dc1'", False, "a decision changed after the approval closed", expect="The approval is closed")
+db8.executescript("""
+INSERT INTO AuditEvents(OccurredAt,EntityType,EntityId,Action,WorkspaceId) VALUES ('2026-10-20T14:00:00Z','Train','t1','Probe','default'),('2026-10-20T14:00:00Z','Train','t1','Probe2','default');
+""")
+check(db8, "UPDATE AuditEvents SET Hash=printf('%064d',1) WHERE Action='Probe'", False, "a hash without the previous hash", expect="append-only")
+check(db8, "UPDATE AuditEvents SET PrevHash='xyz', Hash=printf('%064d',1) WHERE Action='Probe'", False, "a hash that is not 64 hex characters", expect="CHECK")
+check(db8, "UPDATE AuditEvents SET Action='Edited' WHERE Action='Probe'", False, "an audit row edited", expect="append-only")
+check(db8, "UPDATE AuditEvents SET Action='Edited', PrevHash=printf('%064d',0), Hash=printf('%064d',1) WHERE Action='Probe'", False, "an audit row edited while it is sealed", expect="append-only")
+check(db8, "UPDATE AuditEvents SET PrevHash=printf('%064d',0), Hash=printf('%064d',1) WHERE Action='Probe'", True, "an audit row sealed once")
+check(db8, "UPDATE AuditEvents SET PrevHash=printf('%064d',0), Hash=printf('%064d',2) WHERE Action='Probe'", False, "a sealed audit row sealed again", expect="append-only")
+check(db8, "UPDATE AuditEvents SET PrevHash=NULL, Hash=NULL WHERE Action='Probe'", False, "a sealed audit row's hash cleared", expect="append-only")
+check(db8, "DELETE FROM AuditEvents WHERE Action='Probe'", False, "a sealed audit row deleted", expect="append-only")
+check(db8, "DELETE FROM AuditEvents WHERE Action='Probe2'", False, "an unsealed audit row deleted", expect="append-only")
+check(db8, "INSERT INTO AuditChainHeads(ChainId,LastId,LastHash,SealedCount,SealedAt) VALUES('default',1,printf('%064d',1),1,'2026-10-20T14:00:00Z')", True, "the audit chain's head recorded")
+check(db8, "INSERT INTO AuditChainHeads(ChainId,LastId,LastHash,SealedCount,SealedAt) VALUES('default',2,printf('%064d',2),2,'2026-10-20T14:00:00Z')", False, "a chain head twice", expect="UNIQUE")
+check(db8, "UPDATE AuditChainHeads SET VerifiedStatus='Verified' WHERE ChainId='default'", False, "a verification status without its time", expect="CHECK")
+check(db8, "UPDATE AuditChainHeads SET VerifiedStatus='Maybe', VerifiedAt='2026-10-20T14:00:00Z' WHERE ChainId='default'", False, "a verification status that is neither verified nor failed", expect="CHECK")
+check(db8, "UPDATE AuditChainHeads SET VerifiedStatus='Failed', VerifiedAt='2026-10-20T14:00:00Z', FirstBadId=1, FirstBadReason='Row 1 does not verify' WHERE ChainId='default'", True, "a verification recorded")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

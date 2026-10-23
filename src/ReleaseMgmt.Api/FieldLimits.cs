@@ -161,6 +161,19 @@ public static class FieldLimits
         },
         [typeof(DeploymentEndpoints.IngestEventsBody)] = new() { ["DeploymentExternalId"] = ReleaseModelLimits.MaxExternalId },
         [typeof(IngestEvent)] = new() { ["Level"] = Code, ["Message"] = ReleaseModelLimits.MaxEventMessage, ["ExternalId"] = ReleaseModelLimits.MaxExternalId },
+        // REOS-111/112: metric samples, control calls and run pause (a reason is 500 characters, the schema's CHECK)
+        [typeof(DeploymentOpsEndpoints.IngestMetricsBody)] = new() { ["DeploymentExternalId"] = ReleaseModelLimits.MaxExternalId },
+        [typeof(IngestSample)] = new() { ["Series"] = Code },
+        [typeof(ControlRequest)] = new() { ["Reason"] = 500 },
+        [typeof(DeploymentOpsEndpoints.PauseBody)] = new() { ["Reason"] = 500 },
+        // REOS-113: approval policies, requests and decisions, and declining an exception (notes are 2,000 characters, the schema's CHECK)
+        [typeof(NewPolicy)] = new() { ["Name"] = 100, ["EnvironmentKind"] = Code, ["MinRiskTier"] = Code },
+        [typeof(PolicyPatch)] = new() { ["Name"] = 100, ["EnvironmentKind"] = Code, ["MinRiskTier"] = Code, ["Clear"] = Code },
+        [typeof(SeatInput)] = new() { ["Label"] = 100, ["Kind"] = Code, ["Value"] = Id },
+        [typeof(NewApproval)] = new() { ["TrainId"] = Id, ["EnvironmentId"] = Id },
+        [typeof(DecideRequest)] = new() { ["Seat"] = 100, ["Decision"] = Code, ["Note"] = 2000 },
+        [typeof(ApprovalEndpoints.DeclineBody)] = new() { ["Note"] = 2000 },
+        [typeof(ApprovalEndpoints.OverrideDeclineBody)] = new() { ["TrainId"] = Id, ["RequestedByUserId"] = Id, ["Note"] = 2000 },
     };
 
     /// <summary>Every body type with a row in the table (for the completeness test and the documentation table).</summary>

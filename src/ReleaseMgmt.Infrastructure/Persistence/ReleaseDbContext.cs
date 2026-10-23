@@ -45,6 +45,14 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<CatalogServices>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<IngestKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<Deployments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<MetricSamples>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-111 to 114
+        b.Entity<MetricRollups>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<ThresholdBreaches>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<DeploymentControlActions>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<ApprovalPolicies>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<Approvals>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        // A chain is the workspace's id; the host-wide rows' chain ('*') is read from the default workspace only, like the host-wide audit rows themselves (Q-105c).
+        b.Entity<AuditChainHeads>().HasQueryFilter(e => WorkspaceId == null || e.ChainId == WorkspaceId || (e.ChainId == "*" && WorkspaceId == WorkspaceIds.Default));
         // Host-wide alerts (backups) concern every workspace; host-wide audit rows (user accounts) are read from the default workspace only (Q-105c).
         b.Entity<SyncAlerts>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId || e.WorkspaceId == null);
         b.Entity<AuditEvents>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId || (e.WorkspaceId == null && WorkspaceId == WorkspaceIds.Default));
@@ -76,6 +84,8 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<TrainMilestones>().HasQueryFilter(e => WorkspaceId == null || Set<ReleaseTrains>().Any(t => t.Id == e.ReleaseTrainId && t.WorkspaceId == WorkspaceId));
         b.Entity<TrainEnvironments>().HasQueryFilter(e => WorkspaceId == null || Set<ReleaseTrains>().Any(t => t.Id == e.ReleaseTrainId && t.WorkspaceId == WorkspaceId));
         b.Entity<DeploymentEvents>().HasQueryFilter(e => WorkspaceId == null || Set<Deployments>().Any(d => d.Id == e.DeploymentId && d.WorkspaceId == WorkspaceId));
+        b.Entity<ApprovalPolicyRequirements>().HasQueryFilter(e => WorkspaceId == null || Set<ApprovalPolicies>().Any(p => p.Id == e.PolicyId && p.WorkspaceId == WorkspaceId));
+        b.Entity<ApprovalDecisions>().HasQueryFilter(e => WorkspaceId == null || Set<Approvals>().Any(a => a.Id == e.ApprovalId && a.WorkspaceId == WorkspaceId));
 
         b.Entity<GateTransitions>().HasQueryFilter(e => WorkspaceId == null || Set<StageGates>().Any(g => g.Id == e.StageGateId && Set<ReleaseTrains>().Any(t => t.Id == g.ReleaseTrainId && t.WorkspaceId == WorkspaceId)));
         b.Entity<GateWaivers>().HasQueryFilter(e => WorkspaceId == null || Set<StageGates>().Any(g => g.Id == e.StageGateId && Set<ReleaseTrains>().Any(t => t.Id == g.ReleaseTrainId && t.WorkspaceId == WorkspaceId)));
@@ -110,6 +120,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         ["WebhookDestinationId"] = typeof(WebhookDestinations), ["FreezeWindowId"] = typeof(FreezeWindows), ["ExportJobId"] = typeof(ExportJobs),
         ["OnCallTeamId"] = typeof(Teams), ["ReleaseTypeId"] = typeof(ReleaseTypes), ["EnvironmentId"] = typeof(Environments), ["CatalogServiceId"] = typeof(CatalogServices),
         ["DefaultTemplateId"] = typeof(TrainTemplates), ["ControlWebhookDestinationId"] = typeof(WebhookDestinations), ["DeploymentId"] = typeof(Deployments), ["IngestKeyId"] = typeof(IngestKeys),
+        ["PolicyId"] = typeof(ApprovalPolicies), ["ApprovalId"] = typeof(Approvals), ["BreachId"] = typeof(ThresholdBreaches),
     };
 
     /// <summary>
@@ -180,6 +191,9 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
             nameof(CatalogServices) => Set<CatalogServices>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(Deployments) => Set<Deployments>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(IngestKeys) => Set<IngestKeys>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
+            nameof(ApprovalPolicies) => Set<ApprovalPolicies>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
+            nameof(Approvals) => Set<Approvals>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
+            nameof(ThresholdBreaches) => Set<ThresholdBreaches>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             _ => throw new InvalidOperationException($"No workspace check for {table.Name}"),
         };
         return [.. await q.ToListAsync(ct)];

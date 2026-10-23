@@ -60,6 +60,14 @@ public class WorkspaceIsolationTests
         INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('ta','enva');
         INSERT INTO Deployments(Id,ExternalId,CatalogServiceId,EnvironmentId,ReleaseTrainId,ReleaseVersion,CreatedAt,UpdatedAt,IngestKeyId) VALUES('depa','{Marker}-dep-1','svca','enva','ta','9.9.9','{t}','{t}','ika');
         INSERT INTO DeploymentEvents(DeploymentId,OccurredAt,ReceivedAt,Level,Message,ExternalId) VALUES('depa','{t}','{t}','Info','{Marker} event','{Marker}-ev-1');
+        INSERT INTO MetricSamples(DeploymentId,Series,SampledAt,ReceivedAt,ErrorRatePct,LatencyP95Ms,AvailabilityPct,RequestCount) VALUES('depa','Canary','{t}','{t}',0.9,410,99.1,1200);
+        INSERT INTO MetricRollups(DeploymentId,Series,BucketAt,Samples,ErrorRateAvgPct,ErrorRateMaxPct,RequestCount) VALUES('depa','Canary','2026-09-01T10:00:00Z',120,0.2,0.9,5000);
+        INSERT INTO ThresholdBreaches(Id,DeploymentId,Series,Metric,ThresholdValue,ForSeconds,StartedAt,PeakValue,LastValue) VALUES('bra','depa','Canary','ErrorRate',0.5,120,'{t}',0.9,0.9);
+        INSERT INTO DeploymentControlActions(Id,DeploymentId,Action,Source,RequestedByUserId,RequestedAt,Reason) VALUES('cnta','depa','Pause','Manual','{rteId}','{t}','{Marker} pause');
+        INSERT INTO ApprovalPolicies(Id,Name,EnvironmentKind,CreatedAt) VALUES('pola','{Marker} Policy','Production','{t}');
+        INSERT INTO ApprovalPolicyRequirements(Id,PolicyId,Label,EligibleKind,EligibleValue) VALUES('rqa','pola','{Marker} Seat','Team','tma');
+        INSERT INTO Approvals(Id,ReleaseTrainId,EnvironmentId,RequestedByUserId,RequestedAt,DueAt) VALUES('apa','ta','enva','{rteId}','{t}','2026-10-02T00:00:00Z');
+        INSERT INTO ApprovalDecisions(Id,ApprovalId,Label,EligibleKind,EligibleValue,DueAt) VALUES('dca','apa','{Marker} Seat','Team','tma','2026-10-02T00:00:00Z');
         INSERT INTO ChangeRecords(ReleaseTrainId,Justification) VALUES('ta','{Marker} justification');
         INSERT INTO AffectedCIs(Id,ReleaseTrainId,CiName) VALUES('cia','ta','{Marker} CI');
         INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('dwa','ta','2026-11-30T02:00:00Z','2026-11-30T06:00:00Z');
@@ -76,6 +84,7 @@ public class WorkspaceIsolationTests
         INSERT INTO StepDependencies(StepId,DependsOnStepId) VALUES('sa2','sa');
         INSERT INTO RunbookRuns(Id,ReleaseTrainId,Mode,StartedAt,StartedByUserId) VALUES('ra','ta','Rehearsal','{t}','{rteId}');
         INSERT INTO StepExecutions(Id,RunId,StepId) VALUES('ea','ra','sa');
+        UPDATE RunbookRuns SET PausedAt='{t}', PausedByUserId='{rteId}', PauseReason='{Marker} pause' WHERE Id='ra';
         INSERT INTO Blockers(Id,ReleaseTrainId,Title,Severity,RaisedAt) VALUES('ba','ta','{Marker} Blocker','High','{t}');
         INSERT INTO KnownIssues(Id,ReleaseTrainId,Title,Severity,RaisedAt) VALUES('kia','ta','{Marker} Issue','Low','{t}');
         INSERT INTO GoNoGoDecisions(Id,ReleaseTrainId,Decision,DecidedByUserId,DecidedAt,GateSnapshotJson,Notes) VALUES('da','ta','GoWithConditions','{rteId}','{t}','{{}}','{Marker} notes');
@@ -103,7 +112,7 @@ public class WorkspaceIsolationTests
             ["pir-actions"] = "paa", ["milestones"] = "ma", ["attachments"] = "aa", ["comm-library"] = "la", ["comm-templates"] = "cta", ["comm-schedule"] = "csa",
             ["dispatches"] = "dsa", ["export-jobs"] = "xa", ["freezes"] = "fa", ["links"] = "lka", ["notifications"] = "na", ["alerts"] = "sya", ["webhook-allowlist"] = "wha",
             ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
-            ["release-types"] = "rta", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika",
+            ["release-types"] = "rta", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika", ["approval-requests"] = "apa", ["approval-policies"] = "pola",
             ["ciId"] = "cia", ["issueId"] = "kia", ["stepId"] = "sa", ["jobId"] = "ija", ["trainId"] = "ta", ["day"] = "2026-12-24",
             ["audit"] = Scalar(f, "SELECT Id FROM AuditEvents WHERE ReleaseTrainId='ta' AND EntityType='Train'"),   // GET /audit/{id}: one of A's events
         };
@@ -126,12 +135,15 @@ public class WorkspaceIsolationTests
             $"SELECT * FROM CommDispatches WHERE CommTemplateId IN (SELECT Id FROM CommTemplates WHERE ReleaseTrainId IN {trains})",
         }.ToList();
         foreach (var root in new[] { "Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
-                     "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "Environments", "CatalogServices", "IngestKeys", "Deployments" })
+                     "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "Environments", "CatalogServices", "IngestKeys", "Deployments",
+                     "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions", "ApprovalPolicies", "Approvals" })
             queries.Add($"SELECT * FROM {root} WHERE WorkspaceId='default'");
         foreach (var child in new[] { "ChangeRecords", "AffectedCIs", "DeploymentWindows", "BundledProducts", "StageGates", "Attachments", "RunbookSteps", "RunbookRuns", "Blockers",
                      "KnownIssues", "GoNoGoDecisions", "PostImplementationReviews", "FreezeOverrides", "Baselines", "ExternalLinks", "CommTemplates", "CommSchedule", "TrainMilestones", "TrainEnvironments" })
             queries.Add($"SELECT * FROM {child} WHERE ReleaseTrainId IN {trains}");
         queries.Add("SELECT * FROM DeploymentEvents WHERE DeploymentId IN (SELECT Id FROM Deployments WHERE WorkspaceId='default')");
+        queries.Add("SELECT * FROM ApprovalPolicyRequirements WHERE PolicyId IN (SELECT Id FROM ApprovalPolicies WHERE WorkspaceId='default')");
+        queries.Add("SELECT * FROM ApprovalDecisions WHERE ApprovalId IN (SELECT Id FROM Approvals WHERE WorkspaceId='default')");
         var rows = new List<string>();
         using var c = new SqliteConnection($"Data Source={f.DbPath};Pooling=False");
         c.Open();

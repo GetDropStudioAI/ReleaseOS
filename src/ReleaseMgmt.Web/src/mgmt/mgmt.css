@@ -22,3 +22,8 @@ textarea.mg-input { resize: vertical; }
 .mg-mono { font-family: var(--font-mono); font-size: var(--type-mono-small); }
 .mg-tablewrap { display: flex; flex-direction: column; gap: var(--gap-md); min-width: 0; }
 @media (max-width: 1100px) { .mg-split { grid-template-columns: 1fr; } }
+.mg-warn { color: var(--color-status-warning); font-weight: 600; }
+.mg-input.narrow { max-width: calc(var(--sidebar-width) * 0.5); }
+.mg-input.mid { min-width: calc(var(--sidebar-width) * 0.9); }
+.mg-sections { display: flex; flex-direction: column; gap: var(--gap-lg); }
+.mg-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--sidebar-width) * 0.9), 1fr)); gap: var(--gap-md); }

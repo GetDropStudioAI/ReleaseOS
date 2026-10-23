@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createUser } from './api'
 import { errMsg } from './format'
-
-const ROLES = [{ key: 'Viewer', label: 'Viewer' }, { key: 'RTE', label: 'RTE' }, { key: 'ReleaseManager', label: 'Release Manager' }, { key: 'GovernanceOfficer', label: 'Governance Officer' }]
+import { Button } from './ui'
+import { Field, Problem, SelectInput, TextInput } from './mgmt/forms'
+import { ROLE_OPTIONS } from './workspaceApi'
 
 /**
- * REOS-83: add a person before their first sign-in so they can be named as an owner straight away (inline row form, like Teams and Holidays).
- * Their first organisation sign-in finds this row by email; the identity provider's role then replaces the one chosen here (Q-003, Q-083a).
+ * REOS-83: add a person before their first sign-in so they can be named as an owner straight away. Their first organisation sign-in finds this row by
+ * email; the identity provider's role then replaces the one chosen here (Q-003, Q-083a). Restyled with the management screens (REOS-129).
  */
 export function AddUser({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false)
@@ -17,7 +18,10 @@ export function AddUser({ onAdded }: { onAdded: () => void }) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [added, setAdded] = useState<string | null>(null)
+  const first = useRef<HTMLInputElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const reset = () => { setEmail(''); setName(''); setRole('Viewer'); setHandle('') }
+  useEffect(() => { if (open) first.current?.focus() }, [open])
 
   const create = async () => {
     setBusy(true); setProblem(null); setAdded(null)
@@ -25,29 +29,31 @@ export function AddUser({ onAdded }: { onAdded: () => void }) {
       const u = await createUser({ email, displayName: name, role, ...(handle.trim() ? { handle: handle.trim() } : {}) })
       setAdded(`${u.displayName} (${u.email}) added. They can be named as an owner now; their first sign-in uses this account.`)
       reset(); setOpen(false); onAdded()
+      requestAnimationFrame(() => trigger.current?.focus())
     } catch (e) { setProblem(errMsg(e, 'The user could not be added.')) }
     finally { setBusy(false) }
   }
 
   if (!open) return (
-    <>
-      {added && <p className="ok" role="status">✓ {added}</p>}
-      <p><button type="button" className="text" onClick={() => { setOpen(true); setAdded(null) }}>Add user</button></p>
-    </>
+    <div className="mg-stack">
+      {added && <p className="mg-ok" role="status">✓ {added}</p>}
+      <div className="mg-actions"><Button ref={trigger} variant="primary" onClick={() => { setOpen(true); setAdded(null) }}>Add user</Button></div>
+    </div>
   )
+  const incomplete = !email.trim() || !name.trim()
   return (
-    <div className="inline-form" role="group" aria-label="Add user">
-      <label>Email <input className="line" type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" spellCheck={false} placeholder="rae@example.com" /></label>{' '}
-      <label>Name <input className="line" value={name} onChange={e => setName(e.target.value)} autoComplete="off" /></label>{' '}
-      <label>Role <select className="line" value={role} onChange={e => setRole(e.target.value)}>
-        {ROLES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
-      </select></label>{' '}
-      <label>Handle <input className="line" value={handle} onChange={e => setHandle(e.target.value)} autoComplete="off" spellCheck={false} placeholder="@rae (optional)" /></label>{' '}
-      <button type="button" className="text" onClick={() => { setOpen(false); reset(); setProblem(null) }}>Cancel</button>{' '}
-      <button type="button" className="text" disabled={busy || !email.trim() || !name.trim()} onClick={create}>Add user</button>
-      {(!email.trim() || !name.trim()) && <p className="muted small">Enter the email they sign in with and their name.</p>}
-      <p className="muted small">The role is used until their first sign-in; from then on it comes from the identity provider.</p>
-      {problem && <p className="bad" role="alert">✗ {problem}</p>}
+    <div className="mg-form" role="group" aria-label="Add user">
+      <Field label="Email"><TextInput ref={first} type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" spellCheck={false} placeholder="rae@example.com" /></Field>
+      <Field label="Name"><TextInput value={name} onChange={e => setName(e.target.value)} autoComplete="off" /></Field>
+      <Field label="Role"><SelectInput value={role} onChange={e => setRole(e.target.value)} options={ROLE_OPTIONS} /></Field>
+      <Field label="Handle"><TextInput value={handle} onChange={e => setHandle(e.target.value)} autoComplete="off" spellCheck={false} placeholder="@rae (optional)" /></Field>
+      {incomplete && <p className="mg-note">Enter the email they sign in with and their name.</p>}
+      <p className="mg-note">The role is used until their first sign-in; from then on it comes from the identity provider.</p>
+      <Problem message={problem} />
+      <div className="mg-actions">
+        <Button onClick={() => { setOpen(false); reset(); setProblem(null); requestAnimationFrame(() => trigger.current?.focus()) }}>Cancel</Button>
+        <Button variant="primary" disabled={busy || incomplete} onClick={create}>Add user</Button>
+      </div>
     </div>
   )
 }

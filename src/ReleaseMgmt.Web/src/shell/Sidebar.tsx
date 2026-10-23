@@ -5,6 +5,7 @@ import { CountBadge } from '../ui'
 import type { ControlPlane } from './health.ts'
 import { navFor, pathOf, type IconName, type View } from './nav.ts'
 import { UserMenu } from './UserMenu'
+import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 const ICONS: Record<IconName, LucideIcon> = {
   'layout-dashboard': LayoutDashboard, 'calendar-days': CalendarDays, layers: Layers, workflow: Workflow, 'shield-check': ShieldCheck, activity: Activity, history: History,
@@ -33,10 +34,7 @@ export function Sidebar({ me, view, workspace, approvals, plane, onGo, onSignedO
           <span className="os-brand-mark" aria-hidden="true"><Layers2 size={18} strokeWidth={1.8} /></span>
           <span className="os-brand-name">ReleaseOS</span>
         </div>
-        <div className="os-workspace">
-          <p className="os-workspace-name">{workspace?.name ?? 'Loading workspace…'}</p>
-          <p className="os-workspace-detail">{workspace?.region ? `Workspace · ${workspace.region}` : 'Workspace'}</p>
-        </div>
+        <WorkspaceSwitcher me={me} workspace={workspace} />
         <nav className="os-nav" aria-label="Primary">
           {navFor(me.roles).map(g => (
             <div key={g.id} className={`os-nav-group os-nav-group-${g.id}`}>

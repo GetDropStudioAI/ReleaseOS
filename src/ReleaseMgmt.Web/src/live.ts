@@ -1,6 +1,7 @@
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
 import { useEffect, useRef, useState } from 'react'
 import { setServerTime } from './time'
+import { hubQuery } from './workspace'
 
 export type LiveState = 'connecting' | 'live' | 'reconnecting' | 'offline'
 
@@ -25,7 +26,7 @@ export function useLive(enabled: boolean, handlers: Handlers) {
   useEffect(() => {
     if (!enabled) return
     const hub = new HubConnectionBuilder()
-      .withUrl('/hub/trains')
+      .withUrl(`/hub/trains${hubQuery()}`)   // REOS-106: the hub joins the workspace's group (a browser cannot set a header on a WebSocket)
       .withAutomaticReconnect([0, 1000, 3000, 5000, 10000])
       .configureLogging(LogLevel.Warning)
       .build()

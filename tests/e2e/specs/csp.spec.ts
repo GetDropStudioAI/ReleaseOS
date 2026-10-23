@@ -10,7 +10,7 @@ const SCREENS: { link: RegExp; heading: RegExp; where?: 'bell' | 'card' }[] = [
   { link: /^Portfolio & calendar$/, heading: /^Release portfolio$/ },
   { link: /^Approvals/, heading: /^Approvals$/ },
   { link: /^Audit history$/, heading: /^Audit history$/ },
-  { link: /^Teams & settings$/, heading: /^Admin$/ },
+  { link: /^Teams & settings$/, heading: /^Teams & settings$/ },
   { link: /^Templates$/, heading: /^Train templates$/ },
   { link: /^Comm library$/, heading: /^Comm library$/ },
   { link: /^Connectors$/, heading: /^Connectors$/ },

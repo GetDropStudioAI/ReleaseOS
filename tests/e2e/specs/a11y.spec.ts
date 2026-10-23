@@ -35,7 +35,7 @@ for (const scheme of ['light', 'dark'] as const) {
     test('admin screen', async ({ page }) => {
       await signIn(page, `a11y-admin-${scheme}@example.com`)
       await page.click('nav[aria-label=Primary] a:has-text("Teams & settings")')
-      await expect(page.locator('table.grid').first()).toBeVisible()
+      await expect(page.locator('table.os-table').first()).toBeVisible()
       await scan(page, `admin (${scheme})`)
     })
   })

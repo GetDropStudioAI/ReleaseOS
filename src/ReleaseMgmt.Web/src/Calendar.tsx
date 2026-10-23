@@ -1,67 +1,33 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ApiError, get, getStream, post, type Me, type StreamRow } from './api'
+import { ChevronLeft, ChevronRight, Download, Plus } from 'lucide-react'
+import { ApiError, get, getStream, type Me, type StreamRow } from './api'
 import { buildPath, ROOT, type Route } from './route'
-import { announce } from './announce'
-import { useFocusWhen } from './focus'
-import { displayZone, fmtDayTime, fmtHM, serverNow, zoneAbbr } from './time'
-import { useAction } from './useAction'
+import { CalendarSubscribe } from './CalendarSubscribe'
+import {
+  addDays, addMonths, applyFilters, conflictsOf, dayLabel, durationText, entriesByDay, freezeDays, NO_FILTER, parseDay, RISKS, rangeTitle, releaseRows, riskLabel, STATUSES,
+  startOfWeek, stamp, utcDay, visibleDays, type CalendarPayload, type CalFreeze, type Conflict, type Entry, type Filters, type Mode,
+} from './calendarModel'
+import './calendar.css'
+import { browserZone } from './shell/clock'
+import { serverNow } from './time'
+import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, Notice, PageHeading, Panel, PropertyList, StatusChip, TabPanel, Tabs, TwoLine, type Column } from './ui'
 
 /**
- * Screen "Calendar" (REOS-51, docs/UI.md row "Calendar", Q-051*): month and week grids of trains (target date, deployment window, gate due dates, milestones) with freeze
- * and chill windows as tinted date ranges, and the "Subscribe" section for the ICS feed link.
- * Semantics: one role="grid" table (labelled by the month heading above it, column headers, gridcells) with a roving tabindex. Arrow keys move the day, Home/End the start/end of the week,
- * Page Up/Down the month (the week in week view), Enter opens the first train of the day; every entry is also a real button. Status is glyph + word +
- * colour; freeze days are tinted AND named in text (visible on the first day of each row, and for screen readers on every day). Dates are shown in Display:TimeZone.
+ * Screen "Portfolio & calendar" (REOS-96, REOS-134, REOS-51 underneath; docs/UI.md, docs/proposals/redesign-mapping.md). Tabs: Week calendar (the designed one), Month, Timeline and
+ * Release list; filters; upcoming windows; capacity and constraints; the Subscribe panel for the ICS feed. Every day is a UTC day and every time is UTC with the person's own time
+ * beside it (D44). The grids are role="grid" with a roving tabindex: arrow keys move the day (and, in the week grid, the release row), Page Up and Page Down the week or month,
+ * Home and End the week's edges, Enter opens the first item in the cell; every entry is also a real button. Status is a word in a chip, never colour alone; a freeze or chill is
+ * tinted and named in text.
  */
-export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[] }
-export interface CalGate { id: string; name: string; class: string; status: string; dueOn: string; trainId: string; trainTitle: string; trainStatus: string }
-export interface CalFreeze { id: string; name: string; kind: 'Freeze' | 'Chill'; startsAt: string; endsAt: string; scope: string }
-export interface CalMilestone { id: string; name: string; dueOn: string; done: boolean; trainId: string; trainTitle: string; trainStatus: string }
-interface CalendarPayload { from: string; to: string; trains: CalTrain[]; gates: CalGate[]; freezeWindows: CalFreeze[]; milestones?: CalMilestone[] }
-interface IcsTokenRow { id: string; createdAt: string; revokedAt: string | null; active: boolean; lastUsedAt: string | null }
-interface IcsIssued { id: string; token: string; path: string; scope: string; createdAt: string }
-
-// ---- date arithmetic on 'YYYY-MM-DD' strings (calendar days, no zone) ----
-const pad = (n: number) => String(n).padStart(2, '0')
-const parse = (s: string) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d) }
-const iso = (ms: number) => { const d = new Date(ms); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` }
-export const addDays = (s: string, n: number) => iso(parse(s) + n * 86_400_000)
-export function addMonths(s: string, n: number) {
-  const d = new Date(parse(s)); const y = d.getUTCFullYear(), m = d.getUTCMonth() + n
-  return iso(Date.UTC(y, m, Math.min(d.getUTCDate(), new Date(Date.UTC(y, m + 1, 0)).getUTCDate())))
-}
-const weekday = (s: string) => (new Date(parse(s)).getUTCDay() + 6) % 7   // Monday = 0
-export const startOfWeek = (s: string) => addDays(s, -weekday(s))
-/** The calendar day an instant falls on in the display zone. */
-const dayInZone = (t: string | number) => new Intl.DateTimeFormat('en-CA', { timeZone: displayZone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t))
-const todayIso = () => dayInZone(serverNow())
-
-export type Mode = 'month' | 'week'
-/** The days shown for a focus date: whole weeks covering the month, or the focus week. */
-export function visibleDays(focus: string, mode: Mode): string[] {
-  let first: string, last: string
-  if (mode === 'week') { first = startOfWeek(focus); last = addDays(first, 6) }
-  else { const m1 = `${focus.slice(0, 7)}-01`; first = startOfWeek(m1); last = addDays(startOfWeek(addDays(addMonths(m1, 1), -1)), 6) }
-  const out: string[] = []
-  for (let d = first; d <= last; d = addDays(d, 1)) out.push(d)
-  return out
-}
-
-const TRAIN: Record<string, { glyph: string; cls: string; word: string }> = {
-  Planning: { glyph: '○', cls: 'muted', word: 'planning' }, Gated: { glyph: '◐', cls: 'accent', word: 'gated' }, Executing: { glyph: '●', cls: 'accent', word: 'executing' },
-  Complete: { glyph: '✓', cls: 'ok', word: 'complete' }, Aborted: { glyph: '✗', cls: 'bad', word: 'aborted' },
-}
-const GATE: Record<string, { glyph: string; cls: string; word: string }> = {
-  Pending: { glyph: '○', cls: 'muted', word: 'pending' }, InProgress: { glyph: '◐', cls: 'accent', word: 'in progress' }, Certified: { glyph: '✓', cls: 'ok', word: 'certified' },
-  Failed: { glyph: '✗', cls: 'bad', word: 'failed' }, Waived: { glyph: '✓', cls: 'ok', word: 'waived' },
-}
-const trainSt = (s: string) => TRAIN[s] ?? { glyph: '○', cls: 'muted', word: s.toLowerCase() }
-const gateSt = (s: string) => GATE[s] ?? { glyph: '○', cls: 'muted', word: s.toLowerCase() }
-const KIND = { Freeze: { glyph: '▲', cls: 'bad' }, Chill: { glyph: '◐', cls: 'warn' } } as const
-
-interface Entry { key: string; kind: 'target' | 'window' | 'gate' | 'milestone'; trainId: string; gateId?: string; label: string; title: string; st?: { glyph: string; cls: string; word: string } }
+export type { CalTrain, CalGate, CalFreeze, CalMilestone } from './calendarModel'
+type TabId = 'week' | 'month' | 'timeline' | 'list'
+const TIMELINE_DAYS = 28
+const UPCOMING_DAYS = 30
+const FREEZE_ROW = '__freeze'
+const EMPTY_ROW = '__empty'   // the grid keeps its header (and today's column) when the week has nothing in it
 
 const errText = (e: unknown) => (e instanceof ApiError ? (e.body?.message ?? e.message) : (e as Error).message)
+const todayIso = () => utcDay(serverNow())
 
 /** Open a train. App wires `onOpen`; without it the screen changes the URL itself (history + popstate, the same path useRoute already listens to). */
 function openRoute(r: Partial<Route>, onOpen?: (r: Partial<Route>) => void) {
@@ -70,275 +36,353 @@ function openRoute(r: Partial<Route>, onOpen?: (r: Partial<Route>) => void) {
   window.dispatchEvent(new PopStateEvent('popstate'))
 }
 
-export function Calendar({ onOpen, trainId: current }: { me: Me; onOpen?: (r: Partial<Route>) => void; trainId?: string | null }) {
-  const [mode, setMode] = useState<Mode>('month')
-  const [focus, setFocus] = useState<string>(() => todayIso())
+/** One request for a range of UTC days; a day of margin each side. Keeps the last payload while the next loads. */
+function useRange(from: string | null, to: string | null) {
   const [data, setData] = useState<CalendarPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const days = useMemo(() => visibleDays(focus, mode), [focus, mode])
-  const first = days[0], last = days[days.length - 1]
-  const captionId = useId()
-  const cells = useRef(new Map<string, HTMLElement>())
-  const kb = useRef(false)   // focus moved by keyboard: move DOM focus after the render
-  const today = todayIso()
-
-  // One request per visible range; a day of margin each side, because the server cuts days at UTC midnight and the screen at the display zone's.
+  const [nonce, setNonce] = useState(0)
   useEffect(() => {
+    if (!from || !to) return
     let live = true
-    get<CalendarPayload>(`/api/v1/calendar?from=${addDays(first, -1)}&to=${addDays(last, 1)}`)
+    get<CalendarPayload>(`/api/v1/calendar?from=${addDays(from, -1)}&to=${addDays(to, 1)}`)
       .then(d => { if (live) { setData(d); setError(null) } })
       .catch(e => { if (live) setError(errText(e)) })
     return () => { live = false }
-  }, [first, last])
-  useEffect(() => { if (kb.current) { cells.current.get(focus)?.focus(); kb.current = false } }, [focus, mode, data])
+  }, [from, to, nonce])
+  const fresh = data !== null && from !== null && to !== null && data.from === addDays(from, -1) && data.to === addDays(to, 1)   // the payload is for the range now shown
+  return { data, error, fresh, retry: () => { setError(null); setNonce(n => n + 1) } }
+}
 
-  const byDay = useMemo(() => {
-    const m = new Map<string, Entry[]>()
-    const add = (d: string, e: Entry) => { const a = m.get(d); if (a) a.push(e); else m.set(d, [e]) }
-    for (const t of data?.trains ?? []) {
-      const st = trainSt(t.status)
-      add(t.targetDate, { key: `t:${t.id}`, kind: 'target', trainId: t.id, label: `Target · ${t.title}`, title: `${t.title}, target release date, ${st.word}`, st })
-      // REOS-85: a window that collides with another open train's (and shares a CI or product) says so in words, with ▲.
-      const clash = t.collisions ?? []
-      const overlap = clash.length ? `overlaps ${clash.map(c => `${c.title} (${c.shared.join(', ')})`).join('; ')}` : ''
-      if (t.window) add(dayInZone(t.window.startsAt), { key: `w:${t.id}`, kind: 'window', trainId: t.id, label: `${fmtHM(t.window.startsAt)}–${fmtHM(t.window.endsAt)} ${zoneAbbr(t.window.startsAt)} window · ${t.title}`,
-        title: `${t.title}, deployment window${overlap ? `, ${overlap}` : ''}`, st: overlap ? { glyph: '▲', cls: 'warn', word: overlap } : undefined })
-    }
-    for (const g of data?.gates ?? []) {
-      const st = gateSt(g.status)
-      add(g.dueOn, { key: `g:${g.id}`, kind: 'gate', trainId: g.trainId, gateId: g.id, label: `${g.name} due · ${g.trainTitle}`, title: `${g.name} gate of ${g.trainTitle}, due, ${st.word}`, st })
-    }
-    // Q-0844: milestones are ◆ entries; the state word says done, open or overdue (never a guard, so never "blocked").
-    for (const m of data?.milestones ?? []) {
-      const st = m.done ? { glyph: '✓', cls: 'ok', word: 'done' } : m.dueOn < today ? { glyph: '▲', cls: 'bad', word: 'overdue' } : { glyph: '○', cls: 'muted', word: 'open' }
-      add(m.dueOn, { key: `m:${m.id}`, kind: 'milestone', trainId: m.trainId, label: `◆ ${m.name} · ${m.trainTitle}`, title: `Milestone ${m.name} of ${m.trainTitle}, ${st.word}`, st })
-    }
-    return m
-  }, [data, today])
-
-  const freezeDays = useMemo(() => {
-    const m = new Map<string, CalFreeze[]>()
-    for (const f of data?.freezeWindows ?? []) {
-      const a = dayInZone(f.startsAt), b = dayInZone(Date.parse(f.endsAt) - 1000)
-      for (let d = a; d <= b && d <= addDays(last, 1); d = addDays(d, 1)) { const arr = m.get(d); if (arr) arr.push(f); else m.set(d, [f]) }
-    }
-    return m
-  }, [data, last])
-
-  const step = useCallback((dir: 1 | -1) => setFocus(f => (mode === 'month' ? addMonths(f, dir) : addDays(f, 7 * dir))), [mode])
-  const moveTo = (d: string) => { kb.current = true; setFocus(d) }
-  const openFirst = (day: string) => {
-    const e = (byDay.get(day) ?? [])[0]
-    if (e) openRoute({ view: 'trains', trainId: e.trainId, selection: e.gateId ? { kind: 'gate', id: e.gateId } : null }, onOpen)
-  }
-  const onKey = (e: React.KeyboardEvent, day: string) => {
-    if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return
-    const k = e.key
-    const to = k === 'ArrowLeft' ? addDays(day, -1) : k === 'ArrowRight' ? addDays(day, 1) : k === 'ArrowUp' ? addDays(day, -7) : k === 'ArrowDown' ? addDays(day, 7)
-      : k === 'Home' ? startOfWeek(day) : k === 'End' ? addDays(startOfWeek(day), 6)
-      : k === 'PageUp' ? (mode === 'month' ? addMonths(day, -1) : addDays(day, -7)) : k === 'PageDown' ? (mode === 'month' ? addMonths(day, 1) : addDays(day, 7)) : null
-    if (to) { e.preventDefault(); moveTo(to) }
-    else if (k === 'Enter') { e.preventDefault(); openFirst(day) }
-  }
-
-  const title = mode === 'month'
-    ? new Date(parse(focus)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-    : `Week of ${new Date(parse(first)).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}`
-  const weeks: string[][] = []
-  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7))
-  const MAX = 4
-
+function EntryCard({ e, onOpen, compact }: { e: Entry; onOpen: () => void; compact?: boolean }) {
   return (
-    <section>
-      <h1>Calendar</h1>
-      <div className="cal-bar">
-        <span className="tabs" role="group" aria-label="View">
-          <button type="button" className="choice" aria-pressed={mode === 'month'} onClick={() => setMode('month')}>Month</button>
-          <button type="button" className="choice" aria-pressed={mode === 'week'} onClick={() => setMode('week')}>Week</button>
-        </span>
-        <span>
-          <button type="button" className="text" onClick={() => step(-1)}><span aria-hidden="true">‹</span> Previous {mode}</button>{' '}
-          <button type="button" className="text" onClick={() => setFocus(todayIso())}>Today</button>{' '}
-          <button type="button" className="text" onClick={() => step(1)}>Next {mode} <span aria-hidden="true">›</span></button>
-        </span>
-        <span className="muted">Dates in {displayZone()} ({zoneAbbr()})</span>
-      </div>
-      {error && <p className="bad" role="alert">✗ {error}</p>}
-      {!data && !error && <p className="muted" role="status">Loading…</p>}
-
-      <div id={captionId} className="cal-caption" aria-live="polite">{title}</div>   {/* outside the grid: a role=grid table may not contain a caption (axe aria-required-children) */}
-      <table className={`cal ${mode}`} role="grid" aria-labelledby={captionId} data-testid="calendar-grid">
-        <thead>
-          <tr>{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => <th key={d} scope="col" abbr={d}>{d.slice(0, 3)}</th>)}</tr>
-        </thead>
-        <tbody>
-          {weeks.map(w => (
-            <tr key={w[0]}>
-              {w.map((day, col) => {
-                const entries = byDay.get(day) ?? []
-                const fz = freezeDays.get(day) ?? []
-                const kind = fz.some(f => f.kind === 'Freeze') ? 'freeze' : fz.length ? 'chill' : ''
-                const out = mode === 'month' && day.slice(0, 7) !== focus.slice(0, 7)
-                const shown = mode === 'month' ? entries.slice(0, MAX) : entries
-                const num = Number(day.slice(8))
-                const cls = ['cal-day', kind && `cal-${kind}`, kind && 'cal-tint', out && 'cal-out', day === focus && 'cal-sel', day === today && 'cal-today'].filter(Boolean).join(' ')
-                return (
-                  <td key={day} role="gridcell" ref={el => { if (el) cells.current.set(day, el); else cells.current.delete(day) }}
-                    className={cls} tabIndex={day === focus ? 0 : -1} aria-selected={day === focus} data-date={day}
-                    onKeyDown={e => onKey(e, day)} onClick={e => { if (e.target === e.currentTarget) setFocus(day) }}>
-                    <div className={`cal-daynum${day === today ? ' today' : ''}`}>
-                      <span aria-hidden="true">{num === 1 || (mode === 'week' && col === 0) ? new Date(parse(day)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : num}</span>
-                      {/* every day carries its full date for screen readers: a bare "30" under an "October" caption would be read as 30 October */}
-                      <span className="sr-only">{new Date(parse(day)).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
-                      {day === today && <> · today</>}
-                    </div>
-                    {fz.map(f => {
-                      const k = KIND[f.kind]
-                      const visible = day === dayInZone(f.startsAt) || col === 0 || day === first
-                      return (
-                        <div key={f.id} className={`cal-freeze-label ${k.cls}`} data-testid="freeze-label">
-                          {visible && <span aria-hidden="true">{k.glyph} {f.kind} · {f.name}</span>}
-                          <span className="sr-only">{f.kind}: {f.name}, {f.scope}</span>
-                          {mode === 'week' && <span className="muted"> ({f.scope})</span>}
-                        </div>
-                      )
-                    })}
-                    {shown.map(e => (
-                      <button key={e.key} type="button" className={`cal-entry ${e.kind}`} title={e.title} data-testid={`cal-${e.kind}`}
-                        onClick={() => openRoute({ view: 'trains', trainId: e.trainId, selection: e.gateId ? { kind: 'gate', id: e.gateId } : null }, onOpen)}>
-                        <span className="cal-what">{e.label}</span>
-                        {e.st && <> <span className={e.st.cls}>{e.st.glyph} {e.st.word}</span></>}
-                      </button>
-                    ))}
-                    {mode === 'month' && entries.length > MAX && (
-                      <button type="button" className="text cal-more" onClick={() => { setFocus(day); setMode('week') }}>+{entries.length - MAX} more (week view)</button>
-                    )}
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="muted cal-help">
-        <span className="bad">▲ Freeze</span> and <span className="warn">◐ Chill</span> days are shaded. Arrow keys move by day, Page Up and Page Down by {mode}, Home and End to the week edges; Enter opens the first item on the day and each item is also a button.
-      </p>
-
-      <Subscribe current={current} />
-    </section>
+    <button type="button" className={`os-cal-card ${e.tone}${e.conflict ? ' conflict' : ''}${compact ? ' compact' : ''} ${e.kind}`} title={e.title} data-testid={`cal-${e.kind}`} onClick={onOpen}>
+      <span className="os-cal-card-name">{e.name}</span>
+      <span className="os-cal-card-detail">{e.detail}</span>
+      <StatusChip tone={e.tone}>{e.label}</StatusChip>
+      {e.conflict && <span className="os-cal-card-conflict">▲ {e.conflict}</span>}
+    </button>
   )
 }
 
-/** The ICS feed link: created, rotated and revoked here; the secret is shown once, straight after it is issued, and is not recoverable (only its hash is stored). */
-function Subscribe({ current }: { current?: string | null }) {
-  const [rows, setRows] = useState<IcsTokenRow[] | null>(null)
-  const [issued, setIssued] = useState<IcsIssued | null>(null)
-  const [confirm, setConfirm] = useState<{ id: string; action: 'rotate' | 'revoke' } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const { run: guard, pending } = useAction()
-  const busy = pending !== null
-  const [copied, setCopied] = useState<string | null>(null)
-  const heading = useRef<HTMLHeadingElement>(null)
-  const firstLink = useRef<HTMLInputElement>(null)
-  const createRef = useRef<HTMLButtonElement>(null)
-  const confirmRef = useFocusWhen<HTMLButtonElement>(confirm !== null)
-  const triggers = useRef(new Map<string, HTMLButtonElement>())   // Rotate / Revoke per row, to give focus back on Cancel
-  const [trains, setTrains] = useState<StreamRow[]>([])
-  const [trainId, setTrainId] = useState('')
-  const load = useCallback(() => get<IcsTokenRow[]>('/api/v1/me/ics-tokens').then(r => { setRows(r); setError(null) }).catch(e => setError(errText(e))), [])
-  useEffect(() => { load() }, [load])
-  // One-train subscriptions default to the train last opened in the Stream, else the first.
-  useEffect(() => { getStream().then(t => { setTrains(t); setTrainId(id => id || (current && t.some(x => x.id === current) ? current : t[0]?.id) || '') }).catch(() => setTrains([])) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+function FreezeLabel({ f, visible }: { f: CalFreeze; visible: boolean }) {
+  const glyph = f.kind === 'Freeze' ? '▲' : '◐'
+  return (
+    <div className={`os-cal-freeze ${f.kind === 'Freeze' ? 'danger' : 'warning'}`} data-testid="freeze-label">
+      {visible && <span aria-hidden="true">{glyph} {f.kind} · {f.name}</span>}
+      <span className="sr-only">{f.kind}: {f.name}, {f.scope}</span>
+    </div>
+  )
+}
 
-  const active = rows?.find(r => r.active) ?? null
-  // One request at a time: a double click on Create or Confirm is ignored. After each, focus goes where the next step is, never to <body>.
-  const run = (label: string, fn: () => Promise<void>, then: () => void) => guard(label, async () => {
-    setError(null)
-    try { await fn(); await load(); requestAnimationFrame(then) } catch (e) { setError(errText(e)) }
-  })
-  const ready = () => { announce('Link ready. Copy it now: it is shown only once.'); firstLink.current?.focus() }
-  const create = () => run('Creating…', async () => { setIssued(await post<IcsIssued>('/api/v1/me/ics-tokens', { scope: 'all' })); setCopied(null) }, ready)
-  const rotate = (id: string) => run('Rotating…', async () => { setIssued(await post<IcsIssued>(`/api/v1/me/ics-tokens/${id}:rotate`, { scope: 'all' })); setConfirm(null); setCopied(null) }, ready)
-  const revoke = (id: string) => run('Revoking…', async () => { await post(`/api/v1/me/ics-tokens/${id}:revoke`, {}); setIssued(null); setConfirm(null) },
-    () => { announce('Link revoked.'); createRef.current?.focus() })
-  const cancel = () => { const c = confirm; setConfirm(null); requestAnimationFrame(() => c && triggers.current.get(`${c.id}:${c.action}`)?.focus()) }
-  const hide = () => { setIssued(null); requestAnimationFrame(() => heading.current?.focus()) }
+export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?: (r: Partial<Route>) => void; onPlan?: () => void; trainId?: string | null }) {
+  const [tab, setTab] = useState<TabId>('week')
+  const [focus, setFocus] = useState<string>(() => todayIso())
+  const [focusRow, setFocusRow] = useState<string | null>(null)
+  const [filters, setFilters] = useState<Filters>(NO_FILTER)
+  const today = todayIso()
+  const zone = browserZone()
+  const titleId = useId()
+  const cells = useRef(new Map<string, HTMLElement>())
+  const kb = useRef(false)   // focus moved by keyboard: move DOM focus after the render
 
-  const origin = window.location.origin
-  const urls = (t: string) => [
-    { key: 'all', label: 'All trains', url: `${origin}/api/v1/ics/${t}.ics` },
-    { key: 'mine', label: 'My work (my gates, steps and milestones)', url: `${origin}/api/v1/ics/${t}/mine.ics` },
-    { key: 'freezes', label: 'Freeze and chill windows', url: `${origin}/api/v1/ics/${t}/freezes.ics` },
-    ...(trainId ? [{ key: 'train', label: 'One train', url: `${origin}/api/v1/ics/${t}/trains/${encodeURIComponent(trainId)}.ics` }] : []),
-  ]
-  const copy = async (key: string, url: string) => {
-    try { await navigator.clipboard.writeText(url); setCopied(key); announce('Link copied.') }
-    catch { setCopied(null); setError('The browser did not allow copying. Select the address and copy it by hand.') }
+  const mode: Mode = tab === 'month' ? 'month' : 'week'
+  const days = useMemo(() => tab === 'timeline' ? Array.from({ length: TIMELINE_DAYS }, (_, i) => addDays(startOfWeek(focus), i)) : visibleDays(focus, mode), [focus, mode, tab])
+  const first = days[0], last = days[days.length - 1]
+  const view = useRange(tab === 'list' ? null : first, tab === 'list' ? null : last)
+  const upcoming = useRange(today, addDays(today, UPCOMING_DAYS))
+  const [stream, setStream] = useState<StreamRow[] | null>(null)
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const [ahead, setAhead] = useState<{ id: string; name: string; kind: string; startsAt: string; endsAt: string }[] | null>(null)
+  const loadStream = useCallback(() => { setStreamError(null); getStream().then(setStream).catch(e => setStreamError(errText(e))) }, [])
+  useEffect(() => { getStream().then(setStream).catch(e => setStreamError(errText(e))) }, [])
+  useEffect(() => { get<typeof ahead>('/api/v1/freeze-windows/ahead').then(setAhead).catch(() => setAhead([])) }, [])   // the panel says "none" if this fails; the calendar itself shows the error
+
+  const data = useMemo(() => view.data && applyFilters(view.data, filters), [view.data, filters])
+  const byDay = useMemo(() => (data ? entriesByDay(data, today) : new Map<string, Entry[]>()), [data, today])
+  const fz = useMemo(() => (data ? freezeDays(data, last) : new Map<string, CalFreeze[]>()), [data, last])
+  const rows = useMemo(() => (data ? releaseRows(data, byDay, days) : []), [data, byDay, days])
+  const gridRows = useMemo(() => { const g = [...(days.some(d => fz.has(d)) ? [FREEZE_ROW] : []), ...rows.map(r => r.id)]; return g.length ? g : [EMPTY_ROW] }, [rows, days, fz])
+  const activeRow = focusRow && gridRows.includes(focusRow) ? focusRow : gridRows[0] ?? ''
+  // Focus follows a keyboard move. The cell may not exist yet (the next week is still loading, or its rows differ): keep trying until it does.
+  useEffect(() => {
+    if (!kb.current || !view.fresh) return   // wait for the new range: its rows decide which cell can take focus
+    const el = cells.current.get(tab === 'week' ? `${activeRow}|${focus}` : `|${focus}`)
+    if (el) { el.focus(); kb.current = false }
+  }, [focus, activeRow, tab, view.data, view.fresh])
+
+  const open = (e: Entry) => openRoute({ view: 'trains', trainId: e.trainId, selection: e.gateId ? { kind: 'gate', id: e.gateId } : null }, onOpen)
+  const openTrain = (id: string) => openRoute({ view: 'trains', trainId: id, selection: null }, onOpen)
+  const step = (dir: 1 | -1) => setFocus(f => (tab === 'month' ? addMonths(f, dir) : addDays(f, (tab === 'timeline' ? TIMELINE_DAYS : 7) * dir)))
+  const moveTo = (d: string, row?: string) => { kb.current = true; setFocus(d); if (row !== undefined) setFocusRow(row) }
+  const openFirst = (day: string, row?: string) => {
+    if (row === FREEZE_ROW || row === EMPTY_ROW) return
+    const list = (byDay.get(day) ?? []).filter(e => row === undefined || e.trainId === row)
+    if (list[0]) open(list[0])
+  }
+  const onKey = (e: React.KeyboardEvent, day: string, row?: string) => {
+    if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return
+    const k = e.key
+    const ri = row === undefined ? -1 : gridRows.indexOf(row)
+    if (row !== undefined && (k === 'ArrowUp' || k === 'ArrowDown')) {
+      const nr = gridRows[ri + (k === 'ArrowDown' ? 1 : -1)]
+      e.preventDefault(); if (nr !== undefined) moveTo(day, nr); return
+    }
+    const to = k === 'ArrowLeft' ? addDays(day, -1) : k === 'ArrowRight' ? addDays(day, 1) : k === 'ArrowUp' ? addDays(day, -7) : k === 'ArrowDown' ? addDays(day, 7)
+      : k === 'Home' ? startOfWeek(day) : k === 'End' ? addDays(startOfWeek(day), 6)
+      : k === 'PageUp' ? (mode === 'month' ? addMonths(day, -1) : addDays(day, -7)) : k === 'PageDown' ? (mode === 'month' ? addMonths(day, 1) : addDays(day, 7)) : null
+    if (to) { e.preventDefault(); moveTo(to) }   // the row is kept as it was: it may not exist in the next week, and the person's own row comes back when it does
+    else if (k === 'Enter') { e.preventDefault(); openFirst(day, row) }
   }
 
+  // ---- derived panels ----
+  const conflicts: Conflict[] = useMemo(() => (upcoming.data ? conflictsOf(upcoming.data) : []), [upcoming.data])
+  const upcomingTrains = useMemo(() => {
+    const d = upcoming.data && applyFilters(upcoming.data, filters)
+    if (!d) return null
+    const clash = new Map<string, string[]>()
+    for (const c of conflictsOf(d)) clash.set(c.trainId, [...(clash.get(c.trainId) ?? []), c.text])
+    return d.trains.filter(t => t.status !== 'Complete' && t.status !== 'Aborted')
+      .map(t => ({ t, at: t.window ? t.window.startsAt : `${t.targetDate}T00:00:00Z`, why: clash.get(t.id) ?? [] }))
+      .filter(x => x.at >= `${today}T00:00:00Z`).sort((a, b) => a.at.localeCompare(b.at) || a.t.title.localeCompare(b.t.title)).slice(0, 8)
+  }, [upcoming.data, filters, today])
+  const nextFreeze = ahead?.[0]
+  const windowCount = (d: CalendarPayload | null) => d?.trains.filter(t => t.window).length ?? 0
+  const shownEntries = days.flatMap(d => byDay.get(d) ?? [])
+  const summary = data
+    ? `${shownEntries.filter(e => e.kind === 'window').length} release windows · ${shownEntries.filter(e => e.kind === 'target').length} target dates · ${shownEntries.filter(e => e.kind === 'milestone').length} milestones · ${new Set(data.freezeWindows.map(f => f.id)).size} freeze or chill windows`
+    : ''
+
+  const upcomingCols: Column<NonNullable<typeof upcomingTrains>[number]>[] = [
+    { key: 'release', header: 'Release', cell: x => <TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => openTrain(x.t.id)}>{x.t.title}</button>} secondary={`${riskLabel(x.t.riskTier)} risk`} /> },
+    { key: 'window', header: 'Window · UTC', cell: x => {
+      if (!x.t.window) return <TwoLine primary={`Target ${dayLabel(x.t.targetDate)}`} secondary="No deployment window" />
+      const s = stamp(x.t.window.startsAt, zone)
+      return <TwoLine primary={s.utc} secondary={[durationText(x.t.window.startsAt, x.t.window.endsAt), s.local && `${s.local} for you`].filter(Boolean).join(' · ')} />
+    } },
+    { key: 'status', header: 'Status', cell: x => <StatusChip>{x.t.status}</StatusChip> },
+    { key: 'conflicts', header: 'Conflicts', cell: x => x.why.length ? <span className="os-cal-conflict-text">▲ {x.why[0]}{x.why.length > 1 ? ` (+${x.why.length - 1} more)` : ''}</span> : <span className="os-muted">None</span> },
+  ]
+
+  const listRows = useMemo(() => (stream ?? []).filter(r => r.status !== 'Complete' && r.status !== 'Aborted' || filters.status === r.status)
+    .filter(r => (filters.status === 'all' || r.status === filters.status) && (filters.risk === 'all' || r.riskTier === filters.risk)), [stream, filters])
+  const listCols: Column<StreamRow>[] = [
+    { key: 'release', header: 'Release', cell: r => <TwoLine primary={r.title} secondary={`${riskLabel(r.riskTier)} risk`} /> },
+    { key: 'target', header: 'Target date · UTC', cell: r => <TwoLine primary={dayLabel(r.targetReleaseDate)} secondary={r.daysToTarget === 0 ? 'today' : r.daysToTarget > 0 ? `in ${r.daysToTarget} business days` : `${-r.daysToTarget} business days ago`} /> },
+    { key: 'status', header: 'Status', cell: r => <StatusChip>{r.status}</StatusChip> },
+    { key: 'blockers', header: 'Readiness', cell: r => r.blockers ? <StatusChip tone="warning">{`${r.blockers} ${r.blockers === 1 ? 'blocker' : 'blockers'}`}</StatusChip> : <StatusChip tone="success">No blockers</StatusChip> },
+  ]
+
+  const dayNum = (day: string, withMonth: boolean) => new Date(parseDay(day)).toLocaleDateString('en-GB', withMonth ? { day: 'numeric', month: 'short', timeZone: 'UTC' } : { day: 'numeric', timeZone: 'UTC' })
+  const dayFull = (day: string) => new Date(parseDay(day)).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+  const dow = (day: string) => new Date(parseDay(day)).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })
+
+  const exportCalendar = () => { const el = document.getElementById('subscribe'); el?.scrollIntoView({ block: 'start' }); el?.focus() }
+  const title = tab === 'timeline' ? `${dayLabel(first)} – ${dayLabel(last)} ${last.slice(0, 4)}` : rangeTitle(focus, mode)
+  const unit = tab === 'month' ? 'month' : tab === 'timeline' ? '4 weeks' : 'week'
+
+  const nav = (
+    <div className="os-cal-nav">
+      <span className="os-cal-zone">UTC</span>
+      <button type="button" className="os-button secondary os-cal-step" aria-label={`Previous ${unit}`} onClick={() => step(-1)}><ChevronLeft aria-hidden="true" size={16} strokeWidth={1.6} /></button>
+      <Button onClick={() => setFocus(todayIso())}>Today</Button>
+      <button type="button" className="os-button secondary os-cal-step" aria-label={`Next ${unit}`} onClick={() => step(1)}><ChevronRight aria-hidden="true" size={16} strokeWidth={1.6} /></button>
+    </div>
+  )
+
+  const loading = view.data === null && !view.error
+  const body = view.error && !view.data ? <ErrorState what="The calendar" message={view.error} onRetry={view.retry} /> : loading ? <LoadingState what="the calendar" /> : null
+  const emptyFilter = filters.status !== 'all' || filters.risk !== 'all'
+
   return (
-    <section aria-labelledby="subscribe-h">
-      <h2 id="subscribe-h" className="cap" ref={heading} tabIndex={-1}>Subscribe</h2>
-      <p className="muted">Add the calendar to Outlook, Apple Calendar or Google Calendar with a link. Anyone who has the link can see gate, milestone, window and freeze titles and times, so keep it private. You have one link; it works until you rotate or revoke it.</p>
-      {error && <p className="bad" role="alert">✗ {error}</p>}
-      {rows === null && !error && <p className="muted">Loading…</p>}
+    <div className="os-page">
+      <PageHeading trail={['Workspace', 'Portfolio & calendar']} title="Release portfolio" description="Coordinate release windows, freezes and milestones in one shared plan."
+        actions={<><Button icon={Download} onClick={exportCalendar}>Export calendar</Button>{onPlan && <Button variant="primary" icon={Plus} onClick={onPlan}>Plan release</Button>}</>} />
 
-      {issued && (
-        <div className="cal-issued" role="region" aria-label="Your new calendar link">
-          <p className="ok">✓ Link ready. Copy it now: it is shown only once and cannot be shown again. If you lose it, rotate to get a new one.</p>
-          <table className="grid" aria-label="Calendar feed links">
-            <thead><tr><th scope="col">Feed</th><th scope="col">Link</th><th scope="col">Action</th></tr></thead>
-            <tbody>
-              {urls(issued.token).map((u, i) => (
-                <tr key={u.key}>
-                  <td>{u.key === 'train'
-                    ? <label>One train <select className="line" value={trainId} onChange={e => setTrainId(e.target.value)} aria-label="Train for the one-train feed">{trains.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
-                    : u.label}</td>
-                  <td className="wrap"><input ref={i === 0 ? firstLink : undefined} className="line wide cal-mono" readOnly value={u.url} aria-label={`${u.label} link`} onFocus={e => e.currentTarget.select()} /></td>
-                  <td><button type="button" className="text" onClick={() => copy(u.key, u.url)}>{copied === u.key ? '✓ Copied' : 'Copy'}</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p><button type="button" className="text" onClick={hide}>I have copied it, hide the link</button></p>
+      <div className="os-cal-toolbar">
+        <Tabs label="Portfolio views" group="portfolio" value={tab} onChange={id => setTab(id as TabId)}
+          tabs={[{ id: 'week', label: 'Week calendar' }, { id: 'month', label: 'Month' }, { id: 'timeline', label: 'Timeline' }, { id: 'list', label: 'Release list', count: stream?.filter(r => r.status !== 'Complete' && r.status !== 'Aborted').length }]} />
+        <div className="os-cal-filters" role="group" aria-label="Filters">
+          <FilterSelect label="Status" value={filters.status} onChange={status => setFilters(f => ({ ...f, status }))} options={[{ value: 'all', label: 'All statuses' }, ...STATUSES.map(s => ({ value: s, label: s }))]} />
+          <FilterSelect label="Risk tier" value={filters.risk} onChange={risk => setFilters(f => ({ ...f, risk }))} options={[{ value: 'all', label: 'All risk tiers' }, ...RISKS.map(r => ({ value: r.value, label: r.label }))]} />
         </div>
+      </div>
+
+      {tab !== 'list' && (
+        <TabPanel id={tab} group="portfolio">
+          <Panel title={<span id={titleId} data-testid="cal-title" aria-live="polite">{title}</span>} meta={nav}
+            footer={data && <div className="os-cal-foot"><span data-testid="cal-summary">{summary}</span><span className="os-cal-legend" aria-label="Status legend">{STATUSES.map(s => <StatusChip key={s}>{s}</StatusChip>)}</span></div>}>
+            {body ?? (view.error && <Notice tone="warning" title="The calendar may be out of date" live action={<Button onClick={view.retry}>Retry</Button>}>{view.error}</Notice>)}
+            {data && tab === 'week' && (
+              (
+                  <div className="os-cal-scroll">
+                    <table className="os-cal week" role="grid" aria-labelledby={titleId} data-testid="calendar-grid">
+                      <thead>
+                        <tr>
+                          <th scope="col" className="os-cal-corner">Release</th>
+                          {days.map(d => (
+                            <th key={d} scope="col" abbr={dayFull(d)} className={d === today ? 'today' : undefined} aria-current={d === today ? 'date' : undefined}>
+                              {dow(d)} {dayNum(d, false)}{d === today && <span className="os-cal-today"> Today</span>}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gridRows.map(rid => {
+                          const r = rows.find(x => x.id === rid)
+                          return (
+                            <tr key={rid}>
+                              <th scope="row" className="os-cal-rowhead">
+                                {r ? <TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`].filter(Boolean).join(' · ')} />
+                                  : rid === EMPTY_ROW ? <TwoLine primary={emptyFilter ? 'No releases match these filters' : 'No releases this week'} secondary={emptyFilter ? 'Change the filters, or go to another week' : 'Go to another week, or plan a release'} />
+                                  : <TwoLine primary="Freeze and chill" secondary="Windows that restrict changes" />}
+                              </th>
+                              {days.map(day => {
+                                const list = r ? (byDay.get(day) ?? []).filter(e => e.trainId === r.id) : []
+                                const fzs = r ? [] : fz.get(day) ?? []
+                                const kind = r ? (fz.get(day)?.some(f => f.kind === 'Freeze') ? 'freeze' : fz.get(day)?.length ? 'chill' : '') : (fzs.some(f => f.kind === 'Freeze') ? 'freeze' : fzs.length ? 'chill' : '')
+                                const here = rid === activeRow && day === focus
+                                return (
+                                  <td key={day} role="gridcell" ref={el => { const k = `${rid}|${day}`; if (el) cells.current.set(k, el); else cells.current.delete(k) }}
+                                    className={['os-cal-cell', kind && `tint-${kind}`, day === today && 'today'].filter(Boolean).join(' ')} data-date={day} data-row={rid}
+                                    tabIndex={here ? 0 : -1} aria-selected={here} aria-label={`${r ? r.title : rid === EMPTY_ROW ? 'No releases' : 'Freeze and chill'}, ${dayFull(day)}, ${list.length + fzs.length} ${list.length + fzs.length === 1 ? 'item' : 'items'}`}
+                                    onKeyDown={e => onKey(e, day, rid)} onClick={e => { if (e.target === e.currentTarget) { setFocus(day); setFocusRow(rid) } }}>
+                                    {fzs.map(f => <FreezeLabel key={f.id} f={f} visible />)}
+                                    {list.map(e => <EntryCard key={e.key} e={e} onOpen={() => open(e)} />)}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+            )}
+            {data && tab === 'month' && (
+              <div className="os-cal-scroll">
+                <table className="os-cal month" role="grid" aria-labelledby={titleId} data-testid="calendar-grid">
+                  <thead><tr>{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => <th key={d} scope="col" abbr={d}>{d.slice(0, 3)}</th>)}</tr></thead>
+                  <tbody>
+                    {Array.from({ length: days.length / 7 }, (_, w) => days.slice(w * 7, w * 7 + 7)).map(wk => (
+                      <tr key={wk[0]}>
+                        {wk.map((day, col) => {
+                          const entries = byDay.get(day) ?? []
+                          const fs = fz.get(day) ?? []
+                          const kind = fs.some(f => f.kind === 'Freeze') ? 'freeze' : fs.length ? 'chill' : ''
+                          const out = day.slice(0, 7) !== focus.slice(0, 7)
+                          const MAX = 3
+                          return (
+                            <td key={day} role="gridcell" ref={el => { const k = `|${day}`; if (el) cells.current.set(k, el); else cells.current.delete(k) }}
+                              className={['os-cal-cell', kind && `tint-${kind}`, out && 'out', day === focus && 'sel', day === today && 'today'].filter(Boolean).join(' ')}
+                              tabIndex={day === focus ? 0 : -1} aria-selected={day === focus} data-date={day} onKeyDown={e => onKey(e, day)} onClick={e => { if (e.target === e.currentTarget) setFocus(day) }}>
+                              <div className="os-cal-daynum">
+                                <span aria-hidden="true">{day.endsWith('-01') ? dayNum(day, true) : dayNum(day, false)}</span>
+                                {/* every day carries its full date for screen readers: a bare "30" under an "October" title would be read as 30 October */}
+                                <span className="sr-only">{dayFull(day)}</span>
+                                {day === today && <span className="os-cal-today"> Today</span>}
+                              </div>
+                              {fs.map(f => <FreezeLabel key={f.id} f={f} visible={day === utcDay(f.startsAt) || col === 0 || day === first} />)}
+                              {entries.slice(0, MAX).map(e => <EntryCard key={e.key} e={e} compact onOpen={() => open(e)} />)}
+                              {entries.length > MAX && <button type="button" className="os-link os-link-button" onClick={() => { setFocus(day); setTab('week') }}>+{entries.length - MAX} more (week view)</button>}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {data && tab === 'timeline' && <Timeline data={data} days={days} today={today} rows={rows} byDay={byDay} onOpen={openTrain} emptyFilter={emptyFilter} />}
+            {data && tab !== 'timeline' && <p className="os-muted os-cal-help">Arrow keys move by day{tab === 'week' ? ' and release' : ''}, Page Up and Page Down by {mode}, Home and End to the week's edges. Enter opens the first item in the cell; each item is also a button.</p>}
+          </Panel>
+        </TabPanel>
       )}
 
-      {rows && !active && (
-        <p>You have no calendar link. <button type="button" className="text strong" ref={createRef} disabled={busy} onClick={() => void create()}>{pending === 'Creating…' ? pending : 'Create link'}</button></p>
+      {tab === 'list' && (
+        <TabPanel id="list" group="portfolio">
+          <Panel title="Release list" subtitle="Every open release, with its target date and readiness" meta={stream ? <span>{listRows.length} {listRows.length === 1 ? 'release' : 'releases'}</span> : undefined}>
+            {streamError ? <ErrorState what="The release list" message={streamError} onRetry={loadStream} />
+              : stream === null ? <LoadingState what="the release list" />
+              : <DataTable caption="Open releases" columns={listCols} rows={listRows} rowKey={r => r.id} onSelect={r => openTrain(r.id)}
+                  empty={emptyFilter ? 'No releases match these filters.' : 'No open releases yet. Import releases from a CSV, or plan one.'} />}
+          </Panel>
+        </TabPanel>
       )}
 
-      {rows && rows.length > 0 && (
-        <table className="grid" aria-label="Calendar links">
-          <thead><tr><th scope="col">Created</th><th scope="col">Last used</th><th scope="col">State</th><th scope="col">Actions</th></tr></thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id} data-testid="ics-row">
-                <td className="cal-mono">{fmtDayTime(r.createdAt)}</td>
-                <td className="cal-mono">{r.lastUsedAt ? fmtDayTime(r.lastUsedAt) : <span className="muted">not since the server started</span>}</td>
-                <td>{r.active ? <span className="ok">● active</span> : <span className="muted">○ revoked {r.revokedAt ? fmtDayTime(r.revokedAt) : ''}</span>}</td>
-                <td className="wrap">
-                  {r.active && confirm?.id !== r.id && (
-                    <>
-                      <button type="button" className="text" ref={el => { if (el) triggers.current.set(`${r.id}:rotate`, el); else triggers.current.delete(`${r.id}:rotate`) }} disabled={busy} onClick={() => setConfirm({ id: r.id, action: 'rotate' })}>Rotate</button>{' '}
-                      <button type="button" className="text" ref={el => { if (el) triggers.current.set(`${r.id}:revoke`, el); else triggers.current.delete(`${r.id}:revoke`) }} disabled={busy} onClick={() => setConfirm({ id: r.id, action: 'revoke' })}>Revoke</button>
-                    </>
-                  )}
-                  {r.active && confirm?.id === r.id && (
-                    <span role="group" aria-label={confirm.action === 'rotate' ? 'Confirm rotate' : 'Confirm revoke'}>
-                      <span className="warn">{confirm.action === 'rotate'
-                        ? '▲ The current link stops working at once. Calendars using it will stop updating until you paste the new link.'
-                        : '▲ The link stops working at once and you will have no calendar link until you create one.'}</span>{' '}
-                      <button type="button" className="text strong" ref={confirmRef} disabled={busy} onClick={() => void (confirm.action === 'rotate' ? rotate(r.id) : revoke(r.id))}>{busy ? pending : `Confirm ${confirm.action}`}</button>{' '}
-                      <button type="button" className="text" disabled={busy} onClick={cancel}>Cancel</button>
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+      <div className="os-cal-lower">
+        <Panel title="Upcoming release windows" subtitle={`Next ${UPCOMING_DAYS} days · sorted by scheduled start`} meta={<button type="button" className="os-link os-link-button" onClick={() => setTab('list')}>View portfolio →</button>}>
+          {upcoming.error ? <ErrorState what="The upcoming windows" message={upcoming.error} onRetry={upcoming.retry} />
+            : upcomingTrains === null ? <LoadingState what="the upcoming windows" />
+            : <DataTable caption="Upcoming release windows" columns={upcomingCols} rows={upcomingTrains} rowKey={x => x.t.id}
+                empty={emptyFilter ? 'No upcoming releases match these filters.' : `No release is scheduled in the next ${UPCOMING_DAYS} days.`} />}
+        </Panel>
+        <Panel title="Capacity & constraints">
+          <div className="os-stack">
+            {upcoming.data && (conflicts.length
+              ? <Notice tone="warning" title={`${conflicts.length} scheduling ${conflicts.length === 1 ? 'conflict' : 'conflicts'}`}
+                  action={<button type="button" className="os-link os-link-button" onClick={() => openTrain(conflicts[0].trainId)}>Resolve →</button>}>
+                  {conflicts[0].text}{conflicts.length > 1 ? `, and ${conflicts.length - 1} more.` : '.'}
+                </Notice>
+              : <Notice tone="success" title="No scheduling conflicts">No release window overlaps another release or a freeze in the next {UPCOMING_DAYS} days.</Notice>)}
+            <PropertyList items={[
+              { label: `Release windows, next ${UPCOMING_DAYS} days`, value: String(windowCount(upcoming.data)) },
+              { label: 'Overlapping or frozen windows', value: String(new Set(conflicts.map(c => c.trainId)).size) },
+              { label: 'Next change freeze', value: nextFreeze ? `${nextFreeze.kind} · ${nextFreeze.name}: ${dayLabel(utcDay(nextFreeze.startsAt))} → ${dayLabel(utcDay(Date.parse(nextFreeze.endsAt) - 1000))}` : ahead ? 'None in the next 45 days' : '…' },
+            ]} />
+            <p className="os-muted">A freeze stops a release starting in its range unless an override is approved. A chill only warns. Overlapping windows are flagged when they share a configuration item or product.</p>
+          </div>
+        </Panel>
+      </div>
+
+      <CalendarSubscribe current={current} />
+    </div>
+  )
+}
+
+/** The Timeline tab (REOS-134): one bar per release across four weeks, from its first dated item to its last, with freezes as a band on top. */
+function Timeline({ data, days, today, rows, byDay, onOpen, emptyFilter }: {
+  data: CalendarPayload; days: string[]; today: string; rows: { id: string; title: string; status: string; riskTier?: string }[]; byDay: Map<string, Entry[]>
+  onOpen: (id: string) => void; emptyFilter: boolean
+}) {
+  const col = (d: string) => days.indexOf(d) + 2   // 1 is the row label
+  const spans = rows.map(r => {
+    const mine = days.filter(d => (byDay.get(d) ?? []).some(e => e.trainId === r.id))
+    return { r, from: mine[0], to: mine[mine.length - 1], n: mine.reduce((s, d) => s + (byDay.get(d) ?? []).filter(e => e.trainId === r.id).length, 0) }
+  })
+  const freezes = data.freezeWindows.map(f => ({ f, a: utcDay(f.startsAt) < days[0] ? days[0] : utcDay(f.startsAt), b: utcDay(Date.parse(f.endsAt) - 1000) > days[days.length - 1] ? days[days.length - 1] : utcDay(Date.parse(f.endsAt) - 1000) })).filter(x => x.b >= x.a)
+  if (spans.length === 0 && freezes.length === 0) return <EmptyState title={emptyFilter ? 'No releases match these filters in this period' : 'No releases in this period'}>Go to another period, or plan a release.</EmptyState>
+  return (
+    <div className="os-cal-scroll">
+      <div className="os-timeline" role="table" aria-label="Release timeline" style={{ gridTemplateColumns: `minmax(160px, 220px) repeat(${days.length}, minmax(26px, 1fr))` }}>
+        <div role="row" className="os-timeline-row head">
+          <div role="columnheader" className="os-timeline-label" style={{ gridColumn: 1 }}>Release</div>
+          {days.map((d, i) => <div key={d} role="columnheader" className={`os-timeline-day${d === today ? ' today' : ''}`} style={{ gridColumn: i + 2 }} aria-label={new Date(parseDay(d)).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}>
+            <span aria-hidden="true">{Number(d.slice(8))}</span>
+          </div>)}
+        </div>
+        {freezes.map(({ f, a, b }) => (
+          <div role="row" key={f.id} className="os-timeline-row">
+            <div role="rowheader" className="os-timeline-label" style={{ gridColumn: 1 }}>{f.kind === 'Freeze' ? '▲' : '◐'} {f.kind} · {f.name}</div>
+            <div role="cell" className={`os-timeline-bar ${f.kind === 'Freeze' ? 'danger' : 'warning'}`} style={{ gridColumn: `${col(a)} / ${col(b) + 1}` }}>
+              {dayLabel(utcDay(f.startsAt))} → {dayLabel(utcDay(Date.parse(f.endsAt) - 1000))}
+            </div>
+          </div>
+        ))}
+        {spans.map(({ r, from, to, n }) => (
+          <div role="row" key={r.id} className="os-timeline-row">
+            <div role="rowheader" className="os-timeline-label"><TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`].filter(Boolean).join(' · ')} /></div>
+            <div role="cell" className="os-timeline-cell" style={{ gridColumn: `${col(from)} / ${col(to) + 1}` }}>
+              <button type="button" className={`os-timeline-bar ${r.status === 'Executing' ? 'info' : r.status === 'Complete' ? 'success' : r.status === 'Aborted' ? 'danger' : 'neutral'}`} data-testid="timeline-bar"
+                title={`${r.title}: ${n} dated ${n === 1 ? 'item' : 'items'}, ${dayLabel(from)} to ${dayLabel(to)}`} onClick={() => onOpen(r.id)}>
+                {dayLabel(from)}{to !== from ? ` → ${dayLabel(to)}` : ''} · {n} {n === 1 ? 'item' : 'items'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="os-muted os-cal-help">Each bar runs from the release's first dated item (window, target date, gate or milestone) to its last in this period. Select a bar to open the release.</p>
+    </div>
   )
 }

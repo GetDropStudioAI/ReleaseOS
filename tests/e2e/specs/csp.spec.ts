@@ -7,7 +7,7 @@ const APP = 'http://127.0.0.1:6080'
 // Every destination of the shell (REOS-94): the sidebar's links, the Inbox bell and the control-plane card (Sync health).
 const SCREENS: { link: RegExp; heading: RegExp; where?: 'bell' | 'card' }[] = [
   { link: /^Overview$/, heading: /^Overview$/ },
-  { link: /^Portfolio & calendar$/, heading: /^Calendar$/ },
+  { link: /^Portfolio & calendar$/, heading: /^Release portfolio$/ },
   { link: /^Approvals/, heading: /^Approvals$/ },
   { link: /^Audit history$/, heading: /^Audit$/ },
   { link: /^Teams & settings$/, heading: /^Admin$/ },

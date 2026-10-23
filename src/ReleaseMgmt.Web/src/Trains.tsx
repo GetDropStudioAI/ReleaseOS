@@ -1,28 +1,17 @@
 import { useEffect, useId, useState, useSyncExternalStore } from 'react'
-import { useDraft, useSession } from './session'
-import { ChangeRecordPanel, GoNoGo, emptyGoNoGo, goNoGoKey, type GoNoGoDraft } from './Governance'
-import { FreezesPanel } from './Freezes'
-import { Links } from './Links'
+import { useSession } from './session'
 import { fmtDayTime } from './time'
 import { day, errMsg, plural, splitId, tMinus } from './format'
-import { Runbook } from './Runbook'
-import { Closeout } from './Closeout'
-import { commsKey, type CommsDraft } from './CommsDrawer'
-import { ExportsPanel } from './ExportsPanel'
-import { Checklist, Products, Timeline, WindowLine, type Selection } from './Planning'
-import { scrollAndFocus } from './focus'
-import { MilestonesSection, milestoneState, useMilestones } from './Milestones'
-import { TrainCloseForm, type Closing } from './TrainClose'
-import { AdvisoryItems } from './Advisories'
-import { advanceTrain, getAdvisories, getFreezesAhead, getReadiness, getStream, getTrain, type Advisories, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
+import type { Selection } from './Planning'
+import { ReleaseDetail } from './release/ReleaseDetail'
+import { ErrorState, LoadingState } from './ui'
+import { getAdvisories, getFreezesAhead, getReadiness, getStream, getTrain, type Advisories, type FreezeAhead, type Readiness, type StreamRow, type TrainDetail } from './api'
 
 // Aborted trains keep a group of their own (shown only when the list has any), so a train never silently vanishes from the Stream (UX review 26).
 const GROUPS: { label: string; status: string; hideEmpty?: boolean }[] = [
   { label: 'Executing', status: 'Executing' }, { label: 'Gated', status: 'Gated' },
   { label: 'Planning', status: 'Planning' }, { label: 'Complete · last 30 days', status: 'Complete' }, { label: 'Aborted', status: 'Aborted', hideEmpty: true },
 ]
-const ORDER = ['Planning', 'Gated', 'Executing', 'Complete']
-
 // Status is words + glyphs + coloured text, never pills or badges (CLAUDE.md rule 9).
 const GLYPH: Record<string, { g: string; cls: string; word: string }> = {
   Certified: { g: '●', cls: 'ok', word: 'Certified' }, Waived: { g: '●', cls: 'warn', word: 'Waived' },
@@ -80,13 +69,7 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   const [adv, setAdv] = useState<Advisories | null>(null)   // REOS-85/88: contingency and window collisions, shown beside readiness, never as guards
   const [tick, setTick] = useState(0)
   const [err, setErr] = useState<string | null>(null)
-  const whyId = useId()
-  const [busy, setBusy] = useState(false)
-  const [closing, setClosing] = useState<Closing | null>(null)   // REOS-86: the Complete or Abort inline form under the header line
   const [chosenGate, setChosenGate] = useState<string | null>(null)
-  const [goDraft, setGoDraft] = useDraft<GoNoGoDraft>(goNoGoKey(id))   // the header button and the Go/No-Go section share one draft
-  const [comms, setComms] = useDraft<CommsDraft>(commsKey(id))   // REOS-45: App swaps the right drawer to the Comms drawer while this is open
-  const milestones = useMilestones(id, refreshKey)   // Q-0843: the timeline's ◆ markers and the Milestones section share one fetch
   useEffect(() => {
     let live = true
     setErr(null); setRErr(null)
@@ -100,82 +83,14 @@ export function TrainHeader({ id, refreshKey, onChanged, selection, onSelect, ca
   }, [id, refreshKey, tick])
   const retry = () => setTick(n => n + 1)
 
-  if (err && !t) return <p className="bad" role="alert">✗ {err} <button type="button" className="text" onClick={retry}>Retry</button></p>
-  if (!t) return <p className="muted">Loading…</p>
-
-  const advance = async () => {
-    if (!t.nextStatus) return
-    setBusy(true); setErr(null)
-    try { await advanceTrain(t.id, t.nextStatus, t.version); onChanged() }
-    catch (e) { setErr(errMsg(e, 'Could not advance the train.')); onChanged() }
-    finally { setBusy(false) }
-  }
-  const { id: relId, name } = splitId(t.title)
-  const open = t.status === 'Planning' || t.status === 'Gated' || t.status === 'Executing'
-  const blockers = r?.blockers.length ?? 0
-  const gatesBefore = t.nextStatus ? t.gates.filter(g => ORDER.indexOf(g.requiredBeforeStatus) <= ORDER.indexOf(t.nextStatus!)) : []
-  const others = (r?.blockers ?? []).filter(b => b.failure.guard !== 'GateLockout')
-  // Checklist shows the gate the user picked, else the first gate still open, else the last.
-  const checklistGate = t.gates.find(g => g.id === chosenGate) ?? t.gates.find(g => g.status !== 'Certified' && g.status !== 'Waived') ?? t.gates[t.gates.length - 1]
-  const pickGate = (gid: string) => { setChosenGate(gid); onSelect({ kind: 'gate', id: gid }) }
-
+  // REOS-97: the release workspace is a redesigned page (App gives it the canvas); its states are the shared ones.
+  if (err && !t) return <div className="os-page"><ErrorState what="The release" message={err} onRetry={retry} /></div>
+  if (!t) return <div className="os-page"><LoadingState what="the release" /></div>
+  // A train that is not the one asked for (the id changed and the answer has not come yet) is not shown as if it were.
+  if (t.id !== id) return <div className="os-page"><LoadingState what="the release" /></div>
   return (
-    <>
-      <div className="header-line">
-        <span className="cap">Release train{t.changeTicketNumber ? <> · <span className="mono">{t.changeTicketNumber}</span></> : ''} · Risk {t.riskTier} · <span className="lc">v{t.version}</span></span>
-        <span className="actions">
-          <button type="button" className="text" onClick={() => onMode('rehearsal')}>Rehearsal</button>
-          <button type="button" className="text" onClick={() => onMode('live')}>Live runbook</button>
-          {canDecide && <button type="button" className="text" onClick={e => {
-            if (goDraft) { setGoDraft(undefined); return }
-            setGoDraft(emptyGoNoGo())   // the form opens far down the page: take the user there (UX review 11)
-            const btn = e.currentTarget
-            requestAnimationFrame(() => {
-              const sec = document.querySelector<HTMLElement>('section[aria-label="Go/No-Go"]')
-              // Focus its heading, unless the form has already moved focus into itself: then only scroll.
-              if (document.activeElement === btn || document.activeElement === document.body) scrollAndFocus(sec?.querySelector<HTMLElement>('h2') ?? sec ?? null)
-              else sec?.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
-            })
-          }}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</button>}
-          <button type="button" className="text" data-comms-trigger aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</button>
-          <button type="button" className="text" onClick={() => scrollAndFocus(document.querySelector<HTMLElement>('#exports h2'))}>Export</button>
-          {canPlan && open && <button type="button" className="text destructive" aria-expanded={closing === 'abort'} onClick={() => setClosing(closing === 'abort' ? null : 'abort')}>Abort…</button>}
-          {t.nextStatus === 'Complete'
-            ? canPlan && <button type="button" className="text" disabled={blockers > 0} aria-expanded={closing === 'complete'} aria-describedby={blockers > 0 ? whyId : undefined} onClick={() => setClosing(closing === 'complete' ? null : 'complete')}>Complete…</button>
-            : t.nextStatus && <button type="button" className="text" disabled={busy || blockers > 0} aria-describedby={blockers > 0 ? whyId : undefined} onClick={advance}>{busy ? 'Advancing…' : `Advance to ${t.nextStatus}`}</button>}
-        </span>
-      </div>
-      {closing && open && <TrainCloseForm key={closing} kind={closing} trainId={t.id} version={t.version} status={t.status} onCancel={() => setClosing(null)} onDone={() => { setClosing(null); onChanged() }} />}
-      {t.nextStatus && blockers > 0 && <p id={whyId} className="muted small">{t.nextStatus === 'Complete' ? 'Complete' : `Advance to ${t.nextStatus}`} is off: {plural(blockers, 'guard')} not met, listed under “To reach {t.nextStatus}”.</p>}
-      <h1>{relId ? `${relId} ${name}` : name}</h1>
-      <p className="muted">{t.status} · Target <strong className="label">{day(t.targetReleaseDate)} {t.targetReleaseDate.slice(0, 4)}</strong> · <span className="mono">{tMinus(t.daysToTarget)}</span> business days · <WindowLine trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} collisions={adv?.collisions} /></p>
-      {err && <p className="bad" role="alert">✗ {err}</p>}
-      {t.nextStatus && r && (
-        <section className="readiness" aria-label="Readiness">
-          <span className="cap">To reach {t.nextStatus}</span>
-          {gatesBefore.map(g => {
-            const ok = g.status === 'Certified' || g.status === 'Waived'
-            return <span key={g.id}><span className={ok ? 'ok' : 'bad'} aria-hidden="true">{ok ? '✓' : '✗'}</span> {g.name}<span className="sr-only">{ok ? ': met' : ': not met'}</span>{!ok && <span className="muted"> due {day(g.dueOn)}</span>}</span>
-          })}
-          {others.map((b, i) => <span key={i}><span className="bad" aria-hidden="true">✗</span><span className="sr-only">Not met:</span> {b.failure.message}</span>)}
-          {r.ready && <span className="ok">✓ Ready for {t.nextStatus}</span>}
-          {adv && <AdvisoryItems contingency={adv.contingency} collisions={adv.collisions} />}
-        </section>
-      )}
-      {t.nextStatus && rErr && <p className="bad" role="alert">✗ The readiness for {t.nextStatus} could not be loaded: {rErr} <button type="button" className="text" onClick={retry}>Retry</button></p>}
-      <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} canPlan={canPlan} trainStatus={t.status} onChanged={onChanged} />
-      <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={checklistGate?.id ?? null} onSelect={pickGate} trainId={t.id} trainStatus={t.status} canPlan={canPlan} onChanged={onChanged}
-        milestones={(milestones.rows ?? []).map(m => ({ id: m.id, name: m.name, dueOn: m.dueOn, tMinus: m.tMinus, state: milestoneState(m) }))} />
-      {checklistGate && <Checklist gateId={checklistGate.id} trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} />}
-      <MilestonesSection trainId={t.id} rows={milestones.rows} error={milestones.error} canPlan={canPlan} onChanged={onChanged} />
-      <GoNoGo trainId={t.id} trainVersion={t.version} canDecide={canDecide} refreshKey={refreshKey} onChanged={onChanged} />
-      <ChangeRecordPanel trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
-      <FreezesPanel trainId={t.id} refreshKey={refreshKey} onChanged={onChanged} />
-      <Links key={t.id} trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
-      <Runbook trainId={t.id} canPlan={canPlan} refreshKey={refreshKey} selection={selection} onSelect={onSelect} onChanged={onChanged} contingency={adv?.contingency ?? null} />
-      <Closeout train={t} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} />
-      <ExportsPanel trainId={t.id} refreshKey={refreshKey} />
-    </>
+    <ReleaseDetail key={t.id} t={t} r={r} rErr={rErr} adv={adv} err={err} refreshKey={refreshKey} onChanged={onChanged} retry={retry} selection={selection} onSelect={onSelect}
+      canPlan={canPlan} canDecide={canDecide} onMode={onMode} chosenGate={chosenGate} onPickGate={gid => { setChosenGate(gid); onSelect({ kind: 'gate', id: gid }) }} />
   )
 }
 

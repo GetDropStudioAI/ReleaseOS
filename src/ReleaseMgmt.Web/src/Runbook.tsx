@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Button, Panel } from './ui'
 import { createStep, getOwners, getSteps, patchStep, SECTIONS, setStepDependencies, type ContingencyView, type Owner, type StepRow } from './api'
 import { ContingencyLine } from './Advisories'
 import { errMsg } from './format'
@@ -55,9 +56,8 @@ export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onC
   const cancel = () => { setDraft(undefined); setErr(null); setBad(null); requestAnimationFrame(() => addBtn.current?.focus()) }
   const field = (f: Field) => ({ id: `${idBase}-${f}`, ...(bad === f ? { 'aria-invalid': true, 'aria-describedby': errId } : {}) })
   return (
-    <section aria-label="Runbook">
-      <div className="section-head"><h2 className="cap dark">Runbook</h2>
-        <span className="muted"><span className="mono label">{steps.length}</span> {steps.length === 1 ? 'step' : 'steps'}{canPlan && <> · <button ref={addBtn} type="button" className="text" aria-expanded={adding} onClick={toggleForm}>Add step</button></>}</span></div>
+    <Panel label="Runbook" title="Runbook" subtitle="The plan: steps by section, in planned order. Actuals are recorded in the run, never here."
+      meta={<><span><span className="mono">{steps.length}</span> {steps.length === 1 ? 'step' : 'steps'}</span>{canPlan && <Button ref={addBtn} aria-expanded={adding} onClick={toggleForm}>Add step</Button>}</>}>
       {contingency && steps.length > 0 && <ContingencyLine c={contingency} />}
       {adding && (
         <form onSubmit={add}><p className="inline-form">
@@ -94,7 +94,7 @@ export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onC
             </table>
           </div>)
       })}
-    </section>
+    </Panel>
   )
 }
 

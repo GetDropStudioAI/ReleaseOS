@@ -43,7 +43,7 @@ test('a Release Manager adds a user, a duplicate is refused inline, and the new 
   const t = await trainByTitle(page, 'Payments platform')
   await page.goto(`/trains/${t.id}`)
   const checklist = page.locator('section[aria-label="Checklist"]')
-  await checklist.locator('.section-head button:has-text("Add task")').click()
+  await checklist.locator('.os-panel-head button:has-text("Add task")').click()
   await checklist.locator('input[placeholder="What has to happen"]').fill('Brief Quinn on the cutover')
   await checklist.locator('label:has-text("Owner") select').selectOption({ label: 'Quinn Added' })
   await checklist.locator('button:text-is("Add")').click()

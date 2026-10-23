@@ -10,7 +10,7 @@ test('closing a tab mid-draft and reopening keeps the draft, the train and the f
   await expect(a.locator('h1')).toContainText('Reporting')
 
   await a.fill('#flt', 'Rep')
-  await a.click('.section-head button:has-text("Add task")')
+  await a.click('.os-panel-head button:has-text("Add task")')
   await a.fill('input[placeholder="What has to happen"]', 'Half-typed task that must survive')
 
   // the 1 s debounce saves it; wait for the PUT to land rather than sleeping

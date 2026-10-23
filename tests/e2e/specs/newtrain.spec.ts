@@ -64,7 +64,7 @@ test('a Release Manager creates a train blank, from an approved template and as 
   await drawer(page).getByLabel('Risk tier').selectOption('Low')
   await drawer(page).locator('button:text-is("Create train")').click()
   await expectOpened(page, blank)
-  await expect(page.locator('main')).toContainText('Risk Low')
+  await expect(page.locator('main')).toContainText('Low risk')
 
   // 2. From template: the gates come from the template; a window plans its step.
   const fromTpl = `E2E from template ${stamp}`
@@ -78,7 +78,7 @@ test('a Release Manager creates a train blank, from an approved template and as 
   await drawer(page).getByLabel('Ends').fill(`${day(61)}T06:00`)
   await drawer(page).locator('button:text-is("Create train")').click()
   await expectOpened(page, fromTpl)
-  await expect(page.locator('main')).toContainText('Risk High')   // the template's default tier
+  await expect(page.locator('main')).toContainText('High risk')   // the template's default tier
   await expect(page.locator('main')).toContainText('E2E Freeze')
   await expect(page.locator('main')).toContainText('E2E CAB')
   await expect(drawer(page)).toContainText('1 runbook step')

@@ -10,7 +10,7 @@ test('runbook steps, dependencies and cycle refusal work from the UI', async ({ 
   await expect(rb).toContainText('No runbook steps yet')
 
   // The Add step form stays open after each Add (Enter submits), so it is opened once for the three steps.
-  await rb.locator('.section-head button:has-text("Add step")').click()
+  await rb.locator('.os-panel-head button:has-text("Add step")').click()
   async function addStep(title: string, section: string, start: string, minutes: string) {
     await rb.locator('label:has-text("Step") input').fill(title)
     await rb.locator('label:has-text("Section") select').selectOption(section)

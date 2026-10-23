@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { openTab, signIn, trainByTitle } from './support'
 
 // REOS-81: add, edit and remove a product and a gate in the train workspace (inline forms, Inspector, inline confirms; no modal).
 // Everything added here is removed again, so the shared demo database ends as it started (apart from versions and audit rows).
@@ -19,8 +19,9 @@ test('a product and a gate are added, edited and removed from the workspace', as
   await page.goto(`/trains/${t.id}`)
 
   // ---- product: add inline, edit in its row, remove with an inline confirm
+  await openTab(page, 'Services')                                                  // the manifest is on the Services tab
   const products = page.locator('section[aria-label="Bundled products"]')
-  await products.locator('.section-head button:text-is("Add product")').click()
+  await products.locator('.os-panel-head button:text-is("Add product")').click()
   const form = products.getByRole('group', { name: 'New product' })
   await form.locator('label:has-text("Product") input').fill('Search Svc')
   await form.locator('label:has-text("Version") input').fill('1.0.0')
@@ -46,8 +47,9 @@ test('a product and a gate are added, edited and removed from the workspace', as
   await expect(products.locator('tr', { hasText: 'Search Svc' })).toHaveCount(0)
 
   // ---- gate: add under the timeline, edit in the Inspector, remove (Pending only) with an inline confirm
+  await openTab(page, 'Overview')                                                  // the gate timeline is on Overview
   const timeline = page.locator('section[aria-label="Gate timeline"]')
-  await timeline.locator('.section-head button:text-is("Add gate")').click()
+  await timeline.locator('.os-panel-head button:text-is("Add gate")').click()
   const gateForm = timeline.getByRole('group', { name: 'New gate' })
   await gateForm.locator('label:has-text("Gate") input').fill('Docs review')
   await gateForm.getByLabel('Business days before the target').fill('2')
@@ -94,17 +96,20 @@ for (const scheme of ['light', 'dark'] as const) {
       const gate = t.gates.find(g => g.status === 'Pending')!
       await page.goto(`/trains/${t.id}/gates/${gate.id}`)
       await expect(page.locator('.inspector h2')).toHaveText(gate.name)
-      await page.locator('section[aria-label="Bundled products"] .section-head button:text-is("Add product")').click()
-      await page.locator('section[aria-label="Gate timeline"] .section-head button:text-is("Add gate")').click()
+      await openTab(page, 'Services')
+      await page.locator('section[aria-label="Bundled products"] .os-panel-head button:text-is("Add product")').click()
       await page.locator('section[aria-label="Bundled products"]').getByRole('button', { name: 'Edit Ledger Svc' }).click()
+      await scan(page, `product forms (${scheme})`)
+      // leave nothing open for the next spec (drafts live in the session)
+      await page.locator('section[aria-label="Bundled products"] button:text-is("Cancel")').first().click()
+      await page.locator('section[aria-label="Bundled products"] button:text-is("Cancel")').first().click()
+      await openTab(page, 'Overview')
+      await page.locator('section[aria-label="Gate timeline"] .os-panel-head button:text-is("Add gate")').click()
       await page.locator('.inspector button:text-is("Edit gate")').click()
       await page.locator('.inspector button:text-is("Remove gate")').waitFor({ state: 'detached' })
       await expect(page.locator('.inspector').getByRole('group', { name: 'Edit gate' })).toBeVisible()
-      await scan(page, `plan structure forms (${scheme})`)
-      // leave nothing open for the next spec (drafts live in the session)
+      await scan(page, `gate forms (${scheme})`)
       await page.locator('.inspector button:text-is("Cancel")').click()
-      await page.locator('section[aria-label="Bundled products"] button:text-is("Cancel")').first().click()
-      await page.locator('section[aria-label="Bundled products"] button:text-is("Cancel")').first().click()
       await page.locator('section[aria-label="Gate timeline"] button:text-is("Cancel")').click()
       await page.locator('.inspector button:text-is("Remove gate")').click()
       await expect(page.locator('.inspector').getByRole('group', { name: 'Confirm removal' })).toBeVisible()

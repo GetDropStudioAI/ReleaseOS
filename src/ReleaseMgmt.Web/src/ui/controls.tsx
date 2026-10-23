@@ -4,13 +4,13 @@ import { shortcutHint } from './keys.ts'
 
 /**
  * Button (D41, REOS-93): `primary` is filled accent, `secondary` is outlined, `destructive` is danger-coloured text for actions like Rollback.
- * An optional leading Lucide icon is decorative; the text is the name. `ref` reaches the <button> (React 19 passes it as a prop).
+ * An optional leading Lucide icon is decorative; the text is the name (without an icon the text is the button's own child, so it is also its own text node). `ref` reaches the <button> (React 19 passes it as a prop).
  */
 export function Button({ variant = 'secondary', icon: Icon, children, className, type = 'button', ...rest }:
   Omit<ComponentProps<'button'>, 'type'> & { variant?: 'primary' | 'secondary' | 'destructive'; icon?: LucideIcon; type?: 'button' | 'submit'; children: ReactNode }) {
   return (
     <button type={type} className={['os-button', variant, className].filter(Boolean).join(' ')} {...rest}>
-      {Icon && <Icon aria-hidden="true" size={16} strokeWidth={1.6} />}<span>{children}</span>
+      {Icon ? <><Icon aria-hidden="true" size={16} strokeWidth={1.6} /><span>{children}</span></> : children}
     </button>
   )
 }

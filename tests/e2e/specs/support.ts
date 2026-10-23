@@ -53,3 +53,10 @@ export async function trainByTitle(page: Page, title: string) {
     return detail
   }, title)
 }
+
+/** The release page's tabs (REOS-97): Overview & readiness, Services, Dependencies, Approvals, Activity. Opens one by its name, from the tab strip. */
+export async function openTab(page: Page, name: string) {
+  const tab = page.getByRole('tab', { name: new RegExp(`^${name}`) })
+  await tab.click()
+  await expect(tab).toHaveAttribute('aria-selected', 'true')
+}

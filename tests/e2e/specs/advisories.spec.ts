@@ -35,8 +35,8 @@ test('the runbook shows its contingency, and two trains sharing a CI in overlapp
   await expect(readiness).toContainText(`Window overlaps ${bTitle}`)
   await expect(readiness).toContainText(`CI ${ci}`)
   await expect(readiness).toContainText('(advisory)')
-  await expect(page.locator('h1 + p')).toContainText(`overlaps ${bTitle}`)    // the window line under the title
-  await expect(page.locator('button:text-is("Complete…")')).toBeEnabled()   // advisories never block
+  await expect(page.locator('[aria-label="Release context"]')).toContainText(`overlaps ${bTitle}`)    // the window line under the title
+  await expect(page.getByRole('button', { name: 'Complete…' })).toBeEnabled()   // advisories never block
 
   const r = await new AxeBuilder({ page }).include('section[aria-label=Readiness]').include('section[aria-label=Runbook]').withTags(TAGS).analyze()
   expect(r.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([])

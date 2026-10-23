@@ -28,7 +28,7 @@ test('a stale gate action shows who changed it and what it is now, inline', asyn
   await expect(alert).toContainText('changed this gate before your change was saved')
   await expect(alert).toContainText('Your change was not applied')
   await expect(alert).toContainText('InProgress')                             // what it is now
-  await expect(b.locator('[role=dialog], dialog')).toHaveCount(0)             // never a modal
+  await expect(b.locator('[role=dialog], dialog[open]')).toHaveCount(0)             // never a modal
   await expect(b.locator('.inspector button:has-text("Start gate")')).toHaveCount(0)   // and the screen caught up to the current state
 })
 

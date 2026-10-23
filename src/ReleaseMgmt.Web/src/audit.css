@@ -18,8 +18,9 @@
 .au-filters .os-search { min-width: calc(var(--sidebar-width) * 1.2); }
 .au-date { display: inline-flex; align-items: center; gap: var(--gap-sm); height: var(--control-height); padding: 0 var(--gap-md); border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); font-size: var(--type-small); color: var(--color-text-secondary); }
 .au-date input { border: 0; background: transparent; font: var(--type-body) var(--font-sans); color: var(--color-text-primary); }
-.au-date:focus-within { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
-.au-date input:focus-visible { outline: none; }
+/* The focus ring is on the field itself (the keyboard tour in a11y-screens.spec.ts checks the focused element), not on the box around it. */
+.au-date input:focus-visible, .au-filters .os-search input:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; border-radius: var(--radius-xs); }
+.au-filters .os-search:focus-within { outline: none; }
 .au-count { margin: 0 0 0 auto; font-size: var(--type-small); color: var(--color-text-secondary); }
 
 .au-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap-lg); align-items: start; }

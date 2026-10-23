@@ -181,15 +181,23 @@ internal static class SyncTestKit
 /// <summary>
 /// A fake clock that counts the timers created on it. A background loop registers its next wait only after it has finished a cycle and read the database,
 /// which takes an unpredictable time on a busy machine; advancing the clock before that registration is lost and the loop then waits forever.
-/// Tests therefore wait for <see cref="Timers"/> to grow instead of sleeping for a fixed time.
+/// Tests therefore wait for <see cref="Timers"/> to grow instead of sleeping for a fixed time. Other timers (an HTTP timeout, the heartbeat) are created on the
+/// same clock, so a bare count can be satisfied by a timer that is not the loop's wait; <see cref="DueTimes"/> lets a test wait for the wait it means.
 /// </summary>
 public sealed class TimerCountingTimeProvider : Microsoft.Extensions.Time.Testing.FakeTimeProvider
 {
     private int _timers;
+    private readonly List<TimeSpan> _due = [];
     public int Timers => Volatile.Read(ref _timers);
+    /// <summary>The due time of every timer created so far, in creation order.</summary>
+    public TimeSpan[] DueTimes { get { lock (_due) return [.. _due]; } }
     public override System.Threading.ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
+        // Count only once the timer exists on the fake clock: a test that sees the count grow advances the clock at once, and an advance that lands between
+        // the count and the registration would be missed by a timer whose due time is then measured from the advanced clock.
+        var timer = base.CreateTimer(callback, state, dueTime, period);
+        lock (_due) _due.Add(dueTime);
         Interlocked.Increment(ref _timers);
-        return base.CreateTimer(callback, state, dueTime, period);
+        return timer;
     }
 }

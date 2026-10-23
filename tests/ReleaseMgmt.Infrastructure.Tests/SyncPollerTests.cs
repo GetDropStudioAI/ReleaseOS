@@ -420,10 +420,10 @@ public sealed class SyncPollerTests(TriggerSuiteFixture fx) : IClassFixture<Trig
     }
 
     // ---- cadence ------------------------------------------------------------------------------------------------------------------------------
-    private static async Task Until(Func<bool> cond, string what)
+    private static async Task Until(Func<bool> cond, string what, Func<string>? state = null)
     {
         var t = Environment.TickCount64;
-        while (!cond()) { if (Environment.TickCount64 - t > 30_000) Assert.Fail("Timed out waiting for " + what); await Task.Delay(10); }
+        while (!cond()) { if (Environment.TickCount64 - t > 30_000) Assert.Fail("Timed out waiting for " + what + (state is null ? "" : " (" + state() + ")")); await Task.Delay(10); }
     }
 
     [Fact]
@@ -431,28 +431,34 @@ public sealed class SyncPollerTests(TriggerSuiteFixture fx) : IClassFixture<Trig
     {
         var e = Sn(cfg: new() { ["Sync:StartDelaySeconds"] = "0" }); e.SnAnswers();
         // The loop registers its next wait on the fake clock only after a cycle and a database read, and that takes an unpredictable time on a busy
-        // machine. So the test never sleeps and hopes: it waits until the loop has armed a NEW timer, then advances the clock.
-        var armed = 0;
-        async Task Armed() { await Until(() => e.Time.Timers > armed, "the loop to wait on the clock"); armed = e.Time.Timers; }
+        // machine. So the test never sleeps and hopes: it waits until the loop has armed a NEW timer of the length it expects, then advances the clock.
+        // (A bare count is not enough: an HTTP timeout or the heartbeat creates timers on the same clock, and advancing before the loop's own wait exists loses it.)
+        var seen = 0;
+        async Task Armed(TimeSpan wait)
+        {
+            await Until(() => Array.IndexOf(e.Time.DueTimes, wait, seen) >= 0, $"the loop to wait {wait} on the clock");
+            seen = Array.IndexOf(e.Time.DueTimes, wait, seen) + 1;
+        }
+        var five = TimeSpan.FromMinutes(5); var one = TimeSpan.FromMinutes(1);
         await e.Poller.StartAsync(default);
         try
         {
             await Until(() => e.Http.Count == 1, "the first cycle");
-            await Armed();
+            await Armed(five);
             e.Time.Advance(TimeSpan.FromMinutes(1));                      // the same five-minute wait is still pending
             await Task.Delay(200);
             Assert.Equal(1, e.Http.Count);                                // no window: one minute later nothing has happened
             e.Time.Advance(TimeSpan.FromMinutes(4));
-            await Until(() => e.Http.Count == 2, "the cycle after five minutes");
-            await Armed();
+            await Until(() => e.Http.Count == 2, "the cycle after five minutes", () => $"http calls {e.Http.Count}, timers created {string.Join(" ", e.Time.DueTimes)}, clock {e.Time.GetUtcNow():O}, alerts {string.Join(";", e.Query("SELECT SourceSystem||':'||Kind||':'||ErrorMessage FROM SyncAlerts").Select(r => string.Join("|", r)))}, state {string.Join(";", e.Query("SELECT * FROM ConnectorState").Select(r => string.Join("|", r)))}");
+            await Armed(five);
 
             e.Sql("INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES('w','t1','2026-10-30T02:00:00Z','2026-10-30T09:00:00Z')");   // window open now
             e.Time.Advance(TimeSpan.FromMinutes(5));                      // the slow wait in progress ends; the loop then sees the open window
             await Until(() => e.Http.Count == 3, "the cycle that notices the window");
-            await Armed();
+            await Armed(one);
             e.Time.Advance(TimeSpan.FromMinutes(1));
             await Until(() => e.Http.Count == 4, "a one-minute cycle");
-            await Armed();
+            await Armed(one);
             e.Time.Advance(TimeSpan.FromMinutes(1));
             await Until(() => e.Http.Count == 5, "another one-minute cycle");
         }

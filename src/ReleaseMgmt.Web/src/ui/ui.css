@@ -9,7 +9,8 @@
   outline: 2px solid var(--color-accent-fill); outline-offset: 2px;
 }
 .os-filter:focus-within, .os-search:focus-within { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
-.os-filter select:focus-visible, .os-search input:focus-visible { outline: none; }
+.os-search input:focus-visible { outline: none; }
+.os-filter select:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: -4px; }   /* also on the control itself, inside the frame: it is the focused element (the keyboard tour checks it) */
 
 .os-link { color: var(--color-accent-text); font-weight: 600; text-decoration: none; }
 .os-link:hover { text-decoration: underline; }

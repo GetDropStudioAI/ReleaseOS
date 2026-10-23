@@ -89,6 +89,8 @@ for (const scheme of ['light', 'dark'] as const) {
       const before = await title(page).textContent()
       await page.keyboard.press('PageDown')
       await expect(title(page)).not.toHaveText(before!)
+      // the calendar moves focus to the new week's cell once that week's data has loaded; a key pressed before that lands on the body and is ignored
+      await expect(page.locator('table.os-cal td:focus')).toHaveCount(1)
       await page.keyboard.press('PageUp')
       await expect(title(page)).toHaveText(before!)
       await expect(page.locator(`table.os-cal.week td[data-date="${train.targetReleaseDate}"][data-row="${row}"]`)).toBeFocused()

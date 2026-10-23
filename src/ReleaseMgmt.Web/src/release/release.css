@@ -1,0 +1,107 @@
+/* The release detail page (REOS-97/126/127). Tokens only; layout sizes come from the tokens' gaps. */
+.rd { max-width: none; }
+.rd .os-page-title-row { flex-wrap: wrap; align-items: flex-start; }
+.rd .os-page-intro { flex: 1 1 calc(var(--sidebar-width) * 1.4); }
+.rd .os-page-actions { flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; }
+.rd .os-disabled-action { flex-direction: column; align-items: flex-end; max-width: calc(var(--sidebar-width) * 1.4); text-align: right; }
+.rd-stack { display: flex; flex-direction: column; gap: var(--gap-xl); }
+.rd-group { margin: var(--gap-lg) 0 calc(-1 * var(--gap-md)); font: 600 var(--type-section) / 1.3 var(--font-sans); color: var(--color-text-primary); }
+.rd-context { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md) var(--gap-xl); font-size: var(--type-small); color: var(--color-text-primary); }
+.rd-actions { display: flex; flex-wrap: wrap; gap: var(--gap-md); }
+.rd-fact { display: inline-flex; gap: var(--gap-sm); align-items: baseline; }
+.rd-k { color: var(--color-text-secondary); }
+.rd-na { color: var(--color-text-secondary); }
+.rd-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--sidebar-width) * 0.62), 1fr)); gap: var(--gap-lg); }
+.rd-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--sidebar-width) * 1.4), 1fr)); gap: var(--gap-lg); align-items: start; }
+.rd-ready { display: flex; align-items: center; gap: var(--gap-lg); margin-bottom: var(--gap-lg); }
+.rd-ready .os-progress { flex: 1; }
+.rd-pct, .rd-score { font-size: var(--type-small); color: var(--color-text-primary); white-space: nowrap; }
+.rd-score { font-weight: 600; }
+.rd-stamp .rd-local { color: var(--color-text-secondary); }
+.rd-scroll { max-height: calc(var(--sidebar-width) * 2.2); overflow: auto; }
+.rd-scroll .os-table th { position: sticky; top: 0; z-index: 1; }
+.rd-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap-sm); }
+.rd-checks .ok { color: var(--color-status-success); }
+.rd-checks .bad { color: var(--color-status-danger); }
+.rd-checks .warn { color: var(--color-status-warning); }
+
+/* Go / no-go card (the dark panel): four states, each with its own icon, label and headline, never colour alone. */
+.rd-go { display: flex; flex-direction: column; align-items: flex-start; gap: var(--gap-md); color: var(--color-inverse-text-primary); }
+.rd-go p, .rd-go ul { margin: 0; }
+.rd-go-head { display: flex; align-items: center; gap: var(--gap-sm); font-size: var(--type-section); }
+.rd-go-rationale { color: var(--color-inverse-text-primary); }
+.rd-go-meta { font-size: var(--type-small); color: var(--color-inverse-text-secondary); }
+.rd-go-conds { padding-left: var(--gap-xl); font-size: var(--type-small); }
+.rd-go-NoGo { border-left: var(--gap-xs) solid var(--color-status-danger); padding-left: var(--gap-lg); }
+.rd-go-GoWithConditions { border-left: var(--gap-xs) dashed var(--color-status-warning); padding-left: var(--gap-lg); }
+.rd-go-None .rd-go-head { font-style: italic; }
+.rd-go .rd-local { color: var(--color-inverse-text-secondary); }
+
+/* Dialog fields (Complete and Abort) */
+.rd-dialog-fields { display: flex; flex-direction: column; gap: var(--gap-md); }
+.rd-dialog-fields p { margin: 0; }
+.rd-field { display: flex; flex-direction: column; gap: var(--gap-xs); font-size: var(--type-small); color: var(--color-text-primary); }
+.rd-field input, .rd-field select, .rd-fields input, .rd-fields select, .rd-fields textarea {
+  height: var(--control-height); padding: 0 var(--gap-md); border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md);
+  background: var(--color-bg-surface); color: var(--color-text-primary); font: var(--type-body) var(--font-sans);
+}
+.rd-field input:focus-visible, .rd-field select:focus-visible, .rd-fields :is(input, select, textarea):focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
+.rd-error { color: var(--color-status-danger); font-weight: 600; }
+
+/* Inputs inside panels' inline forms and table cells */
+.rd-input { width: 100%; min-width: 8em; height: var(--control-height); padding: 0 var(--gap-md); border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); font: var(--type-body) var(--font-sans); }
+.rd-input:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
+.rd-row-actions { display: inline-flex; align-items: center; gap: var(--gap-sm); }
+.rd-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--gap-md) var(--gap-lg); margin-bottom: var(--gap-lg); }
+.rd-fields.stack { display: grid; }
+.rd-fields label { display: flex; flex-direction: column; gap: var(--gap-xs); font-size: var(--type-small); color: var(--color-text-primary); }
+.rd-fields textarea { height: auto; min-height: calc(var(--control-height) * 2); padding: var(--gap-sm) var(--gap-md); }
+.rd-fields input:not([type=file]), .rd-fields select { min-width: 12em; }
+.rd-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--gap-sm) var(--gap-xl); margin: 0 0 var(--gap-lg); font-size: var(--type-body); }
+.rd-facts dt { color: var(--color-text-secondary); }
+.rd-facts dd { margin: 0; color: var(--color-text-primary); white-space: pre-wrap; }
+.rd-sub { margin: var(--gap-lg) 0 var(--gap-sm); font: 600 var(--type-small) / 1.3 var(--font-sans); color: var(--color-text-secondary); }
+.rd-note { margin: var(--gap-sm) 0; font-size: var(--type-small); color: var(--color-text-secondary); }
+.rd-ok { color: var(--color-status-success); }
+.rd-bad { color: var(--color-status-danger); }
+.rd-warn { color: var(--color-status-warning); }
+.rd-note + .rd-note { margin-top: 0; }
+
+/* Legacy sections inside the release page's panels (REOS-126/127): their inline forms, text buttons and grids take the redesign's look without a markup change,
+   so every existing selector, label and keyboard path keeps working. Scoped to .rd, so the Inspector and the other pages are untouched. */
+.rd .os-panel-body > * + * { margin-top: var(--gap-md); }
+.rd .os-panel-body > .os-table-wrap, .rd .os-panel-body .rd-scroll { margin-top: 0; }
+.rd .os-panel button.text:not(.plainlink):not(.quiet), .rd .os-panel a.text {
+  display: inline-flex; align-items: center; height: var(--control-height); padding: 0 var(--control-pad-x); border: var(--border-width) solid var(--color-border-default);
+  border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); font: 600 var(--type-body) / 1 var(--font-sans); cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.rd .os-panel button.text:not(.plainlink):not(.quiet):hover:not(:disabled) { background: var(--color-bg-muted); }
+.rd .os-panel button.text:disabled { opacity: 0.5; cursor: not-allowed; }
+.rd .os-panel button.text.destructive { color: var(--color-status-danger); }
+.rd .os-panel button.text.plainlink, .rd .os-panel button.text.quiet { background: none; border: 0; padding: 0; font: 600 var(--type-body) var(--font-sans); color: var(--color-accent-text); cursor: pointer; text-align: left; }
+.rd .os-panel button.text:focus-visible, .rd .os-panel a.text:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
+.rd .os-panel :is(input, select, textarea).line {
+  height: var(--control-height); padding: 0 var(--gap-md); border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md);
+  background: var(--color-bg-surface); color: var(--color-text-primary); font: var(--type-body) var(--font-sans);
+}
+.rd .os-panel textarea.line { height: auto; padding: var(--gap-sm) var(--gap-md); }
+.rd .os-panel :is(input, select, textarea).line:focus, .rd .os-panel :is(input, select, textarea).line:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; border: var(--border-width) solid var(--color-border-default); }
+.rd .os-panel .inline-form { gap: var(--gap-md) var(--gap-lg); align-items: flex-end; }
+.rd .os-panel .inline-form label { display: inline-flex; flex-direction: column; gap: var(--gap-xs); font-size: var(--type-small); color: var(--color-text-secondary); }
+.rd .os-panel .tabs .choice { color: var(--color-text-secondary); }
+.rd .os-panel .tabs .choice[aria-pressed="true"] { color: var(--color-accent-text); border-bottom-color: var(--color-accent-fill); }
+.rd .os-panel table.grid { width: 100%; border-collapse: collapse; font-size: var(--type-body); margin: 0; }
+.rd .os-panel table.grid th { text-align: left; padding: var(--gap-md) var(--gap-lg); background: var(--color-bg-subtle); color: var(--color-text-secondary); font: 500 var(--type-small) / 1.3 var(--font-sans); border-bottom: var(--border-width) solid var(--color-border-subtle); white-space: nowrap; }
+.rd .os-panel table.grid td { padding: var(--gap-md) var(--gap-lg); border-bottom: var(--border-width) solid var(--color-border-subtle); color: var(--color-text-primary); vertical-align: middle; }
+.rd .os-panel table.grid td.mono { font-family: var(--font-mono); font-size: var(--type-mono); }
+.rd .os-panel table.grid tr.selected td { background: var(--color-bg-accent-faint); }
+.rd .os-panel .muted { color: var(--color-text-secondary); }
+.rd .os-panel .ok { color: var(--color-status-success); }
+.rd .os-panel .warn { color: var(--color-status-warning); }
+.rd .os-panel .bad { color: var(--color-status-danger); }
+.rd .os-panel .accent { color: var(--color-accent-text); }
+.rd .os-panel .label { color: var(--color-text-primary); }
+.rd .os-panel .mono { font-family: var(--font-mono); }
+.rd .os-panel .scroll-x { overflow-x: auto; }
+.rd .os-panel .conflict { margin: var(--gap-md) 0; }
+.rd .os-panel-body { overflow-x: auto; }

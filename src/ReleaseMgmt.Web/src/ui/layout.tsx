@@ -3,15 +3,15 @@ import type { Tone } from './tone.ts'
 
 /**
  * Panel with a heading row (D41, REOS-93): title, optional subtitle, and right-aligned meta (a count, a chip or a link). `inverse` is the dark panel
- * of the design (Go/no-go, Deployment events), dark in both themes. The heading names the section for screen readers.
+ * of the design (Go/no-go, Deployment events), dark in both themes. The heading names the section for screen readers; `label` names it instead when a screen already finds the section by that name.
  */
-export function Panel({ title, subtitle, meta, footer, inverse, level = 2, children }: {
-  title: ReactNode; subtitle?: ReactNode; meta?: ReactNode; footer?: ReactNode; inverse?: boolean; level?: 2 | 3 | 4; children?: ReactNode
+export function Panel({ title, subtitle, meta, footer, inverse, level = 2, label, children }: {
+  title: ReactNode; subtitle?: ReactNode; meta?: ReactNode; footer?: ReactNode; inverse?: boolean; level?: 2 | 3 | 4; label?: string; children?: ReactNode
 }) {
   const id = useId()
   const H = level === 2 ? 'h2' : level === 3 ? 'h3' : 'h4'
   return (
-    <section className={`os-panel${inverse ? ' inverse' : ''}`} aria-labelledby={id}>
+    <section className={`os-panel${inverse ? ' inverse' : ''}`} aria-label={label} aria-labelledby={label ? undefined : id}>
       <header className="os-panel-head">
         <div><H id={id} className="os-panel-title">{title}</H>{subtitle && <p className="os-panel-subtitle">{subtitle}</p>}</div>
         {meta && <div className="os-panel-meta">{meta}</div>}

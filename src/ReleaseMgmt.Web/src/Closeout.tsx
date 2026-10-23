@@ -10,6 +10,7 @@ import { useAction } from './useAction'
 import { ConfirmInline } from './ConfirmInline'
 import { announce } from './announce'
 import { useDraft } from './session'
+import { Button, Panel, StatusChip } from './ui'
 
 // Status is words + glyphs + coloured text (CLAUDE.md rule 9).
 const PIR_STATE: Record<Pir['status'], { g: string; cls: string; word: string }> = {
@@ -25,10 +26,11 @@ const ISSUE_STATE: Record<KnownIssue['status'], { g: string; cls: string }> = {
 const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'] as const
 
 /**
- * Close-out sections of the train view (REOS-36): rollback-rehearsal attestation, post-implementation review with its actions,
- * and the hypercare known-issue log. Everything is inline; every write sends the row's Version as If-Match.
+ * Close-out sections of the release view (REOS-36): rollback-rehearsal attestation, post-implementation review with its actions,
+ * and the hypercare known-issue log. Everything is inline; every write sends the row's Version as If-Match. The release page shows the rehearsal on
+ * Approvals (`part="rollback"`) and the review and known issues on Activity (`part="review"`).
  */
-export function Closeout({ train, canPlan, refreshKey, onChanged }: { train: TrainDetail; canPlan: boolean; refreshKey: number; onChanged: () => void }) {
+export function Closeout({ train, canPlan, refreshKey, onChanged, part }: { train: TrainDetail; canPlan: boolean; refreshKey: number; onChanged: () => void; part?: 'rollback' | 'review' }) {
   const [me, setMe] = useState<Me | null>(null)
   const [owners, setOwners] = useState<Owner[]>([])
   useEffect(() => { getMe().then(setMe).catch(() => setMe(null)); getOwners().then(o => setOwners(o.filter(x => x.kind === 'user'))).catch(() => setOwners([])) }, [])
@@ -39,9 +41,9 @@ export function Closeout({ train, canPlan, refreshKey, onChanged }: { train: Tra
   const common = { train, refreshKey, onChanged, name, owners }
   return (
     <>
-      {train.status !== 'Aborted' && <RollbackSection {...common} canPlan={canPlan} />}
-      {(train.status === 'Complete' || train.status === 'Aborted' || train.status === 'Executing') && <PirSection {...common} canCloseout={canCloseout} meId={me?.id ?? null} />}
-      {(train.status === 'Gated' || train.status === 'Executing' || train.status === 'Complete') && <IssuesSection {...common} canCloseout={canCloseout} canAccept={canAccept} canPlan={canPlan} />}
+      {part !== 'review' && train.status !== 'Aborted' && <RollbackSection {...common} canPlan={canPlan} />}
+      {part !== 'rollback' && (train.status === 'Complete' || train.status === 'Aborted' || train.status === 'Executing') && <PirSection {...common} canCloseout={canCloseout} meId={me?.id ?? null} />}
+      {part !== 'rollback' && (train.status === 'Gated' || train.status === 'Executing' || train.status === 'Complete') && <IssuesSection {...common} canCloseout={canCloseout} canAccept={canAccept} canPlan={canPlan} />}
     </>
   )
 }
@@ -85,10 +87,9 @@ function RollbackSection({ train, refreshKey, onChanged, name, canPlan }: Sectio
   if (!a) return <Errors err={err} />
   const closed = train.status === 'Complete'
   return (
-    <section aria-label="Rollback rehearsal">
-      <div className="section-head"><h2 className="cap dark">Rollback rehearsal</h2>
-        <span className="muted">{canPlan && !closed && <button ref={toggle} type="button" className="text" aria-expanded={!!draft} aria-controls={draft ? formId : undefined} disabled={!!pending}
-          onClick={() => { if (draft) setDraft(undefined); else { setDraft({ runId: '', note: '' }); later(() => first.current?.focus()) } }}>{draft ? 'Cancel' : a.rehearsedAt ? 'Attest again' : 'Attest rehearsal'}</button>}</span></div>
+    <Panel label="Rollback rehearsal" title="Rollback rehearsal" subtitle="An attestation that the rollback section was rehearsed and works."
+      meta={canPlan && !closed && <Button ref={toggle} aria-expanded={!!draft} aria-controls={draft ? formId : undefined} disabled={!!pending}
+          onClick={() => { if (draft) setDraft(undefined); else { setDraft({ runId: '', note: '' }); later(() => first.current?.focus()) } }}>{draft ? 'Cancel' : a.rehearsedAt ? 'Attest again' : 'Attest rehearsal'}</Button>}>
       {a.rehearsedAt
         ? <p><span className="ok">✓ Rehearsed</span> · <span className="mono">{fmtDayTime(a.rehearsedAt)}</span> · attested by {a.rehearsedByName ?? name(a.rehearsedByUserId)}</p>
         : a.required
@@ -105,7 +106,7 @@ function RollbackSection({ train, refreshKey, onChanged, name, canPlan }: Sectio
             <span className="muted">You attest that the rollback section was rehearsed and works.</span></span>
         </div>)}
       <Errors err={err} />
-    </section>
+    </Panel>
   )
 }
 
@@ -130,28 +131,26 @@ function PirSection({ train, refreshKey, onChanged, name, owners, canCloseout, m
   if (!pir && train.status === 'Executing') return null   // an Executing train has a PIR only once a live run was rolled back (REOS-87)
   if (!pir) {
     return (
-      <section aria-label="Post-implementation review">
-        <div className="section-head"><h2 className="cap dark">Post-implementation review</h2>
-          <span className="muted">{canCloseout && <button type="button" className="text" disabled={!!pending} onClick={() => run('Starting…', () => createPir(train.id), undefined, 'Post-implementation review started.')}>{pending ?? 'Start a PIR'}</button>}</span></div>
-        <p className="muted">No PIR. One is created automatically when a train closes with issues or unsuccessfully, when a live run is rolled back, or when an Executing train is aborted.</p>
+      <Panel label="Post-implementation review" title="Post-implementation review"
+        meta={canCloseout && <Button disabled={!!pending} onClick={() => run('Starting…', () => createPir(train.id), undefined, 'Post-implementation review started.')}>{pending ?? 'Start a PIR'}</Button>}>
+        <p className="rd-na">No PIR. One is created automatically when a train closes with issues or unsuccessfully, when a live run is rolled back, or when an Executing train is aborted.</p>
         <Errors err={err} />
-      </section>)
+      </Panel>)
   }
   const s = PIR_STATE[pir.status]
   const closed = pir.status === 'Closed'
   const openActions = d.actions.filter(a => !a.doneAt).length
   const today = new Date(serverNow()).toISOString().slice(0, 10)
   return (
-    <section aria-label="Post-implementation review">
-      <div className="section-head"><h2 className="cap dark">Post-implementation review</h2>
-        <span className="muted">{canCloseout && !closed && (
+    <Panel label="Post-implementation review" title="Post-implementation review"
+      meta={canCloseout && !closed && (
           <>
-            {pir.status === 'Required' && <button type="button" className="text" disabled={!!pending} onClick={() => run('Scheduling…', () => pirAction(train.id, 'schedule', pir.version), undefined, 'PIR marked scheduled.')}>{pending === 'Scheduling…' ? pending : 'Mark scheduled'}</button>}
-            {pir.status !== 'Held' && <> <button type="button" className="text" disabled={!!pending} onClick={() => run('Marking held…', () => pirAction(train.id, 'hold', pir.version, summary ?? undefined), () => setSummaryDraft(undefined), 'PIR marked held.')}>{pending === 'Marking held…' ? pending : 'Mark held'}</button></>}
+            {pir.status === 'Required' && <Button disabled={!!pending} onClick={() => run('Scheduling…', () => pirAction(train.id, 'schedule', pir.version), undefined, 'PIR marked scheduled.')}>{pending === 'Scheduling…' ? pending : 'Mark scheduled'}</Button>}
+            {pir.status !== 'Held' && <Button disabled={!!pending} onClick={() => run('Marking held…', () => pirAction(train.id, 'hold', pir.version, summary ?? undefined), () => setSummaryDraft(undefined), 'PIR marked held.')}>{pending === 'Marking held…' ? pending : 'Mark held'}</Button>}
             {pir.status === 'Held' && <ConfirmInline label="Close PIR" destructive={false} disabled={!!pending} confirmLabel="Close review" pendingLabel="Closing…"
               question={openActions > 0 ? `Close the review with ${plural(openActions, 'action')} still open?` : 'Close the review? It cannot be reopened.'}
               onConfirm={() => run('Closing…', () => pirAction(train.id, 'close', pir.version), undefined, 'PIR closed.')} />}
-          </>)}</span></div>
+          </>)}>
       <p><span className={s.cls}>{s.g} {s.word}</span> <span className="muted">· {pirReason(pir.requiredReason)}{pir.heldAt ? ` · held ${fmtDayTime(pir.heldAt)}` : ''}</span>
         {d.dueOn && !closed && pir.status !== 'Held' && (d.overdue
           ? <span className="bad"> · <span aria-hidden="true">▲ </span>overdue, was due {day(d.dueOn)}</span>
@@ -192,7 +191,7 @@ function PirSection({ train, refreshKey, onChanged, name, owners, canCloseout, m
               () => { setForm(form.ownerId ? { text: '', ownerId: form.ownerId, dueOn: '' } : undefined); actionInput.current?.focus() }, 'Action added.')}>{pending === 'Adding…' ? pending : 'Add action'}</button>
         </p>)}
       <Errors err={err} />
-    </section>
+    </Panel>
   )
 }
 
@@ -218,13 +217,12 @@ function IssuesSection({ train, refreshKey, onChanged, canCloseout, canAccept, c
   const ended = d.hypercareExitAt !== null
   const openCount = d.issues.filter(i => i.status === 'Open').length
   return (
-    <section aria-label="Known issues and hypercare">
-      <div className="section-head"><h2 className="cap dark">Known issues · hypercare</h2>
-        <span className="muted">{train.status === 'Complete' && (ended
-          ? <span className="ok">✓ Hypercare ended {fmtDayTime(d.hypercareExitAt!)}</span>
+    <Panel label="Known issues and hypercare" title="Known issues · hypercare"
+      meta={train.status === 'Complete' && (ended
+          ? <StatusChip tone="success">{`Hypercare ended ${fmtDayTime(d.hypercareExitAt!)}`}</StatusChip>
           : canPlan && <ConfirmInline label="Exit hypercare" destructive={false} disabled={!!pending} confirmLabel="End hypercare" pendingLabel="Ending…"
               question={openCount > 0 ? `End hypercare with ${plural(openCount, 'issue')} still open?` : 'End hypercare? Known issues can no longer be logged.'}
-              onConfirm={() => run('Ending…', () => exitHypercare(train.id, train.version), undefined, 'Hypercare ended.')} />)}</span></div>
+              onConfirm={() => run('Ending…', () => exitHypercare(train.id, train.version), undefined, 'Hypercare ended.')} />)}>
       {d.issues.length === 0 ? <p className="muted">No known issues logged.</p> : (
         <table className="grid">
           <thead><tr><th>Severity</th><th>Issue</th><th>State</th><th>Workaround</th><th>Reference</th><th><span className="sr-only">Actions</span></th></tr></thead>
@@ -266,6 +264,6 @@ function IssuesSection({ train, refreshKey, onChanged, canCloseout, canAccept, c
               () => { setForm(form.severity !== 'Medium' ? { title: '', severity: form.severity, workaround: '', externalKey: '' } : undefined); issueInput.current?.focus() }, 'Issue logged.')}>{pending === 'Logging…' ? pending : 'Log issue'}</button>
         </p>)}
       <Errors err={err} />
-    </section>
+    </Panel>
   )
 }

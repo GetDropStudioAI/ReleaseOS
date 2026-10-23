@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Button, Panel } from './ui'
 import { getMe, getOwners, type ApiError, type Me, type Owner } from './api'
 import { day, errMsg, tMinus } from './format'
 import { displayZone, fmtDayTime, serverNow } from './time'
@@ -87,10 +88,9 @@ export function MilestonesSection({ trainId, rows, error, canPlan, onChanged }: 
   const today = todayInZone()
 
   return (
-    <section aria-label="Milestones">
-      <div className="section-head"><h2 className="cap dark">Milestones</h2>
-        <span className="muted">{rows && <><span className="mono label">{done} / {rows.length}</span> done</>}
-          {canPlan && <> · <button type="button" className="text" aria-expanded={adding !== undefined} onClick={() => { setErr(null); setAdding(adding ? undefined : emptyForm()) }}>{adding ? 'Cancel adding' : 'Add milestone'}</button></>}</span></div>
+    <Panel label="Milestones" title="Milestones" subtitle="Named key dates on the release. Informational: they never block a gate or a move."
+      meta={<>{rows && <span><span className="mono">{done} / {rows.length}</span> done</span>}
+          {canPlan && <Button aria-expanded={adding !== undefined} onClick={() => { setErr(null); setAdding(adding ? undefined : emptyForm()) }}>{adding ? 'Cancel adding' : 'Add milestone'}</Button>}</>}>
       {adding && (
         <p className="inline-form" role="group" aria-label="New milestone">
           <Fields form={adding} owners={owners} onChange={setAdding} idPrefix="ms-new" />{' '}
@@ -140,6 +140,6 @@ export function MilestonesSection({ trainId, rows, error, canPlan, onChanged }: 
             })}
           </tbody>
         </table>)}
-    </section>
+    </Panel>
   )
 }

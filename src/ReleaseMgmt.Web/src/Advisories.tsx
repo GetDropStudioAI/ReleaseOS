@@ -24,11 +24,11 @@ export function ContingencyLine({ c }: { c: ContingencyView }) {
 }
 
 /** The same advisories as readiness-line items, after the guards: ▲ in warning colour and the word "advisory", so they never read as blockers. */
-export function AdvisoryItems({ contingency, collisions }: { contingency: ContingencyView | null; collisions: WindowCollision[] }) {
+export function AdvisoryItems({ contingency, collisions, item: Item = 'span' }: { contingency: ContingencyView | null; collisions: WindowCollision[]; item?: 'span' | 'li' }) {
   return (
     <>
-      {contingency?.state === 'low' && <span><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Contingency {contingency.percent}%, below {contingency.minPercent}% <span className="muted">(advisory)</span></span>}
-      {contingency?.state === 'over' && <span><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> The plan ends {dur(-contingency.spareMin!)} after the rollback deadline <span className="muted">(advisory)</span></span>}
-      {collisions.map(c => <span key={c.otherTrainId}><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Window {collisionText(c)} <span className="muted">(advisory)</span></span>)}
+      {contingency?.state === 'low' && <Item><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Contingency {contingency.percent}%, below {contingency.minPercent}% <span className="muted">(advisory)</span></Item>}
+      {contingency?.state === 'over' && <Item><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> The plan ends {dur(-contingency.spareMin!)} after the rollback deadline <span className="muted">(advisory)</span></Item>}
+      {collisions.map(c => <Item key={c.otherTrainId}><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Window {collisionText(c)} <span className="muted">(advisory)</span></Item>)}
     </>)
 }

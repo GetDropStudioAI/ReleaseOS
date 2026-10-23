@@ -7,14 +7,15 @@ import { errMsg } from './format'
 import { fmtDayTime, utcToZonedInput, zonedInputToUtc, serverNow } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
-import type { ApiError } from './api'
+import type { ApiError, Condition } from './api'
 import { useAction } from './useAction'
 import { ConfirmInline } from './ConfirmInline'
 import { announce } from './announce'
 import { useFocusWhen } from './focus'
+import { Button, DataTable, ErrorState, Notice, Panel, StatusChip, type Column, type Tone } from './ui'
 
-const WORD: Record<string, { g: string; cls: string; word: string }> = {
-  Go: { g: '●', cls: 'ok', word: 'Go' }, GoWithConditions: { g: '◐', cls: 'warn', word: 'Go with conditions' }, NoGo: { g: '✗', cls: 'bad', word: 'No-Go' },
+const WORD: Record<string, { g: string; cls: string; word: string; tone: Tone }> = {
+  Go: { g: '●', cls: 'ok', word: 'Go', tone: 'success' }, GoWithConditions: { g: '◐', cls: 'warn', word: 'Go with conditions', tone: 'warning' }, NoGo: { g: '✗', cls: 'bad', word: 'No-Go', tone: 'danger' },
 }
 
 export interface GoNoGoDraft { decision: string; notes: string; newTarget: string; conditions: { text: string; ownerId: string; expires: string }[] }
@@ -54,7 +55,7 @@ export function GoNoGo({ trainId, trainVersion, canDecide, refreshKey, onChanged
   const confirmBtn = useFocusWhen<HTMLButtonElement>(confirming)
   useEffect(() => { getDecisions(trainId).then(setList).catch(e => setErr(errMsg(e))) }, [trainId, refreshKey])
   useEffect(() => { getOwners().then(o => setOwners(o.filter(x => x.kind === 'user'))).catch(() => setOwners([])) }, [])
-  if (!list) return err ? <p className="bad" role="alert">✗ {err}</p> : null
+  if (!list) return err ? <ErrorState what="The Go/No-Go decisions" message={err} /> : null
   const name = (id: string) => owners.find(o => o.id === id)?.name ?? '—'
   const latest = list[0]
   const now = serverNow()
@@ -90,66 +91,60 @@ export function GoNoGo({ trainId, trainVersion, canDecide, refreshKey, onChanged
     : d.decision === 'NoGo' && d.newTarget ? ` with a new target of ${d.newTarget}` : ''
   const setCond = (i: number, patch: Partial<GoNoGoDraft['conditions'][number]>) => draft && setDraft({ ...draft, conditions: draft.conditions.map((c, j) => j === i ? { ...c, ...patch } : c) })
 
+  const condColumns: Column<Condition>[] = [
+    { key: 'state', header: 'State', cell: c => { const lapsed = !c.closedAt && new Date(c.expiresAt).getTime() <= now; return <StatusChip tone={c.closedAt ? 'success' : lapsed ? 'danger' : 'neutral'}>{c.closedAt ? 'Closed' : lapsed ? 'Expired' : 'Open'}</StatusChip> } },
+    { key: 'text', header: 'Condition', cell: c => c.text },
+    { key: 'owner', header: 'Owner', cell: c => name(c.ownerUserId) },
+    { key: 'expires', header: 'Expires', cell: c => <span className="mono">{fmtDayTime(c.expiresAt)}</span> },
+    { key: 'actions', header: <span className="sr-only">Actions</span>, cell: c => !c.closedAt && <ConfirmInline label="Close" triggerLabel={`Close condition: ${c.text}`} question="Close this condition?" confirmLabel="Close condition" pendingLabel="Closing…" destructive={false} onConfirm={() => close(c.id, c.version)} /> },
+  ]
   const row = (v: DecisionView) => {
     const w = WORD[v.decision.decision]
     return (
-      <div key={v.decision.id}>
-        <p><span className={w.cls}>{w.g} {w.word}</span> · <span className="mono">{fmtDayTime(v.decision.decidedAt)}</span> · {name(v.decision.decidedByUserId)}
-          {v.decision.notes && <span className="muted"> — {v.decision.notes}</span>}
-          {v.decision.newTargetReleaseDate && <span className="muted"> · new target {v.decision.newTargetReleaseDate}</span>}</p>
-        {v.conditions.length > 0 && (
-          <table className="grid">
-            <thead><tr><th>State</th><th>Condition</th><th>Owner</th><th>Expires</th><th><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>
-              {v.conditions.map(c => {
-                const lapsed = !c.closedAt && new Date(c.expiresAt).getTime() <= now
-                return (
-                  <tr key={c.id}>
-                    <td className={c.closedAt ? 'ok nowrap' : lapsed ? 'bad nowrap' : 'nowrap'}>{c.closedAt ? '✓ closed' : lapsed ? '✗ expired' : '○ open'}</td>
-                    <td>{c.text}</td><td>{name(c.ownerUserId)}</td><td className="mono nowrap">{fmtDayTime(c.expiresAt)}</td>
-                    <td>{!c.closedAt && <ConfirmInline label="Close" triggerLabel={`Close condition: ${c.text}`} question="Close this condition?" confirmLabel="Close condition" pendingLabel="Closing…" destructive={false} onConfirm={() => close(c.id, c.version)} />}</td>
-                  </tr>)
-              })}
-            </tbody>
-          </table>)}
+      <div key={v.decision.id} className="rd-decision">
+        <p><StatusChip tone={w.tone}>{w.word}</StatusChip> <span className="mono">{fmtDayTime(v.decision.decidedAt)}</span> · {name(v.decision.decidedByUserId)}
+          {v.decision.notes && <span className="rd-na"> — {v.decision.notes}</span>}
+          {v.decision.newTargetReleaseDate && <span className="rd-na"> · new target {v.decision.newTargetReleaseDate}</span>}</p>
+        {v.conditions.length > 0 && <DataTable caption="Go conditions" columns={condColumns} rows={v.conditions} rowKey={c => c.id} />}
       </div>)
   }
 
   return (
-    <section aria-label="Go/No-Go">
-      <div className="section-head"><h2 className="cap dark">Go/No-Go</h2>
-        <span className="muted">{list.length > 1 && <button type="button" className="text" aria-expanded={history} aria-controls={history ? historyId : undefined} onClick={() => setHistory(!history)}>{history ? 'Hide history' : `History (${list.length})`}</button>}
-          {canDecide && <> <button ref={toggle} type="button" className="text" aria-expanded={!!draft} aria-controls={draft ? formId : undefined} disabled={!!pending} onClick={() => draft ? setDraft(undefined) : open()}>{draft ? 'Cancel' : 'Record Go/No-Go'}</button></>}</span></div>
+    <Panel label="Go/No-Go" title="Go/No-Go" subtitle="Decisions are recorded once and cannot be edited afterwards."
+      meta={<>
+        {list.length > 1 && <Button aria-expanded={history} aria-controls={history ? historyId : undefined} onClick={() => setHistory(!history)}>{history ? 'Hide history' : `History (${list.length})`}</Button>}
+        {canDecide && <Button ref={toggle} variant={draft ? 'secondary' : 'primary'} aria-expanded={!!draft} aria-controls={draft ? formId : undefined} disabled={!!pending} onClick={() => draft ? setDraft(undefined) : open()}>{draft ? 'Cancel' : 'Record Go/No-Go'}</Button>}
+      </>}>
       {draft && (
-        <div className="inline-form stack" id={formId} role="group" aria-label="Record Go/No-Go">
+        <div className="rd-fields stack" id={formId} role="group" aria-label="Record Go/No-Go">
           <RadioChoice label="Decision" groupRef={group} value={draft.decision as 'Go' | 'GoWithConditions' | 'NoGo'} options={(['Go', 'GoWithConditions', 'NoGo'] as const).map(k => ({ key: k, word: WORD[k].word }))}
             onChange={d => setDraft({ ...draft, decision: d, conditions: d === 'GoWithConditions' && draft.conditions.length === 0 ? [{ text: '', ownerId: '', expires: '' }] : draft.conditions })} />
-          <label>Notes <input className="line wide" value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} /></label>
-          {draft.decision === 'NoGo' && <label>New target date <input className="line" type="date" value={draft.newTarget} onChange={e => setDraft({ ...draft, newTarget: e.target.value })} /></label>}
+          <label>Notes <input value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} /></label>
+          {draft.decision === 'NoGo' && <label>New target date <input type="date" value={draft.newTarget} onChange={e => setDraft({ ...draft, newTarget: e.target.value })} /></label>}
           {draft.decision === 'GoWithConditions' && (
             <>
               {draft.conditions.map((c, i) => (
-                <span key={i} className="inline-form">
-                  <label>Condition <input className="line wide" value={c.text} onChange={e => setCond(i, { text: e.target.value })} /></label>
-                  <label>Owner <select className="line" value={c.ownerId || owners[0]?.id || ''} onChange={e => setCond(i, { ownerId: e.target.value })}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
-                  <label>Expires <input className="line" type="datetime-local" value={c.expires} onChange={e => setCond(i, { expires: e.target.value })} /></label>
-                  <button type="button" className="text" onClick={() => setDraft({ ...draft, conditions: draft.conditions.filter((_, j) => j !== i) })}>Remove</button>
+                <span key={i} className="rd-fields">
+                  <label>Condition <input value={c.text} onChange={e => setCond(i, { text: e.target.value })} /></label>
+                  <label>Owner <select value={c.ownerId || owners[0]?.id || ''} onChange={e => setCond(i, { ownerId: e.target.value })}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+                  <label>Expires <input type="datetime-local" value={c.expires} onChange={e => setCond(i, { expires: e.target.value })} /></label>
+                  <Button onClick={() => setDraft({ ...draft, conditions: draft.conditions.filter((_, j) => j !== i) })}>Remove</Button>
                 </span>))}
-              <span><button type="button" className="text" onClick={() => setDraft({ ...draft, conditions: [...draft.conditions, { text: '', ownerId: '', expires: utcToZonedInput(new Date(now + 24 * 3600e3).toISOString()) }] })}>Add condition</button></span>
+              <span><Button onClick={() => setDraft({ ...draft, conditions: [...draft.conditions, { text: '', ownerId: '', expires: utcToZonedInput(new Date(now + 24 * 3600e3).toISOString()) }] })}>Add condition</Button></span>
             </>)}
           {confirming
-            ? <span className="confirm-inline" role="group" aria-label="Confirm decision">
-                <span>Record <span className={WORD[draft.decision].cls}><span aria-hidden="true">{WORD[draft.decision].g} </span>{WORD[draft.decision].word}</span>{summary(draft)}? Decisions cannot be edited afterwards.</span>
-                <button ref={confirmBtn} type="button" className="text" disabled={!!pending} onClick={() => save()}>{pending ?? 'Confirm decision'}</button>
-                <button type="button" className="text" disabled={!!pending} onClick={cancelConfirm}>Cancel</button>
+            ? <span className="confirm-inline rd-fields" role="group" aria-label="Confirm decision">
+                <span>Record <StatusChip tone={WORD[draft.decision].tone}>{WORD[draft.decision].word}</StatusChip>{summary(draft)}? Decisions cannot be edited afterwards.</span>
+                <Button ref={confirmBtn} variant="primary" disabled={!!pending} onClick={() => save()}>{pending ?? 'Confirm decision'}</Button>
+                <Button disabled={!!pending} onClick={cancelConfirm}>Cancel</Button>
               </span>
-            : <span><button ref={recordBtn} type="button" className="text" onClick={review}>Record decision</button> <span className="muted">Decisions cannot be edited afterwards.</span></span>}
+            : <span><Button ref={recordBtn} variant="primary" onClick={review}>Record decision</Button> <span className="rd-na">Decisions cannot be edited afterwards.</span></span>}
         </div>)}
       {conflict && <Conflict error={conflict} what="train">{draft && <button type="button" className="text" disabled={!!pending} onClick={() => save((conflict.body?.current as { version?: number } | undefined)?.version)}>{pending ?? 'Record anyway'}</button>}</Conflict>}
-      {err && <p className="bad" role="alert">✗ {err}</p>}
-      {!latest ? <p className="muted">No Go/No-Go recorded yet. Executing needs a Go.</p> : row(latest)}
+      {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
+      {!latest ? <p className="rd-na">No Go/No-Go recorded yet. Executing needs a Go.</p> : row(latest)}
       {history && <div id={historyId}>{list.slice(1).map(row)}</div>}
-    </section>
+    </Panel>
   )
 }
 
@@ -173,7 +168,7 @@ export function ChangeRecordPanel({ trainId, canEdit, refreshKey, onChanged }: {
   const firstField = useRef<HTMLTextAreaElement>(null)
   const itemInput = useRef<HTMLInputElement>(null)
   useEffect(() => { getChangeRecord(trainId).then(setCr).catch(e => setErr(errMsg(e))); getCis(trainId).then(setCis).catch(() => setCis([])) }, [trainId, refreshKey])
-  if (!cr) return err ? <p className="bad" role="alert">✗ {err}</p> : null
+  if (!cr) return err ? <ErrorState what="The change record" message={err} /> : null
   const edit = () => { setDraft(Object.fromEntries([...FIELDS.map(f => [f.key, cr[f.key] ?? '']), ['cabDate', cr.cabDate ?? '']])); requestAnimationFrame(() => firstField.current?.focus()) }
   const save = (version = cr.version) => run('Saving…', async () => {
     if (!draft) return
@@ -195,31 +190,33 @@ export function ChangeRecordPanel({ trainId, canEdit, refreshKey, onChanged }: {
   }
   const empty = FIELDS.every(f => !cr[f.key]) && !cr.cabDate
 
+  const ciColumns: Column<AffectedCi>[] = [
+    { key: 'item', header: 'Item', cell: c => c.ciName },
+    { key: 'ext', header: 'External id', cell: c => <span className="mono">{c.ciExternalId ?? '—'}</span> },
+    { key: 'actions', header: <span className="sr-only">Actions</span>, cell: c => canEdit && <ConfirmInline label="Remove" triggerLabel={`Remove ${c.ciName}`} question={`Remove ${c.ciName}?`} confirmLabel="Remove item" pendingLabel="Removing…" onConfirm={() => remove(c)} /> },
+  ]
   return (
-    <section aria-label="Change record">
-      <div className="section-head"><h2 className="cap dark">Change record</h2>
-        <span className="muted">{cr.cabDate && <>CAB <span className="mono">{cr.cabDate}</span> · </>}{canEdit && <button ref={editBtn} type="button" className="text" aria-expanded={!!draft} aria-controls={draft ? formId : undefined} disabled={!!pending && !!draft} onClick={() => draft ? setDraft(undefined) : edit()}>{draft ? 'Cancel' : 'Edit'}</button>}</span></div>
+    <Panel label="Change record" title="Change record" subtitle={cr.cabDate ? <>CAB <span className="mono">{cr.cabDate}</span></> : undefined}
+      meta={canEdit && <Button ref={editBtn} aria-expanded={!!draft} aria-controls={draft ? formId : undefined} disabled={!!pending && !!draft} onClick={() => draft ? setDraft(undefined) : edit()}>{draft ? 'Cancel' : 'Edit'}</Button>}>
       {draft ? (
-        <div className="inline-form stack" id={formId}>
-          {FIELDS.map((f, i) => <label key={f.key}>{f.label}<textarea ref={i === 0 ? firstField : undefined} className="line block" rows={2} value={draft[f.key] ?? ''} onChange={e => setDraft({ ...draft, [f.key]: e.target.value })} /></label>)}
-          <label>CAB date <input className="line" type="date" value={draft.cabDate ?? ''} onChange={e => setDraft({ ...draft, cabDate: e.target.value })} /></label>
-          <span><button type="button" className="text" disabled={!!pending} onClick={() => save()}>{pending === 'Saving…' ? pending : 'Save change record'}</button></span>
+        <div className="rd-fields stack" id={formId}>
+          {FIELDS.map((f, i) => <label key={f.key}>{f.label}<textarea ref={i === 0 ? firstField : undefined} rows={2} value={draft[f.key] ?? ''} onChange={e => setDraft({ ...draft, [f.key]: e.target.value })} /></label>)}
+          <label>CAB date <input type="date" value={draft.cabDate ?? ''} onChange={e => setDraft({ ...draft, cabDate: e.target.value })} /></label>
+          <span><Button variant="primary" disabled={!!pending} onClick={() => save()}>{pending === 'Saving…' ? pending : 'Save change record'}</Button></span>
           {conflict && <Conflict error={conflict} what="change record"><button type="button" className="text" disabled={!!pending} onClick={() => save((conflict.body?.current as { version?: number } | undefined)?.version)}>Overwrite with mine</button>{' '}<button type="button" className="text" onClick={() => { setDraft(undefined); setConflict(null) }}>Use theirs</button></Conflict>}
         </div>
-      ) : empty ? <p className="muted">Nothing recorded yet.</p> : (
-        <dl className="facts">{FIELDS.filter(f => cr[f.key]).map(f => <Fragment key={f.key}><dt>{f.label}</dt><dd>{cr[f.key]}</dd></Fragment>)}</dl>
+      ) : empty ? <p className="rd-na">Nothing recorded yet.</p> : (
+        <dl className="rd-facts">{FIELDS.filter(f => cr[f.key]).map(f => <Fragment key={f.key}><dt>{f.label}</dt><dd>{cr[f.key]}</dd></Fragment>)}</dl>
       )}
-      {err && <p className="bad" role="alert">✗ {err}</p>}
-      <h3 className="cap">Affected configuration items</h3>
-      {cis.length === 0 ? <p className="muted">None listed.</p> : (
-        <table className="grid"><thead><tr><th>Item</th><th>External id</th><th><span className="sr-only">Actions</span></th></tr></thead>
-          <tbody>{cis.map(c => <tr key={c.id}><td>{c.ciName}</td><td className="mono muted">{c.ciExternalId ?? '—'}</td><td>{canEdit && <ConfirmInline label="Remove" triggerLabel={`Remove ${c.ciName}`} question={`Remove ${c.ciName}?`} confirmLabel="Remove item" pendingLabel="Removing…" onConfirm={() => remove(c)} />}</td></tr>)}</tbody></table>)}
+      {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
+      <h3 className="rd-sub">Affected configuration items</h3>
+      {cis.length === 0 ? <p className="rd-na">None listed.</p> : <DataTable caption="Affected configuration items" columns={ciColumns} rows={cis} rowKey={c => c.id} />}
       {canEdit && (
-        <p className="inline-form">
-          <label>Item <input ref={itemInput} className="line" value={ci.name} onChange={e => setCi({ ...ci, name: e.target.value })} /></label>
-          <label>External id <input className="line" value={ci.ext} onChange={e => setCi({ ...ci, ext: e.target.value })} /></label>
-          <button type="button" className="text" disabled={!ci.name.trim() || !!pending} onClick={addOne}>{pending === 'Adding…' ? pending : 'Add item'}</button>
-        </p>)}
-    </section>
+        <div className="rd-fields">
+          <label>Item <input ref={itemInput} value={ci.name} onChange={e => setCi({ ...ci, name: e.target.value })} /></label>
+          <label>External id <input value={ci.ext} onChange={e => setCi({ ...ci, ext: e.target.value })} /></label>
+          <Button disabled={!ci.name.trim() || !!pending} onClick={addOne}>{pending === 'Adding…' ? pending : 'Add item'}</Button>
+        </div>)}
+    </Panel>
   )
 }

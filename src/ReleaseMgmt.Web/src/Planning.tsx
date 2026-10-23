@@ -7,7 +7,10 @@ import {
   addGate, addProduct, patchGate, patchProduct, removeGate, removeProduct, GATE_CLASSES, REQUIRED_BEFORE,
   type GateDefinition, type GateInput, type ProductRowV,
 } from './api'
-import { day, errMsg, tMinus } from './format'
+import { day, errMsg, plural, tMinus } from './format'
+import { Button, DataTable, ErrorState, FilterSelect, LoadingState, Notice, Panel, StatusChip, type Column, type Tone } from './ui'
+import { windowStamp } from './release/model'
+import { browserZone } from './shell/clock'
 import { fmtDay, fmtDayTime, fmtHM, utcToZonedInput, zonedInputToUtc, zoneAbbr } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
@@ -37,6 +40,12 @@ export function windowText(w: WindowRow) {
   return same ? `${fmtHM(w.startsAt)}–${fmtHM(w.endsAt)} ${zoneAbbr(w.endsAt)}` : `${fmtDayTime(w.startsAt)} – ${fmtDayTime(w.endsAt)} ${zoneAbbr(w.endsAt)}`
 }
 
+/** D44: the window in UTC, labelled, with the person's own time beside it. */
+function WindowStamp({ w }: { w: WindowRow }) {
+  const s = windowStamp(w.startsAt, w.endsAt, browserZone())
+  return <><span className="mono">{s.utc}</span>{s.local && <span className="rd-na"> ({s.local} your time)</span>}</>
+}
+
 export function WindowLine({ trainId, canEdit, refreshKey, onChanged, collisions }: { trainId: string; canEdit: boolean; refreshKey: number; onChanged: () => void; collisions?: WindowCollision[] }) {
   const [win, setWin] = useState<WindowRow | null | undefined>(undefined)
   const [draft, setDraft] = useDraft<{ start: string; end: string }>(`window:${trainId}`)   // survives a closed tab (session engine)
@@ -60,7 +69,7 @@ export function WindowLine({ trainId, canEdit, refreshKey, onChanged, collisions
   })
   const invalid = (f: 'start' | 'end') => bad === f ? { 'aria-invalid': true, 'aria-describedby': errId } : {}
   if (!editing) return (
-    <span>Window {win ? <span className="mono">{windowText(win)}</span> : <span className="muted">not set</span>}
+    <span>Window {win ? <WindowStamp w={win} /> : <span className="rd-na">not set</span>}
       {canEdit && <> <button ref={editBtn} type="button" className="text" onClick={open}>{win ? 'Edit window' : 'Set window'}</button></>}
       {win && collisions?.map(c => <span key={c.otherTrainId} className="warn"> · <span aria-hidden="true">▲ </span>{collisionText(c)}</span>)}
       {err && <span className="bad" role="alert"> ✗ {err}</span>}</span>
@@ -82,8 +91,9 @@ export function WindowLine({ trainId, canEdit, refreshKey, onChanged, collisions
 }
 
 // ---- Bundled products ---------------------------------------------------------------------------------------------------------------
-const HEALTH_CLS: Record<string, string> = { Ready: 'ok', 'On track': 'ok', 'At risk': 'warn' }
+const HEALTH_CLS: Record<string, string> = { Ready: 'ok', 'On track': 'ok', 'At risk': 'warn' }   // the Inspector's product pane
 const SEV_CLS = (s: string) => s === 'Critical' || s === 'High' ? 'bad' : 'warn'
+const HEALTH_TONE: Record<string, Tone> = { Ready: 'success', 'On track': 'success', 'At risk': 'warning' }
 
 // REOS-81: products are added inline under the heading, edited inline in their row, and removed with an inline confirm (no modal).
 // The plan is locked once the train is Executing (the API refuses with the reason; the buttons are not offered then).
@@ -95,21 +105,21 @@ const LOCK_REASON: Record<string, string> = {
   Aborted: 'The train is Aborted: its products and gates can no longer be changed.',
 }
 
-export function Products({ trainId, refreshKey, selection, onSelect, canPlan = false, trainStatus, onChanged }: { trainId: string; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; canPlan?: boolean; trainStatus?: string; onChanged?: () => void }) {
+export function Products({ trainId, refreshKey, selection, onSelect, canPlan = false, trainStatus, onChanged, manifestVersion }: { trainId: string; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; canPlan?: boolean; trainStatus?: string; onChanged?: () => void; manifestVersion?: number }) {
   const [data, setData] = useState<ProductsResponse | null>(null)
   const [tick, setTick] = useState(0)
-  const headId = useId()
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [adding, setAdding] = useDraft<ProductDraft>(`addProduct:${trainId}`)   // survives a closed tab (session engine)
   const [editing, setEditing] = useDraft<ProductDraft & { id: string }>(`editProduct:${trainId}`)
   const [confirming, setConfirming] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ApiError | null>(null)
+  const [sort, setSort] = useState<'name' | 'version' | 'blockers'>('name')
   useEffect(() => { getProducts(trainId).then(d => { setData(d); setLoadErr(null) }).catch(e => setLoadErr(errMsg(e))) }, [trainId, refreshKey, tick])
-  if (!data) return loadErr ? <section aria-label="Bundled products"><h2 className="cap dark">Bundled products</h2>
-    <p className="bad" role="alert">✗ The products could not be loaded: {loadErr} <button type="button" className="text" onClick={() => setTick(n => n + 1)}>Retry</button></p></section> : null
+  if (!data) return loadErr ? <ErrorState what="The service manifest" message={loadErr} onRetry={() => setTick(n => n + 1)} /> : <LoadingState what="the service manifest" />
   const pct = data.tasksTotal === 0 ? 0 : Math.round(100 * data.tasksDone / data.tasksTotal)
-  const editable = canPlan && !planLocked(trainStatus)
+  const locked = trainStatus !== undefined && planLocked(trainStatus)
+  const editable = canPlan && !locked
   const run = async (fn: () => Promise<unknown>, after: () => void) => {
     setErr(null); setConflict(null)
     try { await fn(); after(); setTick(n => n + 1); onChanged?.() }
@@ -120,64 +130,60 @@ export function Products({ trainId, refreshKey, selection, onSelect, canPlan = f
     if (!adding.name.trim() || !adding.versionTag.trim()) { setErr('A product needs a name and a version tag.'); return }
     void run(() => addProduct(trainId, { name: adding.name, versionTag: adding.versionTag, projectCode: adding.projectCode }), () => setAdding(undefined))
   }
-  const rows = data.products as ProductRowV[]
+  const all = data.products as ProductRowV[]
+  // 20 or more services: sortable (name, version, most blockers first) and the table scrolls inside its panel with the headings kept.
+  const rows = [...all].sort((x, y) => sort === 'version' ? x.versionTag.localeCompare(y.versionTag, undefined, { numeric: true }) : sort === 'blockers' ? y.openBlockers.length - x.openBlockers.length || x.name.localeCompare(y.name) : x.name.localeCompare(y.name))
   const save = (p: ProductRowV, version = p.version) => {
     if (!editing) return
     void run(() => patchProduct(p.id, { name: editing.name, versionTag: editing.versionTag, projectCode: editing.projectCode }, version), () => setEditing(undefined))
   }
   const remove = (p: ProductRowV) => run(() => removeProduct(p.id, p.version), () => { setConfirming(null); if (selection?.kind === 'product' && selection.id === p.id) onSelect(null) })
   const editRow = rows.find(p => p.id === editing?.id)
+  const columns: Column<ProductRowV>[] = [
+    { key: 'name', header: 'Service', cell: p => editable && editing?.id === p.id
+      ? <input className="rd-input" aria-label="Product name" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} />
+      : <button type="button" className="os-link os-link-button" aria-current={selection?.kind === 'product' && selection.id === p.id ? 'true' : undefined} onClick={() => onSelect({ kind: 'product', id: p.id })}>{p.name}</button> },
+    { key: 'version', header: 'Version', cell: p => editable && editing?.id === p.id
+      ? <input className="rd-input" aria-label="Version tag" value={editing.versionTag} onChange={e => setEditing({ ...editing, versionTag: e.target.value })} /> : <span className="mono">{p.versionTag}</span> },
+    { key: 'project', header: 'Project', cell: p => editable && editing?.id === p.id
+      ? <input className="rd-input" aria-label="Project code" value={editing.projectCode} onChange={e => setEditing({ ...editing, projectCode: e.target.value })} /> : <span className="mono">{p.projectCode || '—'}</span> },
+    { key: 'team', header: 'Team', cell: () => <span className="rd-na">Not recorded</span> },
+    { key: 'checks', header: 'Checks', cell: p => <span className="mono">{p.tasksDone} / {p.tasksTotal}</span> },
+    { key: 'blockers', header: 'Blockers', cell: p => p.openBlockers.length === 0 ? <span className="rd-na">—</span> : <span>{p.openBlockers.map((sev, i) => <StatusChip key={i} tone={sev === 'Critical' || sev === 'High' ? 'danger' : 'warning'}>{sev}</StatusChip>)}</span> },
+    { key: 'health', header: 'State', cell: p => <StatusChip tone={HEALTH_TONE[p.health] ?? 'neutral'}>{p.health}</StatusChip> },
+    ...(editable ? [{ key: 'actions', header: <span className="sr-only">Actions</span>, cell: (p: ProductRowV) => editing?.id === p.id
+      ? <span className="rd-row-actions"><Button onClick={() => setEditing(undefined)}>Cancel</Button><Button variant="primary" onClick={() => save(p)}>Save</Button></span>
+      : confirming === p.id
+        ? <span role="group" aria-label={`Confirm removing ${p.name}`} className="rd-row-actions"><span className="rd-error">Remove?</span><Button onClick={() => setConfirming(null)}>Keep</Button><Button variant="destructive" onClick={() => remove(p)}>Confirm remove</Button></span>
+        : <span className="rd-row-actions"><Button aria-label={`Edit ${p.name}`} onClick={() => { setErr(null); setConflict(null); setEditing({ id: p.id, name: p.name, versionTag: p.versionTag, projectCode: p.projectCode }) }}>Edit</Button>
+            <Button variant="destructive" aria-label={`Remove ${p.name}`} onClick={() => { setErr(null); setConflict(null); setConfirming(p.id) }}>Remove</Button></span> }] : []),
+  ]
   return (
-    <section aria-label="Bundled products">
-      <div className="section-head"><h2 id={headId} className="cap dark">Bundled products</h2>
-        <span className="muted"><span className="mono label">{data.tasksDone} / {data.tasksTotal}</span> tasks done · <span className="mono label">{pct}%</span>
-          {editable && <> · <button type="button" className="text" aria-expanded={adding !== undefined} onClick={() => { setErr(null); setAdding(adding ? undefined : { name: '', versionTag: '', projectCode: '' }) }}>Add product</button></>}</span></div>
+    <Panel label="Bundled products" title="Service manifest" subtitle={`${plural(all.length, 'service')} bundled in this release`}
+      meta={<>
+        {manifestVersion !== undefined && <span className="mono">Manifest v{manifestVersion}</span>}
+        <StatusChip tone={locked ? 'warning' : 'success'}>{locked ? 'Locked' : 'Open'}</StatusChip>
+        <span><span className="mono">{data.tasksDone} / {data.tasksTotal}</span> checks done · <span className="mono">{pct}%</span></span>
+        {rows.length > 1 && <FilterSelect label="Sort services by" value={sort} onChange={v => setSort(v as typeof sort)} options={[{ value: 'name', label: 'Name' }, { value: 'version', label: 'Version' }, { value: 'blockers', label: 'Most blockers' }]} />}
+        {editable && <Button variant="primary" aria-expanded={adding !== undefined} onClick={() => { setErr(null); setAdding(adding ? undefined : { name: '', versionTag: '', projectCode: '' }) }}>Add product</Button>}
+      </>}>
       {editable && adding && (
-        <p className="inline-form" role="group" aria-label="New product">
-          <label>Product <input className="line" value={adding.name} onChange={e => setAdding({ ...adding, name: e.target.value })} placeholder="Payments API" /></label>{' '}
-          <label>Version <input className="line mid" value={adding.versionTag} onChange={e => setAdding({ ...adding, versionTag: e.target.value })} placeholder="4.2.0" /></label>{' '}
-          <label>Project <input className="line mid" value={adding.projectCode} onChange={e => setAdding({ ...adding, projectCode: e.target.value })} placeholder="optional" /></label>{' '}
-          <button type="button" className="text" onClick={() => setAdding(undefined)}>Cancel</button>{' '}
-          <button type="button" className="text" onClick={add}>Add product</button>
-        </p>)}
-      {canPlan && trainStatus && planLocked(trainStatus) && <p className="muted">{LOCK_REASON[trainStatus]}</p>}
-      {err && <p className="bad" role="alert">✗ {err}</p>}
+        <div className="inline-form rd-fields" role="group" aria-label="New product">
+          <label>Product <input value={adding.name} onChange={e => setAdding({ ...adding, name: e.target.value })} placeholder="Payments API" /></label>
+          <label>Version <input value={adding.versionTag} onChange={e => setAdding({ ...adding, versionTag: e.target.value })} placeholder="4.2.0" /></label>
+          <label>Project <input value={adding.projectCode} onChange={e => setAdding({ ...adding, projectCode: e.target.value })} placeholder="optional" /></label>
+          <Button onClick={() => setAdding(undefined)}>Cancel</Button>
+          <Button variant="primary" onClick={add}>Add product</Button>
+        </div>)}
+      {locked && <Notice tone="info" title="The manifest is locked">{LOCK_REASON[trainStatus!]}</Notice>}
+      {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
       {conflict && (
         <Conflict error={conflict} what="product">
           {editRow && editing && <><button type="button" className="text" onClick={() => save(editRow, (conflict.body?.current as { version?: number } | undefined)?.version)}>Overwrite with mine</button>{' '}</>}
           <button type="button" className="text" onClick={() => { setEditing(undefined); setConfirming(null); setConflict(null) }}>Use theirs</button>
         </Conflict>)}
-      {rows.length === 0 ? <p className="muted">No products bundled yet.</p> : (
-        <table className="grid" aria-labelledby={headId}>
-          <thead><tr><th>Product</th><th>Version</th><th>Project</th><th className="n">Tasks</th><th>Blockers</th><th>Health</th>{editable && <th><span className="sr-only">Actions</span></th>}</tr></thead>
-          <tbody>
-            {rows.map(p => {
-              const sel = selection?.kind === 'product' && selection.id === p.id
-              if (editable && editing && editing.id === p.id) return (
-                <tr key={p.id} aria-selected={sel} className={sel ? 'selected' : undefined} aria-label={`Editing ${p.name}`}>
-                  <td><input className="line" aria-label="Product name" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} /></td>
-                  <td><input className="line mid" aria-label="Version tag" value={editing.versionTag} onChange={e => setEditing({ ...editing, versionTag: e.target.value })} /></td>
-                  <td><input className="line mid" aria-label="Project code" value={editing.projectCode} onChange={e => setEditing({ ...editing, projectCode: e.target.value })} /></td>
-                  <td className="n">{p.tasksDone} / {p.tasksTotal}</td><td /><td />
-                  <td className="nowrap"><button type="button" className="text" onClick={() => setEditing(undefined)}>Cancel</button>{' '}<button type="button" className="text" onClick={() => save(p)}>Save</button></td>
-                </tr>)
-              return (
-                <tr key={p.id} aria-selected={sel} className={sel ? 'selected' : undefined}>
-                  <td><button type="button" className="text" aria-current={sel ? 'true' : undefined} onClick={() => onSelect({ kind: 'product', id: p.id })}>{p.name}</button></td>
-                  <td className="mono">{p.versionTag}</td><td className="mono muted">{p.projectCode || '—'}</td>
-                  <td className="n">{p.tasksDone} / {p.tasksTotal}</td>
-                  <td>{p.openBlockers.length === 0 ? <span className="muted">—</span> : p.openBlockers.map((s, i) => <span key={i} className={SEV_CLS(s)}>▲ {s} </span>)}</td>
-                  <td className={HEALTH_CLS[p.health] ?? 'muted'}>{p.health}</td>
-                  {editable && <td className={confirming === p.id ? undefined : 'nowrap'}>{confirming === p.id
-                    ? <span role="group" aria-label={`Confirm removing ${p.name}`}><span className="bad">Remove?</span>{' '}<button type="button" className="text" onClick={() => setConfirming(null)}>Keep</button>{' '}<button type="button" className="text destructive" onClick={() => remove(p)}>Confirm remove</button></span>
-                    : <><button type="button" className="text" aria-label={`Edit ${p.name}`} onClick={() => { setErr(null); setConflict(null); setEditing({ id: p.id, name: p.name, versionTag: p.versionTag, projectCode: p.projectCode }) }}>Edit</button>{' '}
-                        <button type="button" className="text destructive" aria-label={`Remove ${p.name}`} onClick={() => { setErr(null); setConflict(null); setConfirming(p.id) }}>Remove</button></>}</td>}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>)}
-    </section>
+      <div className="rd-scroll"><DataTable caption="Service manifest" columns={columns} rows={rows} rowKey={p => p.id} selectedKey={selection?.kind === 'product' ? selection.id : null} empty="No products bundled yet." /></div>
+    </Panel>
   )
 }
 
@@ -199,9 +205,8 @@ export function Timeline({ gates, todayT, targetDate, selectedId, onSelect, trai
   const H = milestones.length > 0 ? 156 : 104
   const targetX = x(0)
   return (
-    <section aria-label="Gate timeline">
-      <div className="section-head"><h2 className="cap dark">Gates{milestones.length > 0 ? ' and milestones' : ''} · business days to target</h2>
-        {canPlan && trainId && !planLocked(trainStatus) && <AddGateButton trainId={trainId} trainStatus={trainStatus} />}</div>
+    <Panel label="Gate timeline" title={`Gates${milestones.length > 0 ? ' and milestones' : ''} · business days to target`} subtitle="Click a gate to open its checklist."
+      meta={canPlan && trainId && !planLocked(trainStatus) ? <AddGateButton trainId={trainId} trainStatus={trainStatus} /> : undefined}>
       {canPlan && trainId && !planLocked(trainStatus) && <AddGate trainId={trainId} trainStatus={trainStatus} gates={gates} onAdded={id => { onChanged?.(); onSelect(id) }} />}
       <svg className="timeline" width="100%" viewBox={`0 0 ${W} ${H}`} role="group"
            aria-label={`Gate timeline to ${day(targetDate)}: ` + gates.map(g => `${g.name} ${STATUS[g.status]?.word ?? g.status}`).join(', ')
@@ -241,7 +246,7 @@ export function Timeline({ gates, todayT, targetDate, selectedId, onSelect, trai
           <text className="tl-name" x={targetX + 8} y="30" textAnchor="end">Target</text>
           <text className="tl-day mono" x={targetX + 8} y="74" textAnchor="end">{day(targetDate)} · T0</text></g>
       </svg>
-    </section>
+    </Panel>
   )
 }
 
@@ -386,7 +391,7 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
   const openBulk = () => setBulk({ text: bulk?.text ?? '', gateId: bulk?.gateId || gateId, open: true })
   const [bad, setBad] = useState<'text' | 'owner' | null>(null)
   const { run, pending } = useAction()
-  const taskRef = useRef<HTMLInputElement>(null), addBtn = useRef<HTMLButtonElement>(null), errId = useId(), headId = useId()
+  const taskRef = useRef<HTMLInputElement>(null), addBtn = useRef<HTMLButtonElement>(null), errId = useId()
   useEffect(() => { getGate(gateId).then(setGate).catch(e => setErr(errMsg(e))) }, [gateId, refreshKey])
   useEffect(() => { if (adding && owners.length === 0) getOwners().then(setOwners).catch(e => setErr(errMsg(e))) }, [adding, owners.length])
   if (!gate) return err ? <p className="bad" role="alert">✗ {err}</p> : null
@@ -411,9 +416,8 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
   const cancel = () => { setDraft(undefined); setErr(null); setBad(null); requestAnimationFrame(() => addBtn.current?.focus()) }
   const invalid = (f: 'text' | 'owner') => bad === f ? { 'aria-invalid': true, 'aria-describedby': errId } : {}
   return (
-    <section aria-label="Checklist">
-      <div className="section-head"><h2 id={headId} className="cap accent">{gate.name} · checklist</h2>
-        <span className="muted"><span className="mono label">{done} / {gate.tasks.length}</span> done · <button type="button" className="text" onClick={openBulk}>Paste tasks</button> · <button ref={addBtn} type="button" className="text" aria-expanded={adding} onClick={toggleForm}>Add task</button></span></div>
+    <Panel label="Checklist" title={`${gate.name} · checklist`}
+      meta={<><span><span className="mono">{done} / {gate.tasks.length}</span> done</span><Button onClick={openBulk}>Paste tasks</Button><Button ref={addBtn} aria-expanded={adding} onClick={toggleForm}>Add task</Button></>}>
       {adding && (
         <form onSubmit={add}><p className="inline-form">
           <label>Task <input ref={taskRef} className="line wide" value={text} onChange={e => setDraft({ text: e.target.value, ownerId })} placeholder="What has to happen" {...invalid('text')} /></label>{' '}
@@ -423,7 +427,7 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
       {err && <p id={errId} className="bad" role="alert">✗ {err}</p>}
       {conflict && <Conflict error={conflict} what="task" />}
       {gate.tasks.length === 0 ? <p className="muted">No tasks on this gate.</p> : (
-        <table className="grid" aria-labelledby={headId}>
+        <table className="grid" aria-label={`${gate.name} checklist`}>
           <thead><tr><th>State</th><th>Task</th><th>Owner</th><th>Product</th><th>Done</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {gate.tasks.map(t => {
@@ -441,7 +445,7 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
             })}
           </tbody>
         </table>)}
-    </section>
+    </Panel>
   )
 }
 

@@ -19,7 +19,7 @@ export const NAV: NavGroup[] = [
       { view: 'trains', label: 'Releases', icon: 'layers' },
       { view: 'orchestration', label: 'Orchestration', icon: 'workflow', placeholder: 'REOS-98' },
       { view: 'approvals', label: 'Approvals', icon: 'shield-check' },
-      { view: 'deployments', label: 'Deployments', icon: 'activity', placeholder: 'REOS-100' },
+      { view: 'deployments', label: 'Deployments', icon: 'activity' },
       { view: 'audit', label: 'Audit history', icon: 'history', need: 'audit' },
     ],
   },

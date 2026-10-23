@@ -381,7 +381,9 @@ public sealed class TelemetryService(IDbContextFactory<ReleaseDbContext> dbf, Ti
         foreach (var sn in MetricSeries.All)
             if (await db.Set<MetricSamples>().AsNoTracking().Where(m => m.DeploymentId == deploymentId && m.Series == sn).OrderByDescending(m => m.SampledAt).FirstOrDefaultAsync(ct) is { } m)
                 latest.Add(new(sn, Iso(m.SampledAt)!, m.ErrorRatePct, m.LatencyP95Ms, m.AvailabilityPct, m.RequestCount));
-        return new(detail.Deployment, Lines(env), Targets(env), canary, breaches, await controls.RollbackStatusAsync(deploymentId, ct), await controls.ActionsAsync(deploymentId, 20, ct), latest,
+        var rollback = await controls.RollbackStatusAsync(deploymentId, ct);
+        if (rollback is null) return null;   // the deployment went away while this was read
+        return new(detail.Deployment, Lines(env), Targets(env), canary, breaches, rollback, await controls.ActionsAsync(deploymentId, 20, ct), latest,
             await SloCoreAsync(db, env, sloDays, null, ct));
     }
 

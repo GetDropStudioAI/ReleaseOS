@@ -1,0 +1,414 @@
+{
+  "source": "Figma uxMlQ7LTNoW8sIKWSIeY98, collection Color (VariableCollectionId:11:2), modes Light and Dark; exported 2026-10-23 (REOS-103). Regenerate tokens.css with python3 tools/gen_tokens.py after changing this file; keep it equal to the Figma variables.",
+  "frames": {
+    "light": [
+      "6:4718",
+      "6:4990",
+      "6:5279",
+      "6:5552",
+      "6:5838",
+      "6:6058",
+      "6:6333"
+    ],
+    "dark": [
+      "12:2",
+      "12:288",
+      "12:592",
+      "12:881",
+      "12:1187",
+      "12:1426",
+      "12:1715"
+    ]
+  },
+  "collection": "Color",
+  "collectionId": "VariableCollectionId:11:2",
+  "modes": [
+    "Light",
+    "Dark"
+  ],
+  "variables": [
+    {
+      "name": "text/primary",
+      "id": "VariableID:11:3",
+      "light": "#182538",
+      "dark": "#E7ECF3",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-text-primary"
+    },
+    {
+      "name": "text/secondary",
+      "id": "VariableID:11:4",
+      "light": "#657287",
+      "dark": "#A7B1C2",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-text-secondary"
+    },
+    {
+      "name": "text/tertiary",
+      "id": "VariableID:11:5",
+      "light": "#8C97A8",
+      "dark": "#8A95A8",
+      "scopes": [
+        "SHAPE_FILL",
+        "TEXT_FILL"
+      ],
+      "css": "--color-text-tertiary"
+    },
+    {
+      "name": "text/on-emphasis",
+      "id": "VariableID:11:6",
+      "light": "#FFFFFF",
+      "dark": "#FFFFFF",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-text-on-emphasis"
+    },
+    {
+      "name": "icon/secondary",
+      "id": "VariableID:11:7",
+      "light": "#657287",
+      "dark": "#A7B1C2",
+      "scopes": [
+        "SHAPE_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-icon-secondary"
+    },
+    {
+      "name": "bg/canvas",
+      "id": "VariableID:11:8",
+      "light": "#F5F7FA",
+      "dark": "#0B1119",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-canvas"
+    },
+    {
+      "name": "bg/surface",
+      "id": "VariableID:11:9",
+      "light": "#FFFFFF",
+      "dark": "#121A26",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-bg-surface"
+    },
+    {
+      "name": "bg/subtle",
+      "id": "VariableID:11:10",
+      "light": "#FAFBFD",
+      "dark": "#0F1620",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-subtle"
+    },
+    {
+      "name": "bg/muted",
+      "id": "VariableID:11:11",
+      "light": "#F0F3F7",
+      "dark": "#1A2433",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-muted"
+    },
+    {
+      "name": "bg/accent-subtle",
+      "id": "VariableID:11:12",
+      "light": "#EDF2FF",
+      "dark": "#18284A",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-accent-subtle"
+    },
+    {
+      "name": "bg/accent-faint",
+      "id": "VariableID:11:13",
+      "light": "#F8FAFF",
+      "dark": "#141F36",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-accent-faint"
+    },
+    {
+      "name": "bg/inverse",
+      "id": "VariableID:11:14",
+      "light": "#14243E",
+      "dark": "#1B2C4A",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-inverse"
+    },
+    {
+      "name": "bg/success-subtle",
+      "id": "VariableID:11:15",
+      "light": "#EAF6EF",
+      "dark": "#10301F",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-success-subtle"
+    },
+    {
+      "name": "bg/warning-subtle",
+      "id": "VariableID:11:16",
+      "light": "#FFF5DF",
+      "dark": "#33260C",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-warning-subtle"
+    },
+    {
+      "name": "bg/danger-subtle",
+      "id": "VariableID:11:17",
+      "light": "#FDEFF0",
+      "dark": "#3A181B",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-bg-danger-subtle"
+    },
+    {
+      "name": "border/subtle",
+      "id": "VariableID:11:18",
+      "light": "#EDF0F5",
+      "dark": "#1C2633",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-border-subtle"
+    },
+    {
+      "name": "border/default",
+      "id": "VariableID:11:19",
+      "light": "#DFE5ED",
+      "dark": "#283446",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-border-default"
+    },
+    {
+      "name": "border/strong",
+      "id": "VariableID:11:20",
+      "light": "#B9C3D4",
+      "dark": "#3A475B",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-border-strong"
+    },
+    {
+      "name": "border/inverse",
+      "id": "VariableID:11:21",
+      "light": "#34455E",
+      "dark": "#33476B",
+      "scopes": [
+        "STROKE_COLOR"
+      ],
+      "css": "--color-border-inverse"
+    },
+    {
+      "name": "accent/fill",
+      "id": "VariableID:11:22",
+      "light": "#315DDF",
+      "dark": "#3A64E0",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-accent-fill"
+    },
+    {
+      "name": "accent/text",
+      "id": "VariableID:11:23",
+      "light": "#315DDF",
+      "dark": "#7FA0F8",
+      "scopes": [
+        "SHAPE_FILL",
+        "TEXT_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-accent-text"
+    },
+    {
+      "name": "status/success",
+      "id": "VariableID:11:24",
+      "light": "#187451",
+      "dark": "#4FC28C",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "TEXT_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-status-success"
+    },
+    {
+      "name": "status/warning",
+      "id": "VariableID:11:25",
+      "light": "#9A6516",
+      "dark": "#E2A94C",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "TEXT_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-status-warning"
+    },
+    {
+      "name": "status/danger",
+      "id": "VariableID:11:26",
+      "light": "#BC4045",
+      "dark": "#F07E84",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL",
+        "TEXT_FILL",
+        "STROKE_COLOR"
+      ],
+      "css": "--color-status-danger"
+    },
+    {
+      "name": "chart/bar",
+      "id": "VariableID:11:27",
+      "light": "#A8BCEB",
+      "dark": "#3D5A9E",
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "css": "--color-chart-bar"
+    },
+    {
+      "name": "inverse/text-primary",
+      "id": "VariableID:11:28",
+      "light": "#C9D5E5",
+      "dark": "#C9D5E5",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-text-primary"
+    },
+    {
+      "name": "inverse/text-secondary",
+      "id": "VariableID:11:29",
+      "light": "#B2C0D4",
+      "dark": "#B2C0D4",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-text-secondary"
+    },
+    {
+      "name": "inverse/text-muted",
+      "id": "VariableID:11:30",
+      "light": "#A5B8D1",
+      "dark": "#A5B8D1",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-text-muted"
+    },
+    {
+      "name": "inverse/text-subtle",
+      "id": "VariableID:11:31",
+      "light": "#9CADC5",
+      "dark": "#9CADC5",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-text-subtle"
+    },
+    {
+      "name": "inverse/text-faint",
+      "id": "VariableID:11:32",
+      "light": "#8C9FB9",
+      "dark": "#8C9FB9",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-text-faint"
+    },
+    {
+      "name": "inverse/accent",
+      "id": "VariableID:11:33",
+      "light": "#9CB7FF",
+      "dark": "#9CB7FF",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-accent"
+    },
+    {
+      "name": "inverse/accent-strong",
+      "id": "VariableID:11:34",
+      "light": "#AFC4FF",
+      "dark": "#AFC4FF",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-accent-strong"
+    },
+    {
+      "name": "inverse/success",
+      "id": "VariableID:11:35",
+      "light": "#76D3A6",
+      "dark": "#76D3A6",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-success"
+    },
+    {
+      "name": "inverse/success-strong",
+      "id": "VariableID:11:36",
+      "light": "#83D3AC",
+      "dark": "#83D3AC",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-success-strong"
+    },
+    {
+      "name": "inverse/danger",
+      "id": "VariableID:11:37",
+      "light": "#D9989D",
+      "dark": "#D9989D",
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "css": "--color-inverse-danger"
+    }
+  ]
+}

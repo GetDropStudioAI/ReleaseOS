@@ -4,6 +4,7 @@ import tokens from '../../../docs/ui/redesign-tokens.json'
 import {
   Button, ConfirmDialog, CountBadge, DataTable, FilterSelect, MetricCard, Notice, Panel, ProgressBar, PropertyList, SearchField, StatusChip,
   TabPanel, Tabs, TwoLine, type Column,
+  ConflictNotice, DisabledAction, EmptyState, ErrorState, LoadingState, NoPermissionState, ReadOnlyNotice, SaveFailureNotice, StaleBanner,
 } from './ui'
 
 /**
@@ -86,6 +87,18 @@ function Specimens({ theme }: { theme: 'light' | 'dark' }) {
       <Section title="Tabs">
         <Tabs label="Release sections" group={`${theme}-release`} tabs={TABS} value={tab} onChange={setTab} />
         <TabPanel id={tab} group={`${theme}-release`}><p>{TABS.find(t => t.id === tab)?.label} content.</p></TabPanel>
+      </Section>
+
+      <Section title="States every screen shares">
+        <LoadingState what="the release list" />
+        <EmptyState title="No releases yet" action={<Button variant="primary">Create release</Button>}>Import releases from a CSV or create the first one.</EmptyState>
+        <ErrorState what="The release list" message="The server did not answer in time." onRetry={() => undefined} />
+        <NoPermissionState what="certify a Compliance gate" who="Governance Officers" />
+        <ReadOnlyNotice />
+        <ConflictNotice by="Priya Shah" at="14:32 UTC" onUseTheirs={() => undefined} onOverwrite={() => undefined} />
+        <DisabledAction reason="Evidence is incomplete: attach the test report first." variant="primary">Approve &amp; record</DisabledAction>
+        <StaleBanner offline since="14:30 UTC" onRefresh={() => undefined} />
+        <SaveFailureNotice message="Check your connection; the draft is still on this page." onRetry={() => undefined} />
       </Section>
 
       <Section title="Operational notices">

@@ -181,3 +181,16 @@
 .os-page-title { margin: 0; font: 600 var(--type-title) / var(--leading-title) var(--font-sans); letter-spacing: var(--tracking-title); color: var(--color-text-primary); }
 .os-page-description { margin: 0; font-size: var(--type-body); line-height: 1.5; color: var(--color-text-secondary); }
 .os-page-actions { display: flex; gap: 8px; flex: none; }
+
+/* Shared states (REOS-123): centred message blocks, a disabled action with its reason, and the spinner (still under reduced motion: it only rotates a glyph). */
+.os-state { display: flex; flex-direction: column; align-items: center; gap: var(--gap-sm); padding: var(--gap-xl) var(--panel-pad); text-align: center; color: var(--color-text-secondary); }
+.os-state p { margin: 0; }
+.os-state-title { font-weight: 600; color: var(--color-text-primary); }
+.os-state-body { max-width: 52ch; font-size: var(--type-small); }
+.os-state-action { margin-top: var(--gap-sm); }
+.os-state-buttons { display: inline-flex; gap: var(--gap-sm); }
+.os-disabled-action { display: inline-flex; align-items: center; gap: var(--gap-sm); }
+.os-disabled-reason { font-size: var(--type-small); color: var(--color-text-secondary); }
+.os-spin { animation: os-spin 1s linear infinite; }
+@keyframes os-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .os-spin { animation: none; } }

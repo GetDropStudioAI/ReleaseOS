@@ -22,6 +22,7 @@ The visual reference is the Figma redesign [uxMlQ7LTNoW8sIKWSIeY98](https://www.
 | `ProgressBar` | readiness, canary traffic; announces the percentage |
 | `FilterSelect` | the design's filter dropdown, a native select underneath |
 | `SearchField` | leading icon and the platform's shortcut hint (⌘ K or Ctrl K); the shell owns the binding |
+| `LoadingState`, `EmptyState`, `ErrorState`, `NoPermissionState`, `ReadOnlyNotice`, `ConflictNotice`, `DisabledAction`, `StaleBanner`, `SaveFailureNotice` | the states every screen shares (REOS-123): always words, never colour alone; loading, errors, conflicts and stale data are live regions; a disabled action shows its reason as text the button is described by. Screens use these instead of their own "Loading…" and "✗ message" lines |
 | `ConfirmDialog` | the only dialog: destructive or irreversible actions (Rollback, Pause run); starts on Cancel, Escape cancels, focus returns |
 | `PageHeading` | breadcrumb trail, the page's h1, a one-line description, up to two actions (secondary + primary) on the right |
 

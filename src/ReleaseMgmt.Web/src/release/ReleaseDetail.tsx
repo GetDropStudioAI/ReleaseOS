@@ -46,8 +46,11 @@ export function Stamp({ iso }: { iso: string }) {
 function focusWhenPresent(find: () => HTMLElement | null, frames = 90) {
   const tick = (n: number) => {
     const el = find()
-    if (el) scrollAndFocus(el)
-    else if (n > 0) requestAnimationFrame(() => tick(n - 1))
+    if (el) {
+      scrollAndFocus(el)
+      // the panels above may still be loading and push the target down: settle, then bring it back into view
+      setTimeout(() => { const r = el.getBoundingClientRect(); if (el.isConnected && (r.bottom < 0 || r.top > window.innerHeight)) el.scrollIntoView({ block: 'start' }) }, 700)
+    } else if (n > 0) requestAnimationFrame(() => tick(n - 1))
   }
   requestAnimationFrame(() => tick(frames))
 }

@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { openTab, signIn, trainByTitle } from './support'
 
 // REOS-50: PDF exports on the train view. The app must be started with Pdf__QuestPdfLicense=Community (or Professional/Enterprise): the licence is the deployer's choice
 // (DECISIONS OI-2) and is never defaulted, so without it the panel must say so readably instead of queuing a job.
@@ -45,6 +45,7 @@ test('a Governance Officer generates the evidence pack ZIP and its SHA-256 verif
   await signIn(page, 'gov@example.com', 'GovernanceOfficer')
   const t = await trainByTitle(page, 'Reporting')
   await page.goto(`/trains/${t.id}`)
+  await openTab(page, 'Activity')                                                       // exports are on the Activity tab
   const panel = page.locator('section[aria-label="Exports"]')
   await panel.locator('button:text-is("Evidence pack with files (ZIP)")').click()
   const row = panel.locator('tr', { hasText: 'Audit evidence pack' }).first()
@@ -61,6 +62,7 @@ test('a Viewer can generate the ordinary documents but is not offered the eviden
   await signIn(page, 'viewer@example.com', 'Viewer')
   const t = await trainByTitle(page, 'Reporting')
   await page.goto(`/trains/${t.id}`)
+  await openTab(page, 'Activity')                                                       // exports are on the Activity tab
   const panel = page.locator('section[aria-label="Exports"]')
   await expect(panel.locator('button:text-is("Generate release report")')).toBeVisible()
   await expect(panel.locator('button:text-is("Generate run sheet")')).toBeVisible()

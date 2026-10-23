@@ -320,4 +320,41 @@ public class AuditTests
         Assert.Throws<SqliteException>(() => Sql(f, "DELETE FROM AuditEvents"));
         Assert.Equal(n, count());
     }
+    // ---- REOS-101: the audit history screen ---------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task A_page_carries_the_matching_total_only_when_asked_and_one_event_can_be_read_by_id()
+    {
+        var (f, rte, rteId, _) = await Setup(); using var _f = f;
+        for (var i = 1; i <= 5; i++) Ev(f, Ts(i), rteId, null, "R", i.ToString(), i % 2 == 0 ? "Even" : "Odd");
+        var plain = await Json(await rte.GetAsync("/api/v1/audit?limit=2"));
+        Assert.Equal(JsonValueKind.Null, plain.GetProperty("total").ValueKind);
+        var counted = await Json(await rte.GetAsync("/api/v1/audit?limit=2&total=true&action=odd"));
+        Assert.Equal(3, counted.GetProperty("total").GetInt64());   // the total is of the filter, not of the page
+        Assert.Equal(2, counted.GetProperty("items").GetArrayLength());
+
+        var id = Ids(plain)[0];
+        var one = await Json(await rte.GetAsync($"/api/v1/audit/{id}"));
+        Assert.Equal(id, one.GetProperty("id").GetInt64().ToString());
+        Assert.Equal("rte", one.GetProperty("actorName").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await rte.GetAsync("/api/v1/audit/999999")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await As(f, Roles.Viewer, "v@x.com")).GetAsync($"/api/v1/audit/{id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_integrity_check_reads_the_live_triggers_and_fails_when_an_append_only_trigger_is_gone()
+    {
+        var (f, rte, rteId, _) = await Setup(); using var _f = f;
+        Ev(f, Ts(1), rteId, null, "R", "1", "A");
+        var ok = await Json(await rte.GetAsync("/api/v1/audit/integrity"));
+        Assert.True(ok.GetProperty("appendOnly").GetBoolean());
+        Assert.False(ok.GetProperty("hashChained").GetBoolean());        // no chain until REOS-114: the banner must not claim one
+        Assert.Empty(ok.GetProperty("missingTriggers").EnumerateArray());
+        Assert.True(ok.GetProperty("retainedEvents").GetInt64() >= 1);
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await As(f, Roles.Viewer, "v@x.com")).GetAsync("/api/v1/audit/integrity")).StatusCode);
+
+        Sql(f, "DROP TRIGGER trg_Audit_NoDelete");
+        var bad = await Json(await rte.GetAsync("/api/v1/audit/integrity"));
+        Assert.False(bad.GetProperty("appendOnly").GetBoolean());
+        Assert.Equal(["trg_Audit_NoDelete"], bad.GetProperty("missingTriggers").EnumerateArray().Select(e => e.GetString()!).ToArray());
+    }
 }

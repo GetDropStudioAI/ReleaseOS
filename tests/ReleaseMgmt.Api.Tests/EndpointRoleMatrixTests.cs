@@ -70,6 +70,8 @@ public class EndpointRoleMatrixTests
         GET /api/v1/audit                                        AuditRead
         GET /api/v1/audit.csv                                    AuditRead
         GET /api/v1/audit/entity-types                           AuditRead
+        GET /api/v1/audit/integrity                              AuditRead
+        GET /api/v1/audit/{id}                                   AuditRead
         GET /api/v1/calendar                                     Read
         GET /api/v1/comm-library                                 Read
         GET /api/v1/comm-library/{id}                            Read

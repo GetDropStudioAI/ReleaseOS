@@ -371,7 +371,7 @@ public class IngestApiTests
         }
         var baseline = await P95(async () => (await rte.GetAsync("/api/v1/trains")).EnsureSuccessStatusCode(), 40);
 
-        const int seconds = 3, perSecond = 50;
+        var seconds = int.TryParse(Environment.GetEnvironmentVariable("REOS_INGEST_LOAD_SECONDS"), out var secs) && secs > 0 ? secs : 3; const int perSecond = 50;
         var failures = 0;
         var ingestTimes = new System.Collections.Concurrent.ConcurrentBag<double>();
         using var stop = new CancellationTokenSource();

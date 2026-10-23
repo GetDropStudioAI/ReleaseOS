@@ -83,6 +83,8 @@ Plan (`RunbookSteps`) and actuals (`StepExecutions` per `RunbookRuns`) are separ
 
 Immutable by trigger: `AuditEvents`, `GateTransitions`, `Baselines`, `GoNoGoDecisions`, `CommDispatches` and `FreezeOverrides` (no update, no delete), and `Attachments` once locked (no update of any column, no delete).
 
+Release model, environments and deployments (upgrade 006; REOS-107, 109, 110; D42, D46): `ReleaseTrains` gains `ReleaseKey` (`PREFIX-n`, unique per workspace, never changes, never reused; the prefix and the counter are `Workspaces.KeyPrefix`/`NextKeyNumber`), `OwnerUserId`, `OwnerTeamId`, `ReleaseBranch`, `OnCallUserId` or `OnCallTeamId` (not both) and `ReleaseTypeId`; `TrainEnvironments` are a release's target environments; `ReleaseTypes` (per workspace, seeded Beta, CERT, PenTest Cert, Production), `Environments` (Staging or Production, order, control webhook destination, thresholds and SLOs), `CatalogServices` (the service catalog; `BundledProducts.CatalogServiceId` links a product), `IngestKeys` (SHA-256 of per-workspace API keys; the key is shown once), `Deployments` (service × environment × version × strategy, state Queued → Running ⇄ Paused → Successful / Failed → RolledBack, traffic, pods, linked train and live run) and the append-only `DeploymentEvents` (integer id: their order). All are workspace-scoped like the tables before them; section 10b's triggers hold the references inside one workspace. Telemetry samples, thresholds' enforcement, the control webhooks and automatic rollback are the next stories.
+
 Support tables: `IcsTokens` (hash of each user's calendar token, one active per user), `ParsePreviews` (parser previews, 30-minute expiry, refused if the train's `Version` moved), `ConnectorState` (base URL, enabled flag and cycle bookkeeping per connector; secrets stay in Data Protection), `Teams.WebhookDestinationId` (team notification channel), `Users.Handle` (optional `@handle`).
 
 Audit (D27): one row per service write; cascaded trigger effects write their own rows. Services must set `LastChangedByUserId` and `LastChangedAt` wherever those columns exist. Honest limit: anyone with write access to the DB file can drop a trigger; mitigated by OS file permissions (service account only) and 15-minute backups (D3).
@@ -154,6 +156,10 @@ REST under `/api/v1`. Mutations take `If-Match: <Version>`; 409 returns the curr
 | Runs | `POST /trains/{id}/runs {mode}`, `POST /runs/{id}/steps/{stepId}:start` `:done` `:fail` `:skip`, `POST /runs/{id}:end`, `GET /runs/{id}/forecast` |
 | Governance | `POST /trains/{id}/gonogo`, `POST /gonogo/{id}/conditions`, `POST /conditions/{id}:close`, `GET/POST /freezes`, `POST /freezes/{id}/overrides`, `GET/PATCH /trains/{id}/pir`, `/trains/{id}/known-issues` |
 | Blockers | `GET/POST /trains/{id}/blockers`, `POST /blockers/{id}:resolve` |
+| Release model | `GET/PATCH /trains/{id}/release` (key, owner, owning team, branch, on-call, type, target environments; PATCH needs the train's `If-Match`), `PATCH /workspace {keyPrefix}`, `GET/POST /release-types`, `PATCH /release-types/{id}`, `:archive` `:unarchive` (REOS-107, RT1, D46) |
+| Environments, services | `GET/POST /environments`, `GET/PATCH /environments/{id}`, `:archive` `:unarchive`; `GET/POST /services`, `GET/PATCH /services/{id}`, `:archive` `:unarchive`; `PUT /products/{id}/service {serviceId | serviceKey}` (REOS-109, D42) |
+| Deployments | `GET /deployments?environmentId&serviceId&trainId&state`, `GET /deployments/{id}` (with events), `GET /trains/{id}/deployments`, `GET /trains/{id}/environments` (per-environment state of each service in the release); admin: `GET/POST /ingest-keys`, `POST /ingest-keys/{id}:revoke` |
+| Push ingest | `POST /ingest/deployments` (create or update by `externalId`), `POST /ingest/events` (up to 100 per call); `Authorization: Bearer rk_…` (or `X-Api-Key`), a per-workspace key, no cookie and no role; idempotent; 401 for a bad key (audited), 429 beyond the rate limit (REOS-110, D42) |
 | Milestones | `GET/POST /trains/{id}/milestones`, `PATCH/DELETE /milestones/{id}`, `POST /milestones/{id}:done` `:undone` (informational key dates; never a guard, Q-0840..Q-0846) |
 | Evidence | `POST /attachments` (multipart, 50 MB max, SHA-256 server-side), `GET /attachments/{id}` |
 | Integrations | `GET/POST /trains/{id}/links`, `GET /sync/health`, `GET /sync/alerts`, `POST /sync/alerts/{id}:resolve`, `POST /sync:run-now` |
@@ -167,7 +173,7 @@ REST under `/api/v1`. Mutations take `If-Match: <Version>`; 409 returns the curr
 | Audit | `GET /audit?train&entity&from&to`, `GET /audit.csv` (GovernanceOfficer, RTE) |
 | Admin | `/users`, `/teams`, `/holidays`, `/webhooks`, `/connectors` |
 
-SignalR hub `/hub/trains`: join a group per open train; server pushes `TrainChanged{id,version}`, `StepChanged`, `ForecastChanged`, `SyncAlertRaised`, `NotificationCreated`, and `ServerTime` every 10 s (client computes clock offset for countdowns). Clients refetch rather than trust payloads.
+SignalR hub `/hub/trains`: join a group per open train; server pushes `TrainChanged{id,version}`, `StepChanged`, `ForecastChanged`, `SyncAlertRaised`, `DeploymentChanged{id,version,trainId}`, `NotificationCreated`, and `ServerTime` every 10 s (client computes clock offset for countdowns). Clients refetch rather than trust payloads.
 
 ## 7. Screens
 

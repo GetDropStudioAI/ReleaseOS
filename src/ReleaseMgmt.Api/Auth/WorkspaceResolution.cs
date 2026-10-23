@@ -24,6 +24,8 @@ public sealed class WorkspaceResolution(RequestDelegate next, IDbContextFactory<
 {
     public const string Header = "X-Workspace";
     public const string Query = "workspace";
+    /// <summary>REOS-106: the workspace the person last chose, set by the SPA. A last resort for requests that cannot carry the header (links, downloads); never an error.</summary>
+    public const string Cookie = "reos.workspace";
     public const string Claim = "ws";
     public const string NotFound = "WorkspaceNotFound";
     public const string Required = "WorkspaceRequired";
@@ -38,6 +40,9 @@ public sealed class WorkspaceResolution(RequestDelegate next, IDbContextFactory<
         var asked = http.Items[WorkspaceRoutePrefix.ItemKey] as string;
         if (asked is null && http.Request.Headers.TryGetValue(Header, out var h) && !string.IsNullOrWhiteSpace(h)) asked = h.ToString().Trim();
         if (asked is null && http.Request.Path.StartsWithSegments("/hub") && http.Request.Query.TryGetValue(Query, out var q) && !string.IsNullOrWhiteSpace(q)) asked = q.ToString().Trim();
+
+        string? remembered = null;
+        if (asked is null && http.Request.Cookies.TryGetValue(Cookie, out var c) && !string.IsNullOrWhiteSpace(c)) remembered = c.Trim();
 
         List<(string Id, string Slug, string Role)> mine;
         await using (var db = await dbf.CreateDbContextAsync(http.RequestAborted))
@@ -57,9 +62,12 @@ public sealed class WorkspaceResolution(RequestDelegate next, IDbContextFactory<
                 return;
             }
         }
+        else if (remembered is not null && mine.Any(m => m.Id == remembered || string.Equals(m.Slug, remembered, StringComparison.OrdinalIgnoreCase)))   // a stale or foreign value falls through to the rules below
+            current = mine.First(m => m.Id == remembered || string.Equals(m.Slug, remembered, StringComparison.OrdinalIgnoreCase));
         else if (mine.Count == 1) current = mine[0];
         else if (mine.Any(m => m.Id == WorkspaceIds.Default)) current = mine.Single(m => m.Id == WorkspaceIds.Default);
         else if (mine.Count == 0) current = null;
+        else if (IsChooser(http.Request)) current = mine.OrderBy(m => m.Slug, StringComparer.Ordinal).First();   // REOS-106: the SPA asks who you are and where you belong before it names one
         else
         {
             http.Response.StatusCode = StatusCodes.Status400BadRequest;
@@ -71,6 +79,10 @@ public sealed class WorkspaceResolution(RequestDelegate next, IDbContextFactory<
         using (WorkspaceScope.Enter(current?.Id ?? Nowhere))
             await next(http);
     }
+
+    /// <summary>The two reads the SPA makes before it has chosen a workspace: who am I, and which workspaces do I belong to.</summary>
+    private static bool IsChooser(HttpRequest r) =>
+        HttpMethods.IsGet(r.Method) && (r.Path.Equals("/api/v1/me", StringComparison.OrdinalIgnoreCase) || r.Path.Equals("/api/v1/workspaces", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The principal with its role claims replaced by the workspace role (none for a non-member) and the workspace in <see cref="Claim"/>.</summary>
     private static ClaimsPrincipal WithRole(ClaimsPrincipal user, string workspaceId, string? role)

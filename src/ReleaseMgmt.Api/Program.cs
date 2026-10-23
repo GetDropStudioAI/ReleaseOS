@@ -82,6 +82,7 @@ builder.Services.AddSingleton<IReadinessService, ReadinessService>();
 builder.Services.AddSingleton<SeedService>();
 builder.Services.AddSingleton<UserCreationService>();   // REOS-83 add users ahead of their first sign-in
 builder.Services.AddSingleton<WorkspaceService>();      // REOS-104 workspaces (D45)
+builder.Services.AddSingleton<WorkspaceMembersService>();   // REOS-106 switcher list, create workspace, members
 builder.Services.AddSingleton<ReleaseModelService>();   // REOS-107 key, owner, team, branch, on-call, type, target environments
 builder.Services.AddSingleton<ReleaseTypeService>();    // REOS-107 / RT1 release types per workspace
 builder.Services.AddSingleton<EnvironmentService>();    // REOS-109 environments
@@ -232,6 +233,7 @@ api.MapUserCreation();   // REOS-83
 api.MapAttachments();
 api.MapNotifications();
 api.MapShell();   // REOS-94
+api.MapWorkspaceAdmin();   // REOS-106
 api.MapTemplates();   // REOS-38
 api.MapTrainCreation();   // REOS-80
 api.MapAudit();

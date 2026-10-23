@@ -59,6 +59,7 @@ public class EndpointRoleMatrixTests
         DELETE /api/v1/links/{id}                                Admin
         DELETE /api/v1/products/{id}                             Plan
         DELETE /api/v1/sync/webhook-allowlist/{id}               Admin
+        DELETE /api/v1/workspace/members/{userId}                Admin
         DELETE /api/v1/trains/{id}/cis/{ciId}                    Plan
         GET {*path:nonfile}                                      Anonymous
         GET /api/v1/analytics                                    Read
@@ -145,6 +146,8 @@ public class EndpointRoleMatrixTests
         GET /api/v1/trains/{id}/window                           Read
         GET /api/v1/users                                        Read
         GET /api/v1/workspace                                    Read
+        GET /api/v1/workspace/members                            Admin
+        GET /api/v1/workspaces                                   Read
         GET /auth/config                                         Anonymous
         GET /healthz                                             Anonymous
         PATCH /api/v1/gates/{id}                                 Plan
@@ -233,6 +236,8 @@ public class EndpointRoleMatrixTests
         POST /api/v1/trains/{id}/tasks:parse                     Plan
         POST /api/v1/users                                       Admin
         POST /api/v1/waivers/{id}:approve                        GovernanceOfficer
+        POST /api/v1/workspace/members                           Admin
+        POST /api/v1/workspaces                                  Admin
         POST /auth/dev-login                                     Anonymous
         POST /auth/logout                                        Anonymous
         PUT /api/v1/comm-library/{id}                            Admin
@@ -253,6 +258,7 @@ public class EndpointRoleMatrixTests
         GET /api/v1/trains/{id}/release                          Read
         PATCH /api/v1/trains/{id}/release                        Plan
         PATCH /api/v1/workspace                                  Admin
+        PATCH /api/v1/workspace/members/{userId}                 Admin
         GET /api/v1/release-types                                Read
         POST /api/v1/release-types                               Plan
         PATCH /api/v1/release-types/{id}                         Plan

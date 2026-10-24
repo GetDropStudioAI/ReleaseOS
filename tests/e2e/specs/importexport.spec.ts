@@ -123,6 +123,8 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(rows.nth(0).locator('ins')).toContainText(`New ${stamp}`)
       await expect(rows.nth(1)).toContainText('= unchanged')
       await expect(rows.nth(2)).toContainText('+ new')
+      // the pointer rests where the seed commit was clicked, so the new Commit button is hovered: it must keep its fill and contrast
+      await page.getByRole('button', { name: /^Commit/ }).hover()
       await scan(page, `imports with diff markers (${scheme})`)
     })
 

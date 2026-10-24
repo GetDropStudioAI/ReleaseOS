@@ -23,7 +23,7 @@
 }
 .os-button:hover:not(:disabled) { background: var(--color-bg-muted); }
 .os-button.primary { background: var(--color-accent-fill); border-color: var(--color-accent-fill); color: var(--color-text-on-emphasis); }
-.os-button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.os-button.primary:hover:not(:disabled) { background: var(--color-accent-fill); filter: brightness(1.08); }   /* the generic hover tint above must not replace the fill: white text on it fails contrast */
 .os-button.destructive { color: var(--color-status-danger); }
 .os-button.destructive.filled { background: var(--color-status-danger); border-color: var(--color-status-danger); color: var(--color-bg-surface); }
 .os-button.destructive.filled:hover:not(:disabled) { filter: brightness(1.08); }

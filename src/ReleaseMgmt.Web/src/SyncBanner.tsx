@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { get } from './api'
-import { fmtDayTime } from './time'
+import { timeText } from './utcTime'
 
 /**
  * REOS-42: the connector-wide failure banner and the sync state it reads (GET /api/v1/sync/state).
@@ -72,7 +72,7 @@ export function SyncBanner({ sync, onOpen }: { sync: { state: SyncStateDto | nul
     <div className="sync-banner-row" data-testid="sync-banner" {...(speaking ? { role: 'region', 'aria-label': 'Sync problems' } : {})}>
       {failing.map(e => (
         <p key={`${e.source}-${e.kind}`} className="sync-banner bad">
-          <strong role="alert"><span aria-hidden="true">{e.scope === 'engine' ? '▲' : '✗'}</span> {headline(e)}{e.since ? ` since ${fmtDayTime(e.since)}` : ''}.</strong>
+          <strong role="alert"><span aria-hidden="true">{e.scope === 'engine' ? '▲' : '✗'}</span> {headline(e)}{e.since ? ` since ${timeText(e.since, { date: true })}` : ''}.</strong>
           <span className="sync-banner-effect">{cycles(e, state?.connectors.find(c => c.source === e.source))} {effect(e)}</span>
           <a href="/sync" onClick={ev => { ev.preventDefault(); onOpen() }}>Sync health</a>
         </p>

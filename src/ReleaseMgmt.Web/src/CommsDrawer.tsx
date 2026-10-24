@@ -5,8 +5,9 @@ import { useFocusWhen, useRestoreFocus } from './focus'
 import { errMsg } from './format'
 import { useAction } from './useAction'
 import { useDraft } from './session'
-import { ErrorState, LoadingState, SidePanel } from './ui'
-import { fmtDayTime, fmtHM, utcToZonedInput } from './time'
+import { ErrorState, LoadingState, SidePanel, Time } from './ui'
+import { utcToZonedInput } from './time'
+import { timeText, utcHM } from './utcTime'
 
 /** Session draft for the drawer (`comms:{trainId}`): App and the header's Communicate button read it to open and close the drawer. */
 export interface CommsDraft { open: boolean; tab?: Tab; templateId?: string; scheduleItemId?: string; webhookId?: string }
@@ -75,10 +76,10 @@ const OUTCOME: Record<string, { g: string; cls: string; word: string }> = {
 }
 
 function ScheduleState({ s }: { s: ScheduleItem }) {
-  const at = s.sentAt ? fmtHM(s.sentAt) : ''
+  const at = s.sentAt ? <Time at={s.sentAt} /> : ''
   switch (s.state) {
     case 'sent': return <span className="ok">✓ sent {at}</span>
-    case 'sentLate': return <span className="warn">✓ sent {fmtDayTime(s.sentAt!)} late</span>
+    case 'sentLate': return <span className="warn">✓ sent <Time at={s.sentAt!} date /> late</span>
     case 'overdue': return <span className="bad">▲ overdue</span>
     case 'ready': return <span className="accent">ready to send</span>
     default: return <span className="muted">scheduled</span>
@@ -131,7 +132,7 @@ function ScheduleTable({ ctx, selectedId, onPick, empty }: { ctx: DispatchContex
           <tr key={s.id} className={s.id === selectedId ? 'selected' : undefined} aria-selected={s.id === selectedId}>
             <td className="mono">{tMinusLabel(ctx.targetReleaseDate, s.dueAt)}</td>
             <td><button type="button" className="text plainlink" onClick={() => onPick(s)}>{s.templateType} · {s.audience}</button></td>
-            <td className="mono nowrap">{fmtDayTime(s.dueAt)}</td>
+            <td className="mono nowrap"><Time at={s.dueAt} date /></td>
             <td className="nowrap"><ScheduleState s={s} /></td>
           </tr>
         ))}
@@ -179,7 +180,7 @@ function SentLog({ trainId, refreshKey }: { trainId: string; refreshKey: number 
             return (
               <Fragment key={r.id}>
                 <tr className={sel ? 'selected' : undefined} aria-selected={sel}>
-                  <td className="mono nowrap">{fmtDayTime(r.dispatchedAt)}</td>
+                  <td className="mono nowrap"><Time at={r.dispatchedAt} date /></td>
                   <td>{r.dispatchedByName ?? '—'}</td>
                   <td className="nowrap"><span className={o.cls}>{o.g}</span> {r.channel === 'Webhook' ? `webhook ${r.webhookName ?? ''}` : r.channel === 'Mailto' ? 'mail' : 'copy'} <span className={o.cls}>{o.word}</span>{r.isRehearsal && <span className="muted"> · rehearsal</span>}</td>
                   <td><button type="button" className="text plainlink" aria-expanded={sel} onClick={() => setOpen(sel ? null : r.id)}>{r.subject}</button></td>
@@ -354,7 +355,7 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
   return (
     <div className="comms-drawer">
     <SidePanel title={template ? `${template.templateType}` : 'Communications'} titleRef={headingRef} closeLabel="Close drawer" onClose={onClose}
-      subtitle={template ? `${template.audience}${item ? ` · for ${tMinusLabel(ctx!.targetReleaseDate, item.dueAt)}, due ${fmtDayTime(item.dueAt)}` : ''}` : undefined}>
+      subtitle={template ? `${template.audience}${item ? ` · for ${tMinusLabel(ctx!.targetReleaseDate, item.dueAt)}, due ${timeText(item.dueAt, { date: true })}` : ''}` : undefined}>
       {ctxErr && <ErrorState what="The communications" message={ctxErr} onRetry={() => setRev(n => n + 1)} />}
       {!ctx && !ctxErr && <LoadingState what="the communications" />}
 
@@ -382,7 +383,7 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
                     </div>
                     <div>
                       <div className="header-line"><h3 className="cap">Preview</h3>
-                        <span className="muted small">{body ? <>data as of <span className="mono">{fmtHM(body.asOf)}</span> · train <span className="mono">v{body.trainVersion}</span></> : '—'}</span></div>
+                        <span className="muted small">{body ? <>data as of <span className="mono">{utcHM(body.asOf)} UTC</span> · train <span className="mono">v{body.trainVersion}</span></> : '—'}</span></div>
                       {previewErr && <p className="bad" role="alert">✗ {previewErr}</p>}
                       <div className="comms-rule" role="group" aria-label="Hydrated preview">
                         {subject && <div className="preview-subject"><span className="sr-only">Subject: </span>{subject.text}</div>}

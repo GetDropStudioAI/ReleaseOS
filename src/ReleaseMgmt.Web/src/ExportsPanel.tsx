@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, Panel } from './ui'
 import { createExportJob, exportJobFileUrl, getMe, listExportJobs, type ExportJob, type ExportKind } from './api'
 import { errMsg } from './format'
-import { fmtDayTime } from './time'
+import { Time } from './ui'
+import { timeText } from './utcTime'
 import { announce } from './announce'
 
 const POLL_MS = 3000
@@ -102,11 +103,11 @@ export function ExportsPanel({ trainId, refreshKey = 0 }: { trainId: string; ref
                   <td className="nowrap"><State job={j} />
                     {j.status === 'Failed' && <span className="bad" role={fresh.has(j.id) ? 'alert' : undefined}> {j.error ?? 'The export failed.'}</span>}
                   </td>
-                  <td className="nowrap"><span className="muted">{j.requestedByName ?? '—'}</span> <span className="mono">{fmtDayTime(j.createdAt)}</span></td>
+                  <td className="nowrap"><span className="muted">{j.requestedByName ?? '—'}</span> <span className="mono"><Time at={j.createdAt} date /></span></td>
                   <td className="mono nowrap" title={j.sha256 ?? undefined}>{j.sha256 ? `${j.sha256.slice(0, 12)}…` : <span className="muted">—</span>}</td>
                   <td className="mono n nowrap">{j.sizeBytes != null ? fmtSize(j.sizeBytes) : ''}</td>
                   <td className="nowrap">{j.status === 'Done' && (j.expiredAt
-                    ? <span className="muted" title={`The file was deleted on ${fmtDayTime(j.expiredAt)} after the retention period; generate it again`}>File deleted (retention)</span>
+                    ? <span className="muted" title={`The file was deleted on ${timeText(j.expiredAt, { date: true })} after the retention period; generate it again`}>File deleted (retention)</span>
                     : <a ref={el => { if (el) links.current.set(j.id, el); else links.current.delete(j.id) }} className="text" href={exportJobFileUrl(j.id)} download={j.fileName} aria-label={`Download ${j.label} ${j.ref}`}>Download</a>)}</td>
                 </tr>))}
             </tbody>

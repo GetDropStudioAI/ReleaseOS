@@ -8,12 +8,12 @@ import {
   type GateDefinition, type GateInput, type ProductRowV,
 } from './api'
 import { day, errMsg, plural, tMinus } from './format'
-import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, Notice, Panel, PropertyList, StatusChip, chipTone, type Column, type Tone } from './ui'
+import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, Notice, Panel, PropertyList, StatusChip, chipTone, type Column, type Tone, InputZoneNote, Time } from './ui'
 import { InspectorFrame } from './InspectorFrame'
 import { stampOf, stampText } from './deploy/deployLogic'
 import { windowStamp } from './release/model'
 import { browserZone } from './shell/clock'
-import { fmtDay, fmtDayTime, fmtHM, utcToZonedInput, zonedInputToUtc, zoneAbbr } from './time'
+import { utcToZonedInput, zonedInputToUtc } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
 import type { ApiError, WindowCollision } from './api'
@@ -33,14 +33,9 @@ const STATUS: Record<string, { g: string; cls: string; word: string }> = {
   InProgress: { g: '◐', cls: 'accent', word: 'in progress' }, Pending: { g: '○', cls: 'muted', word: 'pending' },
 }
 
-// ---- Deployment window (GET/PUT /trains/{id}/window). Shown in the viewer's zone with its abbreviation (Q-008). -----------------------------
+// ---- Deployment window (GET/PUT /trains/{id}/window). Shown as UTC with the person's own time beside it (D44); edited in the display zone, which the fields say. -----------------------------
 const localInput = utcToZonedInput
 const toUtc = zonedInputToUtc
-
-export function windowText(w: WindowRow) {
-  const same = fmtDay(w.startsAt) === fmtDay(w.endsAt)
-  return same ? `${fmtHM(w.startsAt)}–${fmtHM(w.endsAt)} ${zoneAbbr(w.endsAt)}` : `${fmtDayTime(w.startsAt)} – ${fmtDayTime(w.endsAt)} ${zoneAbbr(w.endsAt)}`
-}
 
 /** D44: the window in UTC, labelled, with the person's own time beside it. */
 function WindowStamp({ w }: { w: WindowRow }) {
@@ -78,8 +73,8 @@ export function WindowLine({ trainId, canEdit, refreshKey, onChanged, collisions
   )
   return (
     <span className="inline-form">
-      <label>Starts <input ref={startRef} className="line" type="datetime-local" value={start} onChange={e => setDraft({ start: e.target.value, end })} {...invalid('start')} /></label>{' '}
-      <label>Ends <input className="line" type="datetime-local" value={end} onChange={e => setDraft({ start, end: e.target.value })} {...invalid('end')} /></label>{' '}
+      <label>Starts <input ref={startRef} className="line" type="datetime-local" value={start} aria-describedby={"zn-pl-1"} onChange={e => setDraft({ start: e.target.value, end })} {...invalid('start')} /></label><InputZoneNote id="zn-pl-1" value={start} />{' '}
+      <label>Ends <input className="line" type="datetime-local" value={end} aria-describedby={"zn-pl-2"} onChange={e => setDraft({ start, end: e.target.value })} {...invalid('end')} /></label><InputZoneNote id="zn-pl-2" value={end} />{' '}
       <button type="button" className="text" disabled={!!pending} onClick={() => save()}>{pending ?? 'Save window'}</button>{' '}
       <button type="button" className="text" disabled={!!pending} onClick={close}>Cancel</button>
       {err && <span id={errId} className="bad" role="alert"> ✗ {err}</span>}
@@ -438,7 +433,7 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
                   <td><button type="button" className="text plainlink" aria-current={sel ? 'true' : undefined} onClick={() => onSelect({ kind: 'task', gateId: gate.id, id: t.id })}>{t.description}</button></td>
                   <td>{t.owner ?? <span className="muted">—</span>}</td>
                   <td>{t.product ?? <span className="muted">—</span>}</td>
-                  <td className="mono muted nowrap">{t.completedAt ? fmtDayTime(t.completedAt) : '—'}</td>
+                  <td className="mono muted nowrap">{t.completedAt ? <Time at={t.completedAt} date /> : '—'}</td>
                   <td><button type="button" className="text" disabled={!!pending} onClick={() => void toggle(t)}>{pending === t.id ? (t.done ? 'Reopening…' : 'Marking done…') : t.done ? 'Reopen' : 'Mark done'}</button></td>
                 </tr>
               )

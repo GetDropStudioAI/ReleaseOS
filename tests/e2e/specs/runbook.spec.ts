@@ -44,4 +44,5 @@ test('runbook steps, dependencies and cycle refusal work from the UI', async ({ 
   await expect(alert).toContainText('R-001')
   await expect(alert).toContainText('R-002')
   await expect(rb.locator('tr', { hasText: 'Stop traffic' }).locator('td').last()).toHaveText('—')
+  await expect(rb.locator('tr', { hasText: 'Deploy API' })).toContainText(/Sat 7 Nov 03:15–03:45 UTC/)   // D44: 21:15 entered in the display zone (CST, UTC-6) is 03:15 UTC the next day
 })

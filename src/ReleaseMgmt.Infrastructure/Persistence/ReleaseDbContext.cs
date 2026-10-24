@@ -42,6 +42,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<ConnectorState>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<ReleaseTypes>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-107/109/110
         b.Entity<Environments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<Clients>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-118 (RT3)
         b.Entity<CatalogServices>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<IngestKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<Deployments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
@@ -118,7 +119,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         ["RunId"] = typeof(RunbookRuns), ["StepId"] = typeof(RunbookSteps), ["DependsOnStepId"] = typeof(RunbookSteps), ["DecisionId"] = typeof(GoNoGoDecisions),
         ["PirId"] = typeof(PostImplementationReviews), ["CommTemplateId"] = typeof(CommTemplates), ["DispatchId"] = typeof(CommDispatches),
         ["WebhookDestinationId"] = typeof(WebhookDestinations), ["FreezeWindowId"] = typeof(FreezeWindows), ["ExportJobId"] = typeof(ExportJobs),
-        ["OnCallTeamId"] = typeof(Teams), ["ReleaseTypeId"] = typeof(ReleaseTypes), ["EnvironmentId"] = typeof(Environments), ["CatalogServiceId"] = typeof(CatalogServices),
+        ["OnCallTeamId"] = typeof(Teams), ["ReleaseTypeId"] = typeof(ReleaseTypes), ["EnvironmentId"] = typeof(Environments), ["CertEnvironmentId"] = typeof(Environments), ["CatalogServiceId"] = typeof(CatalogServices),
         ["DefaultTemplateId"] = typeof(TrainTemplates), ["ControlWebhookDestinationId"] = typeof(WebhookDestinations), ["DeploymentId"] = typeof(Deployments), ["IngestKeyId"] = typeof(IngestKeys),
         ["PolicyId"] = typeof(ApprovalPolicies), ["ApprovalId"] = typeof(Approvals), ["BreachId"] = typeof(ThresholdBreaches),
     };

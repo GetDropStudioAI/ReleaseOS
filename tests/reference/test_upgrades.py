@@ -194,6 +194,27 @@ for sql, want, label in [
 t8.execute("UPDATE ReleaseTrains SET ReleaseTypeId = 'typ' WHERE Id = 'r2'")
 check(t8.execute("SELECT ReleaseTypeId FROM ReleaseTrains WHERE Id = 'r2'").fetchone() == ("typ",), "008: a release without a type can be given one")
 
+# Upgrade 009 (REOS-118): the rebuilt ImportJobs keeps its rows and takes the Clients kind, Clients starts empty, the new rules are live
+t9 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("009_"):
+        t9.execute("INSERT INTO ImportJobs (Id, Kind, FileName, Sha256, RowCount, Status, UploadedByUserId, CreatedAt) VALUES ('ij1', 'Teams', 't.csv', 'ab', 3, 'Previewed', 'u1', '2026-09-03T00:00:00Z')")
+        t9.execute("INSERT INTO Environments (Id, Name, Kind, CreatedAt) VALUES ('envc', 'CERT', 'Staging', '2026-09-03T00:00:00Z')")
+    t9.executescript(s.read_text())
+check(t9.execute("SELECT Id, Kind, RowCount, Status, WorkspaceId FROM ImportJobs").fetchall() == [("ij1", "Teams", 3, "Previewed", "default")], "009: import jobs kept by the rebuild")
+check(t9.execute("SELECT COUNT(*) FROM Clients").fetchone() == (0,), "009: the client list starts empty")
+check(t9.execute("INSERT INTO ImportJobs (Id, Kind, FileName, Sha256, RowCount, Status, UploadedByUserId, CreatedAt) VALUES ('ij2', 'Clients', 'c.csv', 'cd', 1, 'Previewed', 'u1', '2026-09-04T00:00:00Z')").rowcount == 1, "009: a Clients import job is accepted")
+for sql, want, label in [
+    ("INSERT INTO Clients (Id, Name, Segment, CreatedAt) VALUES ('c1', 'Acme', 'Standard', '2026-09-04T00:00:00Z')", None, "009: a Standard client"),
+    ("INSERT INTO Clients (Id, Name, Segment, CertEnvironmentId, CreatedAt) VALUES ('c2', 'Globex', 'OnDemand', 'envc', '2026-09-04T00:00:00Z')", None, "009: an On-Demand client with its CERT environment"),
+    ("INSERT INTO Clients (Id, Name, Segment, CertEnvironmentId, CreatedAt) VALUES ('c3', 'Initech', 'Standard', 'envc', '2026-09-04T00:00:00Z')", "Only an On-Demand client has a CERT environment", "009: a Standard client with a CERT environment is refused"),
+    ("INSERT INTO Clients (Id, Name, Segment, CreatedAt) VALUES ('c4', 'Hooli', 'OnDemand', '2026-09-04T00:00:00Z')", "needs a CERT environment", "009: an On-Demand client without one is refused"),
+]:
+    try:
+        t9.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

@@ -10,8 +10,8 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261024201636_Schema")]
-    partial class Schema
+    [Migration("20261024211901_Triggers")]
+    partial class Triggers
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -676,6 +676,55 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("StageGateId");
 
                     b.ToTable("ChecklistTasks", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Clients", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CertEnvironmentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Segment")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CertEnvironmentId");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("Clients", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -3360,6 +3409,25 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.StageGates", null)
                         .WithMany()
                         .HasForeignKey("StageGateId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Clients", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Environments", null)
+                        .WithMany()
+                        .HasForeignKey("CertEnvironmentId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });

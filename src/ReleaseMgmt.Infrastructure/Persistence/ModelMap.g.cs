@@ -62,6 +62,7 @@ public static class ModelMap
         b.Entity<TrainMilestones>(e => { e.ToTable("TrainMilestones"); e.HasKey(e => e.Id);  });
         b.Entity<ReleaseTypes>(e => { e.ToTable("ReleaseTypes"); e.HasKey(e => e.Id);  });
         b.Entity<Environments>(e => { e.ToTable("Environments"); e.HasKey(e => e.Id);  });
+        b.Entity<Clients>(e => { e.ToTable("Clients"); e.HasKey(e => e.Id);  });
         b.Entity<TrainEnvironments>(e => { e.ToTable("TrainEnvironments"); e.HasKey(e => new { e.ReleaseTrainId, e.EnvironmentId });  });
         b.Entity<CatalogServices>(e => { e.ToTable("CatalogServices"); e.HasKey(e => e.Id);  });
         b.Entity<IngestKeys>(e => { e.ToTable("IngestKeys"); e.HasKey(e => e.Id);  });
@@ -205,6 +206,9 @@ public static class ModelMap
         b.Entity<Environments>().HasOne<WebhookDestinations>().WithMany().HasForeignKey(e => e.ControlWebhookDestinationId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Environments>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Environments>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<Clients>().HasOne<Environments>().WithMany().HasForeignKey(e => e.CertEnvironmentId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<Clients>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<Clients>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainEnvironments>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainEnvironments>().HasOne<Environments>().WithMany().HasForeignKey(e => e.EnvironmentId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CatalogServices>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);

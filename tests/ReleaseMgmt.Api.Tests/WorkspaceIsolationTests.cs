@@ -54,6 +54,7 @@ public class WorkspaceIsolationTests
         INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('ta','{Marker} Train','2026-11-30','High','{t}','{t}');
         INSERT INTO ReleaseTypes(Id,Name,SortOrder) VALUES('rta','{Marker} Type',10);
         INSERT INTO Environments(Id,Name,Region,Kind,SortOrder,CreatedAt) VALUES('enva','{Marker} Env','{Marker}-region','Production',10,'{t}');
+        INSERT INTO Clients(Id,Name,Segment,CertEnvironmentId,CreatedAt) VALUES('cla','{Marker} Client','OnDemand','enva','{t}');
         INSERT INTO CatalogServices(Id,ServiceKey,Name,OwnerTeamId,Repository,CreatedAt) VALUES('svca','zqalpha-svc','{Marker} Service','tma','https://git.example/{Marker}','{t}');
         INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt,LastUsedAt) VALUES('ika','{Marker} Key','rk_zqalp',printf('%064d',3),'{t}','2999-01-01T00:00:00Z');
         UPDATE ReleaseTrains SET OwnerUserId='ua', OwnerTeamId='tma', ReleaseBranch='{Marker}-branch', ReleaseTypeId='rta' WHERE Id='ta';
@@ -112,7 +113,7 @@ public class WorkspaceIsolationTests
             ["pir-actions"] = "paa", ["milestones"] = "ma", ["attachments"] = "aa", ["comm-library"] = "la", ["comm-templates"] = "cta", ["comm-schedule"] = "csa",
             ["dispatches"] = "dsa", ["export-jobs"] = "xa", ["freezes"] = "fa", ["links"] = "lka", ["notifications"] = "na", ["alerts"] = "sya", ["webhook-allowlist"] = "wha",
             ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["userId"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
-            ["release-types"] = "rta", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika", ["approval-requests"] = "apa", ["approval-policies"] = "pola",
+            ["release-types"] = "rta", ["clients"] = "cla", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika", ["approval-requests"] = "apa", ["approval-policies"] = "pola",
             ["ciId"] = "cia", ["issueId"] = "kia", ["stepId"] = "sa", ["jobId"] = "ija", ["trainId"] = "ta", ["day"] = "2026-12-24",
             ["audit"] = Scalar(f, "SELECT Id FROM AuditEvents WHERE ReleaseTrainId='ta' AND EntityType='Train'"),   // GET /audit/{id}: one of A's events
         };
@@ -135,7 +136,7 @@ public class WorkspaceIsolationTests
             $"SELECT * FROM CommDispatches WHERE CommTemplateId IN (SELECT Id FROM CommTemplates WHERE ReleaseTrainId IN {trains})",
         }.ToList();
         foreach (var root in new[] { "Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
-                     "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "Environments", "CatalogServices", "IngestKeys", "Deployments",
+                     "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "Environments", "Clients", "CatalogServices", "IngestKeys", "Deployments",
                      "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions", "ApprovalPolicies", "Approvals" })
             queries.Add($"SELECT * FROM {root} WHERE WorkspaceId='default'");
         foreach (var child in new[] { "ChangeRecords", "AffectedCIs", "DeploymentWindows", "BundledProducts", "StageGates", "Attachments", "RunbookSteps", "RunbookRuns", "Blockers",

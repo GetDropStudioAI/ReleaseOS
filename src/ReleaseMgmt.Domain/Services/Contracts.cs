@@ -11,7 +11,8 @@ public interface IReadinessService
     Task<ServiceResult<Readiness>> GetAsync(string trainId, string target = "Executing", CancellationToken ct = default);
 }
 
-public sealed record NotificationRequest(string UserId, string Kind, string EntityType, string EntityId, string Message, int EscalationLevel = 0);
+/// <summary><see cref="Message"/> is the body; the notifier puts the workspace, the release key and title in front of it and a deep link behind it (<see cref="MessageStyle"/>). <see cref="TrainId"/> names the release when the entity is not one that belongs to one.</summary>
+public sealed record NotificationRequest(string UserId, string Kind, string EntityType, string EntityId, string Message, int EscalationLevel = 0, string? TrainId = null);
 
 /// <summary>Writes an in-app notification and pushes NotificationCreated. M4 adds reminders, escalation and team webhooks behind this interface.</summary>
 public interface INotifier

@@ -144,8 +144,8 @@ public sealed class RunScenarioAcceptanceTests
         Assert.All(late, n => Assert.Equal(1L, Convert.ToInt64(n[2])));
         var rtes = users.Where(u => u.Role == "RTE").Select(u => u.Id).Order().ToList();
         Assert.Equal(rtes, late.Select(n => (string)n[1]!).Distinct().Order().ToList());                        // Marcus (Release Manager) is not paged for a warning
-        Assert.Contains(late, n => ((string)n[3]!).StartsWith("Step R-004 started 5 min"));
-        Assert.Equal("2026-10-30T06:35:00Z", late.First(n => ((string)n[3]!).StartsWith("Step R-004"))[4]);   // the row carries the fake time of the step start, not the wall clock
+        Assert.Contains(late, n => ((string)n[3]!).Contains(": Step R-004 started 5 min"));   // REOS-139: the workspace, key and title come first
+        Assert.Equal("2026-10-30T06:35:00Z", late.First(n => ((string)n[3]!).Contains(": Step R-004"))[4]);   // the row carries the fake time of the step start, not the wall clock
 
         // The forecast first crossed the rollback deadline when R-004 finished (07:06): RTEs + the Release Manager, once, however many events followed.
         var crossed = Query(path, "SELECT UserId, EscalationLevel, CreatedAt FROM Notifications WHERE Kind='RollbackDeadline' ORDER BY UserId");

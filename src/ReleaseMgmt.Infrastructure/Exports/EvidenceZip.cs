@@ -14,21 +14,22 @@ namespace ReleaseMgmt.Infrastructure.Exports;
 public static class EvidenceZip
 {
     public const string ManifestName = "manifest.csv";
-    public static readonly string[] ManifestHeader = ["name", "size", "sha256", "gate_or_task", "uploader", "uploaded_at", "locked", "zip_path"];
+    public static readonly string[] ManifestHeader = ["name", "size", "sha256", "gate_or_task", "uploader", "uploaded_at", "locked", "zip_path", "workspace", "release_key", "owner", "team", "environments"];   // the last five are REOS-137: which workspace and release the pack is for
 
     public static string EntryPath(AttachmentRow a) => $"files/{a.No:D3}-{AttachmentService.SanitizeFileName(a.FileName)}";
 
     /// <summary>manifest.csv: RFC 4180 with OWASP CSV-injection escaping (a cell starting = + - @, tab or CR gets a leading apostrophe). CRLF line ends, UTF-8 without BOM.</summary>
-    public static string ManifestCsv(IEnumerable<AttachmentRow> rows)
+    public static string ManifestCsv(IEnumerable<AttachmentRow> rows, ReleaseInfo? release = null)
     {
         var lines = new List<string> { ExportSupport.CsvRow(ManifestHeader) };
         foreach (var a in rows)
             lines.Add(ExportSupport.CsvRow([a.FileName, a.SizeBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), a.Sha256, $"{a.EntityType}: {a.EntityLabel}", a.UploaderName,
-                DateTime.SpecifyKind(a.UploadedAt, DateTimeKind.Utc).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture), a.Locked ? "true" : "false", EntryPath(a)]));
+                DateTime.SpecifyKind(a.UploadedAt, DateTimeKind.Utc).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture), a.Locked ? "true" : "false", EntryPath(a),
+                release?.Workspace ?? "", release?.Key ?? "", release?.Owner ?? "", release?.Team ?? "", release is null ? "" : string.Join(", ", release.Environments)]));
         return string.Join("\r\n", lines) + "\r\n";
     }
 
-    public static async Task WriteAsync(string zipPath, string pdfEntryName, byte[] pdf, IReadOnlyList<AttachmentRow> attachments, AttachmentService store, DateTime stamp, CancellationToken ct)
+    public static async Task WriteAsync(string zipPath, string pdfEntryName, byte[] pdf, IReadOnlyList<AttachmentRow> attachments, AttachmentService store, DateTime stamp, CancellationToken ct, ReleaseInfo? release = null)
     {
         var when = new DateTimeOffset(DateTime.SpecifyKind(stamp, DateTimeKind.Utc));
         await using var fs = new FileStream(zipPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 81920, FileOptions.Asynchronous);
@@ -38,7 +39,7 @@ public static class EvidenceZip
         await using (var s = pdfEntry.Open()) await s.WriteAsync(pdf, ct);
 
         var manifest = zip.CreateEntry(ManifestName, CompressionLevel.Optimal); manifest.LastWriteTime = when;
-        await using (var s = manifest.Open()) await s.WriteAsync(new System.Text.UTF8Encoding(false).GetBytes(ManifestCsv(attachments)), ct);
+        await using (var s = manifest.Open()) await s.WriteAsync(new System.Text.UTF8Encoding(false).GetBytes(ManifestCsv(attachments, release)), ct);
 
         foreach (var a in attachments)
         {

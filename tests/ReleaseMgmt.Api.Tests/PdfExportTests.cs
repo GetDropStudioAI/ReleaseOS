@@ -146,6 +146,12 @@ public class PdfExportTests
     public async Task Evidence_pack_page_1_carries_the_mockup_sections_and_a_footer_naming_sections_6_to_9()
     {
         var e = await Setup(); using var _f = e.F;
+        // REOS-137: page 1 also carries the workspace and the release model (key, owner, team, environments), as the mockup now shows
+        Sql(e.F, $@"UPDATE Workspaces SET Name='Payments' WHERE Id='default';
+                    INSERT INTO Teams(Id,Handle,Name) VALUES('tmx','core','Core Platform');
+                    INSERT INTO Environments(Id,Name,Kind,SortOrder,CreatedAt) VALUES('ev1','Staging','Staging',1,'2026-10-01T00:00:00Z'),('ev2','Production EU','Production',2,'2026-10-01T00:00:00Z');
+                    UPDATE ReleaseTrains SET OwnerUserId='{UserId(e.F, "rte@x.com")}', OwnerTeamId='tmx' WHERE Id='t1';
+                    INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('t1','ev1'),('t1','ev2');");
         var id = (await Enqueue(e.Rte, "EvidencePack")).GetProperty("id").GetString()!;
         await e.Run();
         var (bytes, _) = await Download(e.Rte, id);
@@ -166,6 +172,9 @@ public class PdfExportTests
                  })
             Assert.Contains(marker, p1);
         Assert.Contains("EX-", p1);
+        var flat = System.Text.RegularExpressions.Regex.Replace(p1, @"\s+", " ");
+        foreach (var identity in new[] { "Workspace Payments", "RLS-1", "Owner rte", "Team Core Platform", "Environments Staging, Production EU", " UTC (" })
+            Assert.Contains(identity, flat);
         Assert.Contains("…", p1);   // short sha256 like 9f3c1a…77e1a4
         var later = string.Join("\n", Enumerable.Range(2, doc.NumberOfPages - 1).Select(i => doc.GetPage(i).Text));
         foreach (var marker in new[] { "6 · Runbook actuals", "7 · Gate transition log", "8 · Audit events", "9 · Metric snapshot", "Communication plan", "R-090", "Rollback" })
@@ -264,7 +273,7 @@ public class PdfExportTests
 
         var manifest = new StreamReader(zip.GetEntry("manifest.csv")!.Open(), Encoding.UTF8).ReadToEnd();
         var lines = manifest.TrimEnd().Split("\r\n");
-        Assert.Equal("name,size,sha256,gate_or_task,uploader,uploaded_at,locked,zip_path", lines[0]);
+        Assert.Equal("name,size,sha256,gate_or_task,uploader,uploaded_at,locked,zip_path,workspace,release_key,owner,team,environments", lines[0]);   // REOS-137 added the last five
         Assert.Equal(3, lines.Length);
         Assert.Contains("'=freeze", manifest);                // OWASP: leading = is neutralised with an apostrophe
         Assert.DoesNotContain(",=freeze", manifest);

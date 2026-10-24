@@ -8,6 +8,8 @@ using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Infrastructure.Comms;
 using ReleaseMgmt.Infrastructure.Reminders;
 using ReleaseMgmt.Infrastructure.Persistence;
+using ReleaseMgmt.Infrastructure.Services;
+using ReleaseMgmt.Domain.Services;
 
 namespace ReleaseMgmt.Api.Reminders;
 
@@ -72,7 +74,8 @@ public static class WebhookAddressPolicy
 /// A failure raises an alert (IAlertSink + SyncAlerts, source Webhook) and returns false; success is audited.
 /// </summary>
 public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IHttpClientFactory http, SyncAlertWriter syncAlerts,
-    IAlertSink alerts, IConfiguration config, IHostEnvironment env, ILogger<TeamWebhookSender> log, IWebhookUrlVault urlVault, OutboundAddressPolicy addressPolicy) : ITeamWebhookSender
+    IAlertSink alerts, IConfiguration config, IHostEnvironment env, ILogger<TeamWebhookSender> log, IWebhookUrlVault urlVault, OutboundAddressPolicy addressPolicy,
+    PublicLinks? links = null) : ITeamWebhookSender
 {
     public const string ClientName = "team-webhook";
 
@@ -89,7 +92,9 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
             var uri = Validate(urlVault.Unprotect(dest.ProtectedUrl));   // Q-053e: decrypted here, for this call only
             host = uri.Host;
             if (!config.GetValue("Notifications:Webhooks:AllowPrivateTargets", false)) await EnsurePublicAsync(uri, ct);
-            var error = await PostAsync(uri, dest.Kind, n, ct);
+            // REOS-139: the same message style as the in-app notice: workspace, release key and title, UTC times, and a link back when App:PublicBaseUrl is set
+            var subject = await MessageContexts.ForEntityAsync(db, links, n.EntityType, n.EntityId, n.TrainId, ct);
+            var error = await PostAsync(uri, dest.Kind, n, subject, ct);
             if (error is null)
             {
                 db.Set<AuditEvents>().Add(new AuditEvents
@@ -142,14 +147,16 @@ public sealed class TeamWebhookSender(IDbContextFactory<ReleaseDbContext> dbf, T
     }
 
     /// <summary>Returns null on success, else a short reason without the URL.</summary>
-    private async Task<string?> PostAsync(Uri uri, string kind, WebhookNotice n, CancellationToken ct)
+    private async Task<string?> PostAsync(Uri uri, string kind, WebhookNotice n, MessageSubject subject, CancellationToken ct)
     {
         var attempts = Math.Clamp(config.GetValue("Notifications:Webhooks:MaxAttempts", 3), 1, 5);
         var timeout = TimeSpan.FromSeconds(Math.Clamp(config.GetValue("Notifications:Webhooks:TimeoutSeconds", 10), 1, 60));
         var delay = TimeSpan.FromMilliseconds(Math.Clamp(config.GetValue("Notifications:Webhooks:RetryDelayMs", 500), 0, 30_000));
+        var message = MessageStyle.Compose(subject, n.Message);
         var body = JsonSerializer.Serialize(kind == "Generic"
-            ? new { kind = n.Kind, entityType = n.EntityType, entityId = n.EntityId, escalationLevel = n.EscalationLevel, message = n.Message, trainId = n.TrainId, at = time.GetUtcNow().UtcDateTime }
-            : (object)new { text = ChatText(kind, n.Message) });   // Teams and Slack incoming webhooks both take {"text": ...}
+            ? new { kind = n.Kind, entityType = n.EntityType, entityId = n.EntityId, escalationLevel = n.EscalationLevel, message, trainId = n.TrainId, at = time.GetUtcNow().UtcDateTime,
+                    workspace = subject.Workspace, releaseKey = subject.Key, title = subject.Title, link = subject.Link }
+            : (object)new { text = ChatText(kind, message) });   // Teams and Slack incoming webhooks both take {"text": ...}
 
         var last = "no attempt was made";
         for (var attempt = 1; attempt <= attempts; attempt++)

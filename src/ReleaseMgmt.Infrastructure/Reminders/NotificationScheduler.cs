@@ -120,26 +120,26 @@ public sealed class NotificationScheduler : BackgroundService
         {
             var owner = await OwnerRecipientsAsync(db, g.OwnerUserId, g.OwnerTeamId, ct);
             var due = Clock.StartOfDayUtc(g.DueOn.AddDays(1));   // due at the end of DueOn in the display zone
-            string Say(string what) => $"Gate '{g.Name}' on {g.TrainTitle} {what}";
+            string Say(string what) => $"Gate '{g.Name}' {what}";   // the release is in the message header (MessageStyle)
 
             if (g.Status == "InProgress")
             {
-                fired += await FireAsync(new("GateEntered", "StageGate", g.Id, 0, Say($"is now in progress (due {g.DueOn:yyyy-MM-dd})"), owner, g.OwnerTeamId, g.TrainId), ct);
+                fired += await FireAsync(new("GateEntered", "StageGate", g.Id, 0, Say($"is now in progress (due {MessageStyle.Utc(g.DueOn)})"), owner, g.OwnerTeamId, g.TrainId), ct);
 
                 // 50% of the time from entry to DueOn; a gate entered after its due time skips straight to overdue.
                 DateTime? entry = entered.TryGetValue(g.Id, out var e) ? e : g.LastChangedAt;
                 if (entry is DateTime start && start < due && now < due && now >= start + (due - start) / 2)
-                    fired += await FireAsync(new("GateReminder", "StageGate", g.Id, 0, Say($"is half way to its due date ({g.DueOn:yyyy-MM-dd})"), owner, g.OwnerTeamId, g.TrainId), ct);
+                    fired += await FireAsync(new("GateReminder", "StageGate", g.Id, 0, Say($"is half way to its due date ({MessageStyle.Utc(g.DueOn)})"), owner, g.OwnerTeamId, g.TrainId), ct);
             }
 
             if (now >= due)
             {
-                fired += await FireAsync(new("GateOverdue", "StageGate", g.Id, 1, Say($"is overdue (was due {g.DueOn:yyyy-MM-dd}, still {g.Status})"),
+                fired += await FireAsync(new("GateOverdue", "StageGate", g.Id, 1, Say($"is overdue (was due {MessageStyle.Utc(g.DueOn)}, still {g.Status})"),
                     await RoleRecipientsAsync(db, Roles.ReleaseManager, ct), g.OwnerTeamId, g.TrainId), ct);
                 // Level 2 once a whole business day has passed after the due day (Q-037b): holidays and weekends do not count.
                 var level2 = Clock.StartOfDayUtc(BusinessDays.AddBusinessDays(g.DueOn, 1, holidays).AddDays(1));
                 if (now >= level2)
-                    fired += await FireAsync(new("GateOverdue", "StageGate", g.Id, 2, Say($"is more than a business day overdue (was due {g.DueOn:yyyy-MM-dd}, still {g.Status})"),
+                    fired += await FireAsync(new("GateOverdue", "StageGate", g.Id, 2, Say($"is more than a business day overdue (was due {MessageStyle.Utc(g.DueOn)}, still {g.Status})"),
                         await RoleRecipientsAsync(db, Roles.RTE, ct), g.OwnerTeamId, g.TrainId), ct);
             }
         }
@@ -163,7 +163,7 @@ public sealed class NotificationScheduler : BackgroundService
         {
             var late = (int)Math.Floor((now - s.PlannedStartAt).TotalMinutes);
             if (late < StepWarnMin) continue;
-            string Say(int lvl) => $"Step {s.StepCode} '{s.StepTitle}' on {s.TrainTitle} has not started {late} min after its plan" + (lvl == 2 ? " (critical)" : "");
+            string Say(int lvl) => $"Step {s.StepCode} '{s.StepTitle}' has not started {late} min after its plan" + (lvl == 2 ? " (critical)" : "");
 
             var first = await OwnerRecipientsAsync(db, s.OwnerUserId, s.OwnerTeamId, ct);
             first.UnionWith(await RoleRecipientsAsync(db, Roles.RTE, ct));
@@ -197,12 +197,12 @@ public sealed class NotificationScheduler : BackgroundService
                 var who = await RoleRecipientsAsync(db, Roles.ReleaseManager, ct);
                 who.Add(c.OwnerUserId);
                 fired += await FireAsync(new("ConditionExpired", "GoNoGoCondition", c.Id, 1,
-                    $"Go/No-Go condition '{c.Text}' on {c.TrainTitle} expired at {c.ExpiresAt:yyyy-MM-dd HH:mm}Z and is still open", who, null, c.TrainId), ct);
+                    $"Go/No-Go condition '{c.Text}' expired at {MessageStyle.Utc(c.ExpiresAt)} and is still open", who, null, c.TrainId), ct);
             }
             else if (now >= c.ExpiresAt - ConditionLead)
             {
                 fired += await FireAsync(new("ConditionExpiring", "GoNoGoCondition", c.Id, 0,
-                    $"Go/No-Go condition '{c.Text}' on {c.TrainTitle} expires at {c.ExpiresAt:yyyy-MM-dd HH:mm}Z (within the hour)", [c.OwnerUserId], null, c.TrainId), ct);
+                    $"Go/No-Go condition '{c.Text}' expires at {MessageStyle.Utc(c.ExpiresAt)} (within the hour)", [c.OwnerUserId], null, c.TrainId), ct);
             }
         }
         return fired;
@@ -225,7 +225,7 @@ public sealed class NotificationScheduler : BackgroundService
             if (!due.TryGetValue(r.Pir.Id, out var d) || !PirDue.IsOverdue(r.Pir, d, today)) continue;
             var why = r.Pir.RequiredReason == PirDue.Aborted ? "the train was aborted" : "a live run was rolled back";
             fired += await FireAsync(new("PirOverdue", "PostImplementationReview", r.Pir.Id, 1,
-                $"The post-implementation review for {r.TrainTitle} ({why}) was due {d:yyyy-MM-dd} and is not held yet", await RoleRecipientsAsync(db, Roles.ReleaseManager, ct), null, r.Pir.ReleaseTrainId), ct);
+                $"The post-implementation review ({why}) was due {MessageStyle.Utc(d)} and is not held yet", await RoleRecipientsAsync(db, Roles.ReleaseManager, ct), null, r.Pir.ReleaseTrainId), ct);
         }
         return fired;
     }

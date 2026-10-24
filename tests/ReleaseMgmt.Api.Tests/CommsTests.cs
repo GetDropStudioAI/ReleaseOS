@@ -66,7 +66,7 @@ public class CommsTests
     {
         using var c = await Setup();
         var toks = (await c.Viewer.GetFromJsonAsync<JsonElement>("/api/v1/comm-library/tokens")).EnumerateArray().ToList();
-        Assert.Equal(22, toks.Count);
+        Assert.Equal(27, toks.Count);   // REOS-139 added five
         Assert.Contains(toks, t => t.GetProperty("name").GetString() == "GoNoGoDecision" && t.GetProperty("description").GetString()!.Length > 5);
     }
 
@@ -189,7 +189,7 @@ public class CommsTests
         using var c = await Setup();
         var libId = (await c.Rte.GetFromJsonAsync<JsonElement>("/api/v1/comm-library")).EnumerateArray().First(l => l.GetProperty("name").GetString() == "T-1 Go/No-Go outcome").GetProperty("id").GetString()!;
         var lib = await Json(await Send(c.Rte, HttpMethod.Post, "/api/v1/trains/t1/comms:preview", new { libraryTemplateId = libId, target = "Markdown" }));
-        Assert.StartsWith("[R26.10] Go/No-Go: Not yet recorded", lib.GetProperty("subject").GetString());
+        Assert.StartsWith("[Default · RLS-1 R26.10] Go/No-Go: Not yet recorded", lib.GetProperty("subject").GetString());
         Assert.True(lib.GetProperty("canDispatch").GetBoolean());
         Assert.Equal(libId, lib.GetProperty("templateId").GetString());
 

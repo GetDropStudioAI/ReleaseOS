@@ -27,8 +27,8 @@ public sealed class ReleaseReportDocument(ExportModel model, ExportOptions optio
         [
             ("Status", M.Train.Status),
             ("Close code", M.Train.CloseCode is null ? Cell.Q("not closed") : Cell.B(M.Train.CloseCode)),
-            ("Deployment window", M.Window is { } w ? Cell.M($"{F.DayShort(w.StartsAt)} {F.Time(w.StartsAt)}–{F.Time(w.EndsAt)} {F.Zone(w.StartsAt)}") : Cell.Q("not set")),
-            ("Actual", M.Train.ActualStartAt is { } s ? Cell.M($"{F.DayShort(s)} {F.Time(s)}–{(M.Train.ActualEndAt is { } e ? F.Time(e) + " " + F.Zone(e) : "not finished")}") : Cell.Q("not started")),
+            ("Deployment window", M.Window is { } w ? Cell.M($"{F.DayShort(w.StartsAt)} {F.Span(w.StartsAt, w.EndsAt)}") : Cell.Q("not set")),
+            ("Actual", M.Train.ActualStartAt is { } s ? Cell.M($"{F.DayShort(s)} {(M.Train.ActualEndAt is { } e ? F.Span(s, e) : F.Time(s) + " UTC, not finished")}") : Cell.Q("not started")),
             ("Planned release date", fig.Planned is { } p ? Cell.M(F.Day(p)) : Cell.Q("no baseline captured yet")),
             ("Slip", fig.SlipDays is int d ? Cell.M(d <= 0 ? $"on time ({(d == 0 ? "on the day" : $"{-d} day(s) early")})" : $"{d} day(s) late") : Cell.Q("—")),
             ("Products", M.Products.Count == 0 ? Cell.Q("none") : string.Join(" · ", M.Products.Select(x => $"{x.Name} {x.Version}"))),

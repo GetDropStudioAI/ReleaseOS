@@ -20,9 +20,10 @@ public sealed record HydrationSnapshot(
     IReadOnlyList<SnapProduct> Products, IReadOnlyList<SnapGate> Gates,
     int TasksDone, int TasksTotal,
     IReadOnlyList<SnapBlocker> OpenBlockers, SnapDecision? Decision, IReadOnlyList<SnapKnownIssue> KnownIssues,
-    IReadOnlyList<string> Owners, IReadOnlySet<DateOnly> Holidays);
+    IReadOnlyList<string> Owners, IReadOnlySet<DateOnly> Holidays,
+    string? ReleaseKey = null, string? Owner = null, string? Team = null, IReadOnlyList<string>? Environments = null, string Workspace = "", string? Link = null);
 
-/// <summary>Display formatting for messages. Dates are in the display zone (D24), never UTC, in the same "Fri 30 Oct" style as the screens.</summary>
+/// <summary>Display formatting for messages. Dates are in the "Fri 30 Oct" style of the screens. Instants are UTC and labelled, with the display zone (D24) beside them (D44, D51, REOS-139).</summary>
 public static class CommFormat
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -65,11 +66,27 @@ public static class CommFormat
             : $"{DayTime(startUtc, zone, reference)} – {DayTime(endUtc, zone, reference)} {label}";
     }
 
+    /// <summary>"Fri 30 Oct 06:00–10:00 UTC (Fri 30 Oct 01:00–05:00 CT)": the window in UTC, then the display zone's reading; just the UTC part when the display zone is UTC.</summary>
+    public static string WindowUtc(DateTime startUtc, DateTime endUtc, TimeZoneInfo zone, DateOnly reference)
+    {
+        var u = Window(startUtc, endUtc, TimeZoneInfo.Utc, reference);
+        return IsUtc(zone, startUtc) ? u : $"{u} ({Window(startUtc, endUtc, zone, reference)})";
+    }
+
+    /// <summary>"Fri 30 Oct 14:00 UTC (Fri 30 Oct 09:00 CT)".</summary>
+    public static string DayTimeUtc(DateTime utc, TimeZoneInfo zone, DateOnly reference)
+    {
+        var u = DayTime(utc, TimeZoneInfo.Utc, reference) + " UTC";
+        return IsUtc(zone, utc) ? u : $"{u} ({DayTime(utc, zone, reference)} {ZoneLabel(zone, utc)})";
+    }
+
+    private static bool IsUtc(TimeZoneInfo zone, DateTime utc) => zone.GetUtcOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)) == TimeSpan.Zero && !zone.SupportsDaylightSavingTime;
+
     /// <summary>Whole business days from <paramref name="asOf"/>'s local date to the target ("T-n"); negative once past. Unicode minus so Markdown never sees a list marker.</summary>
     public static string SignedDays(int n) => n < 0 ? "−" + (-n).ToString(Inv) : n.ToString(Inv);
 }
 
-/// <summary>Builds the 22 token values from a snapshot (pure) and hydrates templates with them.</summary>
+/// <summary>Builds the 27 token values from a snapshot (pure) and hydrates templates with them.</summary>
 public static class CommHydrator
 {
     public static readonly IReadOnlyDictionary<string, int> SeverityRank = new Dictionary<string, int> { ["Critical"] = 0, ["High"] = 1, ["Medium"] = 2, ["Low"] = 3 };
@@ -86,7 +103,7 @@ public static class CommHydrator
     {
         var today = DateOnly.FromDateTime(CommFormat.ToLocal(s.AsOf, zone));
         string Day(DateOnly d) => CommFormat.Day(d, today);
-        string DayTime(DateTime t) => CommFormat.DayTime(t, zone, today);
+        string DayTime(DateTime t) => CommFormat.DayTimeUtc(t, zone, today);
 
         var gates = s.Gates.OrderBy(g => g.Sequence).ToList();
         var width = gates.Count == 0 ? 0 : gates.Max(g => g.Name.Length);
@@ -101,7 +118,7 @@ public static class CommHydrator
             ["TargetDate"] = TokenValue.Scalar(Day(s.TargetDate)),
             ["DaysToTarget"] = TokenValue.Scalar(CommFormat.SignedDays(BusinessDays.Between(today, s.TargetDate, s.Holidays))),
             ["Status"] = TokenValue.Scalar(s.Status),
-            ["Window"] = TokenValue.Scalar(s.WindowStart is { } a && s.WindowEnd is { } b ? CommFormat.Window(a, b, zone, today) : "Not scheduled"),
+            ["Window"] = TokenValue.Scalar(s.WindowStart is { } a && s.WindowEnd is { } b ? CommFormat.WindowUtc(a, b, zone, today) : "Not scheduled"),
             ["ChangeTicket"] = TokenValue.Scalar(string.IsNullOrWhiteSpace(s.ChangeTicket) ? "Not assigned" : s.ChangeTicket),
             ["ProductList"] = TokenValue.Inline(s.Products.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).Select(p => $"{p.Name} {p.VersionTag}")),
             ["ProductCount"] = TokenValue.Scalar(s.Products.Count.ToString(CultureInfo.InvariantCulture)),
@@ -127,6 +144,11 @@ public static class CommHydrator
                 .OrderBy(k => SeverityRank.GetValueOrDefault(k.Severity, 9)).ThenBy(k => k.Title, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Join(" · ", new[] { k.Severity, k.Title, k.ExternalKey, k.Status == "Accepted" ? "accepted" : null, string.IsNullOrWhiteSpace(k.Workaround) ? null : "workaround: " + k.Workaround }.Where(x => !string.IsNullOrWhiteSpace(x))))),
             ["CloseCode"] = TokenValue.Scalar(s.CloseCode switch { null => "Not closed", "SuccessfulWithIssues" => "Successful with issues", var c => c }),
+            ["ReleaseKey"] = TokenValue.Scalar(string.IsNullOrWhiteSpace(s.ReleaseKey) ? "Not assigned" : s.ReleaseKey),
+            ["Owner"] = TokenValue.Scalar(string.IsNullOrWhiteSpace(s.Owner) ? "Not assigned" : s.Owner),
+            ["Team"] = TokenValue.Scalar(string.IsNullOrWhiteSpace(s.Team) ? "Not assigned" : s.Team),
+            ["Environments"] = TokenValue.Inline(s.Environments ?? []),
+            ["Workspace"] = TokenValue.Scalar(s.Workspace),
         };
     }
 
@@ -138,9 +160,13 @@ public static class CommHydrator
         var subj = TokenParser.Parse(subject, "subject");
         var text = TokenParser.Parse(body, "body");
         var subjectTarget = target == CommTarget.JsonString ? CommTarget.JsonString : CommTarget.PlainText;
+        var rendered = TokenRenderer.Render(text, values, target);
+        if (snapshot.Link is { Length: > 0 } link)   // D52: a way back into the app, only when App:PublicBaseUrl is set
+            rendered += TokenRenderer.Render(new ParsedTemplate([new TemplateSegment.Literal("\n\nOpen in ReleaseOS: "), new TemplateSegment.Token("Link", 0, 0)], []),
+                new Dictionary<string, TokenValue> { ["Link"] = TokenValue.Scalar(link) }, target);
         return new HydratedMessage(
             subject is null ? null : TokenRenderer.Render(subj, values, subjectTarget, singleLine: true),
-            TokenRenderer.Render(text, values, target),
+            rendered,
             [.. subj.Errors, .. text.Errors],
             [.. subj.Tokens.Concat(text.Tokens).Distinct()]);
     }

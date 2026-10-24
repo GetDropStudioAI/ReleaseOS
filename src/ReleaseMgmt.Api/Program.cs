@@ -50,6 +50,7 @@ builder.Host.UseSerilog((ctx, cfg) => cfg
 
 var config = builder.Configuration;
 AllowedHostsGuard.Enforce(builder.Environment, config);   // REOS-68: outside Development, AllowedHosts must name the host (fail fast)
+builder.Services.AddSingleton(ReleaseMgmt.Infrastructure.Services.PublicLinks.From(config));   // REOS-139 / D52: App:PublicBaseUrl; a bad value stops the host here, an unset one means no links
 var dbPath = config["Db:Path"] ?? "data/releasemgmt.db";
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
 var connectionString = $"Data Source={dbPath}";

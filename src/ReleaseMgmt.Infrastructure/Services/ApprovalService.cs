@@ -102,7 +102,7 @@ public sealed class ApprovalService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             await db.SaveChangesAsync(ct);
 
             foreach (var s in seats) foreach (var p in await EligiblePeopleAsync(db, train, s.EligibleKind, s.EligibleValue, ct)) if (p != actor.UserId && !notify.Contains(p)) notify.Add(p);
-            message = $"Approval requested for {train.Title} going to {env.Name}: your decision is due {a.DueAt:yyyy-MM-dd HH:mm}Z";
+            message = $"Approval requested to go to {env.Name}: your decision is due {MessageStyle.Utc(a.DueAt)}";
             return ServiceResult<ApprovalView>.Ok((await ViewsAsync(db, [a], actor.UserId, ct))[0]);
         }, ct);
         if (r.IsOk) await NotifyAsync(notify, "ApprovalRequested", r.Value!.Id, message, ct);
@@ -302,14 +302,14 @@ public sealed class ApprovalService(IDbContextFactory<ReleaseDbContext> dbf, Tim
                 a.Status = "ChangesRequested";
                 Audit(db, actor, t.Id, Entity, a.Id, "ChangesRequested", before, new { by = seat.Label, note, environment = e.Name });
                 requester = a.RequestedByUserId; kind = "ApprovalChangesRequested";
-                message = $"Changes requested on {t.Title} going to {e.Name} ({seat.Label}): {note}";
+                message = $"Changes requested before it goes to {e.Name} ({seat.Label}): {note}";
             }
             else if (seats.All(s => s.Decision == "Approved"))
             {
                 a.Status = "Approved"; a.DecidedAt = now;
                 Audit(db, actor, t.Id, Entity, a.Id, "Approved", before, new { environment = e.Name, a.Round, seats = seats.Select(s => s.Label) });
                 requester = a.RequestedByUserId; kind = "ApprovalApproved";
-                message = $"{t.Title} is approved to go to {e.Name}: every required approver has approved";
+                message = $"Approved to go to {e.Name}: every required approver has approved";
             }
             await db.SaveChangesAsync(ct);
             return ServiceResult<ApprovalView>.Ok((await ViewsAsync(db, [a], actor.UserId, ct))[0]);
@@ -348,7 +348,7 @@ public sealed class ApprovalService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             Audit(db, actor, t.Id, Entity, a.Id, "Resubmit", before, new { a.Round, environment = e.Name, dueAt = a.DueAt });
             await db.SaveChangesAsync(ct);
             foreach (var s in seats) foreach (var p in await EligiblePeopleAsync(db, t, s.EligibleKind, s.EligibleValue, ct)) if (p != a.RequestedByUserId && !notify.Contains(p)) notify.Add(p);
-            message = $"{t.Title} going to {e.Name} was resubmitted for approval (round {a.Round}): your decision is due {a.DueAt:yyyy-MM-dd HH:mm}Z";
+            message = $"Resubmitted for approval to go to {e.Name} (round {a.Round}): your decision is due {MessageStyle.Utc(a.DueAt)}";
             return ServiceResult<ApprovalView>.Ok((await ViewsAsync(db, [a], actor.UserId, ct))[0]);
         }, ct);
         if (r.IsOk) await NotifyAsync(notify, "ApprovalRequested", approvalId, message, ct);

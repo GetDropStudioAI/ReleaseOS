@@ -13,7 +13,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 public sealed record GridInfo(string Key, string Label, string Description, string? ImportKind, IReadOnlyList<string> Filters, string Policy);
 
 /// <summary>
-/// CSV and XLSX for every grid (PROJECT_SCOPE 9, REOS-49). The nine import kinds export exactly their import columns in the importer's canonical text, followed by <c>#</c>-prefixed read-only
+/// CSV and XLSX for every grid (PROJECT_SCOPE 9, REOS-49). The ten import kinds export exactly their import columns in the importer's canonical text, followed by <c>#</c>-prefixed read-only
 /// columns (ids, versions, statuses, derived dates) that an import skips, so an export re-imports as "unchanged". The other grids are export-only. See Q-048d..e.
 /// </summary>
 public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, AuditQueryService audit)
@@ -23,7 +23,7 @@ public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, A
     /// <summary>The <c>#</c> columns of each import kind, in file order (the values come from <see cref="CurrentRow.ReadOnly"/>).</summary>
     internal static readonly IReadOnlyDictionary<string, string[]> ReadOnlyColumns = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
     {
-        [ImportKinds.Users] = ["#Id", "#IsActive", "#Version"], [ImportKinds.Teams] = ["#Id", "#Version"], [ImportKinds.Holidays] = ["#Version"],
+        [ImportKinds.Users] = ["#Id", "#IsActive", "#Version"], [ImportKinds.Teams] = ["#Id", "#Version"], [ImportKinds.Holidays] = ["#Version"], [ImportKinds.Clients] = ["#Id", "#Archived", "#Version"],
         [ImportKinds.Trains] = ["#Id", "#Key", "#Status", "#Version"], [ImportKinds.Products] = ["#Id", "#Version"], [ImportKinds.Gates] = ["#Id", "#DueOn", "#Status", "#Version"],
         [ImportKinds.Tasks] = ["#Id", "#Completed", "#Version"], [ImportKinds.RunbookSteps] = ["#Id", "#Version"], [ImportKinds.ExternalLinks] = ["#Id", "#SyncState", "#LastSyncedStatus", "#Version"],
     };
@@ -32,7 +32,7 @@ public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, A
 
     public static readonly IReadOnlyList<GridInfo> Grids =
     [
-        .. ImportKinds.All.Select(k => new GridInfo(k.Grid, k.Label, Describe(k.Kind), k.Kind, k.Kind switch { ImportKinds.Trains => ["status"], ImportKinds.Users or ImportKinds.Teams or ImportKinds.Holidays => [], _ => TrainOnly }, "Read")),
+        .. ImportKinds.All.Select(k => new GridInfo(k.Grid, k.Label, Describe(k.Kind), k.Kind, k.Kind switch { ImportKinds.Trains => ["status"], ImportKinds.Users or ImportKinds.Teams or ImportKinds.Holidays or ImportKinds.Clients => [], _ => TrainOnly }, "Read")),
         new("blockers", "Blockers", "open and resolved blockers with severity and owner", null, ["train", "open"], "Read"),
         new("known-issues", "Known issues", "hypercare log", null, ["train"], "Read"),
         new("freeze-windows", "Freeze windows", "freezes and chills with their product patterns", null, [], "Read"),
@@ -54,6 +54,7 @@ public sealed class GridExportService(IDbContextFactory<ReleaseDbContext> dbf, A
         ImportKinds.ExternalLinks => "Jira and ServiceNow links",
         ImportKinds.Holidays => "the business-day calendar",
         ImportKinds.Users => "people and roles",
+        ImportKinds.Clients => "clients: Standard or On-Demand, with the CERT environment of an On-Demand client",
         _ => "teams and their members",
     };
 

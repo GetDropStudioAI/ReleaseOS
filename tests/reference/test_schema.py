@@ -257,7 +257,7 @@ roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='t
          if 'WorkspaceId' in [c[1] for c in db6.execute(f"PRAGMA table_info({t})")]]
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
-            'ReleaseTypes','Environments','CatalogServices','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
+            'ReleaseTypes','Environments','CatalogServices','Clients','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
             'ApprovalPolicies','Approvals']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
@@ -649,6 +649,35 @@ check(db9, "UPDATE ReleaseTypes SET IsBeta=0 WHERE Id='tyB'", False, "a Beta typ
 check(db9, "INSERT INTO ReleaseTypes(Id,Name,IsBeta) VALUES('tyD','Spare',1)", True, "a Beta type with no releases")
 check(db9, "UPDATE ReleaseTypes SET IsBeta=0 WHERE Id='tyD'", True, "an unused type stops being a Beta type")
 check(db9, "INSERT INTO ReleaseTypes(Id,Name,IsBeta) VALUES('tyE','Odd',2)", False, "a Beta flag that is not 0 or 1", expect="CHECK")
+
+# ---- Clients (REOS-118, RT3, D47): Standard or OnDemand; only an OnDemand client has a CERT environment, one of its own workspace's ----
+db10 = db_fresh()
+db10.executescript("""
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','2026-10-20T14:00:00Z');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt) VALUES('eC','CERT','Staging','2026-10-20T14:00:00Z');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt,WorkspaceId) VALUES('eX','CERT','Staging','2026-10-20T14:00:00Z','w2');
+""")
+C = "INSERT INTO Clients(Id,Name,Segment,CertEnvironmentId,CreatedAt,WorkspaceId) VALUES(?,?,?,?,?,?)"
+check(db10, C, True, "a Standard client with no CERT environment", ('c1', 'Acme', 'Standard', None, NOW, 'default'))
+check(db10, C, True, "an OnDemand client with a CERT environment of its workspace", ('c2', 'Globex', 'OnDemand', 'eC', NOW, 'default'))
+check(db10, C, False, "a Standard client with a CERT environment", ('c3', 'Initech', 'Standard', 'eC', NOW, 'default'), expect="Only an On-Demand client has a CERT environment")
+check(db10, C, False, "an OnDemand client without a CERT environment", ('c4', 'Hooli', 'OnDemand', None, NOW, 'default'), expect="needs a CERT environment")
+check(db10, C, False, "a segment that is neither Standard nor OnDemand", ('c5', 'Umbrella', 'Premium', None, NOW, 'default'), expect="CHECK")
+check(db10, C, False, "an OnDemand client whose CERT environment is another workspace's", ('c6', 'Soylent', 'OnDemand', 'eX', NOW, 'default'), expect="belongs to another workspace")
+check(db10, C, False, "a client whose name is taken in the workspace (any case)", ('c7', 'ACME', 'Standard', None, NOW, 'default'), expect="UNIQUE")
+check(db10, C, True, "the same name in another workspace", ('c8', 'Acme', 'Standard', None, NOW, 'w2'))
+check(db10, C, False, "a blank name", ('c9', '   ', 'Standard', None, NOW, 'default'), expect="CHECK")
+check(db10, C, False, "a name over 200 characters", ('c10', 'x' * 201, 'Standard', None, NOW, 'default'), expect="CHECK")
+check(db10, "UPDATE Clients SET Segment='Standard' WHERE Id='c2'", False, "an OnDemand client made Standard with its environment kept", expect="Only an On-Demand client has a CERT environment")
+check(db10, "UPDATE Clients SET Segment='Standard', CertEnvironmentId=NULL WHERE Id='c2'", True, "an OnDemand client made Standard with the environment cleared")
+check(db10, "UPDATE Clients SET Segment='OnDemand' WHERE Id='c2'", False, "a client made OnDemand without an environment", expect="needs a CERT environment")
+check(db10, "UPDATE Clients SET Segment='OnDemand', CertEnvironmentId='eC' WHERE Id='c2'", True, "a client made OnDemand with an environment")
+check(db10, "UPDATE Clients SET CertEnvironmentId=NULL WHERE Id='c2'", False, "an OnDemand client loses its environment", expect="needs a CERT environment")
+check(db10, "UPDATE Clients SET CertEnvironmentId='eC' WHERE Id='c1'", False, "a Standard client given an environment", expect="Only an On-Demand client has a CERT environment")
+check(db10, "UPDATE Clients SET CertEnvironmentId='eX' WHERE Id='c2'", False, "an OnDemand client moved to another workspace's environment", expect="belongs to another workspace")
+check(db10, "UPDATE Clients SET WorkspaceId='w2' WHERE Id='c1'", False, "a client moved to another workspace", expect="cannot move to another workspace")
+check(db10, "UPDATE Clients SET Name='Acme Corp', Version=2 WHERE Id='c1'", True, "a client renamed")
+check(db10, "INSERT INTO ImportJobs(Id,Kind,FileName,Sha256,RowCount,Status,UploadedByUserId,CreatedAt) VALUES('ij1','Clients','c.csv','00',1,'Previewed','rte','2026-10-20T14:00:00Z')", True, "a Clients import job")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

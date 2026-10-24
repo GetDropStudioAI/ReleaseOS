@@ -48,7 +48,7 @@ public sealed class CsvImportService(IDbContextFactory<ReleaseDbContext> dbf, Ti
 
     internal static readonly IReadOnlyDictionary<string, KindHandler> Handlers = new KindHandler[]
     {
-        new TrainsHandler(), new ProductsHandler(), new GatesHandler(), new TasksHandler(), new StepsHandler(), new LinksHandler(), new HolidaysHandler(), new UsersHandler(), new TeamsHandler(),
+        new TrainsHandler(), new ProductsHandler(), new GatesHandler(), new TasksHandler(), new StepsHandler(), new LinksHandler(), new HolidaysHandler(), new UsersHandler(), new TeamsHandler(), new ClientsHandler(),
     }.ToDictionary(h => h.Spec.Kind, StringComparer.OrdinalIgnoreCase);
 
     private string FilePath(string jobId) => Path.Combine(options.Directory, jobId + ".csv");

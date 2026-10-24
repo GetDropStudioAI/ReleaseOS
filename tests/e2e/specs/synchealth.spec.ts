@@ -21,7 +21,7 @@ const dev = (page: Page, path: string, body: unknown = {}) =>
   }, [path, body] as const)
 
 const syncLink = (page: Page) => syncHealthCard(page)   // REOS-94: the sidebar's control-plane card
-const openRow = (page: Page, text: string) => page.locator('table[aria-label="Open alerts"] tbody tr', { hasText: text })
+const openRow = (page: Page, text: string) => page.getByRole('table', { name: 'Open alerts' }).locator('tbody tr', { hasText: text })   // REOS-130: the table is named by its caption
 
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`${scheme} theme`, () => {
@@ -49,7 +49,7 @@ for (const scheme of ['light', 'dark'] as const) {
         await syncLink(page).click()
         await expect(page).toHaveURL(/\/sync$/)
         await expect(page.locator('h1')).toHaveText('Sync health')
-        await expect(page.locator('table[aria-label="Connectors"] tbody tr')).toHaveCount(2)
+        await expect(page.getByRole('table', { name: 'Connectors' }).locator('tbody tr')).toHaveCount(2)
         await expect(page.locator('input[type=checkbox], [role=switch], [role=dialog]')).toHaveCount(0)   // rule 9
         await expect(page.getByTestId('sync-banner')).toHaveText('')
 
@@ -58,7 +58,7 @@ for (const scheme of ['light', 'dark'] as const) {
         expect(raised.status).toBe(200)
         await expect(openRow(page, authMsg)).toBeVisible()
         await expect(openRow(page, authMsg)).toContainText('AuthFailed')
-        await expect(openRow(page, authMsg).locator('td.n')).toHaveText('1')
+        await expect(openRow(page, authMsg).locator('td.end')).toHaveText('1')
 
         // BANNER: the other person, on the inbox screen, sees the connector-wide failure without doing anything, with a text link to Sync health
         const banner = b.getByTestId('sync-banner')
@@ -78,7 +78,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
         // repeats are counted on the one row (never a row per failure)
         await dev(page, 'raise', { source: 'ServiceNow', kind: 'AuthFailed', key: tag, message: authMsg, repeat: 3 })
-        await expect(openRow(page, authMsg).locator('td.n')).toHaveText('4')
+        await expect(openRow(page, authMsg).locator('td.end')).toHaveText('4')
         await expect(openRow(page, authMsg)).toHaveCount(1)
 
         // a non-connector failure is an alert on the screen, not a banner line of its own
@@ -88,7 +88,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
         // DETAIL + KEYBOARD: Details opens the right-hand column; j / k move the selection, Enter focuses the detail, Esc closes it
         const detail = page.getByTestId('alert-detail')
-        const current = page.locator('table.sync-alerts [aria-current="true"]')
+        const current = page.locator('section[aria-label="Open alerts"], section[aria-label="Resolved alerts"]').locator('[aria-current="true"]')
         await openRow(page, authMsg).locator('button:text-is("Details")').click()
         await expect(openRow(page, authMsg).locator('button:text-is("Details")')).toHaveAttribute('aria-current', 'true')
         await expect(detail.locator('h2')).toHaveText('ServiceNow AuthFailed')
@@ -117,7 +117,7 @@ for (const scheme of ['light', 'dark'] as const) {
         await expect(detail.locator('button:text-is("Confirm")')).toBeFocused()
         await detail.locator('button:text-is("Confirm")').click()
         await expect(openRow(page, authMsg)).toHaveCount(0)
-        const history = page.locator('table[aria-label="Resolved alerts"] tbody tr', { hasText: authMsg })
+        const history = page.getByRole('table', { name: 'Resolved alerts' }).locator('tbody tr', { hasText: authMsg })
         await expect(history).toHaveCount(1)
         await expect(history).toContainText('4')
         await expect(history).toContainText(`sync-${scheme}`)                                // who resolved it (the dev sign-in name is the email's local part)
@@ -130,7 +130,7 @@ for (const scheme of ['light', 'dark'] as const) {
       }
     })
 
-    test('the webhook allowlist: HTTPS only, no credentials, the server refuses private targets, the secret path is never shown, remove confirms inline', async ({ page }) => {
+    test('the webhook allowlist: HTTPS only, no credentials, the server refuses private targets, the secret path is never shown, remove confirms in a dialog', async ({ page }) => {
       const secret = `s3cr3t-${scheme}-${Date.now()}`
       await signIn(page, `sync-hooks-${scheme}@example.com`, 'RTE')
       await syncLink(page).click()
@@ -158,7 +158,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await form.locator('label:has-text("Address") input').fill(`https://hooks.slack.com/services/T0/B0/${secret}`)
       await expect(hint).not.toContainText('✗')
       await add.click()
-      const row = section.locator('table[aria-label="Webhook allowlist"] tbody tr', { hasText: name })
+      const row = section.getByRole('table', { name: 'Webhook allowlist' }).locator('tbody tr', { hasText: name })
       await expect(row).toBeVisible()
       await expect(row).toContainText('Slack')                                        // detected from the host
       await expect(row).toContainText('https://hooks.slack.com/…')
@@ -172,11 +172,15 @@ for (const scheme of ['light', 'dark'] as const) {
 
       await scan(page, `webhook allowlist (${scheme})`)
 
-      // remove: inline confirm, no modal
+      // remove: a confirmation dialog (D41, REOS-130) that starts on Cancel; Cancel keeps the channel, Remove channel removes it
       await row.locator('button:text-is("Remove")').click()
-      await expect(row).toContainText(`Remove ${name}?`)
-      await expect(page.locator('[role=dialog]')).toHaveCount(0)
-      await row.locator('button:text-is("Confirm")').click()
+      const dialog = page.getByRole('dialog')
+      await expect(dialog).toContainText(`Remove ${name}?`)
+      await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(row).toHaveCount(1)
+      await row.locator('button:text-is("Remove")').click()
+      await dialog.getByRole('button', { name: 'Remove channel' }).click()
       await expect(row).toHaveCount(0)
     })
 

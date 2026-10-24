@@ -14,10 +14,15 @@ using static ReleaseMgmt.Api.Tests.LifecycleContractTests;
 
 namespace ReleaseMgmt.Api.Tests;
 
+/// <summary>Tests that change process-wide Pdf__* environment variables run alone: another class exporting a PDF at the same moment would read 'Pdf__PdfA=4z' (REOS-148).</summary>
+[CollectionDefinition("PdfEnvironment", DisableParallelization = true)]
+public sealed class PdfEnvironmentCollection;
+
 /// <summary>
 /// REOS-50: PDF export jobs. THE ACCEPTANCE: the stored SHA-256 of an evidence pack verifies against the downloaded file (and the X-Content-SHA256 header).
 /// Every test drives the real host and calls ExportWorker.RunOnceAsync itself (the timer is set to an hour so nothing races the test).
 /// </summary>
+[Collection("PdfEnvironment")]
 public class PdfExportTests
 {
     [ModuleInitializer]

@@ -21,6 +21,7 @@ namespace ReleaseMgmt.Api.Tests;
 /// REOS-137 (G15): every document that leaves the app says which workspace it came from and which release it is about: key, owner, team, environments.
 /// Two workspaces side by side, so a file can only pass if it names its own and not the other's.
 /// </summary>
+[Collection("PdfEnvironment")]
 public class ReleaseIdentityTests
 {
     private sealed record Ws(string Name, string Train, string Key, string Owner, string Team, string Env, HttpClient Client);

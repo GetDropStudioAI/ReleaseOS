@@ -83,7 +83,18 @@ public class AuditChainApiTests
         var copy = Path.Combine(Path.GetTempPath(), $"verify-{Guid.NewGuid():N}.db");
         try
         {
-            using (var src = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={f.DbPath};Pooling=False")) { src.Open(); using var dst = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={copy};Pooling=False"); dst.Open(); src.BackupDatabase(dst); }
+            // The host's sealer and other background services write to this database; the online backup answers BUSY at once (it does not wait like a statement does), so try again.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    using var src = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={f.DbPath};Pooling=False"); src.Open();
+                    using var dst = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={copy};Pooling=False"); dst.Open();
+                    src.BackupDatabase(dst);
+                    break;
+                }
+                catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode is 5 or 6 && attempt < 20) { await Task.Delay(250); }
+            }
             var dll = Path.Combine(AppContext.BaseDirectory, "ReleaseMgmt.Api.dll");
             var psi = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, ArgumentList = { dll, "verify-audit", copy } };
             using var p = Process.Start(psi)!;

@@ -54,7 +54,7 @@ public static class Seeder
         var sections = new[] { "PreCheck", "Deploy", "Deploy", "Deploy", "Verify", "Verify", "Hypercare" };
         var productNames = new[] { "Payments API", "Card Portal", "Ledger Service", "Risk Engine", "Notification Hub", "Reporting", "Identity", "Mobile BFF" };
 
-        using var insTrain = Cmd(c, tx, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CurrentStatus,ChangeTicketNumber,ActualStartAt,ActualEndAt,CloseCode,RollbackRehearsedAt,RollbackRehearsedByUserId,LastChangedByUserId,LastChangedAt,Version,CreatedAt,UpdatedAt) VALUES($id,$title,$target,$risk,$status,$chg,$start,$end,$close,$rb,$rbu,$u,$at,1,$created,$created)");
+        using var insTrain = Cmd(c, tx, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CurrentStatus,ChangeTicketNumber,ActualStartAt,ActualEndAt,CloseCode,RollbackRehearsedAt,RollbackRehearsedByUserId,LastChangedByUserId,LastChangedAt,Version,CreatedAt,UpdatedAt,ReleaseTypeId) VALUES($id,$title,$target,$risk,$status,$chg,$start,$end,$close,$rb,$rbu,$u,$at,1,$created,$created,(SELECT Id FROM ReleaseTypes WHERE Name='Production' AND WorkspaceId='default'))");
         using var insWin = Cmd(c, tx, "INSERT INTO DeploymentWindows(Id,ReleaseTrainId,StartsAt,EndsAt) VALUES($id,$t,$s,$e)");
         using var insProd = Cmd(c, tx, "INSERT INTO BundledProducts(Id,ReleaseTrainId,ProductName,VersionTag,ProjectCode) VALUES($id,$t,$n,$v,$p)");
         using var insGate = Cmd(c, tx, "INSERT INTO StageGates(Id,ReleaseTrainId,GateName,GateClass,SequenceOrder,OffsetDays,DueOn,RequiredBeforeStatus,OwnerUserId,Status,CertifiedByUserId,CertifiedAt,LastChangedByUserId,LastChangedAt) VALUES($id,$t,$n,$c,$o,$off,$due,$req,$own,$st,$cb,$ca,$own,$at)");

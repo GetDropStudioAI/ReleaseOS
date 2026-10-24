@@ -179,7 +179,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const releases = view === 'trains'   // the Inspector belongs to the Releases destination; every other page uses the full width
   // D50 (REOS-125): Releases is the full-width table until a release is open (or the New train drawer is); then the release page has the Inspector beside it. The Stream is gone.
   const listPage = releases && !selected && !(newTrain?.open && canAdmin)
-  const redesigned = view === 'approvals' || view === 'admin' || view === 'templates' || view === 'library' || view === 'connectors' || view === 'audit' || view === 'overview' || view === 'calendar' || view === 'deployments' || view === 'orchestration' || placeholderOf(view) !== undefined   // drawn with the redesign's page layout (shell.css .os-page), which has its own gutters
+  const redesigned = view === 'approvals' || view === 'admin' || view === 'templates' || view === 'library' || view === 'connectors' || view === 'audit' || view === 'overview' || view === 'calendar' || view === 'deployments' || view === 'orchestration' || view === 'sync' || placeholderOf(view) !== undefined   // drawn with the redesign's page layout (shell.css .os-page), which has its own gutters
   return (
     <div className="os-app">
       <a className="skip-link" href="#workspace" onClick={e => { e.preventDefault(); const m = document.getElementById('workspace'); m?.focus() }}>Skip to content</a>

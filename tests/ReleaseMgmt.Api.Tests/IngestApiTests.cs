@@ -356,7 +356,9 @@ public class IngestApiTests
         return (hub, events);
     }
 
-    [Fact]
+    // A timing test: it measures p95 latency while 50 events a second arrive. CI runs it alone (Category=Load) after the other tests, because `dotnet test` on the solution
+    // runs four test projects in parallel and on a shared Windows runner that load alone pushed the p95 past a second (REOS-145). Locally `dotnet test` still runs it.
+    [Fact, Trait("Category", "Load")]
     public async Task Fifty_events_a_second_are_accepted_without_slowing_the_app()
     {
         using var f = new ApiFactory();

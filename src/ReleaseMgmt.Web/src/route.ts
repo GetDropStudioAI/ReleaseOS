@@ -22,6 +22,14 @@ export function normalize(r: Route): Route {
   return { view: 'orchestration', trainId: r.trainId, mode: r.mode, selection: r.selection?.kind === 'step' ? r.selection : null }
 }
 
+/** False for an address that names no page (the unknown-path page, REOS-135); `/` and the train and run paths are known whatever follows them. */
+export function isKnownPath(path: string): boolean {
+  try {
+    const first = path.split('/').filter(Boolean).map(decodeURIComponent)[0]
+    return first === undefined || first === 'orchestration' || first === 'trains' || PAGES.has(first as View)
+  } catch { return false }   // a malformed escape names no page (and parsePath would throw on it)
+}
+
 export function parsePath(path: string): Route {
   const seg = path.split('/').filter(Boolean).map(decodeURIComponent)
   if (seg[0] === 'orchestration') {

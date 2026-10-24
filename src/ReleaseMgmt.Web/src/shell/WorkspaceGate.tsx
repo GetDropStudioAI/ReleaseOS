@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getMe, type Me } from '../api'
 import { ErrorState, LoadingState } from '../ui'
+import { NoWorkspace, StartFrame } from '../startup/Startup'
 import { getWorkspaces } from '../workspaceApi'
 import { choose, pick, remembered, type WorkspaceChoice } from '../workspace'
 
@@ -37,7 +38,8 @@ export function WorkspaceGate({ me, onMe, children }: { me: Me; onMe: (me: Me | 
   const reload = useCallback(() => { getWorkspaces().then(list => { setChoices(list); setCurrent(c => list.find(w => w.id === c?.id) ?? c) }).catch((e: Error) => console.error('The workspaces could not be read', e)) }, [])
   const value = useMemo(() => ({ choices: choices ?? [], current, reload }), [choices, current, reload])
 
-  if (error) return <main className="signin"><ErrorState what="Your workspaces" message={error} onRetry={() => setAttempt(n => n + 1)} /></main>
-  if (choices === null) return <main className="signin"><LoadingState what="your workspaces" /></main>
+  if (error) return <StartFrame title="Workspaces unavailable"><ErrorState what="Your workspaces" message={error} onRetry={() => setAttempt(n => n + 1)} /></StartFrame>
+  if (choices === null) return <StartFrame title="Starting" description="Finding your workspaces."><LoadingState what="your workspaces" /></StartFrame>
+  if (!current) return <NoWorkspace name={me.name || me.email} onSignedOut={() => onMe(null)} onRetry={() => setAttempt(n => n + 1)} />
   return <WorkspaceCtx.Provider value={value}>{children}</WorkspaceCtx.Provider>
 }

@@ -66,17 +66,17 @@ What the numbers mean:
 
 ## 3. Sign-in, start-up and stop pages
 
-All seven are drawn today as a plain centred column (`main.signin`) headed "Release Management". The browser tab title in `index.html` is also "Release Management".
+All seven were a plain centred column (`main.signin`) headed "Release Management"; REOS-135 (G13) redraws them as one frame (`startup/Startup.tsx`) named "ReleaseOS", the tab title included, and adds the two that did not exist (no workspace, unknown path). Questions: Q-135a.
 
 | Surface | Today | Ticket | Design | Coverage |
 |---|---|---|---|---|
-| Sign-in: dev sign-in (email, role), Organisation sign-in link, password-reset link, Appearance | `App.tsx` `SignIn` | — | None | `Not covered` |
-| Refused organisation sign-in, in words (REOS-65 reason codes; one says "Ask an administrator to add you to a Release Management group") | `signinReason.ts` | — | None | `Not covered` |
-| Start-up "Loading…" (before `/me`, before the session restores, before the display zone loads) | `App.tsx` | — | None | `Not covered` |
-| "Cannot reach the server" | `App.tsx` | — | None | `Not covered` |
-| Stopped: "The app has stopped. You can close this tab." (after Exit under `start.py`) | `App.tsx`, `shell/UserMenu.tsx` | — | None | `Not covered` |
-| Signed in, but a member of no workspace, or the only workspace is archived (D45) | does not exist | — (REOS-105 and REOS-106 do not name it) | None | `Not covered` |
-| Unknown path, or a deep link to a train that is gone | falls back to Releases (`route.ts` `ROOT`); a missing train shows "✗ … Retry" | — | None | `Not covered` |
+| Sign-in: dev sign-in (email, role), Organisation sign-in link, password-reset link, Appearance | `App.tsx` `SignIn` | — | None | `Story only` |
+| Refused organisation sign-in, in words (REOS-65 reason codes; one says "Ask an administrator to add you to a Release Management group") | `signinReason.ts` | — | None | `Story only` |
+| Start-up "Loading…" (before `/me`, before the session restores, before the display zone loads) | `App.tsx` | — | None | `Story only` |
+| "Cannot reach the server" | `App.tsx` | — | None | `Story only` |
+| Stopped: "The app has stopped. You can close this tab." (after Exit under `start.py`) | `App.tsx`, `shell/UserMenu.tsx` | — | None | `Story only` |
+| Signed in, but a member of no workspace, or the only workspace is archived (D45) | does not exist | — (REOS-105 and REOS-106 do not name it) | None | `Story only` |
+| Unknown path, or a deep link to a train that is gone | falls back to Releases (`route.ts` `ROOT`); a missing train shows "✗ … Retry" | — | None | `Story only` |
 
 ## 4. Destinations
 

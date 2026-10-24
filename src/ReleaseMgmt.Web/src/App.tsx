@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { devLogin, getAuthConfig, getMe, type AuthConfig, type Me } from './api'
-import { signInMessage, withoutSignInReason } from './signinReason'
+import { getMe, type Me } from './api'
+import { NotFound, SignIn, Starting, Stopped, Unreachable } from './startup/Startup'
 import Admin from './Admin'
 import { MyWork } from './MyWork'
 import { Inbox } from './Inbox'
@@ -22,13 +22,12 @@ import { CommsDrawer, commsKey, type CommsDraft } from './CommsDrawer'
 import { NewTrainDrawer, emptyNewTrain, newTrainKey, type NewTrainDraft } from './NewTrain'
 import { getTrain, getUnreadCount, type TrainDetail } from './api'
 import { useDraft } from './session'
-import { parsePath, ROOT, useRoute, type Route } from './route'
+import { isKnownPath, parsePath, ROOT, useRoute, type Route } from './route'
 import { SessionProvider, useSession } from './session'
 import { useLive } from './live'
 import { setDisplayZone } from './time'
 import { getConfig } from './api'
 import { Announcer } from './announce'
-import { ThemeChoices } from './shell/UserMenu'
 import { Sidebar } from './shell/Sidebar'
 import { WorkspaceGate } from './shell/WorkspaceGate'
 import { UtilityBar } from './shell/UtilityBar'
@@ -45,41 +44,6 @@ import './shell/shell.css'
 // The component gallery is a review page (REOS-93): loaded only when opened, so it adds nothing to the app's first load.
 const Gallery = lazy(() => import('./Gallery').then(m => ({ default: m.Gallery })))
 
-const ROLES = ['Viewer', 'RTE', 'ReleaseManager', 'GovernanceOfficer']
-function SignIn({ onDone }: { onDone: () => void }) {
-  const [email, setEmail] = useState('dev@example.com')
-  const [role, setRole] = useState('RTE')
-  const [error, setError] = useState<string | null>(null)
-  const [cfg, setCfg] = useState<AuthConfig | null>(null)
-  // REOS-65: a refused organisation sign-in comes back as /?signin=<reason>; show it in words, then drop it from the address so a reload is clean
-  const [refused] = useState(() => signInMessage(window.location.search))
-  useEffect(() => {
-    if (refused) window.history.replaceState(null, '', window.location.pathname + withoutSignInReason(window.location.search) + window.location.hash)
-  }, [refused])
-  useEffect(() => { getAuthConfig().then(setCfg) }, [])
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    if (await devLogin(email, email.split('@')[0], role)) onDone()
-    else setError('Dev sign-in is only available in the Development environment. Use your organisation sign-in instead.')
-  }
-  return (
-    <main className="signin">
-      <h1>Release Management</h1>
-      {refused && <p className="bad" role="alert">✗ {refused}</p>}
-      <form onSubmit={submit}>
-        <p><label>Email <input className="line" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required /></label></p>
-        <p><label>Role <select className="line" value={role} onChange={e => setRole(e.target.value)}>
-          {ROLES.map(r => <option key={r}>{r}</option>)}</select></label></p>
-        <p><button className="text" type="submit">Sign in (development)</button> <a href="/auth/login">Organisation sign-in</a></p>
-        {cfg?.passwordResetUrl && <p><a href={cfg.passwordResetUrl} rel="noreferrer">Forgot your password? Reset it with your authenticator app or MFA code</a></p>}
-        {error && <p className="bad" role="alert">{error}</p>}
-      </form>
-      <p><ThemeChoices /></p>
-    </main>
-  )
-}
-
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined)
   const [failed, setFailed] = useState(false)
@@ -87,10 +51,11 @@ export default function App() {
   const refresh = () => getMe().then(setMe).catch(() => setFailed(true))
   useEffect(() => { refresh() }, [])
 
-  if (stopped) return <main className="signin"><h1>Release Management</h1><p role="status">The app has stopped. You can close this tab.</p></main>
-  if (failed) return <main className="signin"><p className="bad" role="alert">✗ Cannot reach the server.</p></main>
-  if (me === undefined) return <main className="signin"><p className="muted">Loading…</p></main>
+  if (stopped) return <Stopped />
+  if (failed) return <Unreachable />
+  if (me === undefined) return <Starting />
   if (me === null) return <SignIn onDone={refresh} />
+  if (!isKnownPath(window.location.pathname)) return <NotFound path={window.location.pathname} />
   return <WorkspaceGate me={me} onMe={setMe}><SessionProvider enabled><Signed me={me} onSignedOut={() => setMe(null)} onStopped={() => setStopped(true)} /></SessionProvider></WorkspaceGate>
 }
 
@@ -170,7 +135,7 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
     lastPage.current = key
   }, [view, selected, mode])
 
-  if (!session.ready || !zoneReady) return <main className="signin"><p className="muted">Loading…</p></main>
+  if (!session.ready || !zoneReady) return <Starting />
 
   const canAdmin = adminRole(me.roles)
   const to = (r: Partial<Route>) => go({ ...route, ...r })

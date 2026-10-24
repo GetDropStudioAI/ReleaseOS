@@ -1,0 +1,15 @@
+/* The pages outside the signed-in shell (REOS-135): tokens only, light and dark. */
+.os-start { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 10vh var(--gap-lg) var(--gap-xl); background: var(--color-bg-canvas); color: var(--color-text-primary); }
+.os-start-card { width: min(460px, 100%); display: flex; flex-direction: column; gap: var(--gap-lg); }
+.os-start-card h1 { margin: 0; font-size: var(--type-headline); color: var(--color-text-primary); }
+.os-start-card h1:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 4px; border-radius: var(--radius-sm); }
+.os-start-brand { display: flex; align-items: center; gap: var(--gap-sm); margin: 0; font-weight: 600; font-size: var(--type-section); color: var(--color-text-primary); }
+.os-start-lead, .os-start-text { margin: 0; color: var(--color-text-secondary); font-size: var(--type-body); }
+.os-start-card code { font-family: var(--font-mono); font-size: var(--type-mono); overflow-wrap: anywhere; }
+.os-start-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md); margin: 0; }
+.os-start-actions .os-button { text-decoration: none; }
+.os-start-form { display: flex; flex-direction: column; gap: var(--gap-md); }
+.os-start-field { display: flex; flex-direction: column; gap: var(--gap-xs); font-size: var(--type-small); color: var(--color-text-secondary); }
+.os-start-field input, .os-start-field select { height: var(--control-height); padding: 0 var(--control-pad-x); border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); font: var(--type-body) var(--font-sans); }
+.os-start-field input:focus-visible, .os-start-field select:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 1px; }
+.os-start-theme { display: flex; align-items: center; gap: var(--gap-md); font-size: var(--type-small); color: var(--color-text-secondary); }

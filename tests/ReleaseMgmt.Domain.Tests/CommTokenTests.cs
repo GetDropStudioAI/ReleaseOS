@@ -48,9 +48,9 @@ public class CommTokenTests
     [Fact]
     public void Allowlist_is_exactly_the_scope_list()
     {
-        var scope = "ReleaseTitle TargetDate DaysToTarget Status Window ChangeTicket ProductList ProductCount GateTable NextGate NextGateDue TasksDone TasksTotal PercentComplete BlockerCount CriticalBlockers BlockerList Owners GoNoGoDecision Conditions KnownIssues CloseCode".Split(' ');
+        var scope = "ReleaseTitle TargetDate DaysToTarget Status Window ChangeTicket ProductList ProductCount GateTable NextGate NextGateDue TasksDone TasksTotal PercentComplete BlockerCount CriticalBlockers BlockerList Owners GoNoGoDecision Conditions KnownIssues CloseCode ReleaseKey Owner Team Environments Workspace".Split(' ');
         Assert.Equal(scope.Order(), CommTokens.Allowlist.Order());
-        Assert.Equal(22, CommTokens.Allowlist.Count);
+        Assert.Equal(27, CommTokens.Allowlist.Count);   // REOS-139 added ReleaseKey, Owner, Team, Environments, Workspace
         Assert.Equal(scope.Order(), CommHydrator.Values(Full(), Chicago).Keys.Order());   // the hydrator supplies a value for every token
         Assert.All(CommTokens.Allowlist, n => Assert.False(string.IsNullOrWhiteSpace(CommTokens.Descriptions[n])));
     }
@@ -66,11 +66,15 @@ public class CommTokenTests
     [Fact] public void DaysToTarget_uses_the_local_date_not_UTC() =>
         Assert.Equal("0", Tok("DaysToTarget", Full() with { AsOf = Utc("2026-10-31T02:00:00Z") }));   // 21:00 Fri 30 Oct in Chicago, still the target day
     [Fact] public void Status() => Assert.Equal("Gated", Tok("Status"));
-    [Fact] public void Window_same_day() => Assert.Equal("Fri 30 Oct 01:00–05:00 CT", Tok("Window"));
-    [Fact] public void Window_across_midnight() => Assert.Equal("Fri 30 Oct 22:00 – Sat 31 Oct 02:00 CT", Tok("Window", Full() with { WindowStart = Utc("2026-10-31T03:00:00Z"), WindowEnd = Utc("2026-10-31T07:00:00Z") }));
+    [Fact] public void Window_same_day() => Assert.Equal("Fri 30 Oct 06:00–10:00 UTC (Fri 30 Oct 01:00–05:00 CT)", Tok("Window"));   // UTC first, the display zone beside it (D44, D51)
+    [Fact] public void Window_across_midnight() => Assert.Equal("Sat 31 Oct 03:00–07:00 UTC (Fri 30 Oct 22:00 – Sat 31 Oct 02:00 CT)", Tok("Window", Full() with { WindowStart = Utc("2026-10-31T03:00:00Z"), WindowEnd = Utc("2026-10-31T07:00:00Z") }));
     [Fact] public void Window_not_scheduled() => Assert.Equal("Not scheduled", Tok("Window", Empty()));
     [Fact] public void Window_in_an_unlisted_zone_shows_the_utc_offset() =>
-        Assert.Equal("Fri 30 Oct 07:00–11:00 UTC+01:00", CommHydrator.Hydrate(Full(), TimeZoneInfo.FindSystemTimeZoneById("Africa/Lagos"), null, "{Window}", CommTarget.PlainText).Text);
+        Assert.Equal("Fri 30 Oct 06:00–10:00 UTC (Fri 30 Oct 07:00–11:00 UTC+01:00)", CommHydrator.Hydrate(Full(), TimeZoneInfo.FindSystemTimeZoneById("Africa/Lagos"), null, "{Window}", CommTarget.PlainText).Text);
+    [Fact] public void Window_in_a_utc_display_zone_is_not_repeated() =>
+        Assert.Equal("Fri 30 Oct 06:00–10:00 UTC", CommHydrator.Hydrate(Full(), TimeZoneInfo.Utc, null, "{Window}", CommTarget.PlainText).Text);
+    [Fact] public void Conditions_in_a_utc_display_zone_are_not_repeated() =>
+        Assert.StartsWith("• Card Portal pen-test exceptions signed by CISO · Priya Nair · by Fri 30 Oct 05:30 UTC", CommHydrator.Hydrate(Full(), TimeZoneInfo.Utc, null, "{Conditions}", CommTarget.PlainText).Text);
     [Fact] public void ChangeTicket() => Assert.Equal("CHG0041872", Tok("ChangeTicket"));
     [Fact] public void ChangeTicket_none() => Assert.Equal("Not assigned", Tok("ChangeTicket", Empty()));
     [Fact] public void ProductList_is_one_line_sorted_by_name() => Assert.Equal("Card Portal 2.1.0 · Fraud Engine 1.12.0 · Ledger Svc 3.8.2 · Payments API 4.5.0", Tok("ProductList"));
@@ -110,10 +114,10 @@ public class CommTokenTests
     [Fact] public void Owners_empty_is_None() => Assert.Equal("None", Tok("Owners", Empty()));
     [Fact] public void GoNoGoDecision_reads_like_words() { Assert.Equal("Go with conditions", Tok("GoNoGoDecision")); Assert.Equal("Go", Tok("GoNoGoDecision", Full() with { Decision = Full().Decision! with { Decision = "Go" } })); Assert.Equal("No-Go", Tok("GoNoGoDecision", Full() with { Decision = Full().Decision! with { Decision = "NoGo" } })); }
     [Fact] public void GoNoGoDecision_none_yet() => Assert.Equal("Not yet recorded", Tok("GoNoGoDecision", Empty()));
-    [Fact] public void Conditions_lists_open_conditions_with_owner_and_expiry_in_the_display_zone() => Assert.Equal("• Card Portal pen-test exceptions signed by CISO · Priya Nair · by Fri 30 Oct 00:30", Tok("Conditions"));
+    [Fact] public void Conditions_lists_open_conditions_with_owner_and_expiry_in_the_display_zone() => Assert.Equal("• Card Portal pen-test exceptions signed by CISO · Priya Nair · by Fri 30 Oct 05:30 UTC (Fri 30 Oct 00:30 CT)", Tok("Conditions"));
     [Fact]
     public void Conditions_marks_an_expired_one() =>
-        Assert.Equal("• Card Portal pen-test exceptions signed by CISO · Priya Nair · by Fri 30 Oct 00:30 (expired)", Tok("Conditions", Full() with { AsOf = Utc("2026-10-30T05:31:00Z") }));
+        Assert.Equal("• Card Portal pen-test exceptions signed by CISO · Priya Nair · by Fri 30 Oct 05:30 UTC (Fri 30 Oct 00:30 CT) (expired)", Tok("Conditions", Full() with { AsOf = Utc("2026-10-30T05:31:00Z") }));
     [Fact] public void Conditions_empty_is_None() { Assert.Equal("None", Tok("Conditions", Empty())); Assert.Equal("None", Tok("Conditions", Full() with { Decision = Full().Decision! with { OpenConditions = [] } })); }
     [Fact]
     public void KnownIssues_leaves_out_resolved_and_shows_workaround_and_key() =>
@@ -279,5 +283,42 @@ public class CommTokenTests
         var m = CommHydrator.Hydrate(Full(), Chicago, null, body, CommTarget.Markdown);
         Assert.True(m.CanDispatch);
         Assert.DoesNotContain("{", m.Text.Replace("\\{", ""));
+    }
+
+    // ---- REOS-139 (G17): the release model and the workspace
+    private static HydrationSnapshot Model() => Full() with
+    {
+        ReleaseKey = "RLS-284", Owner = "Rae Tran", Team = "Core Platform", Environments = ["Staging", "Prod EU"], Workspace = "Payments",
+    };
+
+    [Fact] public void ReleaseKey_Owner_Team_Environments_and_Workspace_read_the_release_model()
+    {
+        Assert.Equal("RLS-284", Tok("ReleaseKey", Model()));
+        Assert.Equal("Rae Tran", Tok("Owner", Model()));
+        Assert.Equal("Core Platform", Tok("Team", Model()));
+        Assert.Equal("Staging · Prod EU", Tok("Environments", Model()));
+        Assert.Equal("Payments", Tok("Workspace", Model()));
+    }
+
+    [Fact] public void Unset_release_model_values_read_Not_assigned_and_None()
+    {
+        Assert.Equal("Not assigned", Tok("ReleaseKey")); Assert.Equal("Not assigned", Tok("Owner")); Assert.Equal("Not assigned", Tok("Team"));
+        Assert.Equal("None", Tok("Environments"));
+    }
+
+    [Fact] public void The_new_tokens_are_escaped_for_the_target_like_every_value() =>
+        Assert.Equal("&lt;b&gt;Core&lt;/b&gt; &amp; Co", CommHydrator.Hydrate(Model() with { Team = "<b>Core</b> & Co" }, Chicago, null, "{Team}", CommTarget.Html).Text);
+
+    [Fact] public void Owner_is_the_release_owner_and_Owners_is_still_who_to_ask() =>
+        Assert.NotEqual(Tok("Owner", Model()), Tok("Owners", Model()));
+
+    [Fact] public void A_deep_link_ends_the_message_in_every_target_and_only_when_there_is_one()
+    {
+        var withLink = Model() with { Link = "https://releaseos.example.com/trains/t1" };
+        Assert.Equal("Hi\n\nOpen in ReleaseOS: https://releaseos.example.com/trains/t1", CommHydrator.Hydrate(withLink, Chicago, null, "Hi", CommTarget.PlainText).Text);
+        Assert.Equal("Hi", CommHydrator.Hydrate(Model(), Chicago, null, "Hi", CommTarget.PlainText).Text);   // unset: no link, no host invented
+        Assert.Equal("Hi<br><br>Open in ReleaseOS: https://releaseos.example.com/trains/t1", CommHydrator.Hydrate(withLink, Chicago, null, "Hi", CommTarget.Html).Text);
+        Assert.Equal("Hi\\n\\nOpen in ReleaseOS: https://releaseos.example.com/trains/t1", CommHydrator.Hydrate(withLink, Chicago, null, "Hi", CommTarget.JsonString).Text);   // JSON string content: the breaks are \\n
+        Assert.DoesNotContain("Open in ReleaseOS", CommHydrator.Hydrate(withLink, Chicago, "Subject {Workspace}", "Hi", CommTarget.PlainText).Subject);   // a subject line stays a subject
     }
 }

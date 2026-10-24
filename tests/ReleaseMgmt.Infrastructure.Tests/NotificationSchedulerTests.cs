@@ -52,9 +52,9 @@ public sealed class NotificationSchedulerTests(TriggerSuiteFixture fx) : IClassF
         public RecordingSink Sink { get; } = new();
         public RecordingWebhooks Hooks { get; } = new();
 
-        public NotificationScheduler Scheduler(INotifier? notifier = null, string zone = "UTC")
+        public NotificationScheduler Scheduler(INotifier? notifier = null, string zone = "UTC", PublicLinks? links = null)
         {
-            var real = new Notifier(Db, Time);
+            var real = new Notifier(Db, Time, null, links);
             return new NotificationScheduler(Db, Time, notifier ?? real, new SyncAlertWriter(Db, Time, NullLogger<SyncAlertWriter>.Instance, real), Sink,
                 new Cfg(new() { ["Display:TimeZone"] = zone }), NullLogger<NotificationScheduler>.Instance, Hooks);
         }
@@ -115,6 +115,57 @@ public sealed class NotificationSchedulerTests(TriggerSuiteFixture fx) : IClassF
         Assert.Equal(0, await f.Scheduler().ScanAsync());   // held: nothing to chase
         f.Sql("UPDATE PostImplementationReviews SET Status='Required', RequiredReason='CloseCode=Unsuccessful'");
         Assert.Equal(0, await f.Scheduler().ScanAsync());   // a close-code PIR has no due date
+    }
+
+    // ---- one message style (REOS-139) ------------------------------------------------------------------------------------------------
+    [Fact]
+    public async Task A_notice_names_the_workspace_the_key_and_the_title_with_utc_times_and_no_link_while_the_base_url_is_unset()
+    {
+        var e = NewEnv("2026-10-24T01:00:00Z");   // g1 was due Fri 23 Oct
+        e.Sql("UPDATE Workspaces SET Name='Payments' WHERE Id='default'");
+        var key = (string)e.Query("SELECT ReleaseKey FROM ReleaseTrains WHERE Id='t1'")[0][0]!;
+        var title = (string)e.Query("SELECT Title FROM ReleaseTrains WHERE Id='t1'")[0][0]!;
+        await e.Scheduler().ScanAsync();
+        var msg = (string)e.Query("SELECT Message FROM Notifications WHERE Kind='GateOverdue' AND EntityId='g1' AND EscalationLevel=1")[0][0]!;
+        Assert.StartsWith($"Payments · {key} {title}: Gate '", msg);
+        Assert.EndsWith("is overdue (was due 2026-10-23 UTC, still Pending)", msg);   // a date, labelled UTC, and no host invented
+        Assert.DoesNotContain("Open:", msg);
+        Assert.DoesNotContain("http", msg);
+    }
+
+    [Fact]
+    public async Task Each_workspaces_notices_carry_its_own_name_key_title_and_deep_link()
+    {
+        var e = NewEnv("2026-10-24T01:00:00Z");
+        e.Sql(@"UPDATE Workspaces SET Name='Payments' WHERE Id='default';
+                INSERT INTO Workspaces(Id,Name,Slug,CreatedAt,KeyPrefix) VALUES('w2','Beta Ledger','beta','2026-10-01T00:00:00Z','BET');
+                INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','rm','ReleaseManager','2026-10-01T00:00:00Z');
+                INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt,WorkspaceId) VALUES('tb','Ledger close','2026-11-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z','w2');
+                INSERT INTO StageGates(Id,ReleaseTrainId,GateName,GateClass,SequenceOrder,OffsetDays,DueOn,RequiredBeforeStatus,OwnerUserId,Status) VALUES('gb','tb','Close books','Standard',1,5,'2026-10-23','Gated','rm','Pending')");
+        var key = (string)e.Query("SELECT ReleaseKey FROM ReleaseTrains WHERE Id='t1'")[0][0]!;
+        var title = (string)e.Query("SELECT Title FROM ReleaseTrains WHERE Id='t1'")[0][0]!;
+        Assert.Equal("BET-1", (string)e.Query("SELECT ReleaseKey FROM ReleaseTrains WHERE Id='tb'")[0][0]!);
+
+        await e.Scheduler(links: new PublicLinks("https://releaseos.example.com/")).ScanAsync();
+
+        string Msg(string gate) => (string)e.Query("SELECT Message FROM Notifications WHERE Kind='GateOverdue' AND EntityId=? AND EscalationLevel=1", gate)[0][0]!;
+        Assert.Equal($"Payments · {key} {title}: Gate 'Code Freeze' is overdue (was due 2026-10-23 UTC, still Pending) Open: https://releaseos.example.com/trains/t1/gates/g1", Msg("g1"));
+        Assert.Equal("Beta Ledger · BET-1 Ledger close: Gate 'Close books' is overdue (was due 2026-10-23 UTC, still Pending) Open: https://releaseos.example.com/trains/tb/gates/gb", Msg("gb"));
+        // the notice of one workspace lands in that workspace's inbox only
+        Assert.Equal("default", (string)e.Query("SELECT WorkspaceId FROM Notifications WHERE EntityId='g1' LIMIT 1")[0][0]!);
+        Assert.Equal("w2", (string)e.Query("SELECT WorkspaceId FROM Notifications WHERE EntityId='gb' LIMIT 1")[0][0]!);
+    }
+
+    [Fact]
+    public async Task Condition_and_review_notices_say_utc_and_the_forecast_notice_formats_its_times()
+    {
+        var e = NewEnv("2026-10-30T15:00:00Z", withGate: false);
+        e.Sql(@"INSERT INTO GoNoGoDecisions(Id,ReleaseTrainId,Decision,DecidedByUserId,DecidedAt,GateSnapshotJson) VALUES('d1','t1','GoWithConditions','rm','2026-10-30T10:00:00Z','{}');
+                INSERT INTO GoNoGoConditions(Id,DecisionId,Text,OwnerUserId,ExpiresAt) VALUES('gc1','d1','Sign the exception','rte','2026-10-30T15:30:00Z')");
+        await e.Scheduler().ScanAsync();
+        var msg = (string)e.Query("SELECT Message FROM Notifications WHERE Kind='ConditionExpiring'")[0][0]!;
+        Assert.EndsWith("Go/No-Go condition 'Sign the exception' expires at 2026-10-30 15:30 UTC (within the hour)", msg);
+        Assert.DoesNotContain("Z ", msg);
     }
 
     // ---- gate entered ---------------------------------------------------------------------------------------------------------------

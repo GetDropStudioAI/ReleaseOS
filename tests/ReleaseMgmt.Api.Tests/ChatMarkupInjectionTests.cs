@@ -84,8 +84,8 @@ public class ChatMarkupInjectionTests
     }
 
     [Theory]
-    [InlineData("Slack", "Step &lt;!channel&gt; &lt;https://evil.example|Reset&gt; [Sign in](https://evil.example) &amp; co is late")]
-    [InlineData("Teams", "Step \\<!channel\\> \\<https://evil.example\\|Reset\\> \\[Sign in\\](https://evil.example) & co is late")]
+    [InlineData("Slack", "Default: Step &lt;!channel&gt; &lt;https://evil.example|Reset&gt; [Sign in](https://evil.example) &amp; co is late")]
+    [InlineData("Teams", "Default: Step \\<!channel\\> \\<https://evil.example\\|Reset\\> \\[Sign in\\](https://evil.example) & co is late")]
     public async Task A_team_notice_carries_names_as_text_not_as_chat_markup(string kind, string expected)
     {
         using var f = new ApiFactory();

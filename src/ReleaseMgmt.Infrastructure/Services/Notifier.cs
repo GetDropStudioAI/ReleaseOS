@@ -7,9 +7,9 @@ namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>
 /// In-app notifications (D7): writes the Notifications row and its audit row in one transaction, then pushes NotificationCreated
-/// so the recipient's open tab refetches. Reminders, escalation and team webhooks (M4) sit behind <see cref="INotifier"/>.
+/// so the recipient's open tab refetches. The text is composed in the one message style (<see cref="MessageStyle"/>). Reminders, escalation and team webhooks (M4) sit behind <see cref="INotifier"/>.
 /// </summary>
-public sealed class Notifier(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null)
+public sealed class Notifier(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, PublicLinks? links = null)
     : ServiceBase(dbf, time, realtime), INotifier
 {
     private readonly IRealtimePublisher? _realtime = realtime;
@@ -20,10 +20,12 @@ public sealed class Notifier(IDbContextFactory<ReleaseDbContext> dbf, TimeProvid
         {
             if (string.IsNullOrWhiteSpace(request.Message)) return ServiceResult<(string, string)>.Fail(new GuardFailure(Guards.DbRule, "A notification needs a message"));
             if (!await db.Set<Users>().AnyAsync(u => u.Id == request.UserId, ct)) return ServiceResult<(string, string)>.NotFound("User");
+            // REOS-139: one message style; the stored text already says which workspace and release it is about and where to open it
+            var subject = await MessageContexts.ForEntityAsync(db, links, request.EntityType, request.EntityId, request.TrainId, ct);
             var n = new Notifications
             {
                 UserId = request.UserId, Kind = request.Kind, EntityType = request.EntityType, EntityId = request.EntityId,
-                EscalationLevel = request.EscalationLevel, Message = request.Message.Trim(), CreatedAt = Now,
+                EscalationLevel = request.EscalationLevel, Message = MessageStyle.Compose(subject, request.Message.Trim()), CreatedAt = Now,
             };
             db.Set<Notifications>().Add(n);
             Audit(db, null, null, "Notification", n.Id, "Created", after: new { n.UserId, n.Kind, n.EntityType, n.EntityId, n.EscalationLevel });

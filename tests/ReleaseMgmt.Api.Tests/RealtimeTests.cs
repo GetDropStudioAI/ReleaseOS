@@ -115,7 +115,7 @@ public class RealtimeTests
             Assert.Equal(id, e[1]);
             Assert.True(await Quiet(eventsB, "NotificationCreated", TimeSpan.FromSeconds(1.5)), "another user received someone else's notification");
         }
-        Assert.Equal("1", LifecycleContractTests.Scalar(f, "SELECT COUNT(*) FROM Notifications WHERE Message='Code Freeze is yours'"));
+        Assert.Equal("1", LifecycleContractTests.Scalar(f, "SELECT COUNT(*) FROM Notifications WHERE Message='Default: Code Freeze is yours'"));
         Assert.Equal("1", LifecycleContractTests.Scalar(f, "SELECT COUNT(*) FROM AuditEvents WHERE EntityType='Notification' AND Action='Created' AND ActorUserId IS NULL"));
     }
 

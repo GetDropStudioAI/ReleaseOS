@@ -41,7 +41,45 @@ public sealed class PdfFmt(DisplayClock clock)
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     public DisplayClock Clock => clock;
 
-    public DateTime Local(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), clock.Zone);
+    /// <summary>D51: every instant is printed in UTC; <see cref="Zone"/> adds the display zone's own reading beside it.</summary>
+    public DateTime Local(DateTime utc) => DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+
+    private DateTime InDisplayZone(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), clock.Zone);
+    private bool DisplayIsUtc => clock.Zone.BaseUtcOffset == TimeSpan.Zero && !clock.Zone.SupportsDaylightSavingTime;
+
+    private string ZoneName(DateTime utc)
+    {
+        var id = clock.Zone.Id;
+        var abbr = id switch
+        {
+            "America/Chicago" or "US/Central" or "Central Standard Time" => "CT",
+            "America/New_York" or "US/Eastern" or "Eastern Standard Time" => "ET",
+            "America/Denver" or "US/Mountain" or "Mountain Standard Time" => "MT",
+            "America/Los_Angeles" or "US/Pacific" or "Pacific Standard Time" => "PT",
+            _ => null,
+        };
+        if (abbr is not null) return abbr;
+        var off = clock.Zone.GetUtcOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+        return "UTC" + (off < TimeSpan.Zero ? "-" : "+") + off.Duration().ToString(@"hh\:mm", Inv);
+    }
+
+    /// <summary>The display zone's reading of one instant, e.g. <c>09:14 CT</c> (with the weekday and date when they differ from UTC's); empty when the display zone is UTC.</summary>
+    public string Beside(DateTime utc)
+    {
+        if (DisplayIsUtc) return "";
+        var local = InDisplayZone(utc);
+        var u = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        return (local.Date == u.Date ? local.ToString("HH:mm", Inv) : local.ToString("ddd d MMM HH:mm", Inv)) + " " + ZoneName(utc);
+    }
+
+    /// <summary>"09:00–10:00" in UTC followed by the label: <c>09:00–10:30 UTC (04:00–05:30 CT)</c>.</summary>
+    public string Span(DateTime fromUtc, DateTime toUtc)
+    {
+        var s = $"{Time(fromUtc)}–{Time(toUtc)} UTC";
+        if (DisplayIsUtc) return s;
+        var a = InDisplayZone(fromUtc); var b = InDisplayZone(toUtc);
+        return $"{s} ({a.ToString("HH:mm", Inv)}–{b.ToString("HH:mm", Inv)} {ZoneName(toUtc)})";
+    }
 
     /// <summary>Fri 30 Oct 2026</summary>
     public string Day(DateTime utc) => Local(utc).ToString("ddd d MMM yyyy", Inv);
@@ -62,28 +100,10 @@ public sealed class PdfFmt(DisplayClock clock)
     /// <summary>2026-10-30 01:02 (unambiguous, for the audit log and manifests)</summary>
     public string Iso(DateTime utc) => Local(utc).ToString("yyyy-MM-dd HH:mm", Inv);
 
-    /// <summary>CT, ET, MT, PT, UTC for the common zones; otherwise the UTC offset at that instant (UTC-03:30).</summary>
-    public string Zone(DateTime utc)
-    {
-        var id = clock.Zone.Id;
-        var local = Local(utc);
-        var dst = clock.Zone.IsDaylightSavingTime(local);
-        var abbr = id switch
-        {
-            "America/Chicago" or "US/Central" or "Central Standard Time" => "CT",
-            "America/New_York" or "US/Eastern" or "Eastern Standard Time" => "ET",
-            "America/Denver" or "US/Mountain" or "Mountain Standard Time" => "MT",
-            "America/Los_Angeles" or "US/Pacific" or "Pacific Standard Time" => "PT",
-            "UTC" or "Etc/UTC" or "Etc/GMT" => "UTC",
-            _ => null,
-        };
-        if (abbr is not null) return abbr;
-        _ = dst;
-        var off = clock.Zone.GetUtcOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
-        return "UTC" + (off < TimeSpan.Zero ? "-" : "+") + off.Duration().ToString(@"hh\:mm", Inv);
-    }
+    /// <summary>The label that follows a UTC time: <c>UTC (09:14 CT)</c>, or just <c>UTC</c> when the display zone is UTC.</summary>
+    public string Zone(DateTime utc) => DisplayIsUtc ? "UTC" : $"UTC ({Beside(utc)})";
 
-    /// <summary>Mon 2 Nov 2026 09:14 CT</summary>
+    /// <summary>Mon 2 Nov 2026 14:14 UTC (09:14 CT)</summary>
     public string Stamp(DateTime utc) => $"{Local(utc).ToString("ddd d MMM yyyy HH:mm", Inv)} {Zone(utc)}";
 
     public static string Minutes(double min) => min < 60 ? $"{Math.Round(min):0} min" : $"{(int)(min / 60)} h {Math.Round(min % 60):0} min";

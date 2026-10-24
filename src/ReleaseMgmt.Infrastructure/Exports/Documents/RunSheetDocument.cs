@@ -12,7 +12,7 @@ public sealed class RunSheetDocument(ExportModel model, ExportOptions options) :
 {
     protected override string DocumentName => "Run sheet";
     private static readonly string[] Order = ["PreCheck", "Deploy", "Verify", "Hypercare"];
-    private static readonly Col[] Cols = [new("Step", 0.62f), new("What to do", 2.85f), new("Owner", 0.9f), new("Planned", 1.1f), new("Needs", 0.7f), new("Actual start – end", 1.55f), new("Initials", 0.75f)];
+    private static readonly Col[] Cols = [new("Step", 0.62f), new("What to do", 2.85f), new("Owner", 0.9f), new("Planned (UTC)", 1.1f), new("Needs", 0.7f), new("Actual start – end (UTC)", 1.55f), new("Initials", 0.75f)];
 
     protected override void Body(ColumnDescriptor col)
     {
@@ -24,8 +24,9 @@ public sealed class RunSheetDocument(ExportModel model, ExportOptions options) :
                 t.DefaultTextStyle(x => x.FontColor(PdfStyle.Quiet));
                 t.Span(M.Train.ChangeTicket ?? "no change ticket").FontFamily(PdfStyle.MonoFamilies).FontSize(PdfStyle.MonoSize);
                 t.Span($" · Risk {PdfFmt.Risk(M.Train.RiskTier)} · train version {M.Train.Version}");
-                if (M.Window is { } w) { t.Span(" · Window "); t.Span($"{F.DayShort(w.StartsAt)} {F.Time(w.StartsAt)}–{F.Time(w.EndsAt)} {F.Zone(w.StartsAt)}").FontFamily(PdfStyle.MonoFamilies).FontSize(PdfStyle.MonoSize); }
+                if (M.Window is { } w) { t.Span(" · Window "); t.Span($"{F.DayShort(w.StartsAt)} {F.Span(w.StartsAt, w.EndsAt)}").FontFamily(PdfStyle.MonoFamilies).FontSize(PdfStyle.MonoSize); }
             });
+            if (M.Train.Release?.Line() is { } release) c.Item().Text(release).FontColor(PdfStyle.Quiet);
         });
 
         if (M.Steps.Count == 0) { col.Item().Text("No runbook steps are planned for this train.").FontColor(PdfStyle.Quiet); return; }

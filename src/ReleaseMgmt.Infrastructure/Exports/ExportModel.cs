@@ -9,12 +9,13 @@ public sealed record TrainInfo(string Id, string Title, string Status, string Ri
     DateTime? ActualStartAt, DateTime? ActualEndAt, int Version, DateTime CreatedAt, DateTime? RollbackRehearsedAt, string? RollbackRehearsedBy, ReleaseInfo? Release = null);
 
 /// <summary>REOS-107: the release's key, owner, team, branch, on-call, type and target environments, as the documents print them (names, not ids).</summary>
-public sealed record ReleaseInfo(string? Key, string? Owner, string? Team, string? Branch, string? OnCall, string? Type, IReadOnlyList<string> Environments)
+public sealed record ReleaseInfo(string? Key, string? Owner, string? Team, string? Branch, string? OnCall, string? Type, IReadOnlyList<string> Environments, string? Workspace = null)
 {
-    /// <summary>One line of the parts that are set, e.g. <c>RLS-12 · Owner Rae Tran · Team Operations · Branch release/27.01 · On call SRE · Type CERT · Environments Staging, Production</c>; null when none is.</summary>
+    /// <summary>One line of the parts that are set, e.g. <c>Workspace Payments · RLS-12 · Owner Rae Tran · Team Operations · Branch release/27.01 · On call SRE · Type CERT · Environments Staging, Production</c>; null when none is.</summary>
     public string? Line()
     {
         var parts = new List<string>();
+        if (Workspace is not null) parts.Add($"Workspace {Workspace}");   // REOS-137 / D45: a document says which workspace it came from
         if (Key is not null) parts.Add(Key);
         if (Owner is not null) parts.Add($"Owner {Owner}");
         if (Team is not null) parts.Add($"Team {Team}");
@@ -67,5 +68,11 @@ public sealed record ExportModel(
     public IReadOnlyList<MetricRow> Metrics { get; init; } = [];
 
     /// <summary>The latest Live run: its executions are the "actuals" of the run sheet and the pack. Null before the train has gone live.</summary>
+    /// <summary>The workspace name, or null for a model built without one.</summary>
+    public string? WorkspaceName => Train.Release?.Workspace;
+
+    /// <summary>The release key (RLS-284), or null when the train has none.</summary>
+    public string? ReleaseKey => Train.Release?.Key;
+
     public RunRow? LiveRun => Runs.Where(r => r.Mode == "Live").OrderByDescending(r => r.StartedAt).FirstOrDefault();
 }

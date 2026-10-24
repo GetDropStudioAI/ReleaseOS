@@ -75,7 +75,7 @@ public sealed class EvidencePackDocument(ExportModel model, ExportOptions option
         var products = M.Products.Count == 0 ? "No products bundled" : string.Join(" · ", M.Products.Select(p => $"{p.Name} {p.Version}"));
         if (M.Cis.Count > 0) products += $" · {M.Cis.Count} affected CI{(M.Cis.Count == 1 ? "" : "s")}";
         var runSteps = M.Steps.Count(s => s.Section != "Rollback");
-        var plan = $"Runbook, {runSteps} step{(runSteps == 1 ? "" : "s")} (section 6)." + (M.Window is { } w ? $" Planned window {F.DayShort(w.StartsAt)} {F.Time(w.StartsAt)}–{F.Time(w.EndsAt)} {F.Zone(w.StartsAt)}." : " No deployment window set.");
+        var plan = $"Runbook, {runSteps} step{(runSteps == 1 ? "" : "s")} (section 6)." + (M.Window is { } w ? $" Planned window {F.DayShort(w.StartsAt)} {F.Span(w.StartsAt, w.EndsAt)}." : " No deployment window set.");
         if (!string.IsNullOrWhiteSpace(M.Change.ImplementationPlan)) plan = Clip(M.Change.ImplementationPlan, Clip1 / 2) + " " + plan;
 
         string actual;
@@ -83,7 +83,7 @@ public sealed class EvidencePackDocument(ExportModel model, ExportOptions option
         else if (M.Train.ActualEndAt is not { } e0) actual = $"started {F.Time(s0)} {F.Zone(s0)}, not finished";
         else
         {
-            actual = $"{F.Time(s0)}–{F.Time(e0)} {F.Zone(e0)}";
+            actual = $"{F.Span(s0, e0)}";
             if (PlannedFinish() is { } pf) actual += $" · {PdfFmt.Signed((e0 - pf).TotalMinutes)} vs plan finish {F.Time(pf)}";
         }
 
@@ -346,7 +346,7 @@ public sealed class EvidencePackDocument(ExportModel model, ExportOptions option
     {
         if (M.Steps.Count == 0) { Empty(c, "No runbook steps."); return; }
         var live = M.LiveRun;
-        Grid(c, [new("Step", 0.65f), new("Section", 0.75f), new("Title", 2f), new("Planned", 1.05f), new("Actual", 1.3f), new("Status", 0.7f), new("Variance", 0.75f)],
+        Grid(c, [new("Step", 0.65f), new("Section", 0.75f), new("Title", 2f), new("Planned (UTC)", 1.05f), new("Actual (UTC)", 1.3f), new("Status", 0.7f), new("Variance", 0.75f)],
             M.Steps.Select(s =>
             {
                 var e = live is not null && live.Executions.TryGetValue(s.Id, out var ex) ? ex : null;

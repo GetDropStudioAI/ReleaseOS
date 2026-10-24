@@ -110,7 +110,7 @@ public sealed class ExportWorker(ExportService jobs, ExportModelLoader loader, M
             Directory.CreateDirectory(TempDir);
             temp = Path.Combine(TempDir, $"{job.Id}.{Guid.NewGuid():N}.part");
             if (format == ExportKinds.Zip)
-                await EvidenceZip.WriteAsync(temp, Path.ChangeExtension(job.FileName, ".pdf"), pdf, model.Attachments, attachments, now, ct);
+                await EvidenceZip.WriteAsync(temp, Path.ChangeExtension(job.FileName, ".pdf"), pdf, model.Attachments, attachments, now, ct, model.Train.Release);
             else
                 await File.WriteAllBytesAsync(temp, pdf, ct);
 

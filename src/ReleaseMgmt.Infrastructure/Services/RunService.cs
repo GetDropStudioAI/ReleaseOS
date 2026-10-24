@@ -266,7 +266,7 @@ public sealed class RunService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
         await using var db = await _dbf.CreateDbContextAsync(ct);
         if (await db.Set<Notifications>().AnyAsync(n => n.Kind == "RollbackDeadline" && n.EntityId == e.RunId, ct)) return;
         var f = forecast.Value;
-        var msg = $"Forecast finish {f.ForecastFinish} is {f.CrossesDeadlineByMin} min past the rollback deadline {f.RollbackDeadline}: a rollback might not fit in the window";
+        var msg = $"Forecast finish {MessageStyle.Utc(f.ForecastFinish)} is {f.CrossesDeadlineByMin} min past the rollback deadline {MessageStyle.Utc(f.RollbackDeadline)}: a rollback might not fit in the window";
         foreach (var u in await RecipientsAsync(null, null, includeRte: true, includeManagers: true, ct))
             await notifier!.NotifyAsync(new NotificationRequest(u, "RollbackDeadline", "RunbookRun", e.RunId, msg, 2), ct);
     }

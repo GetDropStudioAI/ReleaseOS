@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.EntityFrameworkCore;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Domain.Services;
+using ReleaseMgmt.Infrastructure.Exports;
 using ReleaseMgmt.Infrastructure.Persistence;
 using ReleaseMgmt.Infrastructure.Reminders;
 
@@ -26,7 +27,7 @@ public sealed record HydrationResult(string? Subject, string Text, IReadOnlyList
 /// the reader the database as of its first read for the whole transaction, so a write that commits between two queries cannot produce a mixed view.
 /// Rendering then runs on the frozen <see cref="HydrationSnapshot"/> with no further database access.
 /// </summary>
-public sealed class CommHydrationService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, DisplayClock clock, Func<string, Task>? snapshotProbe = null)
+public sealed class CommHydrationService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, DisplayClock clock, Func<string, Task>? snapshotProbe = null, PublicLinks? links = null)
 {
     public const string SourceMissing = "CommPreviewSource";
     public const string TooLarge = "CommPreviewTooLarge";
@@ -135,6 +136,7 @@ public sealed class CommHydrationService(IDbContextFactory<ReleaseDbContext> dbf
             .Concat(blockers.Select(b => User(b.OwnerUserId))).Append(User(decision?.DecidedByUserId))
             .Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct().ToList();
 
+        var facts = (await ReleaseFacts.LoadAsync(db, [train.Id], ct)).GetValueOrDefault(train.Id);   // REOS-137/139: key, owner, team, environments
         return new HydrationSnapshot(
             train.Id, train.Version, asOf, train.Title, train.TargetReleaseDate, train.CurrentStatus, train.ChangeTicketNumber, train.CloseCode,
             window?.StartsAt, window?.EndsAt,
@@ -145,6 +147,7 @@ public sealed class CommHydrationService(IDbContextFactory<ReleaseDbContext> dbf
             decision is null ? null : new SnapDecision(decision.Decision, User(decision.DecidedByUserId) ?? "Unknown", decision.DecidedAt,
                 [.. conditions.Select(c => new SnapCondition(c.Text, User(c.OwnerUserId) ?? "Unknown", c.ExpiresAt))]),
             [.. issues.Select(k => new SnapKnownIssue(k.Severity, k.Title, k.Workaround, k.Status, k.ExternalKey))],
-            owners, holidays);
+            owners, holidays,
+            facts?.Key, facts?.Owner, facts?.Team, facts?.Environments, await ReleaseFacts.WorkspaceNameAsync(db, ct), links?.Train(train.Id));
     }
 }

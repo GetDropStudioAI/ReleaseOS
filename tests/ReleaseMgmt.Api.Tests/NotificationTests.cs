@@ -276,7 +276,7 @@ public class NotificationTests
     private const string Secret = "https://93.184.216.34/services/T000/B000/SECRETTOKEN";
 
     private static (TeamWebhookSender Sender, StubHandler Http, RecordingSink Sink, ApiFactory F) WebhookSetup(string url, string kind, Func<HttpRequestMessage, HttpResponseMessage> respond,
-        Dictionary<string, string?>? cfg = null, string env = "Production")
+        Dictionary<string, string?>? cfg = null, string env = "Production", PublicLinks? links = null)
     {
         var f = new ApiFactory();
         _ = f.Server;                                               // boot: migrations run
@@ -291,7 +291,7 @@ public class NotificationTests
         var config = new ConfigurationBuilder().AddInMemoryCollection(cfg ?? []).AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:Webhooks:RetryDelayMs"] = "0" }).Build();
         var writer = new SyncAlertWriter(dbf, time, NullLogger<SyncAlertWriter>.Instance, f.Services.GetRequiredService<INotifier>());
         return (new TeamWebhookSender(dbf, time, new StubFactory(http), writer, sink, config, new DevEnv(env), NullLogger<TeamWebhookSender>.Instance,
-            WebhookTestRows.Vault(f.Services), OutboundAddressPolicy.Default), http, sink, f);
+            WebhookTestRows.Vault(f.Services), OutboundAddressPolicy.Default, links), http, sink, f);
     }
 
     private static WebhookNotice Notice(string team = "tm1") => new(team, "GateOverdue", "StageGate", "g1", 1, "Gate 'Code Freeze' is overdue", "t1");
@@ -307,12 +307,50 @@ public class NotificationTests
             var call = Assert.Single(http.Calls);
             Assert.Equal(Secret, call.Uri.ToString());
             var body = JsonDocument.Parse(call.Body).RootElement;
-            Assert.Equal("Gate 'Code Freeze' is overdue", body.GetProperty(kind == "Generic" ? "message" : "text").GetString());
-            if (kind == "Generic") { Assert.Equal("GateOverdue", body.GetProperty("kind").GetString()); Assert.Equal("g1", body.GetProperty("entityId").GetString()); }
+            Assert.Equal("Default · RLS-1 R26.10: Gate 'Code Freeze' is overdue", body.GetProperty(kind == "Generic" ? "message" : "text").GetString());   // REOS-139: workspace, key and title, no link while App:PublicBaseUrl is unset
+            if (kind == "Generic")
+            {
+                Assert.Equal("GateOverdue", body.GetProperty("kind").GetString()); Assert.Equal("g1", body.GetProperty("entityId").GetString());
+                Assert.Equal("Default", body.GetProperty("workspace").GetString()); Assert.Equal("RLS-1", body.GetProperty("releaseKey").GetString()); Assert.Equal("R26.10", body.GetProperty("title").GetString());
+                Assert.Equal(JsonValueKind.Null, body.GetProperty("link").ValueKind);
+            }
             else Assert.False(body.TryGetProperty("kind", out var ignored));
             Assert.Empty(sink.Raised);
             Assert.Equal("1", Scalar(f, "SELECT COUNT(*) FROM AuditEvents WHERE EntityType='WebhookDestination' AND EntityId='w1' AND Action='Delivered' AND ReleaseTrainId='t1'"));
             Assert.DoesNotContain("SECRETTOKEN", Scalar(f, "SELECT group_concat(COALESCE(AfterJson,''),' ') FROM AuditEvents"));
+        }
+    }
+
+    [Fact]
+    public async Task A_webhook_links_back_into_the_app_when_the_base_url_is_set_and_each_workspace_names_itself()
+    {
+        var links = new PublicLinks("https://releaseos.example.com/");
+        foreach (var kind in new[] { "Teams", "Slack", "Generic" })
+        {
+            var (sender, http, sink, f) = WebhookSetup(Secret, kind, _ => Status(HttpStatusCode.OK), links: links); using var _ = f;
+            Sql(f, $@"UPDATE Workspaces SET Name='Payments' WHERE Id='default';
+                      INSERT INTO Workspaces(Id,Name,Slug,CreatedAt,KeyPrefix) VALUES('w-beta','Beta Ledger','beta','2026-10-01T00:00:00Z','BET');
+                      INSERT INTO WebhookDestinations(Id,Name,Host,ProtectedUrl,UrlHmac,Kind,WorkspaceId) VALUES {WebhookTestRows.Row(f.Services, "w2", "Beta channel", Secret + "2", kind)[..^1]},'w-beta');
+                      INSERT INTO Teams(Id,Handle,Name,WebhookDestinationId,WorkspaceId) VALUES('tmb','ledger','Ledger','w2','w-beta');
+                      INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt,WorkspaceId) VALUES('tb','Ledger close','2026-11-30','Low','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z','w-beta')");
+            Assert.True(await sender.SendAsync(Notice()));
+            using (WorkspaceScope.Enter("w-beta"))
+                Assert.True(await sender.SendAsync(new WebhookNotice("tmb", "GateOverdue", "StageGate", "gb", 1, "Gate 'Close books' is overdue", "tb")));
+            Assert.Equal(2, http.Calls.Count);
+            string Text(string body) { var j = JsonDocument.Parse(body).RootElement; return j.GetProperty(kind == "Generic" ? "message" : "text").GetString()!; }
+            var key = Scalar(f, "SELECT ReleaseKey FROM ReleaseTrains WHERE Id='tb'");
+            Assert.Equal("BET-1", key);
+            var (mine, theirs) = (Text(http.Calls[0].Body), Text(http.Calls[1].Body));
+            // Slack escapes & < > only and Teams escapes Markdown; a plain https address has none of those characters
+            Assert.Equal("Payments · RLS-1 R26.10: Gate 'Code Freeze' is overdue Open: https://releaseos.example.com/trains/t1/gates/g1", mine);
+            Assert.Equal("Beta Ledger · BET-1 Ledger close: Gate 'Close books' is overdue Open: https://releaseos.example.com/trains/tb/gates/gb", theirs);
+            if (kind == "Generic")
+            {
+                var body = JsonDocument.Parse(http.Calls[1].Body).RootElement;
+                Assert.Equal("Beta Ledger", body.GetProperty("workspace").GetString()); Assert.Equal("BET-1", body.GetProperty("releaseKey").GetString());
+                Assert.Equal("Ledger close", body.GetProperty("title").GetString()); Assert.Equal("https://releaseos.example.com/trains/tb/gates/gb", body.GetProperty("link").GetString());
+            }
+            Assert.DoesNotContain("SECRETTOKEN", mine + theirs);   // a credential is never part of a message
         }
     }
 

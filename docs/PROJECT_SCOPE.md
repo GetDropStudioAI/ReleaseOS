@@ -107,7 +107,9 @@ Port to EF: tables, CHECKs, partial unique indexes (`UX_RunbookRuns_OneOpenLive`
 - Pasted text is saved in session state until commit or discard.
 
 ### 5.2 Communication token hydration
-Allowlisted tokens only: `{ReleaseTitle} {TargetDate} {DaysToTarget} {Status} {Window} {ChangeTicket} {ProductList} {ProductCount} {GateTable} {NextGate} {NextGateDue} {TasksDone} {TasksTotal} {PercentComplete} {BlockerCount} {CriticalBlockers} {BlockerList} {Owners} {GoNoGoDecision} {Conditions} {KnownIssues} {CloseCode}`.
+Allowlisted tokens only: `{ReleaseTitle} {TargetDate} {DaysToTarget} {Status} {Window} {ChangeTicket} {ProductList} {ProductCount} {GateTable} {NextGate} {NextGateDue} {TasksDone} {TasksTotal} {PercentComplete} {BlockerCount} {CriticalBlockers} {BlockerList} {Owners} {GoNoGoDecision} {Conditions} {KnownIssues} {CloseCode} {ReleaseKey} {Owner} {Team} {Environments} {Workspace}` (27; the last five are the release model and the workspace, REOS-139). `{Owner}` is the release owner (a person), `{Team}` the owning team, `{Environments}` the target environments on one line; each reads "Not assigned" (environments: "None") when unset. `{Workspace}` is the workspace name.
+- **One message style** (D45, D51, D52, REOS-139). Every text the app sends reads the same way: the workspace, the release key and title, UTC times labelled "UTC", and a link back. Notifications and team webhooks are composed as `Payments · RLS-284 Card portal: Gate 'Code Freeze' is overdue (was due 2026-10-30 UTC). Open: https://…/trains/…` (Generic webhook JSON also carries `workspace`, `releaseKey`, `title` and `link`). The default library subjects are `[{Workspace} · {ReleaseKey} {ReleaseTitle}] …` and its bodies end with the owner, team and environments. Instants in `{Window}` and `{Conditions}` are UTC with the display zone beside them (`Fri 30 Oct 06:00–10:00 UTC (Fri 30 Oct 01:00–05:00 CT)`); dates (`{TargetDate}`, gate due days) are dates.
+- **Deep link.** The link is built from `App:PublicBaseUrl` (the address people open the app at, e.g. `https://releaseos.example.com`; no credentials, query or fragment: a bad value stops the start). **When it is not set there is no link**: nothing is guessed from a request or a machine name, and the text is otherwise the same. A hydrated communication then ends with `Open in ReleaseOS: <link>`. A gate notice links to the gate, a run notice to Orchestration, approvals to Approvals, sync alerts to Sync health, everything else to the release.
 - Unknown token = error; preview returns `tokenErrors[]`; dispatch refused.
 - Empty lists render "None". Values escaped per target (Markdown; HTML for rich-text copy; JSON for webhooks).
 - Hydration reads one snapshot in a single read transaction; preview returns `asOf` and `trainVersion`; the client warns if the train's version moved.
@@ -133,7 +135,7 @@ Allowlisted tokens only: `{ReleaseTitle} {TargetDate} {DaysToTarget} {Status} {W
 - No modals; centre workspace is never unmounted by navigation. A 409 keeps the draft and shows the conflicting change.
 
 ### 5.5 Notifications and escalation
-In-app inbox (`Notifications`) plus optional team webhooks (no SMTP in v1, OI-7). Gate entered InProgress → owner. At 50% of the time from entry to `DueOn` → reminder. `DueOn` passed → escalation level 1 to Release Manager; +1 business day → level 2 to RTE. Step late ≥5 min → owner + RTE; ≥30 min → Release Manager. Go/No-Go condition 1 h before expiry → condition owner.
+In-app inbox (`Notifications`) plus optional team webhooks (no SMTP in v1, OI-7). Both carry the one message style of 5.2 (workspace, release key and title, UTC times, deep link when `App:PublicBaseUrl` is set). Gate entered InProgress → owner. At 50% of the time from entry to `DueOn` → reminder. `DueOn` passed → escalation level 1 to Release Manager; +1 business day → level 2 to RTE. Step late ≥5 min → owner + RTE; ≥30 min → Release Manager. Go/No-Go condition 1 h before expiry → condition owner.
 
 ### 5.6 Background services
 `SyncPollerService`, `SyncWatchdogService`, `NotificationScheduler` (gate reminders, condition expiry), `ForecastService` (on step events), `BackupService` (SQLite online backup API every 15 min + nightly, 30-day retention, D3), `ExportWorker` (PDF/XLSX jobs from `ExportJobs`), `SessionStateJanitor` (drop client states idle > 30 days).
@@ -232,16 +234,16 @@ Rules (all enforced in code): UTF-8 (BOM ok), RFC 4180, header required, case-in
 ### Exports
 | Export | Format | Contents |
 |---|---|---|
-| Any grid | CSV, XLSX | current filters + visible columns + ids; XLSX frozen header, typed cells |
+| Any grid | CSV, XLSX | current filters + visible columns + ids; XLSX frozen header, typed cells. Last, read-only `#Workspace` and, for a grid about releases, `#ReleaseKey #ReleaseOwner #ReleaseTeam #ReleaseEnvironments` (an import skips `#` columns, so files still round-trip; the trains grid has its own `Owner`, `Team`, `Environments` and `#Key`) |
 | Release report | PDF | summary, products, gate timeline + cycle times, blockers, comms sent, close code, scorecard |
 | Runbook run sheet | PDF, CSV | before: plan, owners, deps, rollback; after: actuals, variance, skips with notes |
-| Audit evidence pack | PDF + ZIP | change record; certifications with timestamps + SoD check; transition log; waivers + freeze overrides with reasons; Go/No-Go + conditions; attachment manifest with SHA-256; audit-log extract; metric snapshot. ZIP adds files + `manifest.csv` |
+| Audit evidence pack | PDF + ZIP | change record; certifications with timestamps + SoD check; transition log; waivers + freeze overrides with reasons; Go/No-Go + conditions; attachment manifest with SHA-256; audit-log extract; metric snapshot. ZIP adds files + `manifest.csv` (columns `workspace, release_key, owner, team, environments` follow `zip_path`) |
 | Post-release scorecard | PDF | planned vs actual, on-time, churn, variance, incidents/rollback, PIR |
-| Analytics workbook | XLSX | one sheet per metric, parameters sheet first |
+| Analytics workbook | XLSX | one sheet per metric, parameters sheet first. Per-metric download today: an `About` sheet with the workspace; the per-release metrics (M2, M6, M7, M8) add `release_key, owner, team, environments` after the metric columns |
 | Audit log | CSV | filtered events with before/after JSON |
 | Calendar | ICS | gate due dates, milestones, windows, freezes; stable UIDs; per-user revocable token; titles and times only |
 
-Mechanics: PDFs are `ExportJobs` background jobs; footer = generated-at, generated-by, train `Version`, page n of m; PDF SHA-256 stored. Charts in PDFs are the client's ECharts SVG sent with the request; unattended exports use ECharts `renderToSVGString` in a small Node step. CSV/XLSX cells starting `= + - @`, tab or CR are prefixed with `'` (OWASP CSV injection). Evidence packs are regenerated on demand, never cached.
+Every PDF, the manifest, the grids and the analytics workbook say which workspace they came from and carry the release key, owner, team and environments (REOS-137). PDF times are UTC, labelled, with the display zone beside them (D51): `Mon 2 Nov 2026 14:14 UTC (09:14 CT)`; no second reading when `Display:TimeZone` is UTC. Mechanics: PDFs are `ExportJobs` background jobs; header = document name and workspace; footer = generated-at, generated-by, release key and title, workspace, train `Version`, page n of m; PDF SHA-256 stored. Charts in PDFs are the client's ECharts SVG sent with the request; unattended exports use ECharts `renderToSVGString` in a small Node step. CSV/XLSX cells starting `= + - @`, tab or CR are prefixed with `'` (OWASP CSV injection). Evidence packs are regenerated on demand, never cached.
 
 ## 10. Non-functional
 
@@ -255,4 +257,4 @@ Mechanics: PDFs are `ExportJobs` background jobs; footer = generated-at, generat
 | Platforms | server on Windows Server or Linux; client in current Edge, Chrome, Safari on macOS and Windows |
 | Observability | structured logs (Serilog to file), health endpoint `/healthz` reporting DB, poller, watchdog |
 | Dev ports | API `http://127.0.0.1:6080`, Vite `http://127.0.0.1:6273` (IPv4 loopback: `localhost` binds IPv6 only on Windows) proxying `/api` and `/hub` |
-| Time | server stores and returns UTC; UI formats in `Display:TimeZone` (default America/Chicago, D24); all server time from an injected `TimeProvider` |
+| Time | server stores and returns UTC; screens, PDFs and messages show UTC labelled, with `Display:TimeZone` (default America/Chicago, D24) beside it (D44, D51), and business days count in that zone; all server time from an injected `TimeProvider` |

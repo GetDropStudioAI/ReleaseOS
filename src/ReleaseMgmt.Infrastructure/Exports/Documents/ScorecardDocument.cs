@@ -20,6 +20,7 @@ public sealed class ScorecardDocument(ExportModel model, ExportOptions options) 
                 t.Span(M.Train.ChangeTicket ?? "no change ticket").FontFamily(PdfStyle.MonoFamilies).FontSize(PdfStyle.MonoSize);
                 t.Span($" · Status {M.Train.Status} · Close code {M.Train.CloseCode ?? "not closed"} · train version {M.Train.Version}");
             });
+            if (M.Train.Release?.Line() is { } release) c.Item().Text(release).FontColor(PdfStyle.Quiet);
         });
 
         Section(col, "Headline", c => KeyVal(c,

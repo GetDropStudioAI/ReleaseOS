@@ -694,7 +694,7 @@ public class ImportExportTests
         Assert.Equal([0xEF, 0xBB, 0xBF], bytes[..3]);
         var text = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
         var header = text[..text.IndexOf("\r\n", StringComparison.Ordinal)];
-        Assert.Equal("Train,GateName,SequenceOrder,OffsetDays,RequiredBefore,Owner,GateClass,#Id,#DueOn,#Status,#Version", header);
+        Assert.Equal("Train,GateName,SequenceOrder,OffsetDays,RequiredBefore,Owner,GateClass,#Id,#DueOn,#Status,#Version,#Workspace,#ReleaseKey,#ReleaseOwner,#ReleaseTeam,#ReleaseEnvironments", header);   // REOS-137: the workspace and the release model, read-only, last
         Assert.DoesNotContain("\n", text.Replace("\r\n", ""));   // no bare LF outside quoted fields in this grid
         Assert.Equal(HttpStatusCode.OK, (await w.Rte.GetAsync("/api/v1/export/gates.csv")).StatusCode);   // the spelling PROJECT_SCOPE 6 uses
     }
@@ -759,14 +759,14 @@ public class ImportExportTests
         async Task<List<string[]>> Get(string url) => ParseCsv(Encoding.UTF8.GetString(await w.Rte.GetByteArrayAsync(url)));
         var expect = new Dictionary<string, string>
         {
-            ["blockers"] = "Train,Title,Severity,Product,Gate,Owner,RaisedAt,ResolvedAt,#Id,#Version",
-            ["known-issues"] = "Train,Title,Severity,Status,Workaround,ExternalKey,RaisedAt,ResolvedAt,#Id,#Version",
-            ["freeze-windows"] = "Name,Kind,StartsAt,EndsAt,ProductPattern,CreatedBy,#Id,#Version",
-            ["attachments"] = "Train,EntityType,EntityId,FileName,ContentType,SizeBytes,Sha256,UploadedBy,UploadedAt,Locked,#Id",
-            ["notifications"] = "Kind,EntityType,EntityId,EscalationLevel,Message,CreatedAt,ReadAt,#Id,#Version",
-            ["sync-alerts"] = "Train,SourceSystem,Kind,ErrorMessage,OccurrenceCount,FirstOccurredAt,LastOccurredAt,Resolved,#Id,#Version",
-            ["templates"] = "Name,Status,DefaultRiskTier,ReviewDueOn,#Id,#Version",
-            ["audit"] = "Id,OccurredAt,Actor,ActorUserId,Train,ReleaseTrainId,EntityType,EntityId,Action,BeforeJson,AfterJson",
+            ["blockers"] = "Train,Title,Severity,Product,Gate,Owner,RaisedAt,ResolvedAt,#Id,#Version,#Workspace,#ReleaseKey,#ReleaseOwner,#ReleaseTeam,#ReleaseEnvironments",
+            ["known-issues"] = "Train,Title,Severity,Status,Workaround,ExternalKey,RaisedAt,ResolvedAt,#Id,#Version,#Workspace,#ReleaseKey,#ReleaseOwner,#ReleaseTeam,#ReleaseEnvironments",
+            ["freeze-windows"] = "Name,Kind,StartsAt,EndsAt,ProductPattern,CreatedBy,#Id,#Version,#Workspace",
+            ["attachments"] = "Train,EntityType,EntityId,FileName,ContentType,SizeBytes,Sha256,UploadedBy,UploadedAt,Locked,#Id,#Workspace,#ReleaseKey,#ReleaseOwner,#ReleaseTeam,#ReleaseEnvironments",
+            ["notifications"] = "Kind,EntityType,EntityId,EscalationLevel,Message,CreatedAt,ReadAt,#Id,#Version,#Workspace",
+            ["sync-alerts"] = "Train,SourceSystem,Kind,ErrorMessage,OccurrenceCount,FirstOccurredAt,LastOccurredAt,Resolved,#Id,#Version,#Workspace,#ReleaseKey,#ReleaseOwner,#ReleaseTeam,#ReleaseEnvironments",
+            ["templates"] = "Name,Status,DefaultRiskTier,ReviewDueOn,#Id,#Version,#Workspace",
+            ["audit"] = "Id,OccurredAt,Actor,ActorUserId,Train,ReleaseTrainId,EntityType,EntityId,Action,BeforeJson,AfterJson,#Workspace,#ReleaseKey,#ReleaseOwner,#ReleaseTeam,#ReleaseEnvironments",
         };
         foreach (var (grid, header) in expect)
         {

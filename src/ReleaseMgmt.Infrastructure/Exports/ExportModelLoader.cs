@@ -185,6 +185,7 @@ public sealed class ExportModelLoader(IDbContextFactory<ReleaseDbContext> dbf, A
     private static async Task<ReleaseInfo> ReleaseInfoOf(ReleaseDbContext db, ReleaseTrains t, CancellationToken ct)
     {
         var v = await ReleaseModelService.ViewAsync(db, t, ct);
-        return new(v.Key, v.Owner?.Name, v.OwnerTeam?.Name, v.Branch, v.OnCallUser?.Name ?? v.OnCallTeam?.Name, v.Type?.Name, [.. v.Environments.Select(e => e.Name)]);
+        var workspace = await db.Set<Workspaces>().IgnoreQueryFilters().AsNoTracking().Where(w => w.Id == t.WorkspaceId).Select(w => w.Name).SingleOrDefaultAsync(ct);
+        return new(v.Key, v.Owner?.Name, v.OwnerTeam?.Name, v.Branch, v.OnCallUser?.Name ?? v.OnCallTeam?.Name, v.Type?.Name, [.. v.Environments.Select(e => e.Name)], workspace);
     }
 }

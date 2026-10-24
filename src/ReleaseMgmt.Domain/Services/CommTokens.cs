@@ -74,6 +74,7 @@ public static class CommTokens
         "ReleaseTitle", "TargetDate", "DaysToTarget", "Status", "Window", "ChangeTicket", "ProductList", "ProductCount", "GateTable",
         "NextGate", "NextGateDue", "TasksDone", "TasksTotal", "PercentComplete", "BlockerCount", "CriticalBlockers", "BlockerList",
         "Owners", "GoNoGoDecision", "Conditions", "KnownIssues", "CloseCode",
+        "ReleaseKey", "Owner", "Team", "Environments", "Workspace",   // REOS-139 (G17): the release model and the workspace
     ];
 
     /// <summary>One line per token for the editor's token list.</summary>
@@ -83,7 +84,7 @@ public static class CommTokens
         ["TargetDate"] = "Target release date, for example Fri 30 Oct",
         ["DaysToTarget"] = "Business days from today to the target date (T-n); a minus sign once past",
         ["Status"] = "Train status: Planning, Gated, Executing, Complete or Aborted",
-        ["Window"] = "Deployment window in the display time zone, or Not scheduled",
+        ["Window"] = "Deployment window in UTC with the display time zone beside it, or Not scheduled",
         ["ChangeTicket"] = "ServiceNow change number, or Not assigned",
         ["ProductList"] = "Bundled products with versions on one line, or None",
         ["ProductCount"] = "Number of bundled products",
@@ -101,6 +102,11 @@ public static class CommTokens
         ["Conditions"] = "Open conditions of the latest Go/No-Go with owner and expiry, or None",
         ["KnownIssues"] = "Known issues that are not resolved, or None",
         ["CloseCode"] = "Close code once complete, or Not closed",
+        ["ReleaseKey"] = "The release key, for example RLS-284, or Not assigned",
+        ["Owner"] = "The release owner (a person), or Not assigned",
+        ["Team"] = "The team that owns the release, or Not assigned",
+        ["Environments"] = "The environments the release goes to on one line, or None",
+        ["Workspace"] = "The name of the workspace the release belongs to",
     };
 
     private static readonly HashSet<string> Set = new(Allowlist, StringComparer.Ordinal);

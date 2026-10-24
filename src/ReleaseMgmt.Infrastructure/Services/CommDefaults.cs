@@ -16,18 +16,18 @@ public static class CommDefaults
 
     public static readonly IReadOnlyList<Entry> Entries =
     [
-        new("T-7 Readiness notice", "Tminus7", "All", -7, "[{ReleaseTitle}] Readiness notice: target {TargetDate}",
-            "**{ReleaseTitle}** targets **{TargetDate}** ({DaysToTarget} business days). Status: {Status}.\nWindow: {Window}\nChange: {ChangeTicket}\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Progress**\n{TasksDone} of {TasksTotal} tasks done ({PercentComplete}). Next gate: {NextGate}, due {NextGateDue}.\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\nQuestions: {Owners}"),
-        new("T-3 Checkpoint", "Tminus3", "Ops", -3, "[{ReleaseTitle}] Checkpoint: {DaysToTarget} business days to go",
-            "**{ReleaseTitle}** checkpoint. Status: {Status}. Window: {Window}.\n\n**Gates**\n{GateTable}\n\n**Critical blockers**\n{CriticalBlockers}\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\nQuestions: {Owners}"),
-        new("T-1 Go/No-Go outcome", "GoNoGo", "All", -1, "[{ReleaseTitle}] Go/No-Go: {GoNoGoDecision}",
-            "**{ReleaseTitle}** is {GoNoGoDecision}.\nWindow: {Window}\nChange: {ChangeTicket}\n\n**Conditions**\n{Conditions}\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Gates**\n{GateTable}\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\n**Known issues**\n{KnownIssues}\n\nQuestions: {Owners}"),
-        new("T0 Cutover start", "Cutover", "Ops", 0, "[{ReleaseTitle}] Cutover starting: {Window}",
-            "Cutover for **{ReleaseTitle}** is starting. Window: {Window}. Change: {ChangeTicket}.\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\nQuestions: {Owners}"),
-        new("T0 Release complete", "Complete", "All", 0, "[{ReleaseTitle}] Release complete: {CloseCode}",
-            "**{ReleaseTitle}** is {Status}. Close code: {CloseCode}.\nChange: {ChangeTicket}\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Known issues**\n{KnownIssues}\n\nQuestions: {Owners}"),
-        new("Hypercare exit", "HypercareExit", "All", 5, "[{ReleaseTitle}] Hypercare ended",
-            "Hypercare for **{ReleaseTitle}** has ended. Close code: {CloseCode}.\n\n**Known issues still open**\n{KnownIssues}\n\nQuestions: {Owners}"),
+        new("T-7 Readiness notice", "Tminus7", "All", -7, "[{Workspace} · {ReleaseKey} {ReleaseTitle}] Readiness notice: target {TargetDate}",
+            "**{ReleaseTitle}** targets **{TargetDate}** ({DaysToTarget} business days). Status: {Status}.\nWindow: {Window}\nChange: {ChangeTicket}\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Progress**\n{TasksDone} of {TasksTotal} tasks done ({PercentComplete}). Next gate: {NextGate}, due {NextGateDue}.\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\nOwner: {Owner} · Team: {Team} · Environments: {Environments}\nQuestions: {Owners}"),
+        new("T-3 Checkpoint", "Tminus3", "Ops", -3, "[{Workspace} · {ReleaseKey} {ReleaseTitle}] Checkpoint: {DaysToTarget} business days to go",
+            "**{ReleaseTitle}** checkpoint. Status: {Status}. Window: {Window}.\n\n**Gates**\n{GateTable}\n\n**Critical blockers**\n{CriticalBlockers}\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\nOwner: {Owner} · Team: {Team} · Environments: {Environments}\nQuestions: {Owners}"),
+        new("T-1 Go/No-Go outcome", "GoNoGo", "All", -1, "[{Workspace} · {ReleaseKey} {ReleaseTitle}] Go/No-Go: {GoNoGoDecision}",
+            "**{ReleaseTitle}** is {GoNoGoDecision}.\nWindow: {Window}\nChange: {ChangeTicket}\n\n**Conditions**\n{Conditions}\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Gates**\n{GateTable}\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\n**Known issues**\n{KnownIssues}\n\nOwner: {Owner} · Team: {Team} · Environments: {Environments}\nQuestions: {Owners}"),
+        new("T0 Cutover start", "Cutover", "Ops", 0, "[{Workspace} · {ReleaseKey} {ReleaseTitle}] Cutover starting: {Window}",
+            "Cutover for **{ReleaseTitle}** is starting. Window: {Window}. Change: {ChangeTicket}.\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Open blockers** ({BlockerCount})\n{BlockerList}\n\nOwner: {Owner} · Team: {Team} · Environments: {Environments}\nQuestions: {Owners}"),
+        new("T0 Release complete", "Complete", "All", 0, "[{Workspace} · {ReleaseKey} {ReleaseTitle}] Release complete: {CloseCode}",
+            "**{ReleaseTitle}** is {Status}. Close code: {CloseCode}.\nChange: {ChangeTicket}\n\n**Scope** ({ProductCount} products)\n{ProductList}\n\n**Known issues**\n{KnownIssues}\n\nOwner: {Owner} · Team: {Team} · Environments: {Environments}\nQuestions: {Owners}"),
+        new("Hypercare exit", "HypercareExit", "All", 5, "[{Workspace} · {ReleaseKey} {ReleaseTitle}] Hypercare ended",
+            "Hypercare for **{ReleaseTitle}** has ended. Close code: {CloseCode}.\n\n**Known issues still open**\n{KnownIssues}\n\nOwner: {Owner} · Team: {Team} · Environments: {Environments}\nQuestions: {Owners}"),
     ];
 
     /// <summary>Idempotent. Returns true when the library was empty and the defaults were added.</summary>

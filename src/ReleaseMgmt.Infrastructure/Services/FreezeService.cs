@@ -209,13 +209,13 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             if (!(await OpenRequestsAsync(db, windowId, trainId, ct)).Any(o => o.RequesterId == requestedByUserId))
                 return ServiceResult<int>.Fail(new GuardFailure(ApprovalGuards.OverrideRequestNotFound, $"There is no open request for '{w.Name}' on {t.Title} from that person; it may already have been granted or declined"));
             Audit(db, actor, trainId, "FreezeWindow", windowId, DeclineAction, null, new { requestedBy = requestedByUserId, window = w.Name, note = text });
-            message = $"Your freeze override request for {t.Title} ('{w.Name}') was declined: {text}";
+            message = $"Your freeze override request ('{w.Name}') was declined: {text}";
             await db.SaveChangesAsync(ct);
             return ServiceResult<int>.Ok(1);
         }, ct);
         if (r.IsOk && notifier is not null)
         {
-            try { await notifier.NotifyAsync(new NotificationRequest(requestedByUserId, "FreezeOverrideDeclined", "FreezeWindow", windowId, message, 1), ct); }
+            try { await notifier.NotifyAsync(new NotificationRequest(requestedByUserId, "FreezeOverrideDeclined", "FreezeWindow", windowId, message, 1, trainId), ct); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 if (alerts is null) throw;
@@ -245,7 +245,7 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
 
             approvers = await Memberships.ActiveWithRole(db, [.. Approvers]).Where(u => u.Id != actor.UserId).Select(u => u.Id).ToListAsync(ct);
             var who = await db.Set<Users>().Where(u => u.Id == actor.UserId).Select(u => u.DisplayName).SingleAsync(ct);
-            message = $"{who} asks for a freeze override on {t.Title} ({w.Name})" + (proposedExpiry is DateTime x ? $" until {x.ToUniversalTime():yyyy-MM-dd HH:mm}Z" : "") + $": {text}";
+            message = $"{who} asks for a freeze override on '{w.Name}'" + (proposedExpiry is DateTime x ? $" until {MessageStyle.Utc(x.ToUniversalTime())}" : "") + $": {text}";
             Audit(db, actor, trainId, "FreezeWindow", w.Id, "RequestOverride", null, new { trainId, reason = text, proposedExpiry, notified = approvers.Count });
             await db.SaveChangesAsync(ct);
             return ServiceResult<int>.Ok(approvers.Count);
@@ -254,7 +254,7 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         if (!r.IsOk || notifier is null) return r;
         foreach (var id in approvers)   // after the commit; a failed notification is raised, never swallowed (rule 8)
         {
-            try { await notifier.NotifyAsync(new NotificationRequest(id, "FreezeOverrideRequested", "FreezeWindow", windowId, message, 1), ct); }
+            try { await notifier.NotifyAsync(new NotificationRequest(id, "FreezeOverrideRequested", "FreezeWindow", windowId, message, 1, trainId), ct); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 if (alerts is null) throw;

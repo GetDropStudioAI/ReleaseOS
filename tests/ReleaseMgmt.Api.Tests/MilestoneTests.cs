@@ -259,7 +259,7 @@ public class MilestoneTests
         await Add(c, new { name = "UAT sign-off", dueOn = "2026-10-21", ownerTeamId = "tm1", note = "with business" });
         var csv = Encoding.UTF8.GetString(await c.Viewer.GetByteArrayAsync("/api/v1/exports/milestones.csv?train=t1")).TrimStart('﻿');
         var lines = csv.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal("Train,Name,DueOn,Owner,Note,Done,DoneAt,DoneBy,#Id,#Version", lines[0]);
+        Assert.Equal("Train,Name,DueOn,Owner,Note,Done,DoneAt,DoneBy,#Id,#Version,#Workspace,#ReleaseKey,#ReleaseOwner,#ReleaseTeam,#ReleaseEnvironments", lines[0]);
         Assert.StartsWith("R26.10,'=Code complete,2026-10-16,rte@x.com,,No,,,", lines[1]);   // CSV injection escaped
         Assert.StartsWith("R26.10,UAT sign-off,2026-10-21,'@qa,with business,No,,,", lines[2]);   // a team handle is escaped like any cell starting with @
         Assert.Equal(3, lines.Length);

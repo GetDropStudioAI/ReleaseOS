@@ -179,6 +179,13 @@ public sealed class ExportService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
     /// <summary>Moves the oldest Queued job to Running (attempt counted, start time from the clock) and returns it; null when the queue is empty. Runs under the write lock, so two workers cannot claim one job.</summary>
     public async Task<ExportJobs?> ClaimNextAsync(CancellationToken ct = default)
     {
+        // The worker runs outside any workspace, so the oldest job is found across all of them and then claimed inside its own: the Start audit row and the
+        // trigger that checks it against the train's workspace must see that workspace, or a job of any workspace but the default one could never start (REOS-137).
+        var peek = await RunAsync<string?>(async db =>
+            ServiceResult<string?>.Ok(await db.Set<ExportJobs>().Where(j => j.Status == "Queued").OrderBy(j => j.CreatedAt).ThenBy(j => j.Id).Select(j => j.WorkspaceId).FirstOrDefaultAsync(ct)), ct);
+        if (!peek.IsOk) throw new InvalidOperationException("Could not look for an export job: " + Describe(peek));
+        if (peek.Value is not { } workspace) return null;
+        using var _ = WorkspaceScope.Enter(workspace);
         var r = await RunAsync<ExportJobs?>(async db =>
         {
             var job = await db.Set<ExportJobs>().Where(j => j.Status == "Queued").OrderBy(j => j.CreatedAt).ThenBy(j => j.Id).FirstOrDefaultAsync(ct);

@@ -49,11 +49,14 @@ public abstract class TrainDocument(ExportModel model, ExportOptions options) : 
     protected PdfFmt F { get; } = new(model.Clock);
     protected abstract string DocumentName { get; }
 
+    /// <summary>The key and the title, e.g. <c>RLS-284 Card portal</c>; the title alone for a train without a key.</summary>
+    protected string TrainLabel => M.ReleaseKey is { } k ? $"{k} {M.Train.Title}" : M.Train.Title;
+
     public DocumentMetadata GetMetadata() => new()
     {
-        Title = $"{DocumentName}: {M.Train.Title}",
+        Title = $"{DocumentName}: {TrainLabel}",
         Author = M.GeneratedBy,
-        Subject = $"{M.JobRef} for train {M.Train.Title} (version {M.Train.Version})",
+        Subject = $"{M.JobRef} for train {TrainLabel} (version {M.Train.Version})" + (M.WorkspaceName is { } ws ? $" in workspace {ws}" : ""),
         Creator = "ReleaseOS",
         Producer = "ReleaseOS (QuestPDF)",
         Language = "en-US",
@@ -80,14 +83,14 @@ public abstract class TrainDocument(ExportModel model, ExportOptions options) : 
     protected virtual void Header(IContainer c) =>
         c.BorderBottom(1.5f).BorderColor(PdfStyle.Ink).PaddingBottom(4.5f).Row(r =>
         {
-            r.RelativeItem().Text(DocumentName).FontSize(PdfStyle.Body).SemiBold();
+            r.RelativeItem().Text(t => { t.Span(DocumentName).SemiBold(); if (M.WorkspaceName is { } ws) t.Span($" · {ws}").FontColor(PdfStyle.Quiet); });
             r.AutoItem().Text($"{M.JobRef} · generated {F.Stamp(M.GeneratedAt)} by {M.GeneratedBy}").FontFamily(PdfStyle.MonoFamilies).FontSize(PdfStyle.MonoSize).FontColor(PdfStyle.Quiet);
         });
 
     protected virtual void Footer(IContainer c) =>
         c.BorderTop(0.75f).BorderColor(PdfStyle.Hair).PaddingTop(4.5f).Row(r =>
         {
-            r.RelativeItem().Text($"{M.JobRef} · generated {F.Stamp(M.GeneratedAt)} by {M.GeneratedBy} · train {M.Train.Title} version {M.Train.Version}")
+            r.RelativeItem().Text($"{M.JobRef} · generated {F.Stamp(M.GeneratedAt)} by {M.GeneratedBy} · train {TrainLabel}{(M.WorkspaceName is { } w2 ? $" ({w2})" : "")} version {M.Train.Version}")
                 .FontFamily(PdfStyle.MonoFamilies).FontSize(PdfStyle.MonoSize).FontColor(PdfStyle.Quiet);
             r.AutoItem().Element(PageNumber);
         });

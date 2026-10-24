@@ -44,7 +44,9 @@ jobs:
       - name: Build
         run: dotnet build ReleaseMgmt.sln --configuration Release
       - name: Test
-        run: dotnet test ReleaseMgmt.sln --configuration Release --no-build
+        run: dotnet test ReleaseMgmt.sln --configuration Release --no-build --filter "Category!=Load"
+      - name: "Load test, alone (the timing test must not share the runner with the other test projects, REOS-145)"
+        run: dotnet test tests/ReleaseMgmt.Api.Tests/ReleaseMgmt.Api.Tests.csproj --configuration Release --no-build --filter "Category=Load"
       - name: Schema reference suite (362 cases)
         run: python tests/reference/test_schema.py
       - name: Manual upgrade scripts reach db/schema.sql

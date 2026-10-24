@@ -7,7 +7,7 @@ A story moves to In Review when its own acceptance criteria pass. It stays there
 | # | Check | Command | Pass means |
 |---|---|---|---|
 | 1 | Build, warnings as findings | `dotnet build ReleaseMgmt.sln -c Release --no-incremental` | 0 errors, 0 warnings |
-| 2 | All .NET tests | `dotnet test ReleaseMgmt.sln -c Release` | 0 failed |
+| 2 | All .NET tests | `dotnet test ReleaseMgmt.sln -c Release` | 0 failed. CI runs the timing test `Category=Load` (50 events a second, p95) as its own step after the rest, so it does not share the runner with the other test projects (REOS-145) |
 | 3 | Schema oracle | `python3 tests/reference/test_schema.py` | 167 passed, 0 failed |
 | 3b | Tooling tests | `python3 tests/tools/test_start.py` | all pass |
 | 4 | Metrics oracle | `python3 tests/reference/seed_and_query.py` | runs clean; matches `expected_metrics.json` once M7 lands |

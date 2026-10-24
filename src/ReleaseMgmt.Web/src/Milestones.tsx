@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Panel } from './ui'
+import { Button, Panel, Time } from './ui'
 import { getMe, getOwners, type ApiError, type Me, type Owner } from './api'
 import { day, errMsg, tMinus } from './format'
-import { displayZone, fmtDayTime, serverNow } from './time'
+import { displayZone, serverNow } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
 import { addMilestone, editMilestone, getMilestones, milestoneAction, removeMilestone, type Milestone, type MilestoneInput } from './milestonesApi'
@@ -122,7 +122,7 @@ export function MilestonesSection({ trainId, rows, error, canPlan, onChanged }: 
                   <td className="wrap"><span className="label">{m.name}</span>{m.note && <span className="muted"> · {m.note}</span>}</td>
                   <td className="nowrap">{day(m.dueOn)} · <span className="mono">{tMinus(m.tMinus)}</span></td>
                   <td>{m.ownerName ?? <span className="muted">—</span>}</td>
-                  <td className="mono muted nowrap">{m.done && m.doneAt ? <>{fmtDayTime(m.doneAt)}{m.doneBy ? <span className="ms-by"> · {m.doneBy}</span> : null}</> : '—'}</td>
+                  <td className="mono muted nowrap">{m.done && m.doneAt ? <><Time at={m.doneAt} date />{m.doneBy ? <span className="ms-by"> · {m.doneBy}</span> : null}</> : '—'}</td>
                   <td className="nowrap">
                     {confirm === m.id ? (
                       <span role="group" aria-label={`Confirm removing ${m.name}`}>

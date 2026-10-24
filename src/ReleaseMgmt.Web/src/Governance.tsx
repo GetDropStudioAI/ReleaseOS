@@ -4,7 +4,7 @@ import {
   type AffectedCi, type ChangeRecord, type DecisionView, type NewConditionBody, type Owner,
 } from './api'
 import { errMsg } from './format'
-import { fmtDayTime, utcToZonedInput, zonedInputToUtc, serverNow } from './time'
+import { utcToZonedInput, zonedInputToUtc, serverNow } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
 import type { ApiError, Condition } from './api'
@@ -12,7 +12,7 @@ import { useAction } from './useAction'
 import { ConfirmInline } from './ConfirmInline'
 import { announce } from './announce'
 import { useFocusWhen } from './focus'
-import { Button, DataTable, ErrorState, Notice, Panel, StatusChip, type Column, type Tone } from './ui'
+import { Button, DataTable, ErrorState, Notice, Panel, StatusChip, type Column, type Tone, InputZoneNote, Time } from './ui'
 
 const WORD: Record<string, { g: string; cls: string; word: string; tone: Tone }> = {
   Go: { g: '●', cls: 'ok', word: 'Go', tone: 'success' }, GoWithConditions: { g: '◐', cls: 'warn', word: 'Go with conditions', tone: 'warning' }, NoGo: { g: '✗', cls: 'bad', word: 'No-Go', tone: 'danger' },
@@ -95,14 +95,14 @@ export function GoNoGo({ trainId, trainVersion, canDecide, refreshKey, onChanged
     { key: 'state', header: 'State', cell: c => { const lapsed = !c.closedAt && new Date(c.expiresAt).getTime() <= now; return <StatusChip tone={c.closedAt ? 'success' : lapsed ? 'danger' : 'neutral'}>{c.closedAt ? 'Closed' : lapsed ? 'Expired' : 'Open'}</StatusChip> } },
     { key: 'text', header: 'Condition', cell: c => c.text },
     { key: 'owner', header: 'Owner', cell: c => name(c.ownerUserId) },
-    { key: 'expires', header: 'Expires', cell: c => <span className="mono">{fmtDayTime(c.expiresAt)}</span> },
+    { key: 'expires', header: 'Expires', cell: c => <span className="mono"><Time at={c.expiresAt} date /></span> },
     { key: 'actions', header: <span className="sr-only">Actions</span>, cell: c => !c.closedAt && <ConfirmInline label="Close" triggerLabel={`Close condition: ${c.text}`} question="Close this condition?" confirmLabel="Close condition" pendingLabel="Closing…" destructive={false} onConfirm={() => close(c.id, c.version)} /> },
   ]
   const row = (v: DecisionView) => {
     const w = WORD[v.decision.decision]
     return (
       <div key={v.decision.id} className="rd-decision">
-        <p><StatusChip tone={w.tone}>{w.word}</StatusChip> <span className="mono">{fmtDayTime(v.decision.decidedAt)}</span> · {name(v.decision.decidedByUserId)}
+        <p><StatusChip tone={w.tone}>{w.word}</StatusChip> <span className="mono"><Time at={v.decision.decidedAt} date /></span> · {name(v.decision.decidedByUserId)}
           {v.decision.notes && <span className="rd-na"> — {v.decision.notes}</span>}
           {v.decision.newTargetReleaseDate && <span className="rd-na"> · new target {v.decision.newTargetReleaseDate}</span>}</p>
         {v.conditions.length > 0 && <DataTable caption="Go conditions" columns={condColumns} rows={v.conditions} rowKey={c => c.id} />}
@@ -127,7 +127,7 @@ export function GoNoGo({ trainId, trainVersion, canDecide, refreshKey, onChanged
                 <span key={i} className="rd-fields">
                   <label>Condition <input value={c.text} onChange={e => setCond(i, { text: e.target.value })} /></label>
                   <label>Owner <select value={c.ownerId || owners[0]?.id || ''} onChange={e => setCond(i, { ownerId: e.target.value })}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
-                  <label>Expires <input type="datetime-local" value={c.expires} onChange={e => setCond(i, { expires: e.target.value })} /></label>
+                  <label>Expires <input type="datetime-local" value={c.expires} aria-describedby={`zn-gov-${i}`} onChange={e => setCond(i, { expires: e.target.value })} /></label><InputZoneNote id={`zn-gov-${i}`} value={c.expires} />
                   <Button onClick={() => setDraft({ ...draft, conditions: draft.conditions.filter((_, j) => j !== i) })}>Remove</Button>
                 </span>))}
               <span><Button onClick={() => setDraft({ ...draft, conditions: [...draft.conditions, { text: '', ownerId: '', expires: utcToZonedInput(new Date(now + 24 * 3600e3).toISOString()) }] })}>Add condition</Button></span>

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Button, Panel } from './ui'
+import { Button, Panel, Time } from './ui'
 import { addLink, getConnectors, getLinks, getProducts, getSteps, getTrain, removeLink, type ExternalLinkRow, type LinkEntityType } from './api'
 import { isConflict } from './Conflict'
 import { brokenReason, externalUrl, freshness, keyHint } from './externalLinks'
 import { errMsg } from './format'
-import { fmtDayTime, zoneAbbr } from './time'
 
 /** A thing on this train a link can attach to. Blockers and known issues are linked from their own panels; here they only get a label. */
 interface Target { type: LinkEntityType; id: string; label: string }
@@ -94,7 +93,7 @@ export function Links({ trainId, canEdit, refreshKey, onChanged }: { trainId: st
       {links && links.length === 0 && <p className="muted">No links. Link the train, a product, a gate or a runbook step to its Jira issue or ServiceNow change so Sync health can watch it.</p>}
       {links && links.length > 0 && (
         <div className="scroll-x"><table className="grid" aria-label="External links">
-          <thead><tr><th>System</th><th>Key</th><th>Attached to</th><th>Sync</th><th>Reported</th><th>Last checked ({zoneAbbr()})</th>{canEdit && <th><span className="sr-only">Actions</span></th>}</tr></thead>
+          <thead><tr><th>System</th><th>Key</th><th>Attached to</th><th>Sync</th><th>Reported</th><th>Last checked (UTC)</th>{canEdit && <th><span className="sr-only">Actions</span></th>}</tr></thead>
           <tbody>{links.map(l => {
             const f = freshness(l)
             const href = externalUrl(l.sourceSystem, bases[l.sourceSystem], l.externalKey)
@@ -110,7 +109,7 @@ export function Links({ trainId, canEdit, refreshKey, onChanged }: { trainId: st
                   {l.warnings.map(w => <div key={w.rule} className="muted small">{w.message}</div>)}
                 </td>
                 <td>{l.lastSyncedStatus ?? <span className="muted">—</span>}</td>
-                <td className="mono">{l.lastSyncedAt ? fmtDayTime(l.lastSyncedAt) : <span className="muted">never</span>}</td>
+                <td className="mono">{l.lastSyncedAt ? <Time at={l.lastSyncedAt} date /> : <span className="muted">never</span>}</td>
                 {canEdit && (
                   <td className="wrap">
                     {confirm === l.id ? (

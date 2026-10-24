@@ -1,10 +1,10 @@
 import type { ContingencyView, WindowCollision } from './api'
 import { dur } from './format'
-import { fmtDayTime, fmtHM, zoneAbbr } from './time'
+import { rangeText, timeText } from './utcTime'
 
 /** What a collision shares, in words: "CI ledger-db, Payments API". */
 export const sharedText = (c: WindowCollision) => [...c.sharedCis.map(x => `CI ${x}`), ...c.sharedProducts].join(', ')
-export const collisionText = (c: WindowCollision) => `overlaps ${c.otherTitle} ${fmtHM(c.otherStartsAt)}–${fmtHM(c.otherEndsAt)} ${zoneAbbr(c.otherStartsAt)} · ${sharedText(c)}`
+export const collisionText = (c: WindowCollision) => `overlaps ${c.otherTitle} ${rangeText(c.otherStartsAt, c.otherEndsAt)} · ${sharedText(c)}`
 
 /**
  * REOS-88: the Runbook's contingency line. Spare time before the rollback deadline over the planned execution time, against the minimum
@@ -12,7 +12,7 @@ export const collisionText = (c: WindowCollision) => `overlaps ${c.otherTitle} $
  */
 export function ContingencyLine({ c }: { c: ContingencyView }) {
   if (c.state === 'unknown') return <p className="muted contingency">Contingency not computed: {c.reason}.</p>
-  const details = <span className="muted"> · planned <span className="mono">{dur(c.plannedMin!)}</span> · rollback <span className="mono">{dur(c.rollbackMin)}</span> · rollback deadline <span className="mono">{fmtDayTime(c.rollbackDeadline!)} {zoneAbbr(c.rollbackDeadline!)}</span> · minimum {c.minPercent}%</span>
+  const details = <span className="muted"> · planned <span className="mono">{dur(c.plannedMin!)}</span> · rollback <span className="mono">{dur(c.rollbackMin)}</span> · rollback deadline <span className="mono">{timeText(c.rollbackDeadline!, { date: true })}</span> · minimum {c.minPercent}%</span>
   if (c.state === 'over') return <p className="contingency"><span className="bad">✗ The plan ends <span className="mono">{dur(-c.spareMin!)}</span> after the rollback deadline</span>{details}</p>
   return (
     <p className="contingency">

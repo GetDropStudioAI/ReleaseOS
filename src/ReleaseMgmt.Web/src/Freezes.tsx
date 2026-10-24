@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, ErrorState, Panel } from './ui'
+import { Button, ErrorState, Panel, InputZoneNote, Time, TimeRange } from './ui'
 import {
   approveWaiver, waiveGate, createFreeze, getFreezes, getMe, getOwners, getWaivers, grantOverride, requestOverride, requestWaiver,
   type ApiError, type FreezeOverride, type FreezeRow, type Owner, type Waiver,
 } from './api'
 import { errMsg } from './format'
-import { fmtDayTime, serverNow, utcToZonedInput, zonedInputToUtc } from './time'
+import { serverNow, utcToZonedInput, zonedInputToUtc } from './time'
 import { Conflict, isConflict } from './Conflict'
 import { useDraft } from './session'
 import { useAction } from './useAction'
@@ -81,7 +81,7 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
     if (!r.coversTrain) return <span className="muted">Does not cover this train</span>
     const mine = r.overrides.filter(o => o.releaseTrainId === trainId)
     const valid = mine.filter(live).sort((a, b) => b.expiresAt.localeCompare(a.expiresAt))[0]
-    if (valid) return <span className="ok">✓ Override until <span className="mono">{fmtDayTime(valid.expiresAt)}</span></span>
+    if (valid) return <span className="ok">✓ Override until <span className="mono"><Time at={valid.expiresAt} date /></span></span>
     return <span className={r.active ? 'bad' : 'warn'}>▲ {r.active ? 'Blocks Deploy steps: no valid override' : 'Will block Deploy steps: no override yet'}</span>
   }
   const reasonShort = form ? form.reason.trim().length < MIN_REASON : false
@@ -95,8 +95,8 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
           <label>Name <input className="line wide" value={creating.name} onChange={e => setCreating({ ...creating, name: e.target.value })} /></label>
           <span><RadioChoice label="Kind" value={creating.kind} options={[{ key: 'Freeze', word: 'Freeze' }, { key: 'Chill', word: 'Chill' }]} onChange={k => setCreating({ ...creating, kind: k })} />
             <span className="muted">A Freeze blocks Live Deploy steps; a Chill only warns.</span></span>
-          <label>Starts <input className="line" type="datetime-local" value={creating.starts} onChange={e => setCreating({ ...creating, starts: e.target.value })} /></label>
-          <label>Ends <input className="line" type="datetime-local" value={creating.ends} onChange={e => setCreating({ ...creating, ends: e.target.value })} /></label>
+          <label>Starts <input className="line" type="datetime-local" value={creating.starts} aria-describedby={"zn-fz-1"} onChange={e => setCreating({ ...creating, starts: e.target.value })} /></label><InputZoneNote id="zn-fz-1" value={creating.starts} />
+          <label>Ends <input className="line" type="datetime-local" value={creating.ends} aria-describedby={"zn-fz-2"} onChange={e => setCreating({ ...creating, ends: e.target.value })} /></label><InputZoneNote id="zn-fz-2" value={creating.ends} />
           <label>Products (pattern, blank = all) <input className="line" value={creating.pattern} onChange={e => setCreating({ ...creating, pattern: e.target.value })} placeholder="Billing*" /></label>
           <span><button type="button" className="text" disabled={createMissing || !!pending} aria-describedby={createMissing ? createHint : undefined}
             onClick={() => run('Creating…', () => createFreeze({ name: creating.name, kind: creating.kind, startsAt: zonedInputToUtc(creating.starts), endsAt: zonedInputToUtc(creating.ends), productPattern: creating.pattern || null }), 'Freeze window created.', newBtn.current)}>{pending === 'Creating…' ? pending : 'Create window'}</button></span>
@@ -115,7 +115,7 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
                 <RowGroup key={r.window.id}>
                   <tr className={open === r.window.id ? 'selected' : undefined}>
                     <td className={`${s.cls} nowrap`}>{s.g} {s.w}</td>
-                    <td>{r.window.name} <span className="muted">· {r.window.kind}</span><br /><span className="mono muted">{fmtDayTime(r.window.startsAt)} to {fmtDayTime(r.window.endsAt)}</span></td>
+                    <td>{r.window.name} <span className="muted">· {r.window.kind}</span><br /><span className="mono muted"><TimeRange from={r.window.startsAt} to={r.window.endsAt} /></span></td>
                     <td className="muted">{r.window.productPattern ? <>Products matching <span className="mono">{r.window.productPattern}</span></> : 'All products'}</td>
                     <td>{trainCell(r)}</td>
                     <td className="nowrap">
@@ -134,7 +134,7 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
                           <tr key={o.id}>
                             <td className={live(o) ? 'ok nowrap' : 'muted nowrap'}>{live(o) ? '✓ valid' : '○ expired'}</td>
                             <td className="wrap">{o.reason}</td><td>{name(o.requestedByUserId)}</td><td>{name(o.approvedByUserId)}</td>
-                            <td className="mono">{fmtDayTime(o.approvedAt)}</td><td className="mono">{fmtDayTime(o.expiresAt)}</td>
+                            <td className="mono"><Time at={o.approvedAt} date /></td><td className="mono"><Time at={o.expiresAt} date /></td>
                           </tr>))}</tbody>
                       </table>
                       <p className="muted">Overrides never change. A renewal adds a new row.</p>
@@ -147,7 +147,7 @@ export function FreezesPanel({ trainId, refreshKey, onChanged }: { trainId: stri
                           {owners.filter(o => o.id !== who.id).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
                           <span className="muted"> An RTE or Release Manager other than you.</span></label>}
                         <label>Reason <input className="line wide" value={form.reason} aria-describedby={reasonShort ? reasonHint : undefined} onChange={e => setForm({ ...form, reason: e.target.value })} /></label>
-                        <label>Expires <input className="line" type="datetime-local" value={form.expires} onChange={e => setForm({ ...form, expires: e.target.value })} /></label>
+                        <label>Expires <input className="line" type="datetime-local" value={form.expires} aria-describedby={"zn-fz-3"} onChange={e => setForm({ ...form, expires: e.target.value })} /></label><InputZoneNote id="zn-fz-3" value={form.expires} />
                         <span>
                           <button type="button" className="text" disabled={reasonShort || !form.expires || (form.kind === 'grant' && !form.requester) || !!pending} aria-describedby={reasonShort ? reasonHint : undefined}
                             onClick={submit}>{pending ?? (form.kind === 'grant' ? 'Grant override' : 'Send request')}</button>{' '}
@@ -198,8 +198,8 @@ export function WaiversPanel({ gateId, gateStatus, gateVersion, refreshKey, onCh
       {list.length === 0 && <p className="muted">No waiver requested.</p>}
       {list.map(w => (
         <div key={w.id}>
-          <p><span className={w.approvedByUserId ? 'ok' : 'warn'}>{w.approvedByUserId ? '✓ Approved' : '◐ Awaiting a second Governance Officer'}</span> <span className="muted">· requested by {name(w.requestedByUserId)} <span className="mono">{fmtDayTime(w.requestedAt)}</span>
-            {w.approvedByUserId && w.approvedAt && <> · approved by {name(w.approvedByUserId)} <span className="mono">{fmtDayTime(w.approvedAt)}</span></>}</span></p>
+          <p><span className={w.approvedByUserId ? 'ok' : 'warn'}>{w.approvedByUserId ? '✓ Approved' : '◐ Awaiting a second Governance Officer'}</span> <span className="muted">· requested by {name(w.requestedByUserId)} <span className="mono"><Time at={w.requestedAt} date /></span>
+            {w.approvedByUserId && w.approvedAt && <> · approved by {name(w.approvedByUserId)} <span className="mono"><Time at={w.approvedAt} date /></span></>}</span></p>
           <p>{w.reason}</p>
           {!w.approvedByUserId && isGo && (w.requestedByUserId === who.id
             ? <p className="muted">You requested this waiver; another Governance Officer must approve it.</p>

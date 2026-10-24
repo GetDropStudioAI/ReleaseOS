@@ -5,12 +5,13 @@ import {
   type KnownIssue, type KnownIssuesData, type Me, type Owner, type Pir, type PirViewData, type RollbackAttestation, type TrainDetail,
 } from './api'
 import { day, errMsg, plural } from './format'
-import { fmtDayTime, serverNow } from './time'
+import { serverNow } from './time'
+import { timeText } from './utcTime'
 import { useAction } from './useAction'
 import { ConfirmInline } from './ConfirmInline'
 import { announce } from './announce'
 import { useDraft } from './session'
-import { Button, Panel, StatusChip } from './ui'
+import { Button, Panel, StatusChip, Time } from './ui'
 
 // Status is words + glyphs + coloured text (CLAUDE.md rule 9).
 const PIR_STATE: Record<Pir['status'], { g: string; cls: string; word: string }> = {
@@ -91,7 +92,7 @@ function RollbackSection({ train, refreshKey, onChanged, name, canPlan }: Sectio
       meta={canPlan && !closed && <Button ref={toggle} aria-expanded={!!draft} aria-controls={draft ? formId : undefined} disabled={!!pending}
           onClick={() => { if (draft) setDraft(undefined); else { setDraft({ runId: '', note: '' }); later(() => first.current?.focus()) } }}>{draft ? 'Cancel' : a.rehearsedAt ? 'Attest again' : 'Attest rehearsal'}</Button>}>
       {a.rehearsedAt
-        ? <p><span className="ok">✓ Rehearsed</span> · <span className="mono">{fmtDayTime(a.rehearsedAt)}</span> · attested by {a.rehearsedByName ?? name(a.rehearsedByUserId)}</p>
+        ? <p><span className="ok">✓ Rehearsed</span> · <span className="mono"><Time at={a.rehearsedAt} date /></span> · attested by {a.rehearsedByName ?? name(a.rehearsedByUserId)}</p>
         : a.required
           ? <p><span className="bad">✗ Not attested</span> <span className="muted">· a {train.riskTier} train needs a rehearsed rollback before Executing</span></p>
           : <p><span className="muted">○ Not attested · optional at {train.riskTier} risk</span></p>}
@@ -99,7 +100,7 @@ function RollbackSection({ train, refreshKey, onChanged, name, canPlan }: Sectio
         <div className="inline-form stack" id={formId}>
           <label>Evidence run <select ref={first} className="line" value={draft.runId} onChange={e => setDraft({ ...draft, runId: e.target.value })}>
             <option value="">None linked</option>
-            {a.rehearsalRuns.map(r => <option key={r.id} value={r.id}>{fmtDayTime(r.startedAt)} · {r.outcome ?? 'ended'}</option>)}</select></label>
+            {a.rehearsalRuns.map(r => <option key={r.id} value={r.id}>{timeText(r.startedAt, { date: true })} · {r.outcome ?? 'ended'}</option>)}</select></label>
           <label>What was rehearsed <input className="line wide" value={draft.note} onChange={e => setDraft({ ...draft, note: e.target.value })} /></label>
           <span><button type="button" className="text" disabled={!!pending} onClick={() => run('Recording…', () => attestRollback(train.id, draft.runId || null, draft.note || null, train.version),
             () => { setDraft(undefined); later(() => toggle.current?.focus()) }, 'Rollback rehearsal attested.')}>{pending ?? 'Record attestation'}</button>{' '}
@@ -151,7 +152,7 @@ function PirSection({ train, refreshKey, onChanged, name, owners, canCloseout, m
               question={openActions > 0 ? `Close the review with ${plural(openActions, 'action')} still open?` : 'Close the review? It cannot be reopened.'}
               onConfirm={() => run('Closing…', () => pirAction(train.id, 'close', pir.version), undefined, 'PIR closed.')} />}
           </>)}>
-      <p><span className={s.cls}>{s.g} {s.word}</span> <span className="muted">· {pirReason(pir.requiredReason)}{pir.heldAt ? ` · held ${fmtDayTime(pir.heldAt)}` : ''}</span>
+      <p><span className={s.cls}>{s.g} {s.word}</span> <span className="muted">· {pirReason(pir.requiredReason)}{pir.heldAt ? ` · held ${timeText(pir.heldAt, { date: true })}` : ''}</span>
         {d.dueOn && !closed && pir.status !== 'Held' && (d.overdue
           ? <span className="bad"> · <span aria-hidden="true">▲ </span>overdue, was due {day(d.dueOn)}</span>
           : <span className="muted"> · due <span className="mono">{day(d.dueOn)}</span></span>)}
@@ -219,7 +220,7 @@ function IssuesSection({ train, refreshKey, onChanged, canCloseout, canAccept, c
   return (
     <Panel label="Known issues and hypercare" title="Known issues · hypercare"
       meta={train.status === 'Complete' && (ended
-          ? <StatusChip tone="success">{`Hypercare ended ${fmtDayTime(d.hypercareExitAt!)}`}</StatusChip>
+          ? <StatusChip tone="success">{`Hypercare ended ${timeText(d.hypercareExitAt!, { date: true })}`}</StatusChip>
           : canPlan && <ConfirmInline label="Exit hypercare" destructive={false} disabled={!!pending} confirmLabel="End hypercare" pendingLabel="Ending…"
               question={openCount > 0 ? `End hypercare with ${plural(openCount, 'issue')} still open?` : 'End hypercare? Known issues can no longer be logged.'}
               onConfirm={() => run('Ending…', () => exitHypercare(train.id, train.version), undefined, 'Hypercare ended.')} />)}>

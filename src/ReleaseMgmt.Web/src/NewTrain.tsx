@@ -3,7 +3,7 @@ import { cloneTrain, createTrain, getTemplates, type CreatedTrain, type StreamRo
 import { errMsg, plural } from './format'
 import { serverNow, utcToZonedInput, zonedInputToUtc } from './time'
 import { useDraft } from './session'
-import { SidePanel } from './ui'
+import { SidePanel, InputZoneNote } from './ui'
 
 /** How the new train starts (REOS-80). Underlined text choices, never a segmented control (UI.md). */
 export type NewTrainMode = 'blank' | 'template' | 'copy'
@@ -131,8 +131,8 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
       {d.mode === 'template' && template && template.stepCount > 0 && <>
         <p className="muted">Deployment window, optional: the template&apos;s {plural(template.stepCount, 'runbook step')} are planned from its start. Without a window the steps are left out.</p>
         <p className="inline-form">
-          <label>Starts <input className="line" type="datetime-local" value={d.start} onChange={e => set({ start: e.target.value })} /></label>
-          <label>Ends <input className="line" type="datetime-local" value={d.end} onChange={e => set({ end: e.target.value })} /></label>
+          <label>Starts <input className="line" type="datetime-local" value={d.start} aria-describedby={"zn-nt-1"} onChange={e => set({ start: e.target.value })} /></label><InputZoneNote id="zn-nt-1" value={d.start} />
+          <label>Ends <input className="line" type="datetime-local" value={d.end} aria-describedby={"zn-nt-2"} onChange={e => set({ end: e.target.value })} /></label><InputZoneNote id="zn-nt-2" value={d.end} />
         </p>
       </>}
 

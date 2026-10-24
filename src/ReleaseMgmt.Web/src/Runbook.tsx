@@ -1,21 +1,20 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { Button, EmptyState, ErrorState, LoadingState, Panel, PropertyList, StatusChip } from './ui'
+import { Button, EmptyState, ErrorState, LoadingState, Panel, PropertyList, StatusChip, InputZoneNote, TimeRange } from './ui'
 import { InspectorFrame } from './InspectorFrame'
 import { createStep, getOwners, getSteps, patchStep, SECTIONS, setStepDependencies, type ContingencyView, type Owner, type StepRow } from './api'
 import { ContingencyLine } from './Advisories'
 import { errMsg } from './format'
-import { fmtDay, fmtHM, utcToZonedInput, zonedInputToUtc } from './time'
+import { utcToZonedInput, zonedInputToUtc } from './time'
 import { Conflict, isConflict } from './Conflict'
 import { useDraft } from './session'
 import type { Selection } from './Planning'
 import { useAction } from './useAction'
 import { announce } from './announce'
 
-const hm = fmtHM
 const localInput = utcToZonedInput
 const toUtc = zonedInputToUtc
 type Field = 'title' | 'owner' | 'start' | 'minutes'
-const planned = (s: StepRow) => `${fmtDay(s.plannedStartAt)} ${hm(s.plannedStartAt)}–${hm(s.plannedEndAt)} · ${s.plannedDurationMin} min`
+const planned = (s: StepRow) => <><TimeRange from={s.plannedStartAt} to={s.plannedEndAt} /> · {s.plannedDurationMin} min</>
 
 // ---- The runbook: steps grouped by section, in planned order ---------------------------------------------------------------------------
 export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onChanged, contingency = null }: { trainId: string; canPlan: boolean; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void; contingency?: ContingencyView | null }) {
@@ -65,7 +64,7 @@ export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onC
           <label>Step <input ref={titleRef} className="line wide" value={d.title} onChange={e => setDraft({ ...d, ownerId, title: e.target.value })} placeholder="What happens" {...field('title')} /></label>{' '}
           <label>Section <select className="line" value={d.section} onChange={e => setDraft({ ...d, ownerId, section: e.target.value })}>{SECTIONS.map(x => <option key={x}>{x}</option>)}</select></label>{' '}
           <label>Owner <select className="line" value={ownerId} onChange={e => setDraft({ ...d, ownerId: e.target.value })} {...field('owner')}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>{' '}
-          <label>Starts <input className="line" type="datetime-local" value={d.start} onChange={e => setDraft({ ...d, ownerId, start: e.target.value })} {...field('start')} /></label>{' '}
+          <label>Starts <input className="line" type="datetime-local" value={d.start} aria-describedby={"zn-rb-1"} onChange={e => setDraft({ ...d, ownerId, start: e.target.value })} {...field('start')} /></label><InputZoneNote id="zn-rb-1" value={d.start} />{' '}
           <label>Minutes <input className="line narrow" inputMode="numeric" value={d.minutes} onChange={e => setDraft({ ...d, ownerId, minutes: e.target.value })} {...field('minutes')} /></label>{' '}
           <button type="submit" className="text" disabled={!!pending}>{pending === 'add' ? 'Adding…' : 'Add'}</button> <button type="button" className="text" onClick={cancel}>Cancel</button>
         </p></form>)}
@@ -141,7 +140,7 @@ export function StepInspector({ stepId, trainId, canPlan, refreshKey, onChanged,
         <p className="inline-form stack">
           <label>Title <input ref={titleRef} className="line block" value={d.title} onChange={e => setDraft({ ...d, title: e.target.value })} /></label>
           <label>Section <select className="line" value={d.section} onChange={e => setDraft({ ...d, section: e.target.value })}>{SECTIONS.map(x => <option key={x}>{x}</option>)}</select></label>
-          <label>Starts <input className="line" type="datetime-local" value={d.start} onChange={e => setDraft({ ...d, start: e.target.value })} /></label>
+          <label>Starts <input className="line" type="datetime-local" value={d.start} aria-describedby={"zn-rb-2"} onChange={e => setDraft({ ...d, start: e.target.value })} /></label><InputZoneNote id="zn-rb-2" value={d.start} />
           <label>Minutes <input className="line narrow" inputMode="numeric" value={d.minutes} onChange={e => setDraft({ ...d, minutes: e.target.value })} /></label>
         </p>)}
       {canPlan && <p className="actions-col">{!editing

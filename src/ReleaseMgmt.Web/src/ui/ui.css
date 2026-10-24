@@ -204,3 +204,7 @@
 .os-side-body > * { margin-top: 0; margin-bottom: 0; }
 .ins-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-sm); }
 .ins-blockers { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--gap-xs); }
+
+/* Times (D44, REOS-136): UTC first and labelled; the person's own time beside it in the secondary text colour. */
+.os-time-local { color: var(--color-text-secondary); }
+.os-zone-note { display: block; color: var(--color-text-secondary); font-size: 0.85em; font-weight: 400; }

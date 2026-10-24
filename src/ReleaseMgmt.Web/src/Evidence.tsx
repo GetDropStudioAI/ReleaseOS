@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, get, getMe, type Me } from './api'
 import { errMsg } from './format'
-import { fmtDayTime } from './time'
 import { announce } from './announce'
 import { ConfirmInline } from './ConfirmInline'
+import { Time } from './ui'
 
 export interface EvidenceRow {
   id: string; entityType: string; entityId: string; fileName: string; contentType: string; sizeBytes: number; sha256: string
@@ -85,7 +85,7 @@ export function Evidence({ trainId, entityType, entityId, refreshKey = 0 }: { tr
                   <td className="mono n nowrap">{fmtSize(a.sizeBytes)}</td>
                   <td className="mono nowrap" title={a.sha256}>{a.sha256.slice(0, 12)}…</td>
                   <td className={a.isLocked ? 'ok nowrap' : 'muted nowrap'}>{a.isLocked ? '✓ Locked' : '○ Open'}</td>
-                  <td className="nowrap"><span className="muted">{a.uploadedByName ?? '—'}</span> <span className="mono">{fmtDayTime(a.uploadedAt)}</span></td>
+                  <td className="nowrap"><span className="muted">{a.uploadedByName ?? '—'}</span> <span className="mono"><Time at={a.uploadedAt} date /></span></td>
                   <td className="nowrap">
                     <a className="text" href={`/api/v1/attachments/${a.id}`} download={a.fileName} aria-label={`Download ${a.fileName}`}>Download</a>
                     {canDelete(a) && <> <ConfirmInline label="Delete" triggerLabel={`Delete ${a.fileName}`} question={`Delete ${a.fileName}?`} confirmLabel="Confirm delete" pendingLabel="Deleting…" onConfirm={() => del(a)} /></>}

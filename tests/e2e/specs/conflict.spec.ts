@@ -57,6 +57,7 @@ test('a window edit that loses the race keeps the draft and offers overwrite or 
   const alert = b.locator('.conflict')
   await expect(alert).toContainText('changed this window before your change was saved')
   await expect(alert).toContainText('The window is now')
+  await expect(alert).toContainText(/\d\d:\d\d UTC/)                         // D44: the times are UTC, labelled
   await expect(b.locator('label:has-text("Starts") input')).toHaveValue('2026-12-01T20:00')      // Bob's draft is intact
   await expect(b.locator('label:has-text("Ends") input')).toHaveValue('2026-12-01T23:00')
 

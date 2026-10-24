@@ -194,7 +194,7 @@ None of these is in Figma, and none has a story except where noted. Two decision
 | 18 grids as CSV and XLSX: the 9 import kinds, plus blockers, known issues, freeze windows, attachments manifest, my notifications, sync alerts, templates, audit log, milestones | `GridExportService.cs`, `GridFiles.cs` | REOS-107 | None | `Partly`: data columns only; there is no workspace column, and round-trip re-import must keep working |
 | CSV import, 9 kinds, preview then commit | `CsvImportService.cs` | REOS-107, REOS-109 (service key) | None | `Partly` |
 | Analytics per chart: CSV (client), XLSX (server), SVG (the drawn chart, ECharts palette) | `analyticsExport.ts`, `AnalyticsExportEndpoints.cs` | — | None | `Not covered`: the SVG colours must follow the new tokens |
-| Analytics workbook with one sheet per metric and a parameters sheet (PROJECT_SCOPE section 9) | not built: one metric per XLSX | — | None | `Not covered` |
+| Analytics workbook with one sheet per metric and a parameters sheet (PROJECT_SCOPE section 9) | `AnalyticsExportEndpoints.cs` `FullWorkbook`, button on the Analytics screen | REOS-141 | None | `Built` (REOS-141, Q-141a) |
 | Audit log CSV | `/audit.csv` | REOS-101 | "Export audit log" | `Covered` |
 
 ### 6.3 Calendar feeds (ICS, `IcsFeedService.cs`)

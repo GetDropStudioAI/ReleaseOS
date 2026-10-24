@@ -239,7 +239,7 @@ Rules (all enforced in code): UTF-8 (BOM ok), RFC 4180, header required, case-in
 | Runbook run sheet | PDF, CSV | before: plan, owners, deps, rollback; after: actuals, variance, skips with notes |
 | Audit evidence pack | PDF + ZIP | change record; certifications with timestamps + SoD check; transition log; waivers + freeze overrides with reasons; Go/No-Go + conditions; attachment manifest with SHA-256; audit-log extract; metric snapshot. ZIP adds files + `manifest.csv` (columns `workspace, release_key, owner, team, environments` follow `zip_path`) |
 | Post-release scorecard | PDF | planned vs actual, on-time, churn, variance, incidents/rollback, PIR |
-| Analytics workbook | XLSX | one sheet per metric, parameters sheet first. Per-metric download today: an `About` sheet with the workspace; the per-release metrics (M2, M6, M7, M8) add `release_key, owner, team, environments` after the metric columns |
+| Analytics workbook | XLSX | `GET /analytics/xlsx`: a `Parameters` sheet first (workspace, period, filters, generated-at in UTC with the display zone beside it, data as-of, a table of the sheets), then `M1`..`M15`, each equal to its per-metric download (REOS-141, Q-141a). Per-metric download: an `About` sheet with the workspace; the per-release metrics (M2, M6, M7, M8) add `release_key, owner, team, environments` after the metric columns |
 | Audit log | CSV | filtered events with before/after JSON |
 | Calendar | ICS | gate due dates, milestones, windows, freezes; stable UIDs; per-user revocable token; titles and times only |
 

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { aggregateSteps, chartTable, columnHeader, findingM2, findingM3, findingM4, findingM5, findingM6, findingM7, findingM8, findingM9, findingM10, findingM11, findingM13, findingM14, findingM15,
   fmt, headlines, monthLabel, normalize, NO_DATA, type Metric, type MetricResponse } from '../src/analyticsFindings.ts'
-import { csvCell, exportName, presetRange, svgWithTitle, toCsv } from '../src/analyticsExport.ts'
+import { csvCell, exportName, presetRange, svgWithTitle, toCsv, workbookName, workbookUrl } from '../src/analyticsExport.ts'
 
 // The oracle fixture (real data shapes): columns and rows per metric, SQL column names.
 const fx = JSON.parse(readFileSync(new URL('../../../tests/reference/fixtures/expected_metrics.json', import.meta.url), 'utf8')) as { metrics: Record<string, { key: string; columns: string[]; rows: unknown[][] }> }
@@ -133,4 +133,10 @@ test('svgWithTitle puts the finding first and escapes it; exportName is filesyst
 test('presetRange ends on the as-of UTC day and counts back whole days', () => {
   assert.deepEqual(presetRange('2026-10-24T23:30:00Z', 30), { from: '2026-09-24', to: '2026-10-24' })
   assert.deepEqual(presetRange('2026-03-01T00:00:00Z', 90), { from: '2025-12-01', to: '2026-03-01' })
+})
+
+test('the workbook name and request carry the window and the as-of of the figures on screen', () => {
+  assert.equal(workbookName('2026-04-01', '2026-09-28'), 'analytics-workbook-2026-04-01_2026-09-28.xlsx')
+  assert.equal(workbookName('2026-04-01/../x', '2026-09-28'), 'analytics-workbook-2026-04-01x_2026-09-28.xlsx')
+  assert.equal(workbookUrl('2026-04-01', '2026-09-28', '2026-09-28T12:00:00Z'), '/api/v1/analytics/xlsx?from=2026-04-01&to=2026-09-28&now=2026-09-28T12%3A00%3A00Z')
 })

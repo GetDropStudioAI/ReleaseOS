@@ -5,7 +5,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
-    /// <summary>Applies all 130 triggers from db/schema.sql verbatim and in file order (same-event triggers fire newest-first,
+    /// <summary>Applies all 133 triggers from db/schema.sql verbatim and in file order (same-event triggers fire newest-first,
     /// so order decides which rule's error a caller sees). A migration that rebuilds a table must re-apply that table's triggers;
     /// SchemaContractTests fails if any trigger name is missing.</summary>
     public partial class Triggers : Migration

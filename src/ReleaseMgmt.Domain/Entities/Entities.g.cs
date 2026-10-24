@@ -155,6 +155,7 @@ public class ReleaseTrains
     public string? OnCallUserId { get; set; }
     public string? OnCallTeamId { get; set; }
     public string? ReleaseTypeId { get; set; }
+    public int? BetaNumber { get; set; }
 }
 
 public class ChangeRecords
@@ -678,6 +679,7 @@ public class ReleaseTypes
     public DateTime? ArchivedAt { get; set; }
     public int Version { get; set; } = 1;
     public string WorkspaceId { get; set; } = "default";
+    public bool IsBeta { get; set; } = false;
 }
 
 public class Environments

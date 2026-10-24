@@ -33,9 +33,10 @@ public class ReleaseModelExchangeTests
         return rows.Skip(1).First(x => x[column] == title).Select((v, i) => header[i] + "=" + v).ToArray();
     }
 
-    private static async Task<(ApiFactory F, HttpClient Rte)> World()
+    /// <summary>REOS-116: <paramref name="types"/> starts the host with the release types seeded (a new release then names one); without, the workspace has none and asks for none.</summary>
+    private static async Task<(ApiFactory F, HttpClient Rte)> World(bool types = false)
     {
-        var f = new ApiFactory();
+        var f = types ? new ApiFactory(settings: new Dictionary<string, string> { ["ReleaseTypes:SeedAtStart"] = "true" }) : new ApiFactory();
         var rte = await As(f, Roles.RTE, "rte@x.com");
         await As(f, Roles.Viewer, "dana@x.com");
         Sql(f, @"INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Operations'),('tm2','sre','SRE')");
@@ -48,10 +49,10 @@ public class ReleaseModelExchangeTests
     [Fact]
     public async Task Trains_import_the_release_fields_export_them_with_the_key_and_re_import_unchanged()
     {
-        var (f, rte) = await World(); using var _ = f;
+        var (f, rte) = await World(types: true); using var _ = f;
         var header = new[] { "Title", "TargetReleaseDate", "RiskTier", "Owner", "Team", "Branch", "OnCall", "ReleaseType", "Environments" };
         var p = await Json(await Preview(rte, "Trains", Csv(header, ["R27.01", Date(), "Low", "dana@x.com", "ops", "release/27.01", "@sre", "cert", "production, Staging"])));
-        Assert.Equal(0, p.GetProperty("counts").GetProperty("errors").GetInt32());
+        Assert.True(p.GetProperty("counts").GetProperty("errors").GetInt32() == 0, p.GetRawText());
         await Commit(rte, p);
 
         var id = Scalar(f, "SELECT Id FROM ReleaseTrains WHERE Title='R27.01'");

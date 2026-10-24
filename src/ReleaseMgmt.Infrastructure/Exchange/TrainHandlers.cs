@@ -35,7 +35,7 @@ internal abstract class TrainScopedHandler : KindHandler
     protected static string TrainRef(ReleaseTrains t) => $"{t.Id}@{t.Version}";
 }
 
-internal sealed record TrainPayload(string? TemplateId, string? OwnerUserId = null, string? OwnerTeamId = null, string? OnCallUserId = null, string? OnCallTeamId = null, string? ReleaseTypeId = null, List<string>? EnvironmentIds = null);
+internal sealed record TrainPayload(string? TemplateId, string? OwnerUserId = null, string? OwnerTeamId = null, string? OnCallUserId = null, string? OnCallTeamId = null, string? ReleaseTypeId = null, List<string>? EnvironmentIds = null, int? BetaNumber = null);
 
 internal sealed class TrainsHandler : KindHandler
 {
@@ -65,6 +65,7 @@ internal sealed class TrainsHandler : KindHandler
                     ["Team"] = t.OwnerTeamId is not null && teams.TryGetValue(t.OwnerTeamId, out var ot) ? ot.Handle : "",
                     ["Branch"] = Norm(t.ReleaseBranch), ["OnCall"] = OwnerCell(t.OnCallUserId, t.OnCallTeamId, users, teams),
                     ["ReleaseType"] = t.ReleaseTypeId is not null && types.TryGetValue(t.ReleaseTypeId, out var tn2) ? tn2 : "",
+                    ["BetaNumber"] = t.BetaNumber?.ToString() ?? "",
                     ["Environments"] = string.Join(", ", envNames[t.Id]),
                 },
                 [new("#Id", t.Id), new("#Key", t.ReleaseKey ?? ""), new("#Status", t.CurrentStatus), new("#Version", t.Version.ToString())]))];
@@ -123,6 +124,7 @@ internal sealed class TrainsHandler : KindHandler
             if (tp is null) { env.Err(row.Row, "ReleaseType", $"No release type is named {PlanEnv.Quote(typeName)}.{PlanEnv.Did(env.Suggest(typeName, types.Select(x => x.Name)))}"); ok = false; }
             else { typeId = tp.Id; r.After["ReleaseType"] = tp.Name; }
         }
+        int? betaNumber = row.Cells.TryGetValue("BetaNumber", out var bn) && int.TryParse(bn, out var bnv) ? bnv : null;
         if (row.Cells.TryGetValue("Environments", out var envCell) && envCell.Length > 0)
         {
             var all = (List<Environments>)env.Bag["environments"];
@@ -136,13 +138,29 @@ internal sealed class TrainsHandler : KindHandler
             if (ok) { picked = [.. picked.OrderBy(x => x.SortOrder).ThenBy(x => x.Name, StringComparer.Ordinal)]; envIds = [.. picked.Select(x => x.Id)]; r.After["Environments"] = string.Join(", ", picked.Select(x => x.Name)); }
         }
         if (!ok) return null;
-        r.Payload = new TrainPayload(templateId, ownerUser, ownerTeam, onCallUser, onCallTeam, typeId, envIds);
+        r.Payload = new TrainPayload(templateId, ownerUser, ownerTeam, onCallUser, onCallTeam, typeId, envIds, betaNumber);
         r.Refs = templateId ?? "";
         return r;
     }
 
     protected override void Rules(PlanEnv env, ParsedRow row, Resolved r, Planned p)
     {
+        // REOS-116 (D46, D48): a release has a type once the workspace has types, and a Beta type's release has its number (1 to 3); no other release has one.
+        var types = (List<ReleaseTypes>)env.Bag["types"];
+        if (types.Count > 0)
+        {
+            var typeCell = row.Cells.TryGetValue("ReleaseType", out var tc) ? tc : null;
+            string? effective = typeCell ?? (p.Op == RowOp.Updated ? p.Existing!.Cells.GetValueOrDefault("ReleaseType", "") : "");
+            if (p.Op == RowOp.New && string.IsNullOrEmpty(typeCell)) env.Err(row.Row, "ReleaseType", $"A release needs a release type: {string.Join(", ", types.Where(x => x.ArchivedAt == null).Select(x => x.Name))}");
+            else if (p.Op == RowOp.Updated && typeCell is { Length: 0 }) env.Err(row.Row, "ReleaseType", "A release cannot lose its release type");
+            else if (types.FirstOrDefault(x => string.Equals(x.Name, effective, StringComparison.OrdinalIgnoreCase)) is { } tp)
+            {
+                var numberCell = row.Cells.TryGetValue("BetaNumber", out var nc) ? nc : p.Op == RowOp.Updated ? p.Existing!.Cells.GetValueOrDefault("BetaNumber", "") : "";
+                var typeChangedOrNumberGiven = p.Op == RowOp.New || p.Changed.Contains("ReleaseType") || p.Changed.Contains("BetaNumber");
+                if (typeChangedOrNumberGiven && tp.IsBeta && numberCell.Length == 0) env.Err(row.Row, "BetaNumber", $"A {tp.Name} release needs its number, 1 to 3");
+                else if (typeChangedOrNumberGiven && !tp.IsBeta && numberCell.Length > 0) env.Err(row.Row, "BetaNumber", $"Only a Beta release carries a number; \"{tp.Name}\" does not");
+            }
+        }
         if (p.Op == RowOp.Updated && p.Existing!.ReadOnly.FirstOrDefault(x => x.Key == "#Status").Value is { } s && s is "Executing" or "Complete" or "Aborted")
             env.Err(row.Row, p.Changed[0], $"{r.After["Title"]} is {s}; plan imports are refused once a train is Executing or Complete");
     }
@@ -170,7 +188,7 @@ internal sealed class TrainsHandler : KindHandler
                     ChangeTicketNumber = p.After.GetValueOrDefault("ChangeTicketNumber") is { Length: > 0 } c ? c : null,
                     CreatedAt = env.Now, UpdatedAt = env.Now, LastChangedByUserId = env.Actor.UserId, LastChangedAt = env.Now,
                     ReleaseKey = await Services.ReleaseKeyAllocator.AllocateAsync(env.Db, ct),
-                    OwnerUserId = pay.OwnerUserId, OwnerTeamId = pay.OwnerTeamId, OnCallUserId = pay.OnCallUserId, OnCallTeamId = pay.OnCallTeamId, ReleaseTypeId = pay.ReleaseTypeId,
+                    OwnerUserId = pay.OwnerUserId, OwnerTeamId = pay.OwnerTeamId, OnCallUserId = pay.OnCallUserId, OnCallTeamId = pay.OnCallTeamId, ReleaseTypeId = pay.ReleaseTypeId, BetaNumber = pay.BetaNumber,
                     ReleaseBranch = p.After.GetValueOrDefault("Branch") is { Length: > 0 } br ? br : null,
                 };
                 env.Db.Set<ReleaseTrains>().Add(t);
@@ -196,6 +214,7 @@ internal sealed class TrainsHandler : KindHandler
                 if (p.Changed.Contains("Branch")) t.ReleaseBranch = p.After["Branch"].Length == 0 ? null : p.After["Branch"];
                 if (p.Changed.Contains("OnCall")) { t.OnCallUserId = pay.OnCallUserId; t.OnCallTeamId = pay.OnCallTeamId; }
                 if (p.Changed.Contains("ReleaseType")) t.ReleaseTypeId = pay.ReleaseTypeId;
+                if (p.Changed.Contains("ReleaseType") || p.Changed.Contains("BetaNumber")) t.BetaNumber = pay.BetaNumber;
                 if (p.Changed.Contains("Environments"))
                 {
                     env.Db.Set<TrainEnvironments>().RemoveRange(await env.Db.Set<TrainEnvironments>().Where(x => x.ReleaseTrainId == t.Id).ToListAsync(ct));

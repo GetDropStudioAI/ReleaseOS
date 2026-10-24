@@ -22,7 +22,7 @@ public static class AnalyticsEndpoints
         api.MapGet("/analytics", () => Results.Ok(AnalyticsService.Catalog.Select(m => new { m.Id, m.Name, m.Title, m.Unit, m.Columns })))
             .RequireAuthorization(Policies.Read);
 
-        // GET /analytics/{metric}?from&to&now -> { metric, name, title, unit, columns, from, to, asOf, rows[] }
+        // GET /analytics/{metric}?from&to&now&releaseTypeId -> { metric, name, title, unit, columns, from, to, asOf, rows[] }
         api.MapGet("/analytics/{metric}", async (string metric, HttpRequest req, AnalyticsService svc, TimeProvider time, CancellationToken ct) =>
         {
             var info = AnalyticsService.Find(metric);
@@ -57,7 +57,7 @@ public static class AnalyticsEndpoints
         if (Get("to") is { } t) { if (!TryDate(t, out to)) { bad = Bad("to is a date such as 2026-12-31"); return false; } }
         else to = today;
         if (from > to) { bad = Bad("from must not be after to"); return false; }
-        w = new AnalyticsWindow(from, to, now);
+        w = new AnalyticsWindow(from, to, now) { ReleaseTypeId = Get("releaseTypeId") };   // REOS-116: only the releases of that type; an id nobody has gives empty results
         return true;
 
         static DateOnly DefaultFrom(DateOnly d) => d.AddDays(-DefaultWindowDays);

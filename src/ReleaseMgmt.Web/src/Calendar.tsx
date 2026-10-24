@@ -4,10 +4,12 @@ import { ApiError, get, getStream, type Me, type StreamRow } from './api'
 import { buildPath, ROOT, type Route } from './route'
 import { CalendarSubscribe } from './CalendarSubscribe'
 import {
-  addDays, addMonths, applyFilters, conflictsOf, dayLabel, durationText, entriesByDay, freezeDays, NO_FILTER, parseDay, RISKS, rangeTitle, releaseRows, riskLabel, STATUSES,
+  addDays, addMonths, applyFilters, conflictsOf, filtered, dayLabel, durationText, entriesByDay, freezeDays, NO_FILTER, parseDay, RISKS, rangeTitle, releaseRows, riskLabel, STATUSES,
   startOfWeek, stamp, utcDay, visibleDays, type CalendarPayload, type CalFreeze, type Conflict, type Entry, type Filters, type Mode,
 } from './calendarModel'
 import './calendar.css'
+import { listReleaseTypes } from './mgmt/releaseTypesApi'
+import { sortTypes, type ReleaseTypeRow } from './mgmt/releaseTypesLogic'
 import { browserZone } from './shell/clock'
 import { serverNow } from './time'
 import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, Notice, PageHeading, Panel, PropertyList, StatusChip, TabPanel, Tabs, TwoLine, type Column } from './ui'
@@ -79,6 +81,8 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
   const [focus, setFocus] = useState<string>(() => todayIso())
   const [focusRow, setFocusRow] = useState<string | null>(null)
   const [filters, setFilters] = useState<Filters>(NO_FILTER)
+  const [types, setTypes] = useState<ReleaseTypeRow[]>([])
+  useEffect(() => { listReleaseTypes(true).then(r => setTypes(sortTypes(r))).catch(() => setTypes([])) }, [])   // REOS-116: the choices are the workspace's types, not only those with a release in view
   const today = todayIso()
   const zone = browserZone()
   const titleId = useId()
@@ -164,7 +168,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
   ]
 
   const listRows = useMemo(() => (stream ?? []).filter(r => r.status !== 'Complete' && r.status !== 'Aborted' || filters.status === r.status)
-    .filter(r => (filters.status === 'all' || r.status === filters.status) && (filters.risk === 'all' || r.riskTier === filters.risk)), [stream, filters])
+    .filter(r => (filters.status === 'all' || r.status === filters.status) && (filters.risk === 'all' || r.riskTier === filters.risk) && (filters.type === 'all' || r.type?.id === filters.type)), [stream, filters])
   const listCols: Column<StreamRow>[] = [
     { key: 'release', header: 'Release', cell: r => <TwoLine primary={r.title} secondary={`${riskLabel(r.riskTier)} risk`} /> },
     { key: 'target', header: 'Target date · UTC', cell: r => <TwoLine primary={dayLabel(r.targetReleaseDate)} secondary={r.daysToTarget === 0 ? 'today' : r.daysToTarget > 0 ? `in ${r.daysToTarget} business days` : `${-r.daysToTarget} business days ago`} /> },
@@ -191,7 +195,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
 
   const loading = view.data === null && !view.error
   const body = view.error && !view.data ? <ErrorState what="The calendar" message={view.error} onRetry={view.retry} /> : loading ? <LoadingState what="the calendar" /> : null
-  const emptyFilter = filters.status !== 'all' || filters.risk !== 'all'
+  const emptyFilter = filtered(filters)
 
   return (
     <div className="os-page">
@@ -204,6 +208,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
         <div className="os-cal-filters" role="group" aria-label="Filters">
           <FilterSelect label="Status" value={filters.status} onChange={status => setFilters(f => ({ ...f, status }))} options={[{ value: 'all', label: 'All statuses' }, ...STATUSES.map(s => ({ value: s, label: s }))]} />
           <FilterSelect label="Risk tier" value={filters.risk} onChange={risk => setFilters(f => ({ ...f, risk }))} options={[{ value: 'all', label: 'All risk tiers' }, ...RISKS.map(r => ({ value: r.value, label: r.label }))]} />
+          <FilterSelect label="Release type" value={filters.type} onChange={type => setFilters(f => ({ ...f, type }))} options={[{ value: 'all', label: 'All release types' }, ...types.map(t => ({ value: t.id, label: t.name }))]} />
         </div>
       </div>
 

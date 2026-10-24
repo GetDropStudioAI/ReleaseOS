@@ -60,7 +60,7 @@ public class ExchangeTests
     public void The_nine_kinds_are_exactly_the_sections_list()
     {
         Assert.Equal(["Trains", "Products", "Gates", "Tasks", "RunbookSteps", "ExternalLinks", "Holidays", "Users", "Teams"], ImportKinds.All.Select(k => k.Kind));
-        Assert.Equal(["Title", "TargetReleaseDate", "RiskTier", "Template", "ChangeTicketNumber", "WindowStart", "WindowEnd", "Owner", "Team", "Branch", "OnCall", "ReleaseType", "Environments"], Kind("Trains").Columns.Select(c => c.Name));   // the last six are REOS-107
+        Assert.Equal(["Title", "TargetReleaseDate", "RiskTier", "Template", "ChangeTicketNumber", "WindowStart", "WindowEnd", "Owner", "Team", "Branch", "OnCall", "ReleaseType", "BetaNumber", "Environments"], Kind("Trains").Columns.Select(c => c.Name));   // the last six are REOS-107
         Assert.Equal(["Train", "ProductName", "VersionTag", "ProjectCode", "ServiceKey"], Kind("Products").Columns.Select(c => c.Name));   // ServiceKey: REOS-109
         Assert.Equal(["Train", "GateName", "SequenceOrder", "OffsetDays", "RequiredBefore", "Owner", "GateClass"], Kind("Gates").Columns.Select(c => c.Name));
         Assert.Equal(["Train", "StepCode", "Title", "Section", "PlannedStart", "DurationMin", "Owner", "Product", "DependsOn", "Instructions"], Kind("RunbookSteps").Columns.Select(c => c.Name));

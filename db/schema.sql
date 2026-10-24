@@ -178,7 +178,8 @@ CREATE TABLE ReleaseTrains (
     ReleaseBranch TEXT CHECK (ReleaseBranch IS NULL OR length(trim(ReleaseBranch)) BETWEEN 1 AND 200),
     OnCallUserId TEXT REFERENCES Users(Id),               -- on call for the release: a person or a team, not both
     OnCallTeamId TEXT REFERENCES Teams(Id) CHECK (OnCallTeamId IS NULL OR OnCallUserId IS NULL),
-    ReleaseTypeId TEXT REFERENCES ReleaseTypes(Id),       -- RT1 (D46): Beta, CERT, PenTest Cert, Production, ...; optional
+    ReleaseTypeId TEXT REFERENCES ReleaseTypes(Id),       -- RT1 (D46): Beta, CERT, PenTest Cert, Production, ...; required for a new release once the workspace has types (trg_Train_TypeRules_Insert)
+    BetaNumber INTEGER CHECK (BetaNumber IS NULL OR BetaNumber BETWEEN 1 AND 3),   -- RT1 (D48): Beta 1, 2 or 3; set exactly when the type is a Beta type (ReleaseTypes.IsBeta)
     CHECK ((CurrentStatus = 'Complete') = (CloseCode IS NOT NULL))
 );
 
@@ -722,6 +723,7 @@ CREATE TABLE ReleaseTypes (                               -- RT1 (D46): a per-wo
     ArchivedAt TEXT,
     Version INTEGER NOT NULL DEFAULT 1,
     WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    IsBeta INTEGER NOT NULL DEFAULT 0 CHECK (IsBeta IN (0,1)),   -- RT1 (D48): a release of this type carries its number, 1 to 3 (ReleaseTrains.BetaNumber); the seeded Beta type has it
     UNIQUE (WorkspaceId, Name)
 );
 
@@ -1271,6 +1273,30 @@ CREATE TRIGGER trg_Train_AssignKey AFTER INSERT ON ReleaseTrains WHEN NEW.Releas
 BEGIN
     UPDATE Workspaces SET NextKeyNumber = NextKeyNumber + 1 WHERE Id = NEW.WorkspaceId;
     UPDATE ReleaseTrains SET ReleaseKey = (SELECT KeyPrefix || '-' || (NextKeyNumber - 1) FROM Workspaces WHERE Id = NEW.WorkspaceId) WHERE Id = NEW.Id;
+END;
+-- Release types (REOS-116, D46, D48): a release has a type once its workspace has types, never loses it, and carries a Beta number exactly when the type is a Beta type.
+-- A workspace with no types at all (a database opened before the app seeded them) cannot be asked for one; the app seeds every workspace at start and when it is created.
+CREATE TRIGGER trg_Train_TypeRules_Insert BEFORE INSERT ON ReleaseTrains
+BEGIN
+    SELECT RAISE(ABORT, 'A release needs a release type')
+     WHERE NEW.ReleaseTypeId IS NULL AND EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.WorkspaceId = NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'Only a Beta release carries a Beta number')
+     WHERE NEW.BetaNumber IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.IsBeta = 1);
+    SELECT RAISE(ABORT, 'A Beta release needs its number, 1 to 3')
+     WHERE NEW.BetaNumber IS NULL AND EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.IsBeta = 1);
+END;
+CREATE TRIGGER trg_Train_TypeRules_Update BEFORE UPDATE OF ReleaseTypeId, BetaNumber ON ReleaseTrains
+BEGIN
+    SELECT RAISE(ABORT, 'A release cannot lose its release type') WHERE NEW.ReleaseTypeId IS NULL AND OLD.ReleaseTypeId IS NOT NULL;
+    SELECT RAISE(ABORT, 'Only a Beta release carries a Beta number')
+     WHERE NEW.BetaNumber IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.IsBeta = 1);
+    SELECT RAISE(ABORT, 'A Beta release needs its number, 1 to 3')
+     WHERE NEW.BetaNumber IS NULL AND EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.IsBeta = 1);
+END;
+CREATE TRIGGER trg_ReleaseType_BetaFlagLocked BEFORE UPDATE OF IsBeta ON ReleaseTypes WHEN NEW.IsBeta <> OLD.IsBeta
+BEGIN
+    SELECT RAISE(ABORT, 'A release type that releases use cannot become or stop being a Beta type')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains t WHERE t.ReleaseTypeId = OLD.Id);
 END;
 CREATE TRIGGER trg_Deployment_Transition BEFORE UPDATE OF State ON Deployments WHEN NEW.State <> OLD.State
 BEGIN

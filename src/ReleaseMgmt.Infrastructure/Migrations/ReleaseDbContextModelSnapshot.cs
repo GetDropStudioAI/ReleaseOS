@@ -2127,6 +2127,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("ArchivedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("BetaNumber")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ChangeTicketNumber")
                         .HasColumnType("TEXT");
 
@@ -2251,6 +2254,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
                     b.Property<string>("DefaultTemplateId")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsBeta")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
                         .IsRequired()

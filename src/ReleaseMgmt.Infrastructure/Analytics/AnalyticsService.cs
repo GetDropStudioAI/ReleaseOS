@@ -10,6 +10,8 @@ public sealed record AnalyticsWindow(DateOnly From, DateOnly To, DateTime Now)
 {
     /// <summary>The workspace whose records the metrics read (:ws, REOS-105): the current one, or the default workspace outside any.</summary>
     public string WorkspaceId { get; init; } = WorkspaceScope.Current ?? WorkspaceIds.Default;
+    /// <summary>REOS-116 (:type): the release type the metrics are limited to, or null for every type.</summary>
+    public string? ReleaseTypeId { get; init; }
     public string FromText => From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     public string ToText => To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     /// <summary>ISO-8601 UTC, the format every timestamp column is stored in, so julianday(:now) and string comparison line up.</summary>
@@ -23,7 +25,7 @@ public sealed record MetricInfo(string Id, string Name, string Title, string Uni
 
 /// <summary>
 /// The 15 release-level metrics (PROJECT_SCOPE section 8), each running its statement from db/analytics.sql with bound parameters
-/// (:from :to :now :ws; nothing is ever concatenated into the SQL). Rounding is done by SQLite's round() inside the statement, as the oracle does;
+/// (:from :to :now :ws :type; nothing is ever concatenated into the SQL). Rounding is done by SQLite's round() inside the statement, as the oracle does;
 /// the client only passes values through. Reads through <see cref="IAnalyticsConnectionFactory"/>, which is read-only.
 /// </summary>
 public sealed class AnalyticsService(IAnalyticsConnectionFactory connections)
@@ -102,14 +104,15 @@ public sealed class AnalyticsService(IAnalyticsConnectionFactory connections)
         Bind(cmd, sql, ":to", w.ToText);
         Bind(cmd, sql, ":now", w.NowText);
         Bind(cmd, sql, ":ws", w.WorkspaceId);
+        Bind(cmd, sql, ":type", w.ReleaseTypeId);
         var rows = new List<T>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) rows.Add(map(r));
         return rows;
     }
 
-    private static void Bind(SqliteCommand cmd, string sql, string name, string value)
+    private static void Bind(SqliteCommand cmd, string sql, string name, string? value)
     {
-        if (sql.Contains(name, StringComparison.Ordinal)) cmd.Parameters.AddWithValue(name, value);
+        if (sql.Contains(name, StringComparison.Ordinal)) cmd.Parameters.AddWithValue(name, (object?)value ?? DBNull.Value);
     }
 }

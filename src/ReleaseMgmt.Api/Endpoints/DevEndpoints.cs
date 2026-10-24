@@ -25,7 +25,8 @@ public static class DevEndpoints
             var trainId = Ids.New();
             await using (var db = await dbf.CreateDbContextAsync(ct))
             {
-                db.Set<ReleaseTrains>().Add(new ReleaseTrains { Id = trainId, Title = $"R26.9{tag} Live drill", TargetReleaseDate = DateOnly.FromDateTime(now), RiskTier = "Moderate", CurrentStatus = "Executing", CreatedAt = now, UpdatedAt = now, LastChangedByUserId = uid, LastChangedAt = now });
+                var production = await db.Set<ReleaseTypes>().AsNoTracking().Where(x => x.Name == "Production").Select(x => x.Id).FirstOrDefaultAsync(ct);   // REOS-116: every release has a type
+                db.Set<ReleaseTrains>().Add(new ReleaseTrains { Id = trainId, Title = $"R26.9{tag} Live drill", TargetReleaseDate = DateOnly.FromDateTime(now), RiskTier = "Moderate", CurrentStatus = "Executing", CreatedAt = now, UpdatedAt = now, LastChangedByUserId = uid, LastChangedAt = now, ReleaseTypeId = production });
                 db.Set<DeploymentWindows>().Add(new DeploymentWindows { ReleaseTrainId = trainId, StartsAt = start, EndsAt = now.AddMinutes(90) });
                 (string Code, string Section, string Title, int At, int Min, string? After, string? Instr)[] plan =
                 [

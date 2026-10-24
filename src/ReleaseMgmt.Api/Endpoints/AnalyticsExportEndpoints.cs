@@ -1,3 +1,4 @@
+using ReleaseMgmt.Domain.Entities;
 using System.Text.Json;
 using ClosedXML.Excel;
 using ReleaseMgmt.Api.Auth;
@@ -30,7 +31,7 @@ public static class AnalyticsExportEndpoints
             await using var db = await dbf.CreateDbContextAsync(ct);
             var workspace = await ReleaseFacts.WorkspaceNameAsync(db, ct);
             var releases = HasTitle(info) ? await ReleaseFacts.LoadAsync(db, null, ct) : null;
-            var bytes = Workbook(info, w, rows, workspace, releases);
+            var bytes = Workbook(info, w, rows, workspace, releases, await TypeNameAsync(db, w, ct));
             var snapshot = info.Id is "M6" or "M9" or "M14";
             var name = $"analytics-{info.Id.ToLowerInvariant()}-{(snapshot ? "asof-" + w.ToText : w.FromText + "_" + w.ToText)}.xlsx";
             req.HttpContext.Response.Headers.CacheControl = "no-store";
@@ -46,11 +47,15 @@ public static class AnalyticsExportEndpoints
             await using var db = await dbf.CreateDbContextAsync(ct);
             var workspace = await ReleaseFacts.WorkspaceNameAsync(db, ct);
             var releases = await ReleaseFacts.LoadAsync(db, null, ct);
-            var bytes = FullWorkbook(results, w, workspace, releases, time.GetUtcNow().UtcDateTime, clock);
+            var bytes = FullWorkbook(results, w, workspace, releases, time.GetUtcNow().UtcDateTime, clock, await TypeNameAsync(db, w, ct));
             req.HttpContext.Response.Headers.CacheControl = "no-store";
             return Results.File(bytes, XlsxContentType, $"analytics-workbook-{w.FromText}_{w.ToText}.xlsx");
         }).RequireAuthorization(Policies.Read);
     }
+
+    /// <summary>REOS-116: the name of the release type the window is limited to (the id when it no longer exists), or null when it is not limited.</summary>
+    private static async Task<string?> TypeNameAsync(ReleaseDbContext db, AnalyticsWindow w, CancellationToken ct) =>
+        w.ReleaseTypeId is null ? null : await db.Set<ReleaseTypes>().AsNoTracking().Where(x => x.Id == w.ReleaseTypeId).Select(x => x.Name).SingleOrDefaultAsync(ct) ?? w.ReleaseTypeId;
 
     private static bool HasTitle(MetricInfo info) => info.Columns.Any(c => c.Name == "Title");
 
@@ -110,7 +115,7 @@ public static class AnalyticsExportEndpoints
     /// Sheet 1 = the metric (header row then one row per record, values by position in SQL column order); sheet 2 = the window and as-of. Text is always stored as a text cell
     /// (never parsed into a formula), so a value such as =HYPERLINK(...) is data, not a formula (OWASP CSV/formula injection). NULL is an empty cell.
     /// </summary>
-    public static byte[] Workbook(MetricInfo info, AnalyticsWindow w, IReadOnlyList<object> rows, string workspace = "", IReadOnlyDictionary<string, ReleaseFact>? releases = null)
+    public static byte[] Workbook(MetricInfo info, AnalyticsWindow w, IReadOnlyList<object> rows, string workspace = "", IReadOnlyDictionary<string, ReleaseFact>? releases = null, string? releaseType = null)
     {
         using var wb = new XLWorkbook();
         AddMetricSheet(wb, info, rows, releases);
@@ -119,6 +124,7 @@ public static class AnalyticsExportEndpoints
         var about = wb.AddWorksheet("About");
         (string, string)[] meta = [("Metric", $"{info.Id} {info.Title}"), ("Unit", info.Unit), ("From", w.FromText), ("To", w.ToText), ("Data as of", w.NowText), ("Workspace", workspace),
             ("Releases", CarryText(titleAt >= 0))];
+        if (releaseType is not null) meta = [.. meta, ("Release type", releaseType)];   // REOS-116: only when the export is limited to one type
         for (var i = 0; i < meta.Length; i++) { about.Cell(i + 1, 1).Value = meta[i].Item1; about.Cell(i + 1, 1).Style.Font.Bold = true; about.Cell(i + 1, 2).Value = meta[i].Item2; }
         about.Columns().AdjustToContents();
 
@@ -135,7 +141,7 @@ public static class AnalyticsExportEndpoints
     /// and lists the metric sheets; then one sheet per metric (M1..M15), each built by <see cref="AddMetricSheet"/>, the same code as the per-metric download, from the same query run
     /// with the same window, so every sheet holds exactly the per-metric export's rows. Text is stored as text, never as a formula (Q-047b). <paramref name="generatedAt"/> comes from the injected clock.
     /// </summary>
-    public static byte[] FullWorkbook(IReadOnlyList<(MetricInfo Info, IReadOnlyList<object> Rows)> metrics, AnalyticsWindow w, string workspace, IReadOnlyDictionary<string, ReleaseFact>? releases, DateTime generatedAt, DisplayClock clock)
+    public static byte[] FullWorkbook(IReadOnlyList<(MetricInfo Info, IReadOnlyList<object> Rows)> metrics, AnalyticsWindow w, string workspace, IReadOnlyDictionary<string, ReleaseFact>? releases, DateTime generatedAt, DisplayClock clock, string? releaseType = null)
     {
         using var wb = new XLWorkbook();
         var fmt = new PdfFmt(clock);
@@ -150,7 +156,7 @@ public static class AnalyticsExportEndpoints
             ("Period from (UTC day)", w.FromText, ""),
             ("Period to (UTC day)", w.ToText, ""),
             ("Data as of (UTC)", Utc(w.Now), fmt.Beside(w.Now)),
-            ("Filters", "None: every metric reads the whole workspace. Product, risk tier and gate class are not supported (Q-046e)", ""),
+            ("Filters", releaseType is null ? "None: every metric reads the whole workspace. Product, risk tier and gate class are not supported (Q-046e)" : $"Release type: {releaseType}. M11 (freeze windows) has no type. Product, risk tier and gate class are not supported (Q-046e)", ""),
             ("Period", "M6, M9 and M14 are as of now and ignore the period", ""),
         ];
         for (var i = 0; i < meta.Length; i++)

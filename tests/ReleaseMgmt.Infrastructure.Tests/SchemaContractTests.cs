@@ -57,7 +57,7 @@ public sealed class SchemaContractTests : IDisposable
     {
         var expected = Regex.Matches(_schemaText, @"^CREATE TRIGGER (\w+)", RegexOptions.Multiline).Select(m => m.Groups[1].Value).Order().ToList();
         var actual = Master(Migrated()).Where(r => r.Type == "trigger").Select(r => r.Name).Order().ToList();
-        Assert.Equal(130, expected.Count);   // 42 + 49 workspace-boundary triggers (REOS-104) + 16 release-model, deployment and boundary triggers (REOS-107/109/110) + 23 for telemetry, control, approvals and the audit chain (REOS-111 to 114)
+        Assert.Equal(133, expected.Count);   // 42 + 49 workspace-boundary triggers (REOS-104) + 16 release-model, deployment and boundary triggers (REOS-107/109/110) + 23 for telemetry, control, approvals and the audit chain (REOS-111 to 114) + 3 for release types (REOS-116)
         Assert.Equal(expected, actual);
     }
 

@@ -2,9 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEven
 import { ApiError, get, type Me } from './api'
 import { NONE_CELL, NO_DATA, chartTable, columnHeader, findingM2, findingM3, findingM4, findingM5, findingM6, findingM7, findingM8, findingM9, findingM10, findingM11, findingM13, findingM14, findingM15, headlines, normalize,
   type Metric, type MetricResponse, type Rec } from './analyticsFindings.ts'
-import { download, exportName, presetRange, svgWithTitle, toCsv, workbookName, workbookUrl } from './analyticsExport.ts'
+import { analyticsQuery, download, exportName, presetRange, svgWithTitle, toCsv, typeParam, workbookName, workbookUrl } from './analyticsExport.ts'
+import { listReleaseTypes } from './mgmt/releaseTypesApi.ts'
+import { sortTypes, type ReleaseTypeRow } from './mgmt/releaseTypesLogic.ts'
 import { dueText } from './shell/approvalsApi.ts'
-import { Button, ErrorState, LoadingState, MetricCard, Notice, PageHeading, Panel, type Tone } from './ui'
+import { Button, ErrorState, FilterSelect, LoadingState, MetricCard, Notice, PageHeading, Panel, type Tone } from './ui'
 import './analytics.css'
 import { announce } from './announce'
 import { useAction } from './useAction'
@@ -48,8 +50,8 @@ const PRESETS = [{ label: 'Last 30 days', days: 30 }, { label: 'Last 90 days', d
 interface Entry { metric?: Metric; error?: string }
 type Loaded = Record<string, Entry>
 
-async function loadAll(from: string, to: string): Promise<Loaded> {
-  const q = from && to ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : ''
+async function loadAll(from: string, to: string, type: string): Promise<Loaded> {
+  const q = analyticsQuery(from, to, type)
   const res = await Promise.allSettled(IDS.map(id => get<MetricResponse>(`/api/v1/analytics/${id}${q}`)))
   const out: Loaded = {}
   res.forEach((r, i) => { out[IDS[i]] = r.status === 'fulfilled' ? { metric: normalize(r.value) } : { error: r.reason instanceof Error ? r.reason.message : String(r.reason) } })
@@ -60,17 +62,21 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   const [data, setData] = useState<Loaded | null>(null)
   const [from, setFrom] = useState(''), [to, setTo] = useState('')
   const [busy, setBusy] = useState(false)
+  const [type, setType] = useState('')   // REOS-116: a release type id, or '' for all
+  const typeRef = useRef('')
+  const [types, setTypes] = useState<ReleaseTypeRow[]>([])
+  useEffect(() => { listReleaseTypes(true).then(r => setTypes(sortTypes(r))).catch(() => setTypes([])) }, [])
   const [fatal, setFatal] = useState<string | null>(null)
   const seq = useRef(0)
   const [workbookErr, setWorkbookErr] = useState<string | null>(null)
   const { run: act, pending } = useAction()
 
   // `say`: after Apply or Retry the new figures replace the old ones, so the result is spoken once (WCAG 4.1.3); the first load is not announced.
-  const run = useCallback(async (f: string, t: string, say = true) => {
+  const run = useCallback(async (f: string, t: string, say = true, ty = typeRef.current) => {
     const my = ++seq.current
     setBusy(true); setFatal(null)
     try {
-      const d = await loadAll(f, t)
+      const d = await loadAll(f, t, ty)
       if (my !== seq.current) return
       setData(d)
       const any = Object.values(d).find(e => e.metric)?.metric
@@ -99,7 +105,7 @@ export default function AnalyticsScreen(_props: { me: Me }) {
     if (!m) return
     setWorkbookErr(null)
     try {
-      const r = await fetch(workbookUrl(m.from, m.to, m.asOf))
+      const r = await fetch(workbookUrl(m.from, m.to, m.asOf, type))
       if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null))
       download(workbookName(m.from, m.to), await r.blob())
     } catch (e) { setWorkbookErr((e as Error).message) }
@@ -118,6 +124,8 @@ export default function AnalyticsScreen(_props: { me: Me }) {
       {asOf && <span className="an-presets" role="group" aria-label="Quick periods">
         {PRESETS.map(p => <Button key={p.days} disabled={busy} onClick={() => { const r = presetRange(asOf, p.days); setFrom(r.from); setTo(r.to); void run(r.from, r.to) }}>{p.label}</Button>)}
       </span>}
+      <FilterSelect label="Release type" value={type} options={[{ value: '', label: 'All release types' }, ...types.map(t => ({ value: t.id, label: t.name }))]}
+        onChange={v => { setType(v); typeRef.current = v; void run(from, to, true, v) }} />
       {typeof trains === 'number' && <span className="an-period-count">{trains} completed {trains === 1 ? 'train' : 'trains'} · {gates ?? 0} gates timed · {steps ?? 0} live steps · dates are UTC days</span>}
     </form>
     {workbookErr && <div role="alert"><Notice tone="danger" title="Workbook export failed">{workbookErr}</Notice></div>}
@@ -138,12 +146,12 @@ export default function AnalyticsScreen(_props: { me: Me }) {
     </section>
 
     <section className="an-charts" aria-label="Charts">
-      {SPECS.map(s => <ChartCard key={s.id} spec={s} entry={data[s.id]} />)}
+      {SPECS.map(s => <ChartCard key={s.id} spec={s} entry={data[s.id]} type={type} />)}
     </section>
   </div>
 }
 
-function ChartCard({ spec, entry }: { spec: Spec; entry?: Entry }) {
+function ChartCard({ spec, entry, type }: { spec: Spec; entry?: Entry; type: string }) {
   const m = entry?.metric
   const finding = m ? spec.find(m.recs) : 'Could not load this chart'
   const empty = !!m && (m.recs.length === 0 || finding === NO_DATA)
@@ -164,7 +172,7 @@ function ChartCard({ spec, entry }: { spec: Spec; entry?: Entry }) {
   const exportXlsx = () => act('xlsx', async () => {
     setErr(null)
     try {
-      const r = await fetch(`/api/v1/analytics/${spec.id}/xlsx?from=${encodeURIComponent(m!.from)}&to=${encodeURIComponent(m!.to)}&now=${encodeURIComponent(m!.asOf)}`)
+      const r = await fetch(`/api/v1/analytics/${spec.id}/xlsx?from=${encodeURIComponent(m!.from)}&to=${encodeURIComponent(m!.to)}&now=${encodeURIComponent(m!.asOf)}${typeParam(type)}`)
       if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null))
       download(name('xlsx'), await r.blob())
     } catch (e) { setErr(`XLSX export failed: ${(e as Error).message}`) }

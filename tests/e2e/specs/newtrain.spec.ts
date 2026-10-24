@@ -37,8 +37,10 @@ async function openDrawer(page: Page) {
   await expect(drawer(page).locator('h2', { hasText: 'New train' })).toBeVisible()
 }
 
-async function fillCommon(page: Page, title: string, target: string) {
+/** REOS-116: a new release names its type (Production here: no default template, so Blank stays blank); a copy keeps the original's, so it has no type to choose. */
+async function fillCommon(page: Page, title: string, target: string, type: string | null = 'Production') {
   await drawer(page).getByLabel('Title', { exact: true }).fill(title)
+  if (type) await drawer(page).getByLabel('Release type', { exact: true }).selectOption({ label: type })
   await drawer(page).getByLabel('Target release date', { exact: true }).fill(target)
 }
 
@@ -88,7 +90,7 @@ test('a Release Manager creates a train blank, from an approved template and as 
   await drawer(page).locator('button:text-is("Create another")').click()
   await drawer(page).locator('button.choice:text-is("Copy of a train")').click()
   await drawer(page).getByLabel('Copy of').selectOption({ label: `${fromTpl} · Planning` })
-  await fillCommon(page, copy, day(68))
+  await fillCommon(page, copy, day(68), null)
   await drawer(page).locator('button:text-is("Create copy")').click()
   await expectOpened(page, copy)
   await expect(page.locator('main')).toContainText('E2E Freeze')

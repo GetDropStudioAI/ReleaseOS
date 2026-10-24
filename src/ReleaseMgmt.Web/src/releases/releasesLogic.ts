@@ -1,4 +1,5 @@
 import type { StreamRow } from '../api.ts'
+import { typeLabel } from '../mgmt/releaseTypesLogic.ts'
 
 /** The pure parts of the Releases table (REOS-125, D50): the filters, their address-bar form, the order, and the gate rollup. Tested without a browser. */
 
@@ -37,7 +38,7 @@ export function filterReleases(rows: StreamRow[], f: Filters): StreamRow[] {
     && matchesId(f.team, r.ownerTeam ? [r.ownerTeam.id] : [])
     && matchesId(f.type, r.type ? [r.type.id] : [])
     && matchesId(f.environment, r.environments.map(e => e.id))
-    && (q === '' || [r.key ?? '', r.title, r.owner?.name ?? '', r.ownerTeam?.handle ?? '', r.ownerTeam?.name ?? '', r.type?.name ?? '', ...r.environments.map(e => e.name)].some(t => t.toLowerCase().includes(q))))
+    && (q === '' || [r.key ?? '', r.title, r.owner?.name ?? '', r.ownerTeam?.handle ?? '', r.ownerTeam?.name ?? '', (r.type ? typeLabel(r.type, r.betaNumber) : ''), ...r.environments.map(e => e.name)].some(t => t.toLowerCase().includes(q))))
 }
 
 /** Open work first (Executing, Gated, Planning), then what finished; inside a status the nearest target date first, then the key, so the order never jitters. */

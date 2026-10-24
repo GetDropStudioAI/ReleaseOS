@@ -67,9 +67,10 @@ public sealed class SeedService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
         while (nextFriday.DayOfWeek != DayOfWeek.Friday) nextFriday = nextFriday.AddDays(1);
         var trainDefs = new[] { ("R26.11 Payments platform", nextFriday.AddDays(21), "High"), ("R26.12 Card portal", nextFriday.AddDays(14), "Moderate"), ("R26.13 Reporting", nextFriday.AddDays(35), "Low") };
         var ids = new List<string>();
+        var production = await db.Set<ReleaseTypes>().AsNoTracking().Where(x => x.WorkspaceId == WorkspaceIds.Default && x.Name == "Production").Select(x => x.Id).FirstOrDefaultAsync(ct);   // REOS-116: every release has a type
         foreach (var (title, target, risk) in trainDefs)
         {
-            var t = new ReleaseTrains { Id = Ids.New(), Title = title, TargetReleaseDate = target, RiskTier = risk, CreatedAt = stamp, UpdatedAt = stamp, LastChangedByUserId = rte.Id, LastChangedAt = stamp };
+            var t = new ReleaseTrains { Id = Ids.New(), Title = title, TargetReleaseDate = target, RiskTier = risk, CreatedAt = stamp, UpdatedAt = stamp, LastChangedByUserId = rte.Id, LastChangedAt = stamp, ReleaseTypeId = production };
             db.Set<ReleaseTrains>().Add(t);
             ids.Add(t.Id);
             db.Set<DeploymentWindows>().Add(new DeploymentWindows { Id = Ids.New(), ReleaseTrainId = t.Id, StartsAt = new DateTime(target.Year, target.Month, target.Day, 6, 0, 0, DateTimeKind.Utc), EndsAt = new DateTime(target.Year, target.Month, target.Day, 10, 0, 0, DateTimeKind.Utc) });

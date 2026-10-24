@@ -5,6 +5,7 @@ import { useSession } from '../session.tsx'
 import type { LiveState } from '../live.ts'
 import { day, plural, tMinus } from '../format.ts'
 import { statusChip } from '../release/model.ts'
+import { typeLabel } from '../mgmt/releaseTypesLogic.ts'
 import { stampOf, stampText } from '../deploy/deployLogic.ts'
 import { browserZone } from '../shell/clock.ts'
 import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, PageHeading, SearchField, StaleBanner, StatusChip, TwoLine, type Column } from '../ui'
@@ -44,7 +45,7 @@ export function Releases({ rows, error, live, loadedAt, canCreate, onReload, onO
       const s = statusChip(r.status, r.closeCode), open = r.status !== 'Complete' && r.status !== 'Aborted'
       return <TwoLine primary={<StatusChip tone={s.tone}>{s.word}</StatusChip>} secondary={open ? (r.blockers > 0 ? `▲ ${plural(r.blockers, 'blocker')}` : 'No blockers') : undefined} />
     } },
-    { key: 'type', header: 'Type', cell: r => r.type?.name ?? <span className="os-muted">Not set</span> },
+    { key: 'type', header: 'Type', cell: r => r.type ? typeLabel(r.type, r.betaNumber) : <span className="os-muted">Not set</span> },
     { key: 'team', header: 'Team and owner', cell: r => (r.ownerTeam || r.owner)
       ? <TwoLine primary={teamLabel(r) ?? <span className="os-muted">No team</span>} secondary={r.owner?.name ?? 'No owner'} />
       : <span className="os-muted">Not set</span> },

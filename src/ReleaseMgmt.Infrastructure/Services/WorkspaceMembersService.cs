@@ -45,7 +45,15 @@ public sealed partial class WorkspaceMembersService(IDbContextFactory<ReleaseDbC
     /// Creates a workspace (empty: Q-105h) and makes the creator its first member, with the role they hold in the workspace they create it from (an
     /// admin: RTE or Release Manager). Audited in the new workspace. The slug is the URL segment: unique on the host, and never another workspace's id.
     /// </summary>
-    public Task<ServiceResult<WorkspaceChoice>> CreateAsync(string? name, string? slug, string? region, Actor actor, CancellationToken ct = default)
+    public async Task<ServiceResult<WorkspaceChoice>> CreateAsync(string? name, string? slug, string? region, Actor actor, CancellationToken ct = default)
+    {
+        var created = await CreateCoreAsync(name, slug, region, actor, ct);
+        // REOS-116 (D46): a new workspace starts with Beta, CERT, PenTest Cert and Production. Its own transaction (the new workspace is not the request's); the app also seeds any workspace without types at start.
+        if (created.IsOk) await new ReleaseTypeService(dbf, time, realtime).SeedAsync(created.Value.Id, ct);
+        return created;
+    }
+
+    private Task<ServiceResult<WorkspaceChoice>> CreateCoreAsync(string? name, string? slug, string? region, Actor actor, CancellationToken ct)
     {
         name = (name ?? "").Trim();
         slug = (slug ?? "").Trim().ToLowerInvariant();

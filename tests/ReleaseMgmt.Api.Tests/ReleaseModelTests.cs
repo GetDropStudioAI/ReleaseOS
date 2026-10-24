@@ -15,10 +15,15 @@ public class ReleaseModelTests
     private static string Target(int days = 60) => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(days).ToString("yyyy-MM-dd");
     private static long Audits(ApiFactory f, string entityId, string action) => long.Parse(Scalar(f, $"SELECT COUNT(*) FROM AuditEvents WHERE EntityId='{entityId}' AND Action='{action}'"));
 
+    /// <summary>REOS-116: a host that seeds the release types, so a release must name one (the others start without types, as a database opened before the seeding).</summary>
+    private static readonly Dictionary<string, string> Seeded = new() { ["ReleaseTypes:SeedAtStart"] = "true" };
+
     private static async Task<string> Create(HttpClient c, string title, object? extra = null)
     {
         var body = new Dictionary<string, object?> { ["title"] = title, ["targetReleaseDate"] = Target(), ["riskTier"] = "Low" };
         if (extra is not null) foreach (var p in extra.GetType().GetProperties()) body[char.ToLowerInvariant(p.Name[0]) + p.Name[1..]] = p.GetValue(extra);
+        if (!body.ContainsKey("releaseTypeId") && (await c.GetFromJsonAsync<JsonElement>("/api/v1/release-types")) is { } types && types.GetArrayLength() > 0)
+            body["releaseTypeId"] = types.EnumerateArray().First(x => x.GetProperty("name").GetString() == "Production").GetProperty("id").GetString();
         var r = await c.PostAsJsonAsync("/api/v1/trains", body);
         Assert.True(r.IsSuccessStatusCode, await r.Content.ReadAsStringAsync());
         return (await Json(r)).GetProperty("id").GetString()!;
@@ -52,7 +57,7 @@ public class ReleaseModelTests
     [Fact]
     public async Task The_release_list_carries_the_key_owner_team_type_and_environments_of_every_row_for_any_role()
     {
-        using var f = new ApiFactory();
+        using var f = new ApiFactory(settings: Seeded);
         var rte = await As(f, Roles.RTE, "rte@x.com");
         var viewer = await As(f, Roles.Viewer, "v@x.com");
         var rmId = UserId(f, "rte@x.com");
@@ -73,7 +78,7 @@ public class ReleaseModelTests
         Assert.Equal("RLS-2", b.GetProperty("key").GetString());
         Assert.Equal(JsonValueKind.Null, b.GetProperty("owner").ValueKind);
         Assert.Equal(JsonValueKind.Null, b.GetProperty("ownerTeam").ValueKind);
-        Assert.Equal(JsonValueKind.Null, b.GetProperty("type").ValueKind);
+        Assert.Equal("Production", b.GetProperty("type").GetProperty("name").GetString());   // REOS-116: every release has a type; the helper names Production when a test names none
         Assert.Equal(0, b.GetProperty("environments").GetArrayLength());
     }
 
@@ -108,7 +113,7 @@ public class ReleaseModelTests
     [Fact]
     public async Task Owner_team_branch_on_call_type_and_environments_are_set_at_creation_edited_with_If_Match_and_audited()
     {
-        using var f = new ApiFactory();
+        using var f = new ApiFactory(settings: Seeded);
         var rte = await As(f, Roles.RTE, "rte@x.com");
         var rm = await As(f, Roles.ReleaseManager, "rm@x.com");
         var viewer = await As(f, Roles.Viewer, "v@x.com");
@@ -209,7 +214,7 @@ public class ReleaseModelTests
     [Fact]
     public async Task Release_types_are_seeded_per_workspace_managed_by_planners_and_a_types_default_template_starts_the_release()
     {
-        using var f = new ApiFactory();
+        using var f = new ApiFactory(settings: Seeded);
         var rte = await As(f, Roles.RTE, "rte@x.com");
         var rm = await As(f, Roles.ReleaseManager, "rm@x.com");
         var viewer = await As(f, Roles.Viewer, "v@x.com");

@@ -13,7 +13,7 @@ namespace ReleaseMgmt.Api.Endpoints;
 public static class TrainQueryEndpoints
 {
     public sealed record StreamRow(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, int Blockers, string[] Gates, string? CloseCode, string? EndedOn, int Version,
-        string? Key = null, PersonRef? Owner = null, TeamRef? OwnerTeam = null, NamedRef? Type = null, EnvironmentRef[]? Environments = null);   // REOS-125: the release model beside each row, for the Releases table's columns and filters
+        string? Key = null, PersonRef? Owner = null, TeamRef? OwnerTeam = null, NamedRef? Type = null, EnvironmentRef[]? Environments = null, int? BetaNumber = null);   // REOS-125: the release model beside each row, for the Releases table's columns and filters
     public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, int TMinus, string RequiredBeforeStatus, string? OwnerName, string? CertifiedBy, string? CertifiedOn, int TasksDone, int TasksTotal, int Version, int SequenceOrder);   // SequenceOrder: REOS-81 (insert a gate before another)
     public sealed record TrainDetail(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, string? ChangeTicketNumber, string? CloseCode, bool RollbackRehearsed, string? NextStatus, int Version, GateRow[] Gates);
 
@@ -37,7 +37,7 @@ public static class TrainQueryEndpoints
 
     public static void MapTrainQueries(this RouteGroupBuilder api)
     {
-        api.MapGet("/trains", async (IDbContextFactory<ReleaseDbContext> dbf, TrainLifecycleService lifecycle, TimeProvider time, CancellationToken ct) =>
+        api.MapGet("/trains", async (string? releaseTypeId, IDbContextFactory<ReleaseDbContext> dbf, TrainLifecycleService lifecycle, TimeProvider time, CancellationToken ct) =>
         {
             await using var db = await dbf.CreateDbContextAsync(ct);
             var today = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
@@ -47,6 +47,7 @@ public static class TrainQueryEndpoints
                 // Complete and Aborted trains stay listed for 30 days (Complete by ActualEndAt; Aborted, which has no end time, by its last change, the abort),
                 // so a train aborted from its header does not vanish from the Stream (the web's "Aborted" group, REOS-86).
                 .Where(t => t.ArchivedAt == null && (t.CurrentStatus != "Complete" || t.ActualEndAt >= cutoff) && (t.CurrentStatus != "Aborted" || t.UpdatedAt >= cutoff))
+                .Where(t => releaseTypeId == null || t.ReleaseTypeId == releaseTypeId)   // REOS-116: ?releaseTypeId= lists the releases of that type only
                 .OrderBy(t => t.TargetReleaseDate).ThenBy(t => t.Title).ToListAsync(ct);
             var ids = trains.Select(t => t.Id).ToList();
             var gates = (await db.Set<StageGates>().AsNoTracking().Where(g => ids.Contains(g.ReleaseTrainId)).ToListAsync(ct))
@@ -74,7 +75,7 @@ public static class TrainQueryEndpoints
                     BusinessDays.Between(today, t.TargetReleaseDate, holidays), blockers,
                     [.. gates[t.Id].OrderBy(g => g.SequenceOrder).Select(g => g.Status)], t.CloseCode, (t.CurrentStatus == "Aborted" ? t.UpdatedAt : t.ActualEndAt)?.ToString("yyyy-MM-dd"), t.Version,
                     t.ReleaseKey, t.OwnerUserId is { } o && people.TryGetValue(o, out var person) ? person : null, t.OwnerTeamId is { } tm && teamRefs.TryGetValue(tm, out var team) ? team : null,
-                    t.ReleaseTypeId is { } ty && typeRefs.TryGetValue(ty, out var type) ? type : null, [.. envs[t.Id]]));
+                    t.ReleaseTypeId is { } ty && typeRefs.TryGetValue(ty, out var type) ? type : null, [.. envs[t.Id]], t.BetaNumber));
             }
             return Results.Ok(rows);
         }).RequireAuthorization(Policies.Read);

@@ -196,7 +196,9 @@ await using (var scope = app.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<WorkspaceService>().ApplyDefaultSettingsAsync(config["Workspace:DefaultName"], config["Workspace:Region"]);
     var seed = scope.ServiceProvider.GetRequiredService<SeedService>();
     await seed.SeedReferenceDataAsync();
-    await scope.ServiceProvider.GetRequiredService<ReleaseTypeService>().SeedAllAsync();   // REOS-107 / RT1: Beta, CERT, PenTest Cert, Production for a workspace that has no types
+    // REOS-107 / RT1 (REOS-116, D46): Beta, CERT, PenTest Cert and Production for a workspace that has no types, and Production for a release that has none.
+    // ReleaseTypes:SeedAtStart (default true) is the named key: off, a workspace without types accepts typeless releases (the contract tests that insert rows by SQL run that way).
+    if (config.GetValue("ReleaseTypes:SeedAtStart", true)) await scope.ServiceProvider.GetRequiredService<ReleaseTypeService>().SeedAllAsync();
     if (config.GetValue("Seed:Demo", app.Environment.IsDevelopment())) await seed.SeedDemoDataAsync(); // demo trains only when asked (default: Development)
 }
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA

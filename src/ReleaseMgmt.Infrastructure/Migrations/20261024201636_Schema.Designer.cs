@@ -10,8 +10,8 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261023142643_Triggers")]
-    partial class Triggers
+    [Migration("20261024201636_Schema")]
+    partial class Schema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2130,6 +2130,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("ArchivedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("BetaNumber")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ChangeTicketNumber")
                         .HasColumnType("TEXT");
 
@@ -2254,6 +2257,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
                     b.Property<string>("DefaultTemplateId")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsBeta")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
                         .IsRequired()

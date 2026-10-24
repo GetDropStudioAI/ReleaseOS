@@ -27,8 +27,8 @@ public static class CalendarEndpoints
 
     public static void MapCalendar(this RouteGroupBuilder api)
     {
-        api.MapGet("/calendar", async (string? from, string? to, CalendarService cal, CancellationToken ct) =>
-            CalendarService.Validate(from, to, out var f, out var t) is { } why ? Bad(why) : Results.Ok(await cal.GetAsync(f, t, ct))).RequireAuthorization(Policies.Read);
+        api.MapGet("/calendar", async (string? from, string? to, string? releaseTypeId, CalendarService cal, CancellationToken ct) =>
+            CalendarService.Validate(from, to, out var f, out var t) is { } why ? Bad(why) : Results.Ok(await cal.GetAsync(f, t, string.IsNullOrWhiteSpace(releaseTypeId) ? null : releaseTypeId, ct))).RequireAuthorization(Policies.Read);
 
         api.MapGet("/me/ics-tokens", async (ClaimsPrincipal u, IcsTokenService s, CancellationToken ct) => Results.Ok(await s.ListAsync(ActorOf(u).UserId, ct))).RequireAuthorization(Policies.Read);
         api.MapPost("/me/ics-tokens", (IcsCreateBody b, ClaimsPrincipal u, IcsTokenService s, CancellationToken ct) =>

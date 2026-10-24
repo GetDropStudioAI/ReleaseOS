@@ -58,7 +58,7 @@ export interface NamedRef { id: string; name: string }
 export interface EnvironmentRef { id: string; name: string; kind: string; region: string | null }
 /** One release in the list (GET /trains). REOS-125: the release model rides along (key, owner, team, type, environments); each is null or empty when nothing is recorded. */
 export interface StreamRow { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; blockers: number; gates: string[]; closeCode: string | null; endedOn: string | null; version: number
-  key: string | null; owner: PersonRef | null; ownerTeam: TeamRef | null; type: NamedRef | null; environments: EnvironmentRef[] }
+  key: string | null; owner: PersonRef | null; ownerTeam: TeamRef | null; type: NamedRef | null; environments: EnvironmentRef[]; betaNumber?: number | null }
 export interface GateRow { id: string; name: string; class: string; status: string; dueOn: string; tMinus: number; requiredBeforeStatus: string; ownerName: string | null; certifiedBy: string | null; certifiedOn: string | null; tasksDone: number; tasksTotal: number; version: number }
 export interface TrainDetail { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; daysToTarget: number; changeTicketNumber: string | null; closeCode: string | null; rollbackRehearsed: boolean; nextStatus: string | null; version: number; gates: GateRow[] }
 export interface Blocker { hop: string; failure: { guard: string; message: string; items?: string[] | null } }
@@ -213,7 +213,8 @@ export const createTemplate = (b: TemplateInput) => post<TemplateDetail>('/api/v
 export const updateTemplate = (id: string, b: TemplateInput, version: number) => call<TemplateDetail>('PUT', `/api/v1/templates/${id}`, b, version)
 export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
 // REOS-80 new train: blank, from an Approved template, or a copy of a prior train
-export interface NewTrainBody { title: string; targetReleaseDate: string; riskTier?: string | null; templateId?: string | null; windowStartsAt?: string | null; windowEndsAt?: string | null; products?: { productName: string; versionTag: string; projectCode: string }[] }
+export interface NewTrainBody { title: string; targetReleaseDate: string; riskTier?: string | null; templateId?: string | null; windowStartsAt?: string | null; windowEndsAt?: string | null; products?: { productName: string; versionTag: string; projectCode: string }[]
+  releaseTypeId?: string | null; betaNumber?: number | null }   // REOS-116: the type is required once the workspace has types; a Beta type takes its number, 1 to 3
 export interface CreatedTrain { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; source: 'Blank' | 'Template' | 'Clone'; templateId: string | null; clonedFromTrainId: string | null; version: number
   created: { products: number; gates: number; tasks: number; steps: number; dependencies: number; commTemplates: number; commSchedule: number; window: boolean }; notes: string[] }
 export const createTrain = (b: NewTrainBody) => post<CreatedTrain>('/api/v1/trains', b)

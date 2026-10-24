@@ -13,6 +13,7 @@ ANALYTICS = os.path.join(HERE, "..", "..", "db", "analytics.sql")
 FIX = os.path.join(HERE, "fixtures")
 AS_OF = "2026-09-28T12:00:00Z"
 PARAMS = {"from": "2026-01-01", "to": "2026-12-31", "now": AS_OF, "ws": "default"}   # ws: every metric reads one workspace (REOS-105)
+BIND = {**PARAMS, "type": None}   # type: a release type id or NULL for all (REOS-116); not in the fixture's params, so the .NET tests' reading of them is unchanged
 
 random.seed(7)                     # data stream
 idrng = random.Random(1234)        # id stream, separate so ids never shift the data
@@ -124,7 +125,7 @@ blocks = re.split(r"\n-- (M\d+ .*)\n-- name: (\w+)\n", sql)
 expected = {"params": PARAMS, "metrics": {}}
 for i in range(1, len(blocks), 3):
     title, name, q = blocks[i], blocks[i+1], blocks[i+2].strip().rstrip(';')
-    cur = db.execute(q, {k: v for k, v in PARAMS.items() if ':'+k in q})
+    cur = db.execute(q, {k: v for k, v in BIND.items() if ':'+k in q})
     rows = cur.fetchall(); cols = [c[0] for c in cur.description]
     expected["metrics"][name] = {"key": title.split()[0], "columns": cols, "rows": [list(r) for r in rows]}
     print(f"\n{title}  [{name}]  {len(rows)} rows"); print("  ", cols)
@@ -143,12 +144,37 @@ INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId,WorkspaceId) V
 leaks, seen = [], 0
 for i in range(1, len(blocks), 3):
     name, q = blocks[i+1], blocks[i+2].strip().rstrip(';')
-    rows = [list(r) for r in other.execute(q, {k: v for k, v in PARAMS.items() if ':'+k in q}).fetchall()]
+    rows = [list(r) for r in other.execute(q, {k: v for k, v in BIND.items() if ':'+k in q}).fetchall()]
     if rows != expected["metrics"][name]["rows"]: leaks.append(name)
-    w2 = other.execute(q, {k: (v if k != "ws" else "w2") for k, v in PARAMS.items() if ':'+k in q}).fetchall()
+    w2 = other.execute(q, {k: (v if k != "ws" else "w2") for k, v in BIND.items() if ':'+k in q}).fetchall()
     seen += any(any(c is not None and c != 0 for c in r) for r in w2)
 print("\nworkspace isolation:", "every metric unchanged by another workspace's records" if not leaks else f"LEAK in {leaks}", f"({seen} metrics show the other workspace's own records)")
 if leaks or seen < 4: sys.exit(1)
+
+# REOS-116: the type filter. Giving the trains two types splits every train-based metric in two: the parts add up to the whole, and a type nobody has gives nothing.
+typed = sqlite3.connect(":memory:"); db.backup(typed)
+typed.executescript("""
+INSERT INTO ReleaseTypes(Id,Name) VALUES('tA','Type A'),('tB','Type B'),('tNone','Type none');
+UPDATE ReleaseTrains SET ReleaseTypeId = CASE WHEN rowid % 2 = 0 THEN 'tA' ELSE 'tB' END;
+""")
+def run_typed(name, q, t):
+    return typed.execute(q, {k: v for k, v in {**BIND, "type": t}.items() if ':'+k in q}).fetchall()
+type_problems = []
+for i in range(1, len(blocks), 3):
+    name, q = blocks[i+1], blocks[i+2].strip().rstrip(';')
+    if ":type" not in q: continue
+    whole, a, b, none = (run_typed(name, q, t) for t in (None, "tA", "tB", "tNone"))
+    if [list(r) for r in whole] != expected["metrics"][name]["rows"]: type_problems.append(f"{name}: all types differs from the unfiltered result")
+    if name in ("on_time_rate", "outcomes", "comms_timeliness"):
+        for col in ((0,) if name != "comms_timeliness" else (0, 1)):
+            if (a[0][col] or 0) + (b[0][col] or 0) != (whole[0][col] or 0): type_problems.append(f"{name}: column {col} of the two types does not add up")
+    elif name in ("slip_days", "scope_churn", "runbook_summary", "runbook_variance"):
+        if len(a) + len(b) != len(whole): type_problems.append(f"{name}: rows of the two types do not add up")
+    elif name == "throughput":
+        if sum(r[1] for r in a) + sum(r[1] for r in b) != sum(r[1] for r in whole): type_problems.append(f"{name}: completed trains of the two types do not add up")
+    if name in ("slip_days", "scope_churn", "runbook_summary", "runbook_variance") and none: type_problems.append(f"{name}: a type nobody has returned rows")
+print("type filter:", "every filtered metric adds up to the whole" if not type_problems else type_problems)
+if type_problems: sys.exit(1)
 
 if "--write" in sys.argv:
     os.makedirs(FIX, exist_ok=True)

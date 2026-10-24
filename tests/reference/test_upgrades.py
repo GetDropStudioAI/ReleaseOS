@@ -171,6 +171,29 @@ except sqlite3.IntegrityError as e:
 db.execute("INSERT INTO RunbookRuns (Id, ReleaseTrainId, Mode, StartedAt, StartedByUserId) VALUES ('run1', 'r1', 'Rehearsal', '2026-09-03T00:00:00Z', 'u1')")
 check(db.execute("SELECT PausedAt, PausedByUserId, PauseReason FROM RunbookRuns WHERE Id = 'run1'").fetchone() == (None, None, None), "007: a run starts unpaused")
 
+# Upgrade 008 (REOS-116): the Beta type is flagged, nothing else about existing types and releases changes, the new rules are live
+t8 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("008_"):
+        t8.execute("INSERT INTO ReleaseTypes (Id, Name, SortOrder) VALUES ('tyb', 'beta', 10), ('tyc', 'CERT', 20), ('typ', 'Production', 40)")
+        t8.execute("UPDATE ReleaseTrains SET ReleaseTypeId = 'tyb' WHERE Id = 'r1'")
+    t8.executescript(s.read_text())
+check(t8.execute("SELECT Id, IsBeta FROM ReleaseTypes ORDER BY Id").fetchall() == [("tyb", 1), ("tyc", 0), ("typ", 0)], "008: the type called Beta (any case) is a Beta type, the others are not")
+check(t8.execute("SELECT Id, ReleaseTypeId, BetaNumber FROM ReleaseTrains ORDER BY Id").fetchall() == [("r1", "tyb", None), ("r2", None, None)], "008: existing releases keep their type and have no number")
+check(t8.execute("UPDATE ReleaseTrains SET Title = 'R26.10b' WHERE Id = 'r1'").rowcount == 1, "008: a Beta release without a number can be edited in other fields")
+check(t8.execute("UPDATE ReleaseTrains SET Title = 'R26.11b' WHERE Id = 'r2'").rowcount == 1, "008: a release without a type can be edited in other fields")
+for sql, want, label in [
+    ("INSERT INTO ReleaseTrains (Id, Title, TargetReleaseDate, CreatedAt, UpdatedAt) VALUES ('r9', 'x', '2026-12-01', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z')", "needs a release type", "008: a new release without a type is refused once the workspace has types"),
+    ("UPDATE ReleaseTrains SET BetaNumber = 2 WHERE Id = 'r2'", "Only a Beta release carries a Beta number", "008: a number on a release that is not a Beta is refused"),
+    ("UPDATE ReleaseTypes SET IsBeta = 1 WHERE Id = 'tyc'", None, "008: a type no release uses can become a Beta type"),
+]:
+    try:
+        t8.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+t8.execute("UPDATE ReleaseTrains SET ReleaseTypeId = 'typ' WHERE Id = 'r2'")
+check(t8.execute("SELECT ReleaseTypeId FROM ReleaseTrains WHERE Id = 'r2'").fetchone() == ("typ",), "008: a release without a type can be given one")
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

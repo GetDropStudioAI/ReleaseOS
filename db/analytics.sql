@@ -1,8 +1,8 @@
 -- Release Management App — analytics queries (SQLite 3.45+; window functions, JSON)
 -- Every metric reads from records the app already writes; no pre-aggregation (D16).
 -- Parameters bound by the API: :from, :to (ISO dates), :now (ISO timestamp, the request's as-of time;
--- never SQLite's 'now', so results are reproducible) and :ws (the current workspace's id, D45/REOS-105: every metric
--- reads one workspace's records only). Every multi-row query has a deterministic ORDER BY.
+-- never SQLite's 'now', so results are reproducible), :ws (the current workspace's id, D45/REOS-105: every metric
+-- reads one workspace's records only) and :type (REOS-116: a release type id, or NULL for all types; M11 reads the workspace's freeze windows, which have no type). Every multi-row query has a deterministic ORDER BY.
 -- Medians use the row_number pattern.
 
 -- M1  On-time release rate — actual end vs BASELINE planned date (not the current target)
@@ -13,14 +13,14 @@ SELECT
   round(100.0 * sum(date(t.ActualEndAt) <= b.PlannedReleaseDate) / count(*), 1) AS on_time_pct
 FROM ReleaseTrains t
 JOIN Baselines b ON b.ReleaseTrainId = t.Id
-WHERE t.WorkspaceId = :ws AND t.CurrentStatus = 'Complete' AND date(t.ActualEndAt) BETWEEN :from AND :to;
+WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) AND t.CurrentStatus = 'Complete' AND date(t.ActualEndAt) BETWEEN :from AND :to;
 
 -- M2  Slip in days per train (positive = late)
 -- name: slip_days
 SELECT t.Title, b.PlannedReleaseDate, date(t.ActualEndAt) AS actual,
        CAST(julianday(date(t.ActualEndAt)) - julianday(b.PlannedReleaseDate) AS INTEGER) AS slip_days
 FROM ReleaseTrains t JOIN Baselines b ON b.ReleaseTrainId = t.Id
-WHERE t.WorkspaceId = :ws AND t.CurrentStatus = 'Complete' AND date(t.ActualEndAt) BETWEEN :from AND :to
+WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) AND t.CurrentStatus = 'Complete' AND date(t.ActualEndAt) BETWEEN :from AND :to
 ORDER BY t.ActualEndAt, t.Title;
 
 -- M3  Gate cycle time — first entry to InProgress until first Certified/Waived, per gate name, median and p90 (hours)
@@ -32,7 +32,7 @@ WITH spans AS (
   FROM StageGates g
   JOIN GateTransitions tr ON tr.StageGateId = g.Id
   JOIN ReleaseTrains t ON t.Id = g.ReleaseTrainId
-  WHERE t.WorkspaceId = :ws AND date(tr.OccurredAt) BETWEEN :from AND :to
+  WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) AND date(tr.OccurredAt) BETWEEN :from AND :to
   GROUP BY g.Id
   HAVING hours IS NOT NULL
 ), ranked AS (
@@ -52,7 +52,7 @@ SELECT g.GateName, count(*) AS gates,
        round(100.0 * sum(NOT EXISTS (SELECT 1 FROM GateTransitions x WHERE x.StageGateId = g.Id AND x.ToStatus IN ('Failed','Waived'))) / count(*), 1) AS first_pass_pct,
        sum(g.Status = 'Waived') AS waived
 FROM StageGates g JOIN ReleaseTrains t ON t.Id = g.ReleaseTrainId
-WHERE t.WorkspaceId = :ws AND t.CurrentStatus = 'Complete' AND date(t.ActualEndAt) BETWEEN :from AND :to
+WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) AND t.CurrentStatus = 'Complete' AND date(t.ActualEndAt) BETWEEN :from AND :to
 GROUP BY g.GateName ORDER BY g.GateName;
 
 -- M5  Late certification — gates certified after their DueOn date
@@ -60,7 +60,7 @@ GROUP BY g.GateName ORDER BY g.GateName;
 SELECT g.GateName, count(*) AS gates, sum(date(g.CertifiedAt) > g.DueOn) AS late,
        round(avg(max(0, julianday(date(g.CertifiedAt)) - julianday(g.DueOn))), 1) AS avg_days_late
 FROM StageGates g JOIN ReleaseTrains t ON t.Id = g.ReleaseTrainId
-WHERE t.WorkspaceId = :ws AND g.CertifiedAt IS NOT NULL AND date(g.CertifiedAt) BETWEEN :from AND :to
+WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) AND g.CertifiedAt IS NOT NULL AND date(g.CertifiedAt) BETWEEN :from AND :to
 GROUP BY g.GateName ORDER BY g.GateName;
 
 -- M6  Scope churn — products added or removed after the baseline, per train
@@ -75,7 +75,7 @@ SELECT t.Title,
        (SELECT count(*) FROM base WHERE base.ReleaseTrainId = t.Id) AS at_freeze,
        (SELECT count(*) FROM now_ n WHERE n.ReleaseTrainId = t.Id AND n.name NOT IN (SELECT name FROM base WHERE base.ReleaseTrainId = t.Id)) AS added,
        (SELECT count(*) FROM base WHERE base.ReleaseTrainId = t.Id AND base.name NOT IN (SELECT name FROM now_ n WHERE n.ReleaseTrainId = t.Id)) AS removed
-FROM ReleaseTrains t WHERE t.WorkspaceId = :ws AND EXISTS (SELECT 1 FROM Baselines b WHERE b.ReleaseTrainId = t.Id)
+FROM ReleaseTrains t WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) AND EXISTS (SELECT 1 FROM Baselines b WHERE b.ReleaseTrainId = t.Id)
 ORDER BY t.Title;
 
 -- M7  Runbook variance — per step: start lateness and duration overrun vs plan (minutes), live runs only
@@ -87,7 +87,7 @@ FROM StepExecutions e
 JOIN RunbookRuns r ON r.Id = e.RunId AND r.Mode = 'Live'
 JOIN RunbookSteps s ON s.Id = e.StepId
 JOIN ReleaseTrains t ON t.Id = s.ReleaseTrainId
-WHERE t.WorkspaceId = :ws AND e.Status = 'Done' AND date(e.ActualStartAt) BETWEEN :from AND :to
+WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) AND e.Status = 'Done' AND date(e.ActualStartAt) BETWEEN :from AND :to
 ORDER BY t.Title, s.PlannedStartAt, s.StepCode;
 
 -- M8  Runbook variance summary per train — planned window vs actual, and worst step
@@ -101,7 +101,7 @@ WITH v AS (
 SELECT t.Title, count(*) AS steps, round(sum(overrun)) AS total_overrun_min,
        (SELECT StepCode FROM v v2 WHERE v2.ReleaseTrainId = t.Id ORDER BY overrun DESC, StepCode LIMIT 1) AS worst_step,
        round(max(overrun)) AS worst_overrun_min
-FROM v JOIN ReleaseTrains t ON t.Id = v.ReleaseTrainId WHERE t.WorkspaceId = :ws GROUP BY t.Id ORDER BY t.Title;
+FROM v JOIN ReleaseTrains t ON t.Id = v.ReleaseTrainId WHERE t.WorkspaceId = :ws AND (:type IS NULL OR t.ReleaseTypeId = :type) GROUP BY t.Id ORDER BY t.Title;
 
 -- M9  Blocker aging — open blockers by age bucket and severity (as of now)
 -- name: blocker_aging
@@ -112,7 +112,7 @@ SELECT Severity,
        sum(age >= 7)              AS ge_7d,
        round(max(age), 1)         AS oldest_days
 FROM (SELECT Severity, julianday(:now) - julianday(RaisedAt) AS age FROM Blockers
-      WHERE ResolvedAt IS NULL AND ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws))
+      WHERE ResolvedAt IS NULL AND ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws AND (:type IS NULL OR ReleaseTypeId = :type)))
 GROUP BY Severity
 ORDER BY CASE Severity WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END;
 
@@ -123,10 +123,10 @@ SELECT count(*) AS completed,
        sum(CloseCode = 'SuccessfulWithIssues')  AS with_issues,
        sum(CloseCode = 'Unsuccessful')          AS unsuccessful,
        round(100.0 * (SELECT count(DISTINCT r.ReleaseTrainId) FROM RunbookRuns r WHERE r.Mode = 'Live' AND r.Outcome = 'RolledBack'
-                      AND r.ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws AND CurrentStatus = 'Complete' AND date(ActualEndAt) BETWEEN :from AND :to))
+                      AND r.ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws AND (:type IS NULL OR ReleaseTypeId = :type) AND CurrentStatus = 'Complete' AND date(ActualEndAt) BETWEEN :from AND :to))
              / count(*), 1)                     AS rollback_pct,
        round(100.0 * sum(CloseCode <> 'Successful') / count(*), 1) AS change_fail_pct
-FROM ReleaseTrains WHERE WorkspaceId = :ws AND CurrentStatus = 'Complete' AND date(ActualEndAt) BETWEEN :from AND :to;
+FROM ReleaseTrains WHERE WorkspaceId = :ws AND (:type IS NULL OR ReleaseTypeId = :type) AND CurrentStatus = 'Complete' AND date(ActualEndAt) BETWEEN :from AND :to;
 
 -- M11 Freeze exceptions — overrides granted, and approval lead time (hours before expiry)
 -- name: freeze_exceptions
@@ -140,13 +140,13 @@ WHERE f.WorkspaceId = :ws AND date(f.StartsAt) BETWEEN :from AND :to GROUP BY f.
 SELECT count(*) AS scheduled, sum(SentAt IS NOT NULL AND SentAt <= DueAt) AS on_time,
        sum(SentAt IS NULL AND DueAt < :now) AS missed,
        round(100.0 * sum(SentAt IS NOT NULL AND SentAt <= DueAt) / count(*), 1) AS on_time_pct
-FROM CommSchedule WHERE ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws) AND date(DueAt) BETWEEN :from AND :to;
+FROM CommSchedule WHERE ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws AND (:type IS NULL OR ReleaseTypeId = :type)) AND date(DueAt) BETWEEN :from AND :to;
 
 -- M13 Waiver rate — share of Compliance gates passed by waiver (a governance smell when rising)
 -- name: waiver_rate
 SELECT strftime('%Y-%m', g.CertifiedAt) AS month, count(*) AS compliance_gates,
        sum(g.Status = 'Waived') AS waived, round(100.0 * sum(g.Status = 'Waived') / count(*), 1) AS waived_pct
-FROM StageGates g WHERE g.ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws) AND g.GateClass = 'Compliance' AND g.CertifiedAt IS NOT NULL
+FROM StageGates g WHERE g.ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws AND (:type IS NULL OR ReleaseTypeId = :type)) AND g.GateClass = 'Compliance' AND g.CertifiedAt IS NOT NULL
   AND date(g.CertifiedAt) BETWEEN :from AND :to GROUP BY month ORDER BY month;
 
 -- M14 Sync health — link states and alert burden per source system
@@ -156,13 +156,13 @@ SELECT l.SourceSystem, count(*) AS links,
        sum(l.SyncState IN ('NotFound','AuthFailed')) AS broken,
        round(max((julianday(:now) - julianday(l.LastSyncedAt)) * 1440)) AS stalest_min,
        (SELECT count(*) FROM SyncAlerts a WHERE a.WorkspaceId = :ws AND a.SourceSystem = l.SourceSystem AND a.IsResolved = 0) AS open_alerts
-FROM ExternalLinks l WHERE l.ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws) GROUP BY l.SourceSystem ORDER BY l.SourceSystem;
+FROM ExternalLinks l WHERE l.ReleaseTrainId IN (SELECT Id FROM ReleaseTrains WHERE WorkspaceId = :ws AND (:type IS NULL OR ReleaseTypeId = :type)) GROUP BY l.SourceSystem ORDER BY l.SourceSystem;
 
 -- M15 Throughput — trains completed per month and median lead time (created -> complete, days)
 -- name: throughput
 WITH c AS (
   SELECT strftime('%Y-%m', ActualEndAt) AS month, julianday(ActualEndAt) - julianday(CreatedAt) AS lead_days
-  FROM ReleaseTrains WHERE WorkspaceId = :ws AND CurrentStatus = 'Complete' AND date(ActualEndAt) BETWEEN :from AND :to
+  FROM ReleaseTrains WHERE WorkspaceId = :ws AND (:type IS NULL OR ReleaseTypeId = :type) AND CurrentStatus = 'Complete' AND date(ActualEndAt) BETWEEN :from AND :to
 ), r AS (
   SELECT month, lead_days, row_number() OVER (PARTITION BY month ORDER BY lead_days) rn, count(*) OVER (PARTITION BY month) n FROM c
 )

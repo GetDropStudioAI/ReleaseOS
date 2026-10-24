@@ -8,7 +8,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 public sealed record CalWindow(string StartsAt, string EndsAt);
 /// <summary>REOS-85: another open train whose window overlaps this one's and that shares a CI or product (names of what is shared).</summary>
 public sealed record CalCollision(string TrainId, string Title, IReadOnlyList<string> Shared);
-public sealed record CalTrain(string Id, string Title, string Status, string RiskTier, string TargetDate, CalWindow? Window, IReadOnlyList<CalCollision> Collisions);
+public sealed record CalTrain(string Id, string Title, string Status, string RiskTier, string TargetDate, CalWindow? Window, IReadOnlyList<CalCollision> Collisions, NamedRef? Type = null, int? BetaNumber = null);
 public sealed record CalGate(string Id, string Name, string Class, string Status, string DueOn, string TrainId, string TrainTitle, string TrainStatus);
 public sealed record CalFreeze(string Id, string Name, string Kind, string StartsAt, string EndsAt, string Scope);
 public sealed record CalMilestone(string Id, string Name, string DueOn, bool Done, string TrainId, string TrainTitle, string TrainStatus);
@@ -35,13 +35,16 @@ public sealed class CalendarService(IDbContextFactory<ReleaseDbContext> dbf, Adv
         return null;
     }
 
-    public async Task<CalendarPayload> GetAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+    /// <summary>REOS-116: <paramref name="releaseTypeId"/> limits the releases (and so their gates and milestones) to that type; freeze windows are the workspace's and always show.</summary>
+    public async Task<CalendarPayload> GetAsync(DateOnly from, DateOnly to, string? releaseTypeId = null, CancellationToken ct = default)
     {
         await using var db = await dbf.CreateDbContextAsync(ct);
         var start = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var end = to.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);   // exclusive
 
-        var trains = await db.Set<ReleaseTrains>().AsNoTracking().Where(t => t.ArchivedAt == null).ToListAsync(ct);
+        var trains = await db.Set<ReleaseTrains>().AsNoTracking().Where(t => t.ArchivedAt == null && (releaseTypeId == null || t.ReleaseTypeId == releaseTypeId)).ToListAsync(ct);
+        var typeIds = trains.Select(t => t.ReleaseTypeId).OfType<string>().Distinct().ToList();
+        var types = await db.Set<ReleaseTypes>().AsNoTracking().Where(x => typeIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new NamedRef(x.Id, x.Name), ct);
         var byId = trains.ToDictionary(t => t.Id);
         var windows = (await db.Set<DeploymentWindows>().AsNoTracking().ToListAsync(ct)).Where(w => byId.ContainsKey(w.ReleaseTrainId)).ToDictionary(w => w.ReleaseTrainId);
         var gates = (await db.Set<StageGates>().AsNoTracking().Where(g => g.DueOn >= from && g.DueOn <= to).ToListAsync(ct)).Where(g => byId.ContainsKey(g.ReleaseTrainId));
@@ -55,7 +58,7 @@ public sealed class CalendarService(IDbContextFactory<ReleaseDbContext> dbf, Adv
             .Where(t => (t.TargetReleaseDate >= from && t.TargetReleaseDate <= to) || (windows.TryGetValue(t.Id, out var w) && w.StartsAt < end && w.EndsAt > start))
             .OrderBy(t => t.TargetReleaseDate).ThenBy(t => t.Title).ThenBy(t => t.Id)
             .Select(t => new CalTrain(t.Id, t.Title, t.CurrentStatus, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
-                windows.TryGetValue(t.Id, out var w) ? new CalWindow(w.StartsAt.ToString(Iso), w.EndsAt.ToString(Iso)) : null, Clashes(t.Id))).ToList();
+                windows.TryGetValue(t.Id, out var w) ? new CalWindow(w.StartsAt.ToString(Iso), w.EndsAt.ToString(Iso)) : null, Clashes(t.Id), t.ReleaseTypeId is { } ty && types.TryGetValue(ty, out var type) ? type : null, t.BetaNumber)).ToList();
         var calGates = gates.OrderBy(g => g.DueOn).ThenBy(g => g.SequenceOrder).ThenBy(g => g.Id)
             .Select(g => { var t = byId[g.ReleaseTrainId]; return new CalGate(g.Id, g.GateName, g.GateClass, g.Status, g.DueOn.ToString("yyyy-MM-dd"), t.Id, t.Title, t.CurrentStatus); }).ToList();
         var calFreezes = freezes.OrderBy(w => w.StartsAt).ThenBy(w => w.Id)

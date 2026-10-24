@@ -20,10 +20,11 @@ public static class TrainCreationGuards
 public sealed record NewProductInput(string? ProductName, string? VersionTag, string? ProjectCode, string? ServiceKey = null);
 
 /// <summary><c>POST /trains</c>: a blank train, or one built from an Approved template when <see cref="TemplateId"/> is set. Dates are strings so a bad one is a readable 422, not a 400.
-/// REOS-107: the release's owner, team, branch, on-call, type and target environments are optional; a type's default template is used when no template is named.</summary>
+/// REOS-107: the release's owner, team, branch, on-call and target environments are optional. REOS-116 (D46, D48): the release type is required once the workspace has types (a Beta type also takes its number, 1 to 3),
+/// and the type's default template is used when no template is named.</summary>
 public sealed record NewTrainInput(string? Title, string? TargetReleaseDate, string? RiskTier, string? TemplateId = null, string? WindowStartsAt = null, string? WindowEndsAt = null,
     IReadOnlyList<NewProductInput>? Products = null, string? OwnerUserId = null, string? OwnerTeamId = null, string? ReleaseBranch = null, string? OnCallUserId = null,
-    string? OnCallTeamId = null, string? ReleaseTypeId = null, IReadOnlyList<string>? EnvironmentIds = null);
+    string? OnCallTeamId = null, string? ReleaseTypeId = null, IReadOnlyList<string>? EnvironmentIds = null, int? BetaNumber = null);
 
 /// <summary><c>POST /trains/{id}:clone</c>. The risk tier defaults to the source train's.</summary>
 public sealed record CloneTrainInput(string? Title, string? TargetReleaseDate, string? RiskTier = null);
@@ -60,8 +61,9 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             var products = CheckProducts(input.Products ?? [], f);
             var serviceIds = await ResolveServicesAsync(db, products, f, ct);
             var fields = new NewReleaseFields(Blank(input.OwnerUserId), Blank(input.OwnerTeamId), Blank(input.ReleaseBranch), Blank(input.OnCallUserId), Blank(input.OnCallTeamId), Blank(input.ReleaseTypeId),
-                input.EnvironmentIds is { Count: > 0 } ? input.EnvironmentIds : null);
-            f.AddRange(await ReleaseModelService.ValidateAsync(db, fields.OwnerUserId, fields.OwnerTeamId, fields.ReleaseBranch, fields.OnCallUserId, fields.OnCallTeamId, fields.ReleaseTypeId, fields.EnvironmentIds, ct));
+                input.EnvironmentIds is { Count: > 0 } ? input.EnvironmentIds : null, input.BetaNumber);
+            f.AddRange(await ReleaseModelService.ValidateAsync(db, fields.OwnerUserId, fields.OwnerTeamId, fields.ReleaseBranch, fields.OnCallUserId, fields.OnCallTeamId, fields.ReleaseTypeId, fields.EnvironmentIds, ct,
+                betaNumber: fields.BetaNumber, requireType: true, checkBeta: true));
 
             var notes = new List<string>();
             TrainTemplates? template = null;
@@ -156,7 +158,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
 
             Audit(db, actor, train.Id, "ReleaseTrain", train.Id, "Create", null, new
             {
-                train.Title, targetReleaseDate = target.Value.ToString("yyyy-MM-dd"), train.RiskTier, source = template is null ? "Blank" : "Template", templateId = template?.Id, template = template?.Name,
+                train.Title, targetReleaseDate = target.Value.ToString("yyyy-MM-dd"), train.RiskTier, source = template is null ? "Blank" : "Template", templateId = template?.Id, template = template?.Name, fromReleaseType = fromType && template is not null,
                 release = ReleaseModelService.Snapshot(train, fields.EnvironmentIds ?? []),
             });
             await db.SaveChangesAsync(ct);
@@ -193,9 +195,8 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             // REOS-107: the copy keeps the source's team, branch, on-call, type and target environments; a person who left the workspace is dropped, with a note. The key is a new one.
             var srcEnvIds = await db.Set<TrainEnvironments>().AsNoTracking().Where(e => e.ReleaseTrainId == src.Id).Select(e => e.EnvironmentId).ToListAsync(ct);
             var liveEnvIds = (await db.Set<Environments>().AsNoTracking().Where(e => srcEnvIds.Contains(e.Id) && e.ArchivedAt == null).Select(e => e.Id).ToListAsync(ct));
-            var liveType = src.ReleaseTypeId is not null && await db.Set<ReleaseTypes>().AnyAsync(x => x.Id == src.ReleaseTypeId && x.ArchivedAt == null, ct);
-            string? KeepPerson(string? id) { if (id is null || active.Contains(id)) return id; notes.Add("The owner or on-call person of the original is no longer an active member of this workspace and was left empty."); return null; }
-            var cloneFields = new NewReleaseFields(KeepPerson(src.OwnerUserId), src.OwnerTeamId, src.ReleaseBranch, KeepPerson(src.OnCallUserId), src.OnCallTeamId, liveType ? src.ReleaseTypeId : null, liveEnvIds);
+                        string? KeepPerson(string? id) { if (id is null || active.Contains(id)) return id; notes.Add("The owner or on-call person of the original is no longer an active member of this workspace and was left empty."); return null; }
+            var cloneFields = new NewReleaseFields(KeepPerson(src.OwnerUserId), src.OwnerTeamId, src.ReleaseBranch, KeepPerson(src.OnCallUserId), src.OnCallTeamId, src.ReleaseTypeId, liveEnvIds, src.BetaNumber);   // RT1: the copy keeps the type (even one archived since) and the Beta number; the person edits the number for the next Beta
             if (liveEnvIds.Count < srcEnvIds.Count) notes.Add("A target environment of the original is archived and was not copied.");
             ReleaseModelService.Apply(train, cloneFields);
             db.Set<ReleaseTrains>().Add(train);

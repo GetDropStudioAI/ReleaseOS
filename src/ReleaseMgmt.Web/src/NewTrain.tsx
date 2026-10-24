@@ -4,12 +4,14 @@ import { errMsg, plural } from './format'
 import { serverNow, utcToZonedInput, zonedInputToUtc } from './time'
 import { useDraft } from './session'
 import { SidePanel } from './ui'
+import { listReleaseTypes } from './mgmt/releaseTypesApi.ts'
+import { BETA_NUMBERS, activeTypes, startsFrom, typeProblem, type ReleaseTypeRow } from './mgmt/releaseTypesLogic.ts'
 
 /** How the new train starts (REOS-80). Underlined text choices, never a segmented control (UI.md). */
 export type NewTrainMode = 'blank' | 'template' | 'copy'
-export interface NewTrainDraft { open: boolean; mode: NewTrainMode; templateId: string; sourceId: string; title: string; target: string; risk: string; start: string; end: string }
+export interface NewTrainDraft { open: boolean; mode: NewTrainMode; templateId: string; sourceId: string; title: string; target: string; risk: string; start: string; end: string; typeId?: string; betaNumber?: string }   // REOS-116: a session draft saved before the type existed has neither
 export const newTrainKey = 'newtrain'
-export const emptyNewTrain = (): NewTrainDraft => ({ open: true, mode: 'blank', templateId: '', sourceId: '', title: '', target: '', risk: '', start: '', end: '' })
+export const emptyNewTrain = (): NewTrainDraft => ({ open: true, mode: 'blank', templateId: '', sourceId: '', title: '', target: '', risk: '', start: '', end: '', typeId: '', betaNumber: '' })
 
 const MODES: { mode: NewTrainMode; label: string }[] = [{ mode: 'blank', label: 'Blank' }, { mode: 'template', label: 'From template' }, { mode: 'copy', label: 'Copy of a train' }]
 const TIERS = ['Low', 'Moderate', 'High', 'VeryHigh']
@@ -25,6 +27,7 @@ const todayInZone = () => utcToZonedInput(new Date(serverNow()).toISOString()).s
 export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onCreated: (t: CreatedTrain) => void }) {
   const [draft, setDraft] = useDraft<NewTrainDraft>(newTrainKey)
   const [templates, setTemplates] = useState<TemplateRow[] | null>(null)
+  const [types, setTypes] = useState<ReleaseTypeRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<CreatedTrain | null>(null)
@@ -33,6 +36,7 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
   const close = () => setDraft({ ...d, open: false })   // Close keeps what was typed (a session draft); Discard and Done drop it
 
   useEffect(() => { getTemplates().then(ts => setTemplates(ts.filter(t => t.status === 'Approved'))).catch(e => { setTemplates([]); setErr(errMsg(e, 'Could not load the templates.')) }) }, [])
+  useEffect(() => { listReleaseTypes().then(setTypes).catch(e => { setTypes([]); setErr(errMsg(e, 'Could not load the release types.')) }) }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) close() }
     window.addEventListener('keydown', onKey)
@@ -42,17 +46,22 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
   const template = d.mode === 'template' ? templates?.find(t => t.id === d.templateId) : undefined
   const source = d.mode === 'copy' ? trains.find(t => t.id === d.sourceId) : undefined
   const today = todayInZone()
+  const live = activeTypes(types ?? [])
+  const type = live.find(t => t.id === d.typeId)
+  const typeStarts = d.mode === 'blank' ? startsFrom(type) : null
+  const asksType = d.mode !== 'copy'   // a copy keeps the original's type and number
   const defaultTier = template?.defaultRiskTier ?? source?.riskTier ?? 'Moderate'
   const defaultFrom = template ? 'template default' : source ? 'same as the source' : 'default'
 
+  const typeWhy = !asksType ? null : types === null ? 'Loading the release types…' : typeProblem(types, d.typeId ?? '', d.betaNumber ?? '')
   // Why Create is off, in words on the line below it (UI.md: disabled actions always say why).
   const why = d.mode === 'template' && !template ? 'Choose an approved template.'
     : d.mode === 'copy' && !source ? 'Choose the train to copy.'
     : d.title.trim() === '' ? 'Enter a title.'
-    : d.target === '' ? 'Choose a target release date.'
+    : typeWhy ?? (d.target === '' ? 'Choose a target release date.'
     : d.target < today ? 'The target release date is in the past.'
     : d.mode === 'template' && (d.start === '') !== (d.end === '') ? 'Give the window both a start and an end, or neither.'
-    : null
+    : null)
 
   const create = async () => {
     if (why) return
@@ -63,6 +72,7 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
         ? await cloneTrain(d.sourceId, { title: d.title.trim(), targetReleaseDate: d.target, riskTier: risk })
         : await createTrain({
             title: d.title.trim(), targetReleaseDate: d.target, riskTier: risk, templateId: d.mode === 'template' ? d.templateId : null,
+            releaseTypeId: live.length > 0 ? d.typeId || null : null, betaNumber: type?.isBeta ? Number(d.betaNumber) : null,
             windowStartsAt: d.mode === 'template' && d.start ? zonedInputToUtc(d.start) : null, windowEndsAt: d.mode === 'template' && d.end ? zonedInputToUtc(d.end) : null,
           })
       setDraft({ ...emptyNewTrain(), mode: d.mode })   // the form is done with; the drawer stays open to show what was created
@@ -120,6 +130,23 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
 
       <p><label className="cap" htmlFor="nt-title">Title</label>
         <input id="nt-title" className="line block" maxLength={200} placeholder="R27.01 Payments winter release" value={d.title} onChange={e => set({ title: e.target.value })} /></p>
+      {asksType ? (types === null ? <p className="muted">Loading release types…</p>
+        : live.length === 0 ? null
+        : <>
+            <p><label className="cap" htmlFor="nt-type">Release type</label>
+              <select id="nt-type" className="line block" value={d.typeId ?? ''} onChange={e => set({ typeId: e.target.value, betaNumber: '' })}>
+                <option value="">Choose a release type</option>
+                {live.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select></p>
+            {type?.isBeta && <p><label className="cap" htmlFor="nt-beta">{type.name} number</label>
+              <select id="nt-beta" className="line block" value={d.betaNumber ?? ''} onChange={e => set({ betaNumber: e.target.value })}>
+                <option value="">Choose 1, 2 or 3</option>
+                {BETA_NUMBERS.map(n => <option key={n} value={n}>{type.name} {n}</option>)}
+              </select></p>}
+            {typeStarts && <p className="muted">A {type!.name} release starts from the “{typeStarts}” template: its gates and schedule. Choose From template to start from another.</p>}
+            {type && d.mode === 'blank' && !typeStarts && <p className="muted">{type.name} has no default template, so the release starts blank.</p>}
+          </>)
+        : <p className="muted">A copy keeps the original&apos;s release type{source?.type ? `, ${source.type.name}` : ''}.</p>}
       <p><label className="cap" htmlFor="nt-target">Target release date</label>
         <input id="nt-target" className="line block" type="date" min={today} value={d.target} onChange={e => set({ target: e.target.value })} /></p>
       <p><label className="cap" htmlFor="nt-risk">Risk tier</label>

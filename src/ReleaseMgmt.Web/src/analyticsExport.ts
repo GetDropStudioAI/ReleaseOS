@@ -42,8 +42,17 @@ export function workbookName(from: string, to: string): string {
 }
 
 /** The workbook request: the window and as-of of the figures on screen, so the file holds the numbers the person is looking at. */
-export function workbookUrl(from: string, to: string, asOf: string): string {
-  return `/api/v1/analytics/xlsx?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&now=${encodeURIComponent(asOf)}`
+export function workbookUrl(from: string, to: string, asOf: string, type = ''): string {
+  return `/api/v1/analytics/xlsx?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&now=${encodeURIComponent(asOf)}${typeParam(type)}`
+}
+
+/** REOS-116: the release type the figures are limited to, as the query parameter every analytics endpoint takes; nothing for all types. */
+export const typeParam = (type: string): string => (type ? `&releaseTypeId=${encodeURIComponent(type)}` : '')
+
+/** The query string of the metric requests: the period when both ends are set, and the release type when one is chosen. */
+export function analyticsQuery(from: string, to: string, type = ''): string {
+  const q = `${from && to ? `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : ''}${typeParam(type)}`.replace(/^&/, '')
+  return q ? `?${q}` : ''
 }
 
 /** Browser download of a blob through a temporary <a download>. */

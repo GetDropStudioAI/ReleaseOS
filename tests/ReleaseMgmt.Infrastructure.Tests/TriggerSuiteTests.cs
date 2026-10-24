@@ -708,4 +708,40 @@ INSERT INTO AuditEvents(OccurredAt,EntityType,EntityId,Action,WorkspaceId) VALUE
         Check(db8, "UPDATE AuditChainHeads SET VerifiedStatus='Maybe', VerifiedAt='2026-10-20T14:00:00Z' WHERE ChainId='default'", false, "a verification status that is neither verified nor failed", expect: "CHECK");
         Check(db8, "UPDATE AuditChainHeads SET VerifiedStatus='Failed', VerifiedAt='2026-10-20T14:00:00Z', FirstBadId=1, FirstBadReason='Row 1 does not verify' WHERE ChainId='default'", true, "a verification recorded");
     }
+
+    /// <summary>REOS-116 (D46, D48): a type on every release once the workspace has types; a Beta type carries a number 1 to 3. Port of the oracle's last section.</summary>
+    [Fact]
+    public void Release_types_a_type_on_every_release_and_a_Beta_number()
+    {
+        using var db9 = fx.Fresh();
+        Exec(db9, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','2026-10-20T14:00:00Z'),('w3','NoTypes','notypes','2026-10-20T14:00:00Z')");
+        const string T = "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseTypeId,BetaNumber,WorkspaceId) VALUES(?,?,'2026-11-30',?,?,?,?,?)";
+        Check(db9, T, true, "a release in a workspace with no types needs none yet", ["n1", "x", Now, Now, null, null, "default"]);
+        Exec(db9, "INSERT INTO ReleaseTypes(Id,Name,SortOrder,IsBeta) VALUES('tyB','Beta',10,1),('tyC','CERT',20,0),('tyP','Production',40,0)");
+        Exec(db9, "INSERT INTO ReleaseTypes(Id,Name,WorkspaceId) VALUES('tyX','Production','w2')");
+        Check(db9, T, false, "a release created without a type once the workspace has types", ["n2", "x", Now, Now, null, null, "default"], "needs a release type");
+        Check(db9, T, true, "a release created with the type of its own workspace", ["n3", "x", Now, Now, "tyX", null, "w2"]);
+        Check(db9, T, true, "a release in a workspace that still has no types", ["n4", "x", Now, Now, null, null, "w3"]);
+        Check(db9, T, true, "a Production release", ["n5", "x", Now, Now, "tyP", null, "default"]);
+        Check(db9, T, false, "a Production release with a Beta number", ["n6", "x", Now, Now, "tyP", 2, "default"], "Only a Beta release carries a Beta number");
+        Check(db9, T, false, "a Beta release without its number", ["n7", "x", Now, Now, "tyB", null, "default"], "needs its number");
+        Check(db9, T, false, "a Beta release numbered 4", ["n8", "x", Now, Now, "tyB", 4, "default"], "CHECK");
+        Check(db9, T, false, "a Beta release numbered 0", ["n9", "x", Now, Now, "tyB", 0, "default"], "CHECK");
+        Check(db9, T, true, "Beta 1", ["b1", "x", Now, Now, "tyB", 1, "default"]);
+        Check(db9, T, true, "Beta 3", ["b3", "x", Now, Now, "tyB", 3, "default"]);
+        Check(db9, "UPDATE ReleaseTrains SET ReleaseTypeId=NULL WHERE Id='n5'", false, "a release that loses its type", expect: "cannot lose its release type");
+        Check(db9, "UPDATE ReleaseTrains SET ReleaseTypeId='tyC' WHERE Id='b1'", false, "a Beta release changed to CERT with its number kept", expect: "Only a Beta release carries a Beta number");
+        Check(db9, "UPDATE ReleaseTrains SET ReleaseTypeId='tyC', BetaNumber=NULL WHERE Id='b1'", true, "a Beta release changed to CERT with the number cleared");
+        Check(db9, "UPDATE ReleaseTrains SET ReleaseTypeId='tyB' WHERE Id='b1'", false, "a release changed to Beta without a number", expect: "needs its number");
+        Check(db9, "UPDATE ReleaseTrains SET ReleaseTypeId='tyB', BetaNumber=2 WHERE Id='b1'", true, "a release changed to Beta 2");
+        Check(db9, "UPDATE ReleaseTrains SET BetaNumber=NULL WHERE Id='b3'", false, "a Beta release's number cleared", expect: "needs its number");
+        Check(db9, "UPDATE ReleaseTrains SET BetaNumber=2 WHERE Id='n5'", false, "a number set on a Production release", expect: "Only a Beta release carries a Beta number");
+        Check(db9, "UPDATE ReleaseTrains SET Title='renamed' WHERE Id='n1'", true, "a release that predates types edited in another field");
+        Check(db9, "UPDATE ReleaseTrains SET ReleaseTypeId='tyP' WHERE Id='n1'", true, "a release that predates types given its type");
+        Check(db9, "UPDATE ReleaseTypes SET IsBeta=1 WHERE Id='tyP'", false, "a type in use made a Beta type", expect: "cannot become or stop being a Beta type");
+        Check(db9, "UPDATE ReleaseTypes SET IsBeta=0 WHERE Id='tyB'", false, "a Beta type in use stops being one", expect: "cannot become or stop being a Beta type");
+        Check(db9, "INSERT INTO ReleaseTypes(Id,Name,IsBeta) VALUES('tyD','Spare',1)", true, "a Beta type with no releases");
+        Check(db9, "UPDATE ReleaseTypes SET IsBeta=0 WHERE Id='tyD'", true, "an unused type stops being a Beta type");
+        Check(db9, "INSERT INTO ReleaseTypes(Id,Name,IsBeta) VALUES('tyE','Odd',2)", false, "a Beta flag that is not 0 or 1", expect: "CHECK");
+    }
 }

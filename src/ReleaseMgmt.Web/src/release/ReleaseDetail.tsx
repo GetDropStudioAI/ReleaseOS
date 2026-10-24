@@ -19,6 +19,7 @@ import { CloseDialog, type Closing } from '../TrainClose'
 import { AdvisoryItems, ContingencyLine } from '../Advisories'
 import { day, errMsg, plural, splitId, tMinus } from '../format'
 import { announce } from '../announce'
+import { typeLabel } from '../mgmt/releaseTypesLogic'
 import { browserZone } from '../shell/clock'
 import { serverNow } from '../time'
 import type { Mode } from '../route'
@@ -81,6 +82,7 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
   const products = useLoad(() => getProducts(t.id), [t.id, refreshKey])
   const owners = useLoad(() => getOwners(), [])
   const changeRecord = useLoad(() => getChangeRecord(t.id).catch(() => null), [t.id, refreshKey])
+  const model = useLoad(() => get<{ type: { id: string; name: string } | null; betaNumber: number | null }>(`/api/v1/trains/${t.id}/release`).catch(() => null), [t.id, refreshKey])   // REOS-116: the release's type
 
   const { id: relId, name } = splitId(t.title)
   const open = t.status === 'Planning' || t.status === 'Gated' || t.status === 'Executing'
@@ -140,6 +142,7 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
       <div className="rd-context" aria-label="Release context" role="group">
         <StatusChip tone={sc.tone}>{sc.word}</StatusChip>
         <StatusChip tone={rc.tone}>{rc.word}</StatusChip>
+        <span className="rd-fact"><span className="rd-k">Type</span> {model.data?.type ? <span>{typeLabel(model.data.type, model.data.betaNumber)}</span> : <span className="rd-na">Not set</span>}</span>
         <span className="rd-fact"><span className="rd-k">Team</span> <span className="rd-na">{NOT_RECORDED}</span></span>
         <span className="rd-fact"><span className="rd-k">Owner</span> <span className="rd-na">{NOT_RECORDED}</span></span>
         {t.changeTicketNumber && <span className="rd-fact"><span className="rd-k">Change</span> <span className="mono">{t.changeTicketNumber}</span></span>}

@@ -145,7 +145,8 @@ test('a manifest of 20 or more services scrolls inside its panel with its headin
   await signIn(page, 'rd-many@example.com', 'RTE')
   const id = await page.evaluate(async () => {
     const json = { 'Content-Type': 'application/json' }
-    const made = await (await fetch('/api/v1/trains', { method: 'POST', headers: json, body: JSON.stringify({ title: `R26.99 Many services ${Date.now()}`, targetReleaseDate: '2026-12-15' }) })).json() as { train?: { id: string }; id?: string }
+    const types = await (await fetch('/api/v1/release-types')).json() as { id: string; name: string }[]   // REOS-116: a new release names its type
+    const made = await (await fetch('/api/v1/trains', { method: 'POST', headers: json, body: JSON.stringify({ title: `R26.99 Many services ${Date.now()}`, targetReleaseDate: '2026-12-15', releaseTypeId: types.find(t => t.name === 'Production')!.id }) })).json() as { train?: { id: string }; id?: string }
     const trainId = (made.train?.id ?? made.id)!
     for (let i = 1; i <= 22; i++) await fetch(`/api/v1/trains/${trainId}/products`, { method: 'POST', headers: json, body: JSON.stringify({ name: `Service ${String(23 - i).padStart(2, '0')}`, versionTag: `1.${i}.0` }) })
     return trainId

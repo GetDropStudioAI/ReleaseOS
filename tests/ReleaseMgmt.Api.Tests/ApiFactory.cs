@@ -45,6 +45,8 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         // REOS-111 to 114: the background workers (audit sealing and verification, telemetry housekeeping) are driven by their own tests; running them in every host would change rows under tests that compare databases.
         builder.UseSetting("Audit:Seal:Enabled", "false");
         builder.UseSetting("Telemetry:Maintenance:Enabled", "false");
+        // REOS-116: with release types seeded, a release inserted by SQL without one is refused (trg_Train_TypeRules_Insert), as it should be; the many contract tests that build rows by SQL start without types, and the tests of the type rule opt in.
+        builder.UseSetting("ReleaseTypes:SeedAtStart", "false");
         foreach (var (k, v) in settings ?? new Dictionary<string, string>()) builder.UseSetting(k, v);
         builder.UseSetting("Notifications:ScanSeconds", "3600");   // the scheduler is driven by its own tests; keep it quiet here
         builder.UseSetting("Backup:Directory", Path.Combine(_dir, "bk"));

@@ -5,7 +5,7 @@
 import { localClock } from './shell/clock.ts'
 import { chipTone, type Tone } from './ui/tone.ts'
 
-export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[] }
+export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[]; type?: { id: string; name: string } | null; betaNumber?: number | null }
 export interface CalGate { id: string; name: string; class: string; status: string; dueOn: string; trainId: string; trainTitle: string; trainStatus: string }
 export interface CalFreeze { id: string; name: string; kind: 'Freeze' | 'Chill'; startsAt: string; endsAt: string; scope: string }
 export interface CalMilestone { id: string; name: string; dueOn: string; done: boolean; trainId: string; trainTitle: string; trainStatus: string }
@@ -55,19 +55,20 @@ export const RISKS: { value: string; label: string }[] = [
 ]
 export const riskLabel = (r: string) => RISKS.find(x => x.value === r)?.label ?? r
 
-export interface Filters { status: string; risk: string }   // 'all' or a value
-export const NO_FILTER: Filters = { status: 'all', risk: 'all' }
-export const filtered = (f: Filters) => f.status !== 'all' || f.risk !== 'all'
-const keeps = (f: Filters, status: string, risk: string | undefined) => (f.status === 'all' || f.status === status) && (f.risk === 'all' || (risk !== undefined && f.risk === risk))
+export interface Filters { status: string; risk: string; type: string }   // 'all' or a value; type is a release type id (REOS-116)
+export const NO_FILTER: Filters = { status: 'all', risk: 'all', type: 'all' }
+export const filtered = (f: Filters) => f.status !== 'all' || f.risk !== 'all' || f.type !== 'all'
+const keeps = (f: Filters, status: string, risk: string | undefined, type?: string) => (f.status === 'all' || f.status === status) && (f.risk === 'all' || (risk !== undefined && f.risk === risk)) && (f.type === 'all' || (type !== undefined && f.type === type))
 
 /** The filters narrow trains, and the gates and milestones that belong to them, together; freezes are the workspace's and are never filtered. */
 export function applyFilters(d: CalendarPayload, f: Filters): CalendarPayload {
   if (!filtered(f)) return d
   const risk = new Map(d.trains.map(t => [t.id, t.riskTier]))
-  const trainOk = (id: string, status: string) => keeps(f, status, risk.get(id))
+  const type = new Map(d.trains.map(t => [t.id, t.type?.id]))
+  const trainOk = (id: string, status: string) => keeps(f, status, risk.get(id), type.get(id))
   return {
     ...d,
-    trains: d.trains.filter(t => keeps(f, t.status, t.riskTier)),
+    trains: d.trains.filter(t => keeps(f, t.status, t.riskTier, t.type?.id)),
     gates: d.gates.filter(g => trainOk(g.trainId, g.trainStatus)),
     milestones: (d.milestones ?? []).filter(m => trainOk(m.trainId, m.trainStatus)),
   }

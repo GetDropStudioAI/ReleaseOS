@@ -3,6 +3,7 @@ import { ApiError, commitTasks, parseTasks, type GateRow, type ParseIssue, type 
 import { errMsg, plural } from './format'
 import { Conflict, isConflict } from './Conflict'
 import { useDraft } from './session'
+import { SidePanel } from './ui'
 import { announce } from './announce'
 import { useFocusWhen, useRestoreFocus } from './focus'
 
@@ -79,10 +80,7 @@ export function BulkDrawer({ trainId, gates, onClose, onChanged }: { trainId: st
   }
 
   return (
-    <>
-      <div className="section-head"><span className="cap">Drawer · paste tasks</span>
-        <span><button type="button" className="text quiet" onClick={() => { setDraft({ ...d, open: false }); onClose() }}>Close</button></span></div>
-      <h2 ref={headRef} tabIndex={-1}>Paste tasks</h2>
+    <SidePanel title="Paste tasks" titleRef={headRef} closeLabel="Close drawer" onClose={() => { setDraft({ ...d, open: false }); onClose() }}>
       <p className="muted">One task per line. The text you type here is kept until you commit or discard it.</p>
       <pre className="grammar">{GRAMMAR}</pre>
       <p className="inline-form"><label>Lines before any # go to <select className="line" value={d.gateId} onChange={e => set({ gateId: e.target.value })}>
@@ -120,6 +118,6 @@ export function BulkDrawer({ trainId, gates, onClose, onChanged }: { trainId: st
           </p>
           {preview.errorCount > 0 && <p className="muted">Commit is off while there are errors: nothing is added until every line is valid.</p>}
         </section>)}
-    </>
+    </SidePanel>
   )
 }

@@ -148,7 +148,7 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
       <div className="rd-actions" role="group" aria-label="Release actions">
         <Button onClick={() => p.onMode('rehearsal')}>Rehearsal</Button>
         {canDecide && <Button onClick={recordGo}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</Button>}
-        <Button data-comms-trigger aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { open: true, tab: 'message' })}>Communicate</Button>
+        <Button data-comms-trigger aria-expanded={!!comms?.open} onClick={() => setComms(comms?.open ? undefined : { ...comms, open: true, tab: comms?.tab ?? 'message' })}>Communicate</Button>
         <Button onClick={exportPanel}>Export</Button>
         {canPlan && open && <Button variant="destructive" onClick={() => setClosing('abort')}>Abort…</Button>}
       </div>

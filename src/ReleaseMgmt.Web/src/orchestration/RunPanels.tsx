@@ -1,10 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { X } from 'lucide-react'
 import type { RunDetail, RunForecast, RunStepRow, RunSummary } from '../api.ts'
 import { localClock } from '../shell/clock.ts'
 import { fmtCountdown, fmtMinSec, serverNow } from '../time.ts'
 import { stampOf, stampText } from '../deploy/deployLogic.ts'
-import { Button, ConfirmDialog, DataTable, EmptyState, MetricCard, Notice, Panel, PropertyList, StatusChip, TwoLine, type Column } from '../ui'
+import { Button, ConfirmDialog, DataTable, EmptyState, MetricCard, Notice, Panel, PropertyList, SidePanel, StatusChip, TwoLine, type Column } from '../ui'
 import { axisX, bars, clockOf, hm, hms, runKey, runWord, sectionTitle, SECTION_ORDER, stepState, doneCodesOf } from './orchLogic.ts'
 import type { RunStages } from './orchApi.ts'
 
@@ -122,8 +121,7 @@ export function StepDrawer({ run, step, fc, paused, pending, error, onAct, onClo
   const dep = (c: string) => run.steps.find(x => x.stepCode === c)
   return (
     <aside className="or-drawer" aria-label={`Step ${step.stepCode}`} onKeyDown={e => { const t = e.target as HTMLElement; if (e.key === 'Escape' && !e.defaultPrevented && !['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName) && !failing) { e.preventDefault(); onClose() } }}>
-      <Panel title={<span ref={head} tabIndex={-1}>{step.title}</span>} subtitle={`${step.stepCode} · ${step.ownerName ?? 'No owner'}`}
-        meta={<Button icon={X} aria-label="Close step drawer" onClick={onClose}>Close</Button>}>
+      <SidePanel title={<span ref={head} tabIndex={-1}>{step.title}</span>} subtitle={`${step.stepCode} · ${step.ownerName ?? 'No owner'}`} closeLabel="Close step drawer" onClose={onClose}>
         <div className="or-drawer-body">
           <div className="or-drawer-state"><StatusChip tone={st.tone}>{st.word}</StatusChip>
             <span className="mono">{running ? `${fmtMinSec(elapsedSec)} running · plan ${fmtMinSec(step.plannedDurationMin * 60)}` : `Plan ${step.plannedDurationMin} min`}</span></div>
@@ -154,7 +152,7 @@ export function StepDrawer({ run, step, fc, paused, pending, error, onAct, onClo
           )}
           {(local || error) && <Notice tone="danger" title="That did not work" live><span id={errId}>{local ?? error}</span></Notice>}
         </div>
-      </Panel>
+      </SidePanel>
       <ConfirmDialog open={failing} title={`Fail ${step.stepCode}?`} confirmLabel="Fail step" pendingLabel="Failing…" destructive pending={pending === 'drawer:fail'}
         onCancel={() => setFailing(false)} onConfirm={() => void go('fail')}>
         Failing {step.title} stops the forecast and makes the rollback steps ready to run. It cannot be undone.

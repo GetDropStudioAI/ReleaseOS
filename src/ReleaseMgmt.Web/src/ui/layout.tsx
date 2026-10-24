@@ -1,24 +1,42 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { X } from 'lucide-react'
 import type { Tone } from './tone.ts'
 
 /**
  * Panel with a heading row (D41, REOS-93): title, optional subtitle, and right-aligned meta (a count, a chip or a link). `inverse` is the dark panel
  * of the design (Go/no-go, Deployment events), dark in both themes. The heading names the section for screen readers; `label` names it instead when a screen already finds the section by that name.
  */
-export function Panel({ title, subtitle, meta, footer, inverse, level = 2, label, children }: {
-  title: ReactNode; subtitle?: ReactNode; meta?: ReactNode; footer?: ReactNode; inverse?: boolean; level?: 2 | 3 | 4; label?: string; children?: ReactNode
+export function Panel({ title, subtitle, meta, footer, inverse, level = 2, label, titleRef, children }: {
+  title: ReactNode; subtitle?: ReactNode; meta?: ReactNode; footer?: ReactNode; inverse?: boolean; level?: 2 | 3 | 4; label?: string; titleRef?: Ref<HTMLHeadingElement>; children?: ReactNode
 }) {
   const id = useId()
   const H = level === 2 ? 'h2' : level === 3 ? 'h3' : 'h4'
   return (
     <section className={`os-panel${inverse ? ' inverse' : ''}`} aria-label={label} aria-labelledby={label ? undefined : id}>
       <header className="os-panel-head">
-        <div><H id={id} className="os-panel-title">{title}</H>{subtitle && <p className="os-panel-subtitle">{subtitle}</p>}</div>
+        <div><H id={id} ref={titleRef} tabIndex={titleRef ? -1 : undefined} className="os-panel-title">{title}</H>{subtitle && <p className="os-panel-subtitle">{subtitle}</p>}</div>
         {meta && <div className="os-panel-meta">{meta}</div>}
       </header>
       {children !== undefined && <div className="os-panel-body">{children}</div>}
       {footer && <footer className="os-panel-foot">{footer}</footer>}
     </section>
+  )
+}
+
+/**
+ * The right-hand column's one panel pattern (REOS-124, from Audit's event details): a Panel whose heading row carries an icon-only Close (its name says what it closes)
+ * beside any extra meta. The Inspector (gate, task, product, step) and the New train, Bulk paste, Communicate and Run step drawers all use it. `titleRef` is the h2
+ * itself, which takes focus when the panel opens (the caller moves it) and gets it back to the opener when the panel closes. Escape is handled by the caller, as it
+ * has to leave keys typed into a field alone.
+ */
+export function SidePanel({ title, subtitle, meta, closeLabel, onClose, titleRef, footer, level, children }: {
+  level?: 2 | 3 | 4; title: ReactNode; subtitle?: ReactNode; meta?: ReactNode; closeLabel: string; onClose: () => void; titleRef?: Ref<HTMLHeadingElement>; footer?: ReactNode; children?: ReactNode
+}) {
+  return (
+    <Panel title={title} subtitle={subtitle} titleRef={titleRef} footer={footer} level={level}
+      meta={<>{meta}<button type="button" className="os-icon-button" aria-label={closeLabel} onClick={onClose}><X aria-hidden="true" size={16} strokeWidth={1.6} /></button></>}>
+      <div className="os-side-body">{children}</div>
+    </Panel>
   )
 }
 

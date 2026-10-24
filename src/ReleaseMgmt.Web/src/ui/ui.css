@@ -195,3 +195,12 @@
 .os-spin { animation: os-spin 1s linear infinite; }
 @keyframes os-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .os-spin { animation: none; } }
+
+/* Side panel (REOS-124): the right-hand column's panel; Close is an icon-only button, same look as Audit's */
+.os-icon-button { display: inline-flex; padding: var(--gap-xs); border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-icon-secondary); cursor: pointer; }
+.os-icon-button:hover { color: var(--color-text-primary); background: var(--color-bg-muted); }
+.os-icon-button:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
+.os-side-body { display: flex; flex-direction: column; gap: var(--gap-md); min-width: 0; }
+.os-side-body > * { margin-top: 0; margin-bottom: 0; }
+.ins-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-sm); }
+.ins-blockers { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--gap-xs); }

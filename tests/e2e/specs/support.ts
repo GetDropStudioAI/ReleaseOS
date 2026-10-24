@@ -64,3 +64,19 @@ export async function openTab(page: Page, name: string) {
   await tab.click()
   await expect(tab).toHaveAttribute('aria-selected', 'true')
 }
+
+/** The first runbook step of a train, adding one through the API when the demo train has none (REOS-124, REOS-143: a step Inspector needs a step to open). */
+export async function firstStep(page: Page, trainId: string) {
+  return page.evaluate(async id => {
+    const json = { 'Content-Type': 'application/json' }
+    const read = async () => (await (await fetch(`/api/v1/trains/${id}/steps`)).json()) as { id: string; title: string }[]
+    let steps = await read()
+    if (steps.length === 0) {
+      const me = await (await fetch('/api/v1/me')).json() as { id: string }
+      const r = await fetch(`/api/v1/trains/${id}/steps`, { method: 'POST', headers: json, body: JSON.stringify({ ownerUserId: me.id, title: 'Inspector check', section: 'Deploy', plannedStartAt: new Date(Date.now() + 7 * 86_400_000).toISOString(), plannedDurationMin: 15 }) })
+      if (!r.ok) throw new Error(`could not add a step: ${r.status} ${await r.text()}`)
+      steps = await read()
+    }
+    return steps[0]
+  }, trainId)
+}

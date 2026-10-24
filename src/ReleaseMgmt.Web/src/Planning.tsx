@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import {
   addTask, gateAction, getGate, getOwners, getProducts, getWindow, putWindow, taskAction,
   type GateDetail, type GateRow, type Owner, type ProductsResponse, type WindowRow,
@@ -8,7 +8,9 @@ import {
   type GateDefinition, type GateInput, type ProductRowV,
 } from './api'
 import { day, errMsg, plural, tMinus } from './format'
-import { Button, DataTable, ErrorState, FilterSelect, LoadingState, Notice, Panel, StatusChip, type Column, type Tone } from './ui'
+import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, Notice, Panel, PropertyList, StatusChip, chipTone, type Column, type Tone } from './ui'
+import { InspectorFrame } from './InspectorFrame'
+import { stampOf, stampText } from './deploy/deployLogic'
 import { windowStamp } from './release/model'
 import { browserZone } from './shell/clock'
 import { fmtDay, fmtDayTime, fmtHM, utcToZonedInput, zonedInputToUtc, zoneAbbr } from './time'
@@ -91,8 +93,6 @@ export function WindowLine({ trainId, canEdit, refreshKey, onChanged, collisions
 }
 
 // ---- Bundled products ---------------------------------------------------------------------------------------------------------------
-const HEALTH_CLS: Record<string, string> = { Ready: 'ok', 'On track': 'ok', 'At risk': 'warn' }   // the Inspector's product pane
-const SEV_CLS = (s: string) => s === 'Critical' || s === 'High' ? 'bad' : 'warn'
 const HEALTH_TONE: Record<string, Tone> = { Ready: 'success', 'On track': 'success', 'At risk': 'warning' }
 
 // REOS-81: products are added inline under the heading, edited inline in their row, and removed with an inline confirm (no modal).
@@ -449,34 +449,6 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
   )
 }
 
-// Like App's page focus, only a selection the user made moves focus: a deep link or a restored session opening the pane must not.
-let interacted = false
-if (typeof window !== 'undefined') for (const t of ['pointerdown', 'keydown']) window.addEventListener(t, () => { interacted = true }, true)
-
-/**
- * The right pane's focus (WCAG 2.4.3): when a new selection opens it, focus its title (the h2 after the head line, once it has loaded) and
- * remember what had focus; when the selection is cleared and focus fell to <body>, give it back to that opener. Attach the ref to the head line.
- */
-export function usePaneFocus(key: string | null) {
-  const headRef = useRef<HTMLDivElement>(null)
-  const done = useRef<string | null>(null), opener = useRef<HTMLElement | null>(null)
-  useEffect(() => {
-    if (!key) {
-      const o = opener.current; done.current = null; opener.current = null
-      if (o?.isConnected && (!document.activeElement || document.activeElement === document.body)) o.focus()
-      return
-    }
-    if (done.current === key) return
-    const h = headRef.current?.parentElement?.querySelector<HTMLElement>('h2:not(.cap)')
-    if (!h) return   // still loading: the next render tries again
-    done.current = key
-    if (!interacted) return
-    if (!opener.current || !opener.current.isConnected) opener.current = document.activeElement as HTMLElement | null
-    h.tabIndex = -1; h.focus()
-  })
-  return headRef
-}
-
 // ---- Inspector (right pane): gate, task or product, with the reason Certify is unavailable -------------------------------------------------
 export function Inspector({ selection, trainId, canPlan, refreshKey, onClose, onChanged }: { selection: Selection; trainId: string | null; canPlan: boolean; refreshKey: number; onClose: () => void; onChanged: () => void }) {
   const gateId = selection?.kind === 'gate' ? selection.id : selection?.kind === 'task' ? selection.gateId : null
@@ -489,67 +461,72 @@ export function Inspector({ selection, trainId, canPlan, refreshKey, onClose, on
   useEffect(() => { if (gateId) getGate(gateId).then(setGate).catch(e => setErr(errMsg(e))); else setGate(null) }, [gateId, refreshKey])
   useEffect(() => { if (selection?.kind === 'product' && trainId) getProducts(trainId).then(setProducts).catch(e => { setProducts(null); setErr(errMsg(e)) }) }, [selection, trainId, refreshKey])
   const { run, pending } = useAction()
-  const headRef = usePaneFocus(selection ? `${selection.kind}:${selection.id}` : null)
 
-  if (!selection) return <p className="muted">Select a train, gate or task to see its detail here.</p>
+  if (!selection) return <EmptyState title="Nothing selected">Select a train, gate or task to see its detail here.</EmptyState>
+  const focusKey = `${selection.kind}:${selection.id}`
   // One action at a time: the trigger is disabled and says what is happening, so a double click cannot send a stale version (UX review 3, 8).
   const act = (label: string, fn: () => Promise<unknown>, said?: string) => run(label, async () => {
     setErr(null); setConflict(null)
     try { await fn(); if (said) announce(said); onChanged() } catch (e) { if (isConflict(e)) setConflict(e); else setErr(errMsg(e)); onChanged() }
   })
   const busy = (label: string, idle: string) => pending === label ? label : idle
-  const head = (kind: string) => <div ref={headRef} className="section-head"><span className="cap">Inspector · {kind}</span><button type="button" className="text quiet" aria-label="Close inspector" onClick={onClose}>Close</button></div>
+  const frame = (title: string, subtitle: string, body: ReactNode, loading = false) => <InspectorFrame focusKey={focusKey} title={title} subtitle={subtitle} loading={loading} onClose={onClose}>{body}</InspectorFrame>
+  const waiting = (kind: string) => frame(kind, kind, err ? <div role="alert"><ErrorState what={`The ${kind.toLowerCase()}`} message={err} /></div> : <LoadingState what={`the ${kind.toLowerCase()}`} />, true)
 
-  if (selection.kind === 'step') return <>{head('step')}{trainId ? <StepInspector stepId={selection.id} trainId={trainId} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} /> : null}</>
+  if (selection.kind === 'step') return trainId ? <StepInspector stepId={selection.id} trainId={trainId} canPlan={canPlan} refreshKey={refreshKey} onChanged={onChanged} onClose={onClose} /> : waiting('Step')
   if (selection.kind === 'product') {
     const p = products?.products.find(x => x.id === selection.id)
-    return (<>{head('product')}{!p ? (err ? <p className="bad" role="alert">✗ {err}</p> : <p className="muted">Loading…</p>) : (<>
-      <h2>{p.name}</h2>
-      <dl className="facts"><dt>Version</dt><dd className="mono">{p.versionTag}</dd><dt>Project</dt><dd className="mono">{p.projectCode}</dd>
-        <dt>Tasks</dt><dd>{p.tasksDone} of {p.tasksTotal} done</dd><dt>Health</dt><dd className={HEALTH_CLS[p.health] ?? 'muted'}>{p.health}</dd>
-        <dt>Blockers</dt><dd>{p.openBlockers.length === 0 ? 'None open' : p.openBlockers.map((s, i) => <span key={i} className={SEV_CLS(s)}>▲ {s} </span>)}</dd></dl></>)}</>)
+    if (!p) return waiting('Product')
+    return frame(p.name, 'Product', <>
+      <PropertyList items={[
+        { label: 'Version', value: p.versionTag, mono: true }, { label: 'Project', value: p.projectCode, mono: true },
+        { label: 'Tasks', value: `${p.tasksDone} of ${p.tasksTotal} done` }, { label: 'Health', value: <StatusChip tone={HEALTH_TONE[p.health] ?? 'neutral'}>{p.health}</StatusChip> },
+        { label: 'Blockers', value: p.openBlockers.length === 0 ? 'None open' : <span className="ins-blockers">{p.openBlockers.map((b, i) => <StatusChip key={i} tone={b === 'Critical' || b === 'High' ? 'danger' : 'warning'}>{b}</StatusChip>)}</span> },
+      ]} /></>)
   }
-  if (!gate) return <>{head(selection.kind)}{err ? <p className="bad" role="alert">✗ {err}</p> : <p className="muted">Loading…</p>}</>
+  if (!gate) return waiting(selection.kind === 'task' ? 'Task' : 'Gate')
   const st = STATUS[gate.status] ?? STATUS.Pending
 
   if (selection.kind === 'task') {
     const t = gate.tasks.find(x => x.id === selection.id)
-    if (!t) return <>{head('task')}<p className="muted">This task no longer exists.</p></>
-    return (<>{head('task')}
-      <h2>{t.description}</h2>
-      <dl className="facts"><dt>State</dt><dd className={t.done ? 'ok' : undefined}>{t.done ? '✓ done' : '○ open'}</dd><dt>Owner</dt><dd>{t.owner ?? '—'}</dd><dt>Product</dt><dd>{t.product ?? '—'}</dd>
-        <dt>Gate</dt><dd>{gate.name}</dd>{t.done && <><dt>Completed</dt><dd>{t.completedBy ?? ''} {t.completedAt ? fmtDayTime(t.completedAt) : ''}</dd></>}</dl>
-      <p><button type="button" className="text" disabled={!!pending} onClick={() => void act(t.done ? 'Reopening…' : 'Marking done…', () => taskAction(t.id, t.done ? 'reopen' : 'complete', t.version), t.done ? 'Task reopened.' : 'Task marked done.')}>{pending ?? (t.done ? 'Reopen task' : 'Mark done')}</button></p>
-      {err && <p className="bad" role="alert">✗ {err}</p>}
+    if (!t) return frame('Task', 'Task', <EmptyState title="This task no longer exists" />)
+    return frame(t.description, 'Task', <>
+      <PropertyList items={[
+        { label: 'State', value: <StatusChip tone={t.done ? 'success' : 'neutral'}>{t.done ? 'Done' : 'Open'}</StatusChip> }, { label: 'Owner', value: t.owner ?? '—' }, { label: 'Product', value: t.product ?? '—' },
+        { label: 'Gate', value: gate.name },
+        ...(t.done ? [{ label: 'Completed', value: `${t.completedBy ?? ''} ${t.completedAt ? stampText(stampOf(t.completedAt, browserZone())) : ''}`.trim() }] : []),
+      ]} />
+      <div className="ins-actions"><Button disabled={!!pending} onClick={() => void act(t.done ? 'Reopening…' : 'Marking done…', () => taskAction(t.id, t.done ? 'reopen' : 'complete', t.version), t.done ? 'Task reopened.' : 'Task marked done.')}>{pending ?? (t.done ? 'Reopen task' : 'Mark done')}</Button></div>
+      {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
       {conflict && <Conflict error={conflict} what="task" />}</>)
   }
 
   const canStart = gate.status === 'Pending', canFail = gate.status === 'InProgress', canReopen = gate.status === 'Failed' || gate.status === 'Certified'
   const certifiable = gate.status === 'InProgress' || gate.status === 'Failed'
-  return (<>{head('gate')}
-    <h2>{gate.name}</h2>
-    <dl className="facts"><dt>Status</dt><dd className={st.cls}>{st.g} {st.word}</dd><dt>Class</dt><dd>{gate.class}</dd>
-      <dt>Due</dt><dd>{day(gate.dueOn)} · <span className="mono">{tMinus(gate.tMinus)}</span></dd><dt>Owner</dt><dd>{gate.ownerName ?? '—'}</dd>
-      <dt>Tasks</dt><dd>{gate.tasks.filter(t => t.done).length} of {gate.tasks.length} done</dd>
-      {'requiredBeforeStatus' in gate && <><dt>Required before</dt><dd>{(gate as GateDefinition).requiredBeforeStatus}</dd></>}</dl>
-    <p className="actions-col">
-      {canStart && <button type="button" className="text" disabled={!!pending} onClick={() => void act('Starting…', () => gateAction(gate.id, 'start', gate.version), 'Gate started.')}>{busy('Starting…', 'Start gate')}</button>}
-      {certifiable && <button type="button" className="text" disabled={!gate.certify.eligible || !!pending} onClick={() => void act('Certifying…', () => gateAction(gate.id, 'certify', gate.version), 'Gate certified.')}>{busy('Certifying…', 'Certify gate')}</button>}
+  return frame(gate.name, 'Gate', <>
+    <PropertyList items={[
+      { label: 'Status', value: <StatusChip tone={chipTone(st.word)}>{st.word[0].toUpperCase() + st.word.slice(1)}</StatusChip> }, { label: 'Class', value: gate.class },
+      { label: 'Due', value: <>{day(gate.dueOn)} · <span className="mono">{tMinus(gate.tMinus)}</span></> }, { label: 'Owner', value: gate.ownerName ?? '—' },
+      { label: 'Tasks', value: `${gate.tasks.filter(t => t.done).length} of ${gate.tasks.length} done` },
+      ...('requiredBeforeStatus' in gate ? [{ label: 'Required before', value: (gate as GateDefinition).requiredBeforeStatus }] : []),
+    ]} />
+    <div className="ins-actions">
+      {canStart && <Button variant="primary" disabled={!!pending} onClick={() => void act('Starting…', () => gateAction(gate.id, 'start', gate.version), 'Gate started.')}>{busy('Starting…', 'Start gate')}</Button>}
+      {certifiable && <Button variant="primary" disabled={!gate.certify.eligible || !!pending} onClick={() => void act('Certifying…', () => gateAction(gate.id, 'certify', gate.version), 'Gate certified.')}>{busy('Certifying…', 'Certify gate')}</Button>}
       {canFail && <ConfirmInline label="Fail gate" question="Fail this gate?" confirmLabel="Fail gate" pendingLabel="Failing…" disabled={!!pending}
         onConfirm={() => act('Failing…', () => gateAction(gate.id, 'fail', gate.version), 'Gate failed.')} />}
       {canReopen && (gate.status === 'Certified'
         ? <ConfirmInline label="Decertify (reopen)" question="Remove this gate's certification and reopen it?" confirmLabel="Decertify" pendingLabel="Decertifying…" disabled={!!pending}
             onConfirm={() => act('Decertifying…', () => gateAction(gate.id, 'reopen', gate.version), 'Gate decertified and reopened.')} />
-        : <button type="button" className="text" disabled={!!pending} onClick={() => void act('Reopening…', () => gateAction(gate.id, 'reopen', gate.version), 'Gate reopened.')}>{busy('Reopening…', 'Reopen gate')}</button>)}
-    </p>
+        : <Button disabled={!!pending} onClick={() => void act('Reopening…', () => gateAction(gate.id, 'reopen', gate.version), 'Gate reopened.')}>{busy('Reopening…', 'Reopen gate')}</Button>)}
+    </div>
     {certifiable && (gate.certify.eligible
-      ? <p className="ok" role="status">✓ You can certify this gate now.</p>
-      : <div role="status" aria-label="Why Certify is unavailable"><h3 className="cap">Certify unavailable</h3>
-          <ul className="plain">{gate.certify.reasons.map((r, i) => <li key={i} className="bad">✗ {r}</li>)}</ul></div>)}
-    {gate.status === 'Pending' && <p className="muted">Start the gate first, then work its checklist.</p>}
+      ? <Notice tone="success" title="You can certify this gate now" />
+      : <Notice tone="warning" title="Certify unavailable"><ul className="plain" aria-label="Why Certify is unavailable">{gate.certify.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul></Notice>)}
+    {gate.status === 'Pending' && <p className="os-muted">Start the gate first, then work its checklist.</p>}
     {canPlan && 'offsetDays' in gate && <GateDefinitionActions key={gate.id} gate={gate as GateDefinition} onRemoved={() => { onClose(); onChanged() }} onChanged={onChanged} />}
     {trainId && <Evidence trainId={trainId} entityType="Gate" entityId={gate.id} refreshKey={refreshKey} />}
     <WaiversPanel gateId={gate.id} gateStatus={gate.status} gateVersion={gate.version} refreshKey={refreshKey} onChanged={onChanged} />
-    {err && <p className="bad" role="alert">✗ {err}</p>}
+    {err && <Notice tone="danger" title="That did not work" live>{err}</Notice>}
     {conflict && <Conflict error={conflict} what="gate" />}</>)
 }

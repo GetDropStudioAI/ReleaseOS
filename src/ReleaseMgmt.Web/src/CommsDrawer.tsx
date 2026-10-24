@@ -5,6 +5,7 @@ import { useFocusWhen, useRestoreFocus } from './focus'
 import { errMsg } from './format'
 import { useAction } from './useAction'
 import { useDraft } from './session'
+import { ErrorState, LoadingState, SidePanel } from './ui'
 import { fmtDayTime, fmtHM, utcToZonedInput } from './time'
 
 /** Session draft for the drawer (`comms:{trainId}`): App and the header's Communicate button read it to open and close the drawer. */
@@ -240,7 +241,7 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
   const [fallback, setFallback] = useState<{ text: string; note: string } | null>(null)
   const fallbackRef = useRef<HTMLTextAreaElement>(null)
   const ids = useId()
-  const headingId = `${ids}-title`, whyId = `${ids}-why`
+  const whyId = `${ids}-why`
 
   // focus the drawer's heading when it opens, and give focus back to the opener ("Communicate") when it closes (WCAG 2.4.3)
   useRestoreFocus('[data-comms-trigger]')   // first: it must record the opener before the heading takes focus
@@ -351,13 +352,11 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
   const label = (name: string, text: string, busyText: string) => (busy === name ? busyText : text)
 
   return (
-    <section className="comms-drawer" aria-labelledby={headingId}>
-      <div className="section-head"><span className="cap" aria-hidden="true">Drawer · communicate</span>
-        <span><button type="button" className="text quiet" onClick={onClose}>Close</button></span></div>
-      <h2 id={headingId} ref={headingRef} tabIndex={-1}>{template ? `${template.templateType}` : 'Communications'}</h2>
-      {template && <div className="muted">{template.audience}{item ? ` · for ${tMinusLabel(ctx!.targetReleaseDate, item.dueAt)}, due ${fmtDayTime(item.dueAt)}` : ''}</div>}
-      {ctxErr && <p className="bad" role="alert">✗ {ctxErr}</p>}
-      {!ctx && !ctxErr && <p className="muted">Loading…</p>}
+    <div className="comms-drawer">
+    <SidePanel title={template ? `${template.templateType}` : 'Communications'} titleRef={headingRef} closeLabel="Close drawer" onClose={onClose}
+      subtitle={template ? `${template.audience}${item ? ` · for ${tMinusLabel(ctx!.targetReleaseDate, item.dueAt)}, due ${fmtDayTime(item.dueAt)}` : ''}` : undefined}>
+      {ctxErr && <ErrorState what="The communications" message={ctxErr} onRetry={() => setRev(n => n + 1)} />}
+      {!ctx && !ctxErr && <LoadingState what="the communications" />}
 
       {ctx && (
         <>
@@ -444,7 +443,8 @@ export function CommsDrawer({ trainId, canDispatch, refreshKey, onClose, onChang
           {tab === 'log' && <div className="tab-body"><SentLog trainId={trainId} refreshKey={logRev + refreshKey} /></div>}
         </>
       )}
-    </section>
+    </SidePanel>
+    </div>
   )
 }
 

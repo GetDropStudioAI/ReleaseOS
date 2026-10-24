@@ -49,7 +49,8 @@ public class SyncHealthTests
 
     private static async Task<(ApiFactory F, HttpClient Rte, string RteId)> Setup(bool train = false)
     {
-        var f = new ApiFactory();
+        // The poller would start 5 s after the host and rewrite the links these tests seed; on a slow runner (Windows CI, 15 s) it did (REOS-148).
+        var f = new ApiFactory(settings: new Dictionary<string, string> { ["Sync:StartDelaySeconds"] = "3600" });
         var rte = await As(f, Roles.RTE, "rte@x.com");
         if (train) { await As(f, Roles.GovernanceOfficer, "gov@x.com"); SeedTrain(f, UserId(f, "rte@x.com"), UserId(f, "gov@x.com")); }
         return (f, rte, UserId(f, "rte@x.com"));

@@ -220,3 +220,41 @@ test('the exported SVG uses only colours that are token values of the active the
   expect(used.size, 'the drawing has colours').toBeGreaterThan(0)
   for (const c of used) expect(tokens, `${c} is not a design token`).toContain(c)
 })
+
+// REOS-141 (G19): one workbook with a parameters sheet and a sheet per metric, in both themes, with axe clean around the button, its busy state and its failure notice
+for (const scheme of ['light', 'dark'] as const) {
+  test.describe(`workbook, ${scheme} theme`, () => {
+    test.use({ colorScheme: scheme })
+
+    test('the Workbook (XLSX) button downloads a real .xlsx with a Parameters sheet and M1..M15, and axe is clean', async ({ page }) => {
+      await openAnalytics(page, `analytics-workbook-${scheme}@example.com`)
+      const button = page.getByRole('button', { name: 'Export all metrics as one XLSX workbook' })
+      await expect(button).toBeVisible()
+      await expect(button).toHaveText('Workbook (XLSX)')
+      await scan(page, `analytics with the workbook button (${scheme})`)
+
+      const [dl] = await Promise.all([page.waitForEvent('download'), button.click()])
+      expect(dl.suggestedFilename()).toMatch(/^analytics-workbook-\d{4}-\d\d-\d\d_\d{4}-\d\d-\d\d\.xlsx$/)
+      const bytes = readFileSync(await dl.path())
+      expect(bytes.subarray(0, 2).toString('latin1')).toBe('PK')                    // a zip container
+      const names = bytes.toString('latin1')                                        // zip entry names are stored in the clear
+      expect(names).toContain('xl/workbook.xml')
+      expect(names).toContain('xl/worksheets/sheet16.xml')                          // Parameters + 15 metrics
+      expect(names).not.toContain('xl/worksheets/sheet17.xml')
+      await expect(button).toBeEnabled()
+      await scan(page, `analytics after the workbook download (${scheme})`)
+
+      // a failed download says so inline, as an alert, and still passes axe
+      await page.route('**/api/v1/analytics/xlsx*', r => r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'boom' }) }))
+      await button.click()
+      await expect(page.getByRole('alert').filter({ hasText: 'Workbook export failed' })).toBeVisible()
+      await scan(page, `analytics with the workbook failure (${scheme})`)
+    })
+  })
+}
+
+test('a Viewer downloads the workbook too', async ({ page }) => {
+  await openAnalytics(page, 'analytics-workbook-viewer@example.com', 'Viewer')
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export all metrics as one XLSX workbook' }).click()])
+  expect(readFileSync(await dl.path()).subarray(0, 2).toString('latin1')).toBe('PK')
+})

@@ -111,4 +111,106 @@ public class AnalyticsExportTests(AnalyticsFixture fx) : IClassFixture<Analytics
         Assert.Equal("analytics-m2-2026-04-01_2026-09-28.xlsx", res.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
         Assert.Contains("no-store", res.Headers.CacheControl!.ToString());
     }
+
+    // ---- REOS-141 (G19): the one-workbook download ----------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task The_workbook_has_a_parameters_sheet_first_then_one_sheet_per_metric_equal_to_its_own_export()
+    {
+        var c = await As(Roles.Viewer);
+        var res = await c.GetAsync($"/api/v1/analytics/xlsx?{Q}");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.Equal(AnalyticsExportEndpoints.XlsxContentType, res.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("analytics-workbook-2026-01-01_2026-12-31.xlsx", res.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
+        Assert.Contains("no-store", res.Headers.CacheControl!.ToString());
+        using var wb = new XLWorkbook(await res.Content.ReadAsStreamAsync());
+        Assert.Equal(["Parameters", .. Enumerable.Range(1, 15).Select(i => $"M{i}")], wb.Worksheets.Select(w => w.Name).ToArray());
+        foreach (var id in Enumerable.Range(1, 15).Select(i => $"M{i}"))
+        {
+            using var one = new XLWorkbook(await c.GetStreamAsync($"/api/v1/analytics/{id}/xlsx?{Q}"));
+            WorkbookAssert.SameCells(one.Worksheet(id), wb.Worksheet(id), id);
+        }
+        var rowsOn = wb.Worksheet("Parameters").RowsUsed().Where(r => r.Cell(1).GetString() is ['M', ..]).ToDictionary(r => r.Cell(1).GetString(), r => r.Cell(4).GetDouble());
+        Assert.Equal(15, rowsOn.Count);
+        foreach (var (id, n) in rowsOn) Assert.Equal(wb.Worksheet(id).LastRowUsed()!.RowNumber() - 1, (int)n);
+    }
+
+    [Fact]
+    public async Task The_parameters_sheet_gives_workspace_period_filters_and_generated_at_in_utc_with_the_display_zone_beside_it()
+    {
+        var c = await As(Roles.Viewer);
+        using var wb = new XLWorkbook(await c.GetStreamAsync($"/api/v1/analytics/xlsx?{Q}"));
+        var p = wb.Worksheet("Parameters");
+        string V(string name) => p.RowsUsed().First(r => r.Cell(1).GetString() == name).Cell(2).GetString();
+        string Beside(string name) => p.RowsUsed().First(r => r.Cell(1).GetString() == name).Cell(3).GetString();
+        Assert.Equal("2026-09-28 12:00 UTC", V("Generated at (UTC)"));   // the injected clock
+        Assert.Equal("07:00 CT", Beside("Generated at (UTC)"));        // CDT in September
+        Assert.Equal("04:09 PT", Beside2(new DateTime(2026, 11, 2, 12, 9, 0, DateTimeKind.Utc), "America/Los_Angeles"));
+        Assert.Equal("2026-01-01", V("Period from (UTC day)"));
+        Assert.Equal("2026-12-31", V("Period to (UTC day)"));
+        Assert.Equal("2026-09-28 12:00 UTC", V("Data as of (UTC)"));
+        Assert.Equal("America/Chicago", V("Display zone"));
+        Assert.False(string.IsNullOrEmpty(V("Workspace")));
+        Assert.Contains("None", V("Filters"));
+        Assert.All(p.RowsUsed().Where(r => r.Cell(1).GetString() is ['M', ..]), r => Assert.Equal(r.Cell(1).GetString() is "M6" or "M9" or "M14" ? "As of now" : "In the period", r.Cell(5).GetString()));
+    }
+
+    private static string Beside2(DateTime generated, string zone)
+    {
+        var w = new AnalyticsWindow(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), generated);
+        var bytes = AnalyticsExportEndpoints.FullWorkbook([], w, "W", null, generated, new ReleaseMgmt.Infrastructure.Reminders.DisplayClock(TimeZoneInfo.FindSystemTimeZoneById(zone)));
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        return wb.Worksheet("Parameters").Cell(3, 3).GetString();
+    }
+
+    [Theory, InlineData(Roles.Viewer), InlineData(Roles.RTE), InlineData(Roles.ReleaseManager), InlineData(Roles.GovernanceOfficer)]
+    public async Task Any_signed_in_role_may_download_the_workbook(string role)
+    {
+        Assert.Equal(HttpStatusCode.OK, (await (await As(role)).GetAsync($"/api/v1/analytics/xlsx?{Q}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_workbook_is_401_anonymous_400_on_a_bad_window_and_defaults_to_the_usual_window()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await fx.Web.CreateClient().GetAsync($"/api/v1/analytics/xlsx?{Q}")).StatusCode);
+        var c = await As(Roles.Viewer);
+        var bad = await c.GetAsync("/api/v1/analytics/xlsx?from=2026-12-31&to=2026-01-01");
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+        Assert.Equal("InvalidFilter", JsonDocument.Parse(await bad.Content.ReadAsStringAsync()).RootElement.GetProperty("guard").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.GetAsync("/api/v1/analytics/xlsx?product=x")).StatusCode);
+        var ok = await c.GetAsync("/api/v1/analytics/xlsx");
+        Assert.Equal("analytics-workbook-2026-04-01_2026-09-28.xlsx", ok.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
+    }
+
+    [Fact]
+    public void Formula_like_text_in_the_workspace_name_and_in_rows_is_stored_as_text_in_the_workbook()
+    {
+        var w = new AnalyticsWindow(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), DateTime.Parse("2026-09-28T12:00:00Z").ToUniversalTime());
+        var evil = new[] { "=HYPERLINK(\"http://evil\",\"x\")", "+1+1", "-2+3", "@SUM(A1)" };
+        IReadOnlyList<(MetricInfo, IReadOnlyList<object>)> metrics = [(AnalyticsService.Find("M11")!, evil.Select(e => (object)new M11Row(e, 1, null)).ToList())];
+        var bytes = AnalyticsExportEndpoints.FullWorkbook(metrics, w, "=cmd|' /C calc'!A0", null, w.Now, new ReleaseMgmt.Infrastructure.Reminders.DisplayClock(TimeZoneInfo.Utc));
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        foreach (var ws in wb.Worksheets) foreach (var cell in ws.CellsUsed()) Assert.False(cell.HasFormula, $"{ws.Name}!{cell.Address}");
+        Assert.Equal("=cmd|' /C calc'!A0", wb.Worksheet("Parameters").Cell(2, 2).GetString());
+        Assert.Equal(XLDataType.Text, wb.Worksheet("Parameters").Cell(2, 2).DataType);
+        for (var i = 0; i < evil.Length; i++) Assert.Equal(evil[i], wb.Worksheet("M11").Cell(i + 2, 1).GetString());
+        Assert.True(wb.Worksheet("Parameters").Cell(3, 3).IsEmpty(), "no second reading when the display zone is UTC (D51)");
+    }
+}
+
+/// <summary>Cell-for-cell comparison of two sheets: same used range, same type and value in every cell.</summary>
+internal static class WorkbookAssert
+{
+    public static void SameCells(IXLWorksheet expected, IXLWorksheet actual, string what)
+    {
+        Assert.Equal(expected.LastRowUsed()?.RowNumber() ?? 0, actual.LastRowUsed()?.RowNumber() ?? 0);
+        Assert.Equal(expected.LastColumnUsed()?.ColumnNumber() ?? 0, actual.LastColumnUsed()?.ColumnNumber() ?? 0);
+        foreach (var cell in expected.CellsUsed())
+        {
+            var other = actual.Cell(cell.Address);
+            Assert.True(cell.DataType == other.DataType, $"{what}!{cell.Address} type {cell.DataType} vs {other.DataType}");
+            Assert.True(cell.DataType == XLDataType.Number ? cell.GetDouble() == other.GetDouble() : cell.GetString() == other.GetString(), $"{what}!{cell.Address}: '{cell.GetString()}' vs '{other.GetString()}'");
+        }
+        Assert.Equal(expected.CellsUsed().Count(), actual.CellsUsed().Count());
+    }
 }

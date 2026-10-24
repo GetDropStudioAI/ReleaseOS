@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEven
 import { ApiError, get, type Me } from './api'
 import { NONE_CELL, NO_DATA, chartTable, columnHeader, findingM2, findingM3, findingM4, findingM5, findingM6, findingM7, findingM8, findingM9, findingM10, findingM11, findingM13, findingM14, findingM15, headlines, normalize,
   type Metric, type MetricResponse, type Rec } from './analyticsFindings.ts'
-import { download, exportName, presetRange, svgWithTitle, toCsv } from './analyticsExport.ts'
+import { download, exportName, presetRange, svgWithTitle, toCsv, workbookName, workbookUrl } from './analyticsExport.ts'
 import { dueText } from './shell/approvalsApi.ts'
 import { Button, ErrorState, LoadingState, MetricCard, Notice, PageHeading, Panel, type Tone } from './ui'
 import './analytics.css'
@@ -62,6 +62,8 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [fatal, setFatal] = useState<string | null>(null)
   const seq = useRef(0)
+  const [workbookErr, setWorkbookErr] = useState<string | null>(null)
+  const { run: act, pending } = useAction()
 
   // `say`: after Apply or Retry the new figures replace the old ones, so the result is spoken once (WCAG 4.1.3); the first load is not announced.
   const run = useCallback(async (f: string, t: string, say = true) => {
@@ -92,9 +94,21 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   const asOf = Object.values(data ?? {}).find(e => e.metric)?.metric?.asOf
   const trains = rec('M1')?.[0]?.completed, gates = rec('M3')?.reduce((a, r) => a + (Number(r.samples) || 0), 0), steps = rec('M7')?.length
 
+  const exportWorkbook = () => act('workbook', async () => {
+    const m = Object.values(data ?? {}).find(e => e.metric)?.metric
+    if (!m) return
+    setWorkbookErr(null)
+    try {
+      const r = await fetch(workbookUrl(m.from, m.to, m.asOf))
+      if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null))
+      download(workbookName(m.from, m.to), await r.blob())
+    } catch (e) { setWorkbookErr((e as Error).message) }
+  })
+
   const asOfText = asOf ? dueText({ dueAt: asOf, dueOn: null }) : null
   const heading = <PageHeading trail={['Workspace', 'Analytics']} title="Analytics"
-    description={<>{asOfText ? <>Data as of <span className="mono">{asOfText.utc}</span>{asOfText.local ? <> ({asOfText.local})</> : null}. </> : null}Blockers, scope churn and links are as of now and ignore the period.</>} />
+    description={<>{asOfText ? <>Data as of <span className="mono">{asOfText.utc}</span>{asOfText.local ? <> ({asOfText.local})</> : null}. </> : null}Blockers, scope churn and links are as of now and ignore the period.</>}
+    actions={asOf ? <Button disabled={!!pending} onClick={() => void exportWorkbook()} aria-label="Export all metrics as one XLSX workbook">{pending ? 'Workbook…' : 'Workbook (XLSX)'}</Button> : undefined} />
 
   const period = <div>
     <form className="an-period" onSubmit={apply} aria-label="Period">
@@ -106,6 +120,7 @@ export default function AnalyticsScreen(_props: { me: Me }) {
       </span>}
       {typeof trains === 'number' && <span className="an-period-count">{trains} completed {trains === 1 ? 'train' : 'trains'} · {gates ?? 0} gates timed · {steps ?? 0} live steps · dates are UTC days</span>}
     </form>
+    {workbookErr && <div role="alert"><Notice tone="danger" title="Workbook export failed">{workbookErr}</Notice></div>}
     {bad && <p id="an-period-error" className="an-period-error" role="alert">From must not be after to.</p>}
   </div>
 

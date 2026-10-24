@@ -35,6 +35,17 @@ export function exportName(id: string, from: string, to: string, ext: 'csv' | 'x
   return `analytics-${id.toLowerCase()}${asOfSnapshot ? `-asof-${safe(to)}` : `-${safe(from)}_${safe(to)}`}.${ext}`
 }
 
+/** The one-workbook file name (REOS-141): analytics-workbook-2026-04-01_2026-09-28.xlsx. It covers all 15 metrics, so there is no as-of variant. */
+export function workbookName(from: string, to: string): string {
+  const safe = (s: string) => s.replace(/[^0-9A-Za-z-]/g, '')
+  return `analytics-workbook-${safe(from)}_${safe(to)}.xlsx`
+}
+
+/** The workbook request: the window and as-of of the figures on screen, so the file holds the numbers the person is looking at. */
+export function workbookUrl(from: string, to: string, asOf: string): string {
+  return `/api/v1/analytics/xlsx?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&now=${encodeURIComponent(asOf)}`
+}
+
 /** Browser download of a blob through a temporary <a download>. */
 export function download(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob)

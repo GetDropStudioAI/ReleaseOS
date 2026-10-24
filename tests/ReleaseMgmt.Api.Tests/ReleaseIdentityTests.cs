@@ -245,4 +245,32 @@ public class ReleaseIdentityTests
         Assert.True(wb1.Worksheet("M1").Cell(1, 4).IsEmpty());
         Assert.Equal("All releases in the workspace", wb1.Worksheet("About").Cell(7, 2).GetString());
     }
+
+    [Fact]
+    public async Task The_analytics_workbook_of_each_workspace_equals_its_per_metric_exports_and_holds_nothing_of_the_other()
+    {
+        var w = await Setup(); using var _f = w.F;
+        const string Q = "from=2026-01-01&to=2026-12-31&now=2026-09-28T12:00:00Z";
+        var ids = Enumerable.Range(1, 15).Select(i => $"M{i}").ToList();
+        foreach (var (mine, other) in new[] { (w.A, w.B), (w.B, w.A) })
+        {
+            using var wb = new XLWorkbook(new MemoryStream(await mine.Client.GetByteArrayAsync($"/api/v1/analytics/xlsx?{Q}")));
+            Assert.Equal(["Parameters", .. ids], wb.Worksheets.Select(s => s.Name).ToArray());
+            Assert.Equal(mine.Name, wb.Worksheet("Parameters").Cell(2, 2).GetString());
+            foreach (var id in ids)
+            {
+                using var one = new XLWorkbook(new MemoryStream(await mine.Client.GetByteArrayAsync($"/api/v1/analytics/{id}/xlsx?{Q}")));
+                WorkbookAssert.SameCells(one.Worksheet(id), wb.Worksheet(id), $"{mine.Name} {id}");
+            }
+            var all = wb.Worksheets.SelectMany(s => s.CellsUsed()).Select(c => c.GetString()).ToList();
+            foreach (var foreign in new[] { other.Name, other.Key, other.Owner, other.Team, other.Env, other.Train == "tb" ? "Ledger close" : "Payments close" })
+                Assert.DoesNotContain(all, t => t.Contains(foreign));
+        }
+        // sanity: the metrics are not empty, so the comparison above compared something (workspace A's Medium blocker, B's Low one)
+        using var a = new XLWorkbook(new MemoryStream(await w.A.Client.GetByteArrayAsync($"/api/v1/analytics/xlsx?{Q}")));
+        using var b = new XLWorkbook(new MemoryStream(await w.B.Client.GetByteArrayAsync($"/api/v1/analytics/xlsx?{Q}")));
+        Assert.Equal("Medium", a.Worksheet("M9").Cell(2, 1).GetString());
+        Assert.Equal("Low", b.Worksheet("M9").Cell(2, 1).GetString());
+        Assert.Equal(2, a.Worksheet("M9").LastRowUsed()!.RowNumber());
+    }
 }

@@ -1,10 +1,10 @@
 import type { EChartsCoreOption } from 'echarts/core'
 import { aggregateSteps, fmt, lateShare, monthShort, type Rec } from './analyticsFindings.ts'
 
-/** Colours are read from the CSS custom properties (docs/ui/tokens.css) every time a chart is drawn, so a light/dark switch just redraws. */
+/** Colours are read from the redesign's CSS custom properties (docs/ui/tokens.css, REOS-132) every time a chart is drawn, so a light/dark switch just redraws and the SVG export carries the same palette. */
 export interface Palette { bg: string; label: string; secondary: string; tertiary: string; grid: string; rule: string; accent: string; ok: string; warn: string; bad: string; sans: string; mono: string }
-const TOKENS: [keyof Palette, string][] = [['bg', '--bg'], ['label', '--label'], ['secondary', '--secondary'], ['tertiary', '--tertiary'], ['grid', '--grid'], ['rule', '--separator-strong'],
-  ['accent', '--accent'], ['ok', '--ok'], ['warn', '--warn'], ['bad', '--bad'], ['sans', '--font-sans'], ['mono', '--font-mono']]
+const TOKENS: [keyof Palette, string][] = [['bg', '--color-bg-surface'], ['label', '--color-text-primary'], ['secondary', '--color-text-secondary'], ['tertiary', '--color-text-tertiary'], ['grid', '--color-border-subtle'],
+  ['rule', '--color-border-strong'], ['accent', '--color-accent-fill'], ['ok', '--color-status-success'], ['warn', '--color-status-warning'], ['bad', '--color-status-danger'], ['sans', '--font-sans'], ['mono', '--font-mono']]
 export function readPalette(el: Element = document.documentElement): Palette {
   const cs = getComputedStyle(el)
   const p = {} as Palette
@@ -24,12 +24,12 @@ function base(p: Palette, extra: EChartsCoreOption = {}): EChartsCoreOption {
 }
 const valueAxis = (p: Palette, name: string, extra: Record<string, unknown> = {}) => ({
   type: 'value', name, nameTextStyle: { color: p.secondary, fontSize: 11, align: 'left' }, axisLabel: { color: p.secondary, fontFamily: p.mono, fontSize: 10.5 },
-  splitLine: { lineStyle: { color: p.grid } }, axisLine: { show: false }, ...extra,
+  splitLine: { lineStyle: { color: p.grid } }, axisLine: { show: false }, axisTick: { show: false }, ...extra,
 })
 const catAxis = (p: Palette, data: string[], extra: Record<string, unknown> = {}) => ({
   type: 'category', data, axisLine: { lineStyle: { color: p.label } }, axisTick: { show: false }, axisLabel: { color: p.secondary, fontSize: 10.5, ...((extra.axisLabel as object) ?? {}) }, ...extra,
 })
-const legend = (p: Palette) => ({ top: 0, right: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: p.secondary, fontSize: 11, fontFamily: p.sans } })
+const legend = (p: Palette) => ({ top: 0, right: 0, borderColor: p.rule, itemWidth: 10, itemHeight: 10, textStyle: { color: p.secondary, fontSize: 11, fontFamily: p.sans } })
 const barLabel = (p: Palette, formatter: string | ((x: { value: unknown; dataIndex: number }) => string), position: string = 'top') => ({ show: true, position, color: p.label, fontFamily: p.mono, fontSize: 10.5, formatter })
 
 /** Shared prefix ("R26.") stripped from train titles so the x labels stay short; the full title is in the tooltip and the data table. */

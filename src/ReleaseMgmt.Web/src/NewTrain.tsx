@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { cloneTrain, createTrain, getTemplates, type CreatedTrain, type StreamRow, type TemplateRow } from './api'
 import { errMsg, plural } from './format'
 import { serverNow, utcToZonedInput, zonedInputToUtc } from './time'
 import { useDraft } from './session'
+import { SidePanel } from './ui'
 
 /** How the new train starts (REOS-80). Underlined text choices, never a segmented control (UI.md). */
 export type NewTrainMode = 'blank' | 'template' | 'copy'
@@ -71,17 +72,13 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
     finally { setBusy(false) }
   }
 
-  const head = (
-    <div className="section-head"><span className="cap">Drawer · new train</span>
-      <span><button type="button" className="text quiet" onClick={close}>Close</button></span></div>)
+  const frame = (children: ReactNode) => <SidePanel title="New train" closeLabel="Close drawer" onClose={close}>{children}</SidePanel>
 
   if (done) {
     const c = done.created
     const parts = [plural(c.products, 'product'), plural(c.gates, 'gate'), plural(c.tasks, 'task'), plural(c.steps, 'runbook step'), plural(c.commTemplates, 'message'), plural(c.commSchedule, 'T-minus item')]
-    return (
+    return frame(
       <>
-        {head}
-        <h2>New train</h2>
         <p className="ok" role="status">✓ Created {done.title}</p>
         <p className="muted">{done.source === 'Clone' ? 'Copied' : done.source === 'Template' ? 'From the template' : 'Blank'} · Planning · risk {TIER_WORD[done.riskTier] ?? done.riskTier} · {parts.join(' · ')}{c.window ? ' · window set' : ''}</p>
         {done.notes.length > 0 && <ul className="plain">{done.notes.map((n, i) => <li key={i} className="warn">▲ {n}</li>)}</ul>}
@@ -89,14 +86,11 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
           <button type="button" className="text" onClick={() => setDone(null)}>Create another</button>
           <button type="button" className="text" onClick={() => setDraft(undefined)}>Done</button>
         </p>
-      </>
-    )
+      </>)
   }
 
-  return (
+  return frame(
     <>
-      {head}
-      <h2>New train</h2>
       <p className="muted">A new train starts in Planning. Its gates are due a set number of business days before the target date.</p>
       <p><span className="cap" id="nt-mode">Start from</span><br />
         <span className="tabs" role="group" aria-labelledby="nt-mode">
@@ -149,6 +143,5 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
       {why && <p className="muted">{why}</p>}
       {busy && <p className="muted" role="status">Creating…</p>}
       {err && <p className="bad" role="alert">✗ {err}</p>}
-    </>
-  )
+    </>)
 }

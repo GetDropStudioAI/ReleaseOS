@@ -131,7 +131,13 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
     if (!session.ready || restored.current) return
     restored.current = true
     if (parsePath(window.location.pathname) === ROOT && session.restoredRoute && (session.restoredRoute.trainId || session.restoredRoute.view === 'admin')) go({ ...ROOT, ...session.restoredRoute }, true)
-  }, [session.ready, session.restoredRoute, go])
+    // REOS-143: a deep link to a gate, task, product or step opens that Inspector. A saved drawer would take the column, so it starts closed; its draft stays saved.
+    if (route.view === 'trains' && route.selection) {
+      if (comms?.open) setComms({ ...comms, open: false })
+      if (bulk?.open) setBulk({ ...bulk, open: false })
+      if (newTrain?.open) setNewTrain({ ...newTrain, open: false })
+    }
+  }, [session.ready, session.restoredRoute, go])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (session.ready && restored.current) session.saveRoute(route) }, [route, session.ready])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // WCAG 2.4.2 / 2.4.3: every view has its own document title, and a navigation the user made moves focus to the new page.

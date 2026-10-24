@@ -14,7 +14,7 @@ h1 { font-size: var(--text-title); letter-spacing: var(--tracking-title); margin
 .tabs .choice[aria-pressed="true"] { color: var(--label); border-bottom-color: var(--accent); }
 .empty { margin: 0; }
 .workspace { padding: 24px var(--pad-x); overflow: auto; }
-.inspector { border-left: 1px solid var(--separator); padding: 16px; background: var(--panel); overflow: auto; }
+.inspector { padding: var(--gap-lg); background: transparent; overflow: auto; }   /* REOS-124: the panel inside carries its own surface and border */
 .signin { max-width: 420px; margin: 12vh auto; padding: 0 var(--pad-x); }
 select.line { border: 0; border-bottom: 1px solid var(--tertiary); background: transparent; font: inherit; color: inherit; padding: 4px 0; }
 a { color: var(--accent); }

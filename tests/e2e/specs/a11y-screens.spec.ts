@@ -1,13 +1,13 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { openPage, releaseRow, signIn, trainByTitle } from './support'
+import { firstStep, openPage, primaryNav, releaseRow, signIn, trainByTitle } from './support'
 
 // REOS-53 (M8): accessibility pass over EVERY view in route.ts, in light and dark, driven and checked from the keyboard.
 //   1. Keyboard-only tour: from the top of the page Tab to each primary-navigation link and press Enter, in navigation order; the view must open,
 //      and axe must find no serious or critical violation on it.
 //   2. On each view, Tab through the whole page: every stop has an accessible name, a visible focus indicator and a box, and focus is never trapped.
 //   3. The train workspace in Plan, and Rehearsal and Live mode in Orchestration, and its two right-hand drawers (Communicate, Paste tasks), opened from the keyboard.
-// Read-only against the shared demo database: it signs in as its own users and changes nothing.
+// Against the shared demo database: it signs in as its own users and changes nothing (the step Inspector adds one step to a train that has none).
 test.setTimeout(240_000)
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']
@@ -134,6 +134,22 @@ for (const scheme of ['light', 'dark'] as const) {
       }
     })
 
+    test('a Viewer opens the gate Inspector from a link: axe clean, Escape closes it, and there is no New train drawer to open', async ({ page }) => {
+      await signIn(page, `a11y-viewer-${scheme}@example.com`, 'Viewer')
+      await expect(page.getByRole('main').getByRole('button', { name: 'New train', exact: true })).toHaveCount(0)
+      const t = await trainByTitle(page, 'Card portal')
+      const gate = t.gates.find(g => g.name === 'Compliance Sign-off')!
+      await page.goto(`/trains/${t.id}/gates/${gate.id}`)
+      await expect(page.locator('.inspector h2')).toHaveText('Compliance Sign-off')
+      await expect(page.locator('.inspector').getByRole('button', { name: 'Close inspector' })).toBeVisible()
+      await page.waitForTimeout(300)
+      await scan(page, `gate inspector, Viewer (${scheme})`)
+      await page.locator('.inspector h2').focus()
+      await page.keyboard.press('Escape')
+      await expect(page.locator('.inspector')).toContainText('Select a train, gate or task')
+      await scan(page, `inspector with nothing selected, Viewer (${scheme})`)
+    })
+
     test('train workspace in Plan, and Rehearsal and Live mode in Orchestration, gate Inspector and both drawers', async ({ page }) => {
       await signIn(page, `a11y-train-${scheme}@example.com`)
       const t = await trainByTitle(page, 'Card portal')
@@ -167,6 +183,27 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.waitForTimeout(500)
       await scan(page, `comms drawer (${scheme})`)
       checkStops(await tabThrough(page), `comms drawer (${scheme}) tab order`)
+
+      // the task, product and step Inspector and the New train drawer (REOS-124): one panel pattern, scanned in this theme
+      const ids = await page.evaluate(async id => {
+        const get = async (u: string) => (await fetch(`/api/v1/${u}`)).json()
+        const g = await get(`gates/${id.gate}`) as { tasks: { id: string }[] }
+        return { task: g.tasks[0].id, product: ((await get(`trains/${id.train}/products`)) as { products: { id: string }[] }).products[0].id }
+      }, { gate: gate.id, train: t.id })
+      const step = await firstStep(page, t.id)
+      for (const [what, url] of [['task', `/trains/${t.id}/gates/${gate.id}/tasks/${ids.task}`], ['product', `/trains/${t.id}/products/${ids.product}`], ['step', `/trains/${t.id}/steps/${step.id}`]]) {
+        await page.goto(url)
+        await expect(page.locator('.inspector h2')).toBeVisible()
+        await page.waitForTimeout(300)
+        await scan(page, `${what} inspector (${scheme})`)
+        checkStops(await tabThrough(page), `${what} inspector (${scheme}) tab order`)
+      }
+      await primaryNav(page).getByRole('link', { name: /^Releases$/ }).click()   // not goto('/'): an address that names nothing restores the last route
+      await page.getByRole('main').getByRole('button', { name: 'New train', exact: true }).first().click()
+      await expect(page.locator('.inspector h2')).toHaveText('New train')
+      await scan(page, `new train drawer (${scheme})`)
+      checkStops(await tabThrough(page), `new train drawer (${scheme}) tab order`)
+      await page.keyboard.press('Escape')
     })
   })
 }
@@ -192,3 +229,82 @@ for (const [os, pick] of [['light', 'Dark'], ['dark', 'Light']] as const) {
     await ctx.close()
   })
 }
+
+// REOS-143: a drawer left open is saved with the session (useDraft), and used to take the right-hand column on a deep link, hiding the Inspector the link names.
+// A deep link to a gate, task, product or step opens that Inspector; the drafts stay saved but their drawers start closed. Run with --repeat-each under the same user.
+test.describe('REOS-143: a deep link beats a saved drawer', () => {
+  const user = 'a11y-deeplink@example.com'
+  const saved = (page: Page, key: string) => page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/me/session/') && (r.request().postData() ?? '').includes(`"${key}`) && (r.request().postData() ?? '').includes('"open":true'))
+  const inspector = (page: Page) => page.locator('aside[aria-label=Inspector]')
+  // A repeat signs in as the same person, and an address that names nothing restores the last route: leave each test on the Releases list so the next one starts there.
+  test.afterEach(async ({ page }) => {
+    const w = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/me/session/') && (r.request().postData() ?? '').includes('"trainId":null'))
+    await primaryNav(page).getByRole('link', { name: /^Releases$/ }).click()
+    await w
+  })
+  const ids = (page: Page, trainId: string) => page.evaluate(async id => {
+    const get = async (u: string) => (await fetch(`/api/v1/${u}`)).json()
+    const t = await get(`trains/${id}`) as { gates: { id: string; name: string }[] }
+    const gate = t.gates.find(g => g.name === 'Compliance Sign-off')!
+    const g = await get(`gates/${gate.id}`) as { tasks: { id: string; description: string }[] }
+    const p = await get(`trains/${id}/products`) as { products: { id: string; name: string }[] }
+    return { gate, task: g.tasks[0], product: p.products[0] }
+  }, trainId).then(async r => ({ ...r, step: await firstStep(page, trainId) }))
+
+  test('with the Communicate drawer saved open, a link to a gate, task, product or step opens that Inspector', async ({ page }) => {
+    await signIn(page, user)
+    const t = await trainByTitle(page, 'Card portal')
+    const x = await ids(page, t.id)
+    await openPage(page, `/trains/${t.id}`)
+    const w = saved(page, `comms:${t.id}`)
+    await page.getByRole('button', { name: 'Communicate' }).click()
+    await expect(inspector(page).getByRole('heading', { level: 2 })).toBeVisible()
+    await w
+    const links: [string, string][] = [
+      [`/trains/${t.id}/gates/${x.gate.id}`, x.gate.name], [`/trains/${t.id}/gates/${x.gate.id}/tasks/${x.task.id}`, x.task.description],
+      [`/trains/${t.id}/products/${x.product.id}`, x.product.name], [`/trains/${t.id}/steps/${x.step.id}`, x.step.title],
+    ]
+    for (const [url, title] of links) {
+      await page.goto(url)
+      await expect(inspector(page).getByRole('heading', { level: 2 })).toHaveText(title)
+      await expect(page.locator('.comms-drawer')).toHaveCount(0)
+    }
+    // the draft is still saved: Communicate reopens the drawer
+    await page.goto(`/trains/${t.id}`)
+    await page.getByRole('button', { name: 'Communicate' }).click()
+    await expect(page.locator('.inspector .comms-drawer')).toBeVisible()
+  })
+
+  test('with Paste tasks saved open, a link to a gate opens the Inspector and the pasted text is kept', async ({ page }) => {
+    await signIn(page, user)
+    const t = await trainByTitle(page, 'Card portal')
+    const x = await ids(page, t.id)
+    await openPage(page, `/trains/${t.id}/gates/${x.gate.id}`)
+    const w = saved(page, `bulk:${t.id}`)
+    await page.getByRole('button', { name: 'Paste tasks' }).click()
+    await page.getByLabel('Tasks', { exact: true }).fill('- regression task kept across the deep link')
+    await w
+    await page.goto(`/trains/${t.id}/gates/${x.gate.id}`)
+    await expect(inspector(page).getByRole('heading', { level: 2 })).toHaveText(x.gate.name)
+    await page.getByRole('button', { name: 'Paste tasks' }).click()
+    await expect(page.getByLabel('Tasks', { exact: true })).toHaveValue('- regression task kept across the deep link')
+    await page.getByRole('button', { name: 'Discard' }).click()   // leave the shared draft clean for the next repeat
+  })
+
+  test('with the New train drawer saved open, a link to a gate opens the Inspector and the typed title is kept', async ({ page }) => {
+    await signIn(page, user)
+    const t = await trainByTitle(page, 'Card portal')
+    const x = await ids(page, t.id)
+    await primaryNav(page).getByRole('link', { name: /^Releases$/ }).click()
+    const w = saved(page, 'newtrain')
+    await page.getByRole('main').getByRole('button', { name: 'New train', exact: true }).first().click()
+    await inspector(page).getByLabel('Title', { exact: true }).fill('Kept across the deep link')
+    await w
+    await page.goto(`/trains/${t.id}/gates/${x.gate.id}`)
+    await expect(inspector(page).getByRole('heading', { level: 2 })).toHaveText(x.gate.name)
+    await primaryNav(page).getByRole('link', { name: /^Releases$/ }).click()
+    await page.getByRole('main').getByRole('button', { name: 'New train', exact: true }).first().click()
+    await expect(inspector(page).getByLabel('Title', { exact: true })).toHaveValue('Kept across the deep link')
+    await inspector(page).getByRole('button', { name: 'Discard' }).click()
+  })
+})

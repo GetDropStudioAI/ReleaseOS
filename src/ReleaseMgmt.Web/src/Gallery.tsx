@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { CalendarDays, Pencil, Plus, RotateCcw, ShieldCheck } from 'lucide-react'
 import tokens from '../../../docs/ui/redesign-tokens.json'
 import {
-  Button, ConfirmDialog, CountBadge, DataTable, FilterSelect, MetricCard, Notice, Panel, ProgressBar, PropertyList, SearchField, StatusChip,
+  Button, ConfirmDialog, CountBadge, DataTable, FilterSelect, MetricCard, Notice, Panel, ProgressBar, PropertyList, SearchField, SidePanel, StatusChip,
   TabPanel, Tabs, TwoLine, type Column,
   ConflictNotice, DisabledAction, EmptyState, ErrorState, LoadingState, NoPermissionState, ReadOnlyNotice, SaveFailureNotice, StaleBanner,
 } from './ui'
@@ -139,6 +139,16 @@ function Specimens({ theme }: { theme: 'light' | 'dark' }) {
             <p>Canary health is within SLO. The US wave remains locked until both outstanding checks are complete.</p>
             <Button variant="primary" icon={ShieldCheck}>Review approvals</Button>
           </Panel>
+        </div>
+      </Section>
+
+      <Section title="Side panel (Inspector and drawers)">
+        <div className="os-gallery-grid">
+          <SidePanel level={4} title="Compliance Sign-off" subtitle="Gate" closeLabel="Close inspector" onClose={() => undefined}>
+            <PropertyList items={[{ label: 'Status', value: <StatusChip>In progress</StatusChip> }, { label: 'Due', value: '30 Oct 2026 · T-5', mono: true }, { label: 'Owner', value: 'Maya Chen' }]} />
+            <div className="ins-actions"><Button variant="primary">Certify gate</Button><Button>Fail gate</Button></div>
+            <Notice tone="warning" title="Certify unavailable">One task is still open.</Notice>
+          </SidePanel>
         </div>
       </Section>
 

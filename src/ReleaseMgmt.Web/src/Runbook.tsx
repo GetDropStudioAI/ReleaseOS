@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { Button, Panel } from './ui'
+import { Button, EmptyState, ErrorState, LoadingState, Panel, PropertyList, StatusChip } from './ui'
+import { InspectorFrame } from './InspectorFrame'
 import { createStep, getOwners, getSteps, patchStep, SECTIONS, setStepDependencies, type ContingencyView, type Owner, type StepRow } from './api'
 import { ContingencyLine } from './Advisories'
 import { errMsg } from './format'
@@ -99,7 +100,7 @@ export function Runbook({ trainId, canPlan, refreshKey, selection, onSelect, onC
 }
 
 // ---- Inspector for one step: edit the plan, and the dependencies (a cycle is refused with the loop named) ---------------------------------
-export function StepInspector({ stepId, trainId, canPlan, refreshKey, onChanged }: { stepId: string; trainId: string; canPlan: boolean; refreshKey: number; onChanged: () => void }) {
+export function StepInspector({ stepId, trainId, canPlan, refreshKey, onChanged, onClose }: { stepId: string; trainId: string; canPlan: boolean; refreshKey: number; onChanged: () => void; onClose: () => void }) {
   const [steps, setSteps] = useState<StepRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [conflict, setConflict] = useState<import('./api').ApiError | null>(null)
@@ -110,7 +111,10 @@ export function StepInspector({ stepId, trainId, canPlan, refreshKey, onChanged 
   useEffect(() => { getSteps(trainId).then(setSteps).catch(e => setErr(errMsg(e))) }, [trainId, refreshKey])
   useEffect(() => { setErr(null); setConflict(null); setPick('') }, [stepId])
   const s = steps?.find(x => x.id === stepId)
-  if (!s) return err ? <p className="bad" role="alert">✗ {err}</p> : <p className="muted">{steps ? 'This step no longer exists.' : 'Loading…'}</p>
+  if (!s) return (
+    <InspectorFrame focusKey={`step:${stepId}`} title="Step" subtitle="Step" loading={!steps} onClose={onClose}>
+      {err ? <div role="alert"><ErrorState what="The step" message={err} /></div> : steps ? <EmptyState title="This step no longer exists" /> : <LoadingState what="the step" />}
+    </InspectorFrame>)
 
   const run = (label: string, fn: () => Promise<unknown>, said?: string) => once(label, async () => {
     setErr(null); setConflict(null)
@@ -127,11 +131,12 @@ export function StepInspector({ stepId, trainId, canPlan, refreshKey, onChanged 
   const setDeps = (ids: string[], label: string) => run(label, () => setStepDependencies(s.id, ids, s.version), 'Dependencies saved.')
 
   return (
-    <>
-      <h2>{s.title}</h2>
+    <InspectorFrame focusKey={`step:${stepId}`} title={s.title} subtitle={`Step · ${s.stepCode}`} onClose={onClose}>
       {!editing ? (
-        <dl className="facts"><dt>Code</dt><dd className="mono">{s.stepCode}</dd><dt>Section</dt><dd className={s.section === 'Rollback' ? 'warn' : undefined}>{s.section}</dd>
-          <dt>Owner</dt><dd>{s.ownerName ?? '—'}</dd><dt>Planned</dt><dd className="mono">{planned(s)}</dd><dt>Product</dt><dd>{s.productName ?? '—'}</dd></dl>
+        <PropertyList items={[
+          { label: 'Code', value: s.stepCode, mono: true }, { label: 'Section', value: s.section === 'Rollback' ? <StatusChip tone="warning">Rollback</StatusChip> : s.section },
+          { label: 'Owner', value: s.ownerName ?? '—' }, { label: 'Planned', value: planned(s), mono: true }, { label: 'Product', value: s.productName ?? '—' },
+        ]} />
       ) : (
         <p className="inline-form stack">
           <label>Title <input ref={titleRef} className="line block" value={d.title} onChange={e => setDraft({ ...d, title: e.target.value })} /></label>
@@ -154,6 +159,6 @@ export function StepInspector({ stepId, trainId, canPlan, refreshKey, onChanged 
           <button type="button" className="text" disabled={!pick || !!pending} onClick={() => { const id = pick; setPick(''); void setDeps([...s.dependsOn.map(x => x.id), id], 'Adding…') }}>{pending === 'Adding…' ? 'Adding…' : 'Add'}</button></p>)}
       {err && <p className="bad" role="alert">✗ {err}</p>}
       {conflict && <Conflict error={conflict} what="step" />}
-    </>
+    </InspectorFrame>
   )
 }

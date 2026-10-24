@@ -14,14 +14,14 @@ async function scan(page: Page, where: string) {
   expect(bad, `axe violations on ${where}:\n${detail}`).toEqual([])
 }
 
-async function openAnalytics(page: Page, email: string) {
-  await signIn(page, email)
+async function openAnalytics(page: Page, email: string, role = 'RTE') {
+  await signIn(page, email, role)
   await page.click('nav[aria-label=Primary] a[href="/analytics"]')
   await expect(page.getByRole('heading', { level: 1, name: 'Analytics' })).toBeVisible()
   // loaded = the chart cards are drawn and none is still busy (while loading each titles itself with its subtitle), and the six headline figures have left their placeholder
   await expect(page.locator('[data-testid=chart]').first()).toBeVisible()
   await expect(page.locator('[data-testid=chart][aria-busy=true]')).toHaveCount(0)
-  await expect(page.locator('[data-testid=kpi] .an-kpi-value').first()).not.toHaveText('…')
+  await expect(page.locator('[data-testid=kpi] .os-metric-value').first()).not.toHaveText('…')
   // Charts are lazy: the renderer loads after the data ("Loading chart…"), then draws. Wait for that too, or a "no data" skip below
   // can fire before the first SVG exists and silently turn a real check into a skip.
   await expect(page.getByText('Loading chart…')).toHaveCount(0)
@@ -41,10 +41,10 @@ for (const scheme of ['light', 'dark'] as const) {
 
       const kpis = page.locator('[data-testid=kpi]')
       await expect(kpis).toHaveCount(6)
-      await expect(kpis.locator('.group-label')).toHaveText(['On time', 'Slip when late', 'Change fail', 'Rollback', 'Comms on time', 'Waived gates'])
+      await expect(kpis.locator('.os-metric-label')).toHaveText(['On time', 'Slip when late', 'Change fail', 'Rollback', 'Comms on time', 'Waived gates'])
       for (const k of await kpis.all()) {
-        await expect(k.locator('.an-kpi-value')).toHaveText(/^(—|\d+(\.\d)?( d|%)?)$/)   // a figure, or an honest dash
-        await expect(k.locator('.an-kpi-sub')).not.toBeEmpty()
+        await expect(k.locator('.os-metric-value')).toHaveText(/^(—|\d+(\.\d)?( d|%)?)$/)   // a figure, or an honest dash
+        await expect(k.locator('.os-metric-detail')).not.toBeEmpty()
       }
 
       // every chart is titled with a finding (or says there is no data), never blank, and names itself for assistive technology
@@ -80,7 +80,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await openAnalytics(page, `analytics-theme-${scheme}@example.com`)
       const svg = page.locator('[data-testid=chart] [role=img] svg').first()
       test.skip((await svg.count()) === 0, 'the demo seed has no chart data in this window')
-      const bg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toLowerCase())
+      const bg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-surface').trim().toLowerCase())
       expect(bg).toMatch(/^#[0-9a-f]{6}$/)
       expect((await svg.evaluate(e => e.outerHTML)).toLowerCase()).toContain(bg)
     })
@@ -92,7 +92,7 @@ test('switching the theme redraws the charts with the other palette', async ({ p
   await openAnalytics(page, 'analytics-switch@example.com')
   const svg = page.locator('[data-testid=chart] [role=img] svg').first()
   test.skip((await svg.count()) === 0, 'the demo seed has no chart data in this window')
-  const bg = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toLowerCase())
+  const bg = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-surface').trim().toLowerCase())
   const light = await bg()
   expect((await svg.evaluate(e => e.outerHTML)).toLowerCase()).toContain(light)
   await page.emulateMedia({ colorScheme: 'dark' })
@@ -150,7 +150,73 @@ test('applying a period with from after to is refused inline; a valid period rel
   await page.getByRole('button', { name: 'Apply' }).click()
   // a window with no history: every chart says so honestly, and the headline figures show a dash with the reason
   await expect(page.locator('[data-testid=chart-title]', { hasText: 'No data in this window' }).first()).toBeVisible()
-  await expect(page.locator('[data-testid=kpi] .an-kpi-value').first()).toHaveText('—')
+  await expect(page.locator('[data-testid=kpi] .os-metric-value').first()).toHaveText('—')
   // the reload is spoken once through the app's live region (WCAG 4.1.3)
   await expect(page.getByTestId('announcer')).toHaveText(/^Loaded \d+ charts for 2030-01-01 to 2030-01-31/)
+})
+
+// REOS-132: the redesign's screen.
+test('the six headline figures are metric cards and each says its state in words', async ({ page }) => {
+  await openAnalytics(page, 'analytics-cards@example.com')
+  await expect(page.locator('[data-testid=kpi] .os-metric')).toHaveCount(6)
+  for (const k of await page.locator('[data-testid=kpi]').all()) {
+    const detail = (await k.locator('.os-metric-detail').innerText()).trim()
+    // a toned figure leads its detail with a glyph and a word, so colour is never the only cue
+    if (await k.locator('.os-metric-detail.success, .os-metric-detail.warning, .os-metric-detail.danger').count()) expect(detail).toMatch(/^(✓ on track|▲ needs attention|✗ off track) · /)
+  }
+  await expect(page.getByRole('heading', { level: 1, name: 'Analytics' })).toBeVisible()
+  await expect(page.getByText(/Data as of .* UTC/)).toBeVisible()
+})
+
+test('a quick period fills the dates, reloads and is announced', async ({ page }) => {
+  await openAnalytics(page, 'analytics-preset@example.com')
+  await page.getByRole('button', { name: 'Last 30 days' }).click()
+  await expect(page.getByTestId('announcer')).toHaveText(/^Loaded \d+ charts for \d{4}-\d\d-\d\d to \d{4}-\d\d-\d\d/)
+  const from = await page.getByLabel('Period from').inputValue(), to = await page.getByLabel('to', { exact: true }).inputValue()
+  expect((Date.parse(to) - Date.parse(from)) / 86_400_000).toBe(30)
+})
+
+test('keyboard: the period, a chart\'s exports and View data are reachable and operable without a mouse', async ({ page }) => {
+  await openAnalytics(page, 'analytics-keys@example.com')
+  await page.getByLabel('Period from').focus(); await expect(page.getByLabel('Period from')).toBeFocused()
+  await page.getByLabel('to', { exact: true }).focus(); await expect(page.getByLabel('to', { exact: true })).toBeFocused()
+  await page.getByRole('button', { name: 'Apply' }).focus()
+  await page.keyboard.press('Tab'); await expect(page.getByRole('button', { name: 'Last 30 days' })).toBeFocused()
+  const first = page.locator('[data-testid=chart]', { has: page.getByRole('button', { name: 'View data' }) }).first()
+  test.skip((await first.count()) === 0, 'the demo seed has no chart data in this window')
+  const card = page.locator(`[data-testid=chart][data-metric=${await first.getAttribute('data-metric')}]`)   // stable once the button's name flips
+  const view = card.getByRole('button', { name: 'View data' })
+  await view.focus(); await page.keyboard.press('Enter')
+  await expect(card.getByRole('button', { name: 'Hide data' })).toHaveAttribute('aria-expanded', 'true')
+  await expect(card.locator('table')).toBeVisible()
+  const outline = await card.getByRole('button', { name: 'Hide data' }).evaluate(e => getComputedStyle(e).outlineStyle)
+  expect(outline).not.toBe('none')   // the visible focus ring
+  const [dl] = await Promise.all([page.waitForEvent('download'), (async () => { await card.getByRole('button', { name: /as CSV$/ }).focus(); await page.keyboard.press('Enter') })()])
+  expect(dl.suggestedFilename()).toMatch(/\.csv$/)
+})
+
+test('a Viewer reads every chart and downloads the exports', async ({ page }) => {
+  await openAnalytics(page, 'analytics-viewer@example.com', 'Viewer')
+  await expect(page.locator('[data-testid=kpi]')).toHaveCount(6)
+  const card = withExports(page)
+  test.skip((await card.count()) === 0, 'the demo seed has no chart data in this window')
+  const [dl] = await Promise.all([page.waitForEvent('download'), card.getByRole('button', { name: /as XLSX$/ }).click()])
+  expect(readFileSync(await dl.path()).subarray(0, 2).toString('latin1')).toBe('PK')
+  await scan(page, 'analytics (Viewer)')
+})
+
+test('the exported SVG uses only colours that are token values of the active theme', async ({ page }) => {
+  await openAnalytics(page, 'analytics-svgtokens@example.com')
+  const card = page.locator('[data-testid=chart]', { has: page.getByRole('button', { name: /as SVG$/ }) }).first()
+  test.skip((await card.count()) === 0, 'the demo seed has no chart data in this window')
+  const [dl] = await Promise.all([page.waitForEvent('download'), card.getByRole('button', { name: /as SVG$/ }).click()])
+  const svg = readFileSync(await dl.path(), 'utf8')
+  const tokens = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement)
+    return [...document.styleSheets].flatMap(sh => [...sh.cssRules]).flatMap(r => [...((r as CSSStyleRule).style ?? [])]).filter(n => n.startsWith('--color-'))
+      .map(n => cs.getPropertyValue(n).trim().toLowerCase())
+  })
+  const used = new Set((svg.match(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g) ?? []).map(c => c.toLowerCase()))
+  expect(used.size, 'the drawing has colours').toBeGreaterThan(0)
+  for (const c of used) expect(tokens, `${c} is not a design token`).toContain(c)
 })

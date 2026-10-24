@@ -185,21 +185,9 @@ label.block textarea.bulk-text { margin-top: 4px; }
 .an-table { margin-top: 6px; max-height: 320px; overflow: auto; } .an-table table.grid th.n, .an-table table.grid td.n { text-align: right; }
 
 
-/* REOS-48/49 imports and exports (mockups/ImportExport.html): a summary bar with rules above and below, struck-through old values, no boxes */
+/* Imports & exports now styles itself in exchange/exchange.css (REOS-133). */
 .strong { font-weight: 600; }
-.kind-tabs { flex-wrap: wrap; row-gap: 6px; margin: 6px 0 4px; }
-.kind-help { margin: 2px 0 10px; }
-h2.file-name { font-size: var(--text-drawer-title); letter-spacing: var(--tracking-title); margin: 2px 0 2px; font-weight: 600; word-break: break-all; }
-h2.aside-title { font-size: var(--text-drawer-title); letter-spacing: var(--tracking-title); margin: 2px 0 8px; }
-.import-bar { display: flex; gap: 8px 32px; align-items: baseline; flex-wrap: wrap; border-top: 1px solid var(--separator-strong); border-bottom: 1px solid var(--separator-strong); padding: 8px 0; margin: 12px 0 4px; }
-.import-bar .spacer { flex: 1; }
-.import-bar .tabs { align-items: baseline; }
-.import-bar .counts { display: inline-flex; gap: 8px 28px; flex-wrap: wrap; }
-.import-bar .big { font-size: 18px; font-weight: 600; }
 .old { color: var(--secondary); text-decoration: line-through; }
-.preview-table td { font-size: 12.5px; }
-.export-grids td { vertical-align: top; }
-.export-note { margin-top: 12px; border-top: 1px solid var(--separator-strong); padding-top: 8px; }
 
 /* REOS-53 (Q-053g): the focus rule for bottom-rule inputs. tokens.css sets it on :focus-visible, but the .inline-form and grid restatements of "input.line" above have the
    same specificity and come later, which removed the accent rule (outline is none there), so a keyboard user saw no focus at all; and a date input did not
@@ -222,7 +210,7 @@ table.grid tr.selected td:first-child, table.grid tr[aria-selected="true"] td:fi
 /* Design direction D (Command): Fiserv Orange carries the main wording in both themes; blue stays the colour of everything clickable.
    Tokens: --brand-title (22px+ and indicators), --brand-text (smaller headings). Contrast is AA in light and dark (docs/review/ACCESSIBILITY_AUDIT.md). */
 h1 { color: var(--brand-title); }
-.detail h2, h2.file-name, h2.aside-title, .drawer-title, .inspector h2:not(.cap) { color: var(--brand-title); }
+.detail h2, .drawer-title, .inspector h2:not(.cap) { color: var(--brand-title); }
 h2.cap, h3.cap, .section-head h2, .an-title, .cal-caption, .runtable tr.sec td, .runtable tr.sec th { color: var(--brand-text); }
 .tabs a[aria-current="page"], .tabs .choice[aria-pressed="true"], .sync-window button[aria-pressed="true"] { border-bottom-color: var(--brand-title); }
 /* section rows became <th scope="rowgroup"> (WCAG 1.3.1): keep them left-aligned like the old cells */

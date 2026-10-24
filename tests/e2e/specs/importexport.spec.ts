@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
+import { readFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
 import { signIn } from './support'
 
@@ -71,7 +72,7 @@ for (const scheme of ['light', 'dark'] as const) {
       const go = page.getByRole('button', { name: 'Commit 2 rows' })
       await expect(go).toBeEnabled()
       await go.click()
-      await expect(page.locator('p.ok', { hasText: 'Committed Holidays: 2 new' })).toBeVisible()
+      await expect(page.locator('.os-notice', { hasText: 'Committed Holidays: 2 new' })).toBeVisible()
       await expect(page.getByTestId('announcer')).toContainText('Committed Holidays: 2 new')   // spoken through the app's one live region
 
       const names = await page.evaluate(async () => (await (await fetch('/api/v1/holidays')).json() as { day: string; name: string }[]).map(h => `${h.day} ${h.name}`))
@@ -88,7 +89,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.locator('section[aria-label=Errors] tbody tr').first()).toContainText('already exists')
 
       // exports: every grid has CSV and XLSX links, and they serve real files
-      const links = page.locator('aside[aria-label=Exports] table.export-grids tbody tr')
+      const links = page.locator('aside[aria-label=Exports] section[aria-label="Grid catalogue"] tbody tr')
       expect(await links.count()).toBeGreaterThanOrEqual(15)
       await expect(page.locator('aside[aria-label=Exports] a[aria-label="Users as CSV"]')).toHaveAttribute('href', '/api/v1/exports/users.csv')
       await expect(page.locator('aside[aria-label=Exports] a[aria-label="Users as XLSX"]')).toHaveAttribute('href', '/api/v1/exports/users.xlsx')
@@ -101,6 +102,57 @@ for (const scheme of ['light', 'dark'] as const) {
       expect((await xlsxRes.body()).subarray(0, 2).toString()).toBe('PK')
 
       await scan(page, `imports and exports with history and the export list (${scheme})`)
+    })
+
+    test('the preview marks each row with a symbol and a word, and a changed cell shows its old and new value', async ({ page }) => {
+      await signIn(page, `importexport-diff-${scheme}@example.com`, 'RTE')
+      await page.locator('nav[aria-label=Primary] a', { hasText: 'Imports & exports' }).click()
+      const year = 3000 + Math.floor(Math.random() * 5000)
+      const day = (n: number) => `${year}-02-${String(n).padStart(2, '0')}`
+      const stamp = `${scheme}-${Date.now()}`
+      await page.locator('[role=group][aria-label="Import kind"] button', { hasText: /^Holidays$/ }).click()
+      await page.locator('input[type=file]').setInputFiles({ name: 'seed.csv', mimeType: 'text/csv', buffer: csv([['Day', 'Name'], [day(1), `Old ${stamp}`], [day(2), `Same ${stamp}`]]) })
+      await page.getByRole('button', { name: 'Commit 2 rows' }).click()
+      await expect(page.locator('.os-notice', { hasText: 'Committed Holidays: 2 new' })).toBeVisible()
+
+      await page.locator('input[type=file]').setInputFiles({ name: 'diff.csv', mimeType: 'text/csv', buffer: csv([['Day', 'Name'], [day(1), `New ${stamp}`], [day(2), `Same ${stamp}`], [day(3), `Added ${stamp}`]]) })
+      const rows = page.locator('section[aria-label=Preview] tbody tr')
+      await expect(rows).toHaveCount(3)
+      await expect(rows.nth(0)).toContainText('~ updated')
+      await expect(rows.nth(0).locator('del')).toContainText(`Old ${stamp}`)
+      await expect(rows.nth(0).locator('ins')).toContainText(`New ${stamp}`)
+      await expect(rows.nth(1)).toContainText('= unchanged')
+      await expect(rows.nth(2)).toContainText('+ new')
+      await scan(page, `imports with diff markers (${scheme})`)
+    })
+
+    test('the import can be driven from the keyboard', async ({ page }) => {
+      await signIn(page, `importexport-keys-${scheme}@example.com`, 'RTE')
+      await page.locator('nav[aria-label=Primary] a', { hasText: 'Imports & exports' }).click()
+      const holidays = page.locator('[role=group][aria-label="Import kind"] button', { hasText: /^Holidays$/ })
+      await holidays.focus()
+      await page.keyboard.press('Enter')
+      await expect(holidays).toHaveAttribute('aria-pressed', 'true')
+      const chooser = page.getByRole('button', { name: 'Choose CSV file…' })
+      for (let i = 0; i < 20 && !(await chooser.evaluate(el => el === document.activeElement)); i++) await page.keyboard.press('Tab')
+      await expect(chooser).toBeFocused()
+    })
+
+    test('the grid catalogue downloads real CSV and XLSX files, and the recent export jobs are listed', async ({ page }) => {
+      await signIn(page, `importexport-files-${scheme}@example.com`, 'RTE')
+      await page.locator('nav[aria-label=Primary] a', { hasText: 'Imports & exports' }).click()
+      const catalogue = page.locator('section[aria-label="Grid catalogue"]')
+      const [csvDl] = await Promise.all([page.waitForEvent('download'), catalogue.locator('a[aria-label="Users as CSV"]').click()])
+      expect(csvDl.suggestedFilename()).toMatch(/users.*\.csv$/i)
+      expect((await readFile(await csvDl.path())).toString().replace(/^﻿/, '')).toContain('#Version')
+      const [xlsxDl] = await Promise.all([page.waitForEvent('download'), catalogue.locator('a[aria-label="Users as XLSX"]').click()])
+      expect(xlsxDl.suggestedFilename()).toMatch(/users.*\.xlsx$/i)
+      expect((await readFile(await xlsxDl.path())).subarray(0, 2).toString()).toBe('PK')
+
+      const jobs = page.locator('section[aria-label="Recent export jobs"]')
+      await expect(jobs).toBeVisible()
+      await expect(jobs.locator('table')).toBeVisible()   // rows, or the empty line when no document has been generated yet
+      await scan(page, `export catalogue and recent export jobs (${scheme})`)
     })
 
     test('a viewer sees the export list but no import controls', async ({ page }) => {

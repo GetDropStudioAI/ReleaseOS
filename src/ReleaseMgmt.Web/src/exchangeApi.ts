@@ -1,4 +1,4 @@
-import { ApiError } from './api'
+import { ApiError, type ExportJob } from './api'
 
 /** REOS-48/49: typed calls for the CSV import and the grid exports (kept out of api.ts so the shared file stays untouched). */
 export interface ImportError { row: number; column: string; message: string }
@@ -24,6 +24,8 @@ async function json<T>(r: Response): Promise<T> {
 
 export const getKinds = () => fetch('/api/v1/imports/kinds').then(r => json<KindInfo[]>(r))
 export const getGrids = () => fetch('/api/v1/exports/grids').then(r => json<GridInfo[]>(r))
+/** The newest export jobs across every release (GET /export-jobs without a trainId), for the Recent export jobs panel. */
+export const getRecentExportJobs = (limit = 15) => fetch(`/api/v1/export-jobs?limit=${limit}`).then(r => json<ExportJob[]>(r))
 export const getImports = () => fetch('/api/v1/imports?limit=15').then(r => json<ImportJob[]>(r))
 export const getImportRows = (jobId: string, skip: number, take: number) => fetch(`/api/v1/imports/${encodeURIComponent(jobId)}/rows?skip=${skip}&take=${take}`).then(r => json<PlanRow[]>(r))
 

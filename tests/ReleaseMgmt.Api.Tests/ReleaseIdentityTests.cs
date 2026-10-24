@@ -123,8 +123,9 @@ public class ReleaseIdentityTests
         }
         // D51: the generated-at stamp is UTC, with the display zone (America/Chicago) beside it
         var all = AllText(pdf);
-        const string Beside = @"\((?:\w{3} \d{1,2} \w{3} )?\d\d:\d\d(?:–\d\d:\d\d)? CT\)";   // the weekday and date appear only when the display zone is on another day than UTC
-        Assert.Matches(@"generated \w{3} \d{1,2} \w{3} \d{4} \d\d:\d\d UTC " + Beside, all);
+        // the weekday and date appear only when the display zone is on another day than UTC; PdfPig drops spaces differently per platform, so the shape is loose
+        const string Beside = @"\([^)]*\d\d:\d\d(?:–\d\d:\d\d)? CT\)";
+        Assert.Matches(@"generated \w{3} ?\d{1,2} ?\w{3} ?\d{4} \d\d:\d\d UTC " + Beside, all);
         Assert.DoesNotMatch(@"\d\d:\d\d CT", Regex.Replace(all, Beside, ""));   // no time is given in CT alone
     }
 

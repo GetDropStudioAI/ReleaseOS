@@ -56,14 +56,15 @@ public class DeploymentOpsApiTests
     {
         using var f = new ApiFactory();
         var c = await Setup(f);
-        var posted = await c.Ingest.PostAsJsonAsync("/api/v1/ingest/metrics", new { deploymentExternalId = "ci-1", samples = Breaching("Canary") });
+        var samples = Breaching("Canary");   // built once: a replay is the same samples, not new ones taken a moment later
+        var posted = await c.Ingest.PostAsJsonAsync("/api/v1/ingest/metrics", new { deploymentExternalId = "ci-1", samples });
         Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
         var r = await Json(posted);
         Assert.Equal((5, 0, 1), (r.GetProperty("accepted").GetInt32(), r.GetProperty("duplicates").GetInt32(), r.GetProperty("breachesConfirmed").GetInt32()));
         // a replay: nothing accepted, nothing written
         var audits = Count(f, "SELECT COUNT(*) FROM AuditEvents");
-        var replay = await Json(await c.Ingest.PostAsJsonAsync("/api/v1/ingest/metrics", new { deploymentExternalId = "ci-1", samples = Breaching("Canary") }));
-        Assert.True(replay.GetProperty("accepted").GetInt32() == 0 || replay.GetProperty("duplicates").GetInt32() > 0);
+        var replay = await Json(await c.Ingest.PostAsJsonAsync("/api/v1/ingest/metrics", new { deploymentExternalId = "ci-1", samples }));
+        Assert.Equal((0, 5), (replay.GetProperty("accepted").GetInt32(), replay.GetProperty("duplicates").GetInt32()));
 
         var metrics = await Json(await c.Rte.GetAsync($"/api/v1/deployments/{c.DeploymentId}/metrics"));
         Assert.Equal("Canary", metrics.GetProperty("strategy").GetString());

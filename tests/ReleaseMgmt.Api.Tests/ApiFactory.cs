@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ReleaseMgmt.Infrastructure.Comms;
 
 namespace ReleaseMgmt.Api.Tests;
@@ -22,6 +23,8 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
     public string AttachmentsDir => Path.Combine(_dir, "attachments");
     public const string TestHosts = "localhost;releases.example.com";
     public RecordingControlSender ControlSender { get; } = new();
+    /// <summary>A fixed clock for tests whose data carries absolute dates (otherwise the real date turns "not yet due" rows overdue).</summary>
+    public TimeProvider? Clock { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -51,7 +54,11 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         if (environment != "Development") builder.UseSetting("AllowedHosts", TestHosts);
         // REOS-74: outside Development an unencrypted key ring refuses to start; tests that boot Production opt in (KeyRingEncryptionTests cover the refusal).
         builder.UseSetting("DataProtection:AllowUnprotectedKeys", "true");
-        builder.ConfigureTestServices(services => services.AddSingleton<IControlWebhookSender>(ControlSender));
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<IControlWebhookSender>(ControlSender);
+            if (Clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(Clock); }
+        });
     }
 
     protected override void Dispose(bool disposing)

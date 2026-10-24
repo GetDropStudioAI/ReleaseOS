@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.Extensions.Configuration;
 using ReleaseMgmt.Api.Reminders;
 using ReleaseMgmt.Domain.Common;
@@ -24,9 +25,9 @@ public class NotificationTests
     private static void Note(ApiFactory f, string id, string user, string kind, string createdAt, bool read = false, string entityType = "StageGate", string entityId = "g1", int level = 0) =>
         Sql(f, $"INSERT INTO Notifications(Id,UserId,Kind,EntityType,EntityId,EscalationLevel,Message,CreatedAt,ReadAt) VALUES('{id}','{user}','{kind}','{entityType}','{entityId}',{level},'msg {id}','{createdAt}',{(read ? "'2026-10-01T00:00:00Z'" : "NULL")})");
 
-    private static async Task<(ApiFactory F, HttpClient Me, HttpClient Other, string MeId, string OtherId)> Setup()
+    private static async Task<(ApiFactory F, HttpClient Me, HttpClient Other, string MeId, string OtherId)> Setup(TimeProvider? clock = null)
     {
-        var f = new ApiFactory();
+        var f = new ApiFactory() { Clock = clock };
         var me = await As(f, Roles.RTE, "me@x.com");
         var other = await As(f, Roles.Viewer, "other@x.com");
         return (f, me, other, UserId(f, "me@x.com"), UserId(f, "other@x.com"));
@@ -164,7 +165,7 @@ public class NotificationTests
     [Fact]
     public async Task My_work_lists_what_is_open_and_mine_or_my_teams_with_due_dates_and_counts()
     {
-        var (f, me, other, meId, otherId) = await Setup(); using var _ = f;
+        var (f, me, other, meId, otherId) = await Setup(new FakeTimeProvider(DateTimeOffset.Parse("2026-10-22T12:00:00Z"))); using var _ = f;   // g1/k1 are due 2026-10-23: not overdue yet
         SeedTrain(f, meId, otherId);                    // t1 Planning: g1 Code Freeze (mine, Pending, due 2026-10-23), g2 Compliance (other's, InProgress); tasks k1 mine, k2 other's
         Sql(f, $@"
             INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','platform','Platform'),('tm2','data','Data');

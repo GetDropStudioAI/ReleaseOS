@@ -353,7 +353,7 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
             .Select(r => (string)r[0]!).Order().ToList();
         string[] expectedRoots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
             "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents",
-            "ReleaseTypes", "Environments", "CatalogServices", "IngestKeys", "Deployments", "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions",
+            "ReleaseTypes", "Environments", "Clients", "CatalogServices", "IngestKeys", "Deployments", "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions",
             "ApprovalPolicies", "Approvals"];
         AssertTrue(roots.SequenceEqual(expectedRoots.Order()), "WorkspaceId on every root table, and only there", string.Join(",", roots));
         var moving = roots.Where(t => t != "AuditEvents" && Count(db6, "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name=?", $"trg_Ws_{t}_Update") == 0).ToList();

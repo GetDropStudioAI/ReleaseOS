@@ -1,0 +1,7 @@
+/* My work and Inbox (REOS-131): small additions to the shared ui/ components, tokens only. */
+.os-chips { display: inline-flex; flex-wrap: wrap; gap: var(--gap-sm); }
+.os-table tbody tr.unread { font-weight: 600; }
+.os-table tbody tr.unread .os-twoline .secondary { font-weight: 400; }
+/* A pressed filter shows a check as well as the accent border, so the state is never colour alone. */
+.os-button[aria-pressed="true"] { border-color: var(--color-accent-fill); background: var(--color-bg-accent-faint); }
+.os-inbox-tools { display: flex; align-items: center; gap: var(--gap-md); flex-wrap: wrap; }

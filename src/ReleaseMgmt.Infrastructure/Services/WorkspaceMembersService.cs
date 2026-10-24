@@ -15,6 +15,11 @@ namespace ReleaseMgmt.Infrastructure.Services;
 public sealed partial class WorkspaceMembersService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, UserCreationService users, IRealtimePublisher? realtime = null)
     : ServiceBase(dbf, time, realtime)
 {
+    // Kept in fields of their own: CreateAsync builds a ReleaseTypeService, and using the constructor parameters there would capture them a second time (CS9107).
+    private readonly IDbContextFactory<ReleaseDbContext> _dbf = dbf;
+    private readonly TimeProvider _time = time;
+    private readonly IRealtimePublisher? _realtime = realtime;
+
     public const string InvalidInput = AdminService.InvalidInput, SlugTaken = "SlugTaken", LastAdmin = "LastAdmin", LastGovernance = "LastGovernance", NotAllowed = "NotAllowed";
     public const int MaxSlugLength = 40;
 
@@ -49,7 +54,7 @@ public sealed partial class WorkspaceMembersService(IDbContextFactory<ReleaseDbC
     {
         var created = await CreateCoreAsync(name, slug, region, actor, ct);
         // REOS-116 (D46): a new workspace starts with Beta, CERT, PenTest Cert and Production. Its own transaction (the new workspace is not the request's); the app also seeds any workspace without types at start.
-        if (created.IsOk) await new ReleaseTypeService(dbf, time, realtime).SeedAsync(created.Value.Id, ct);
+        if (created.IsOk) await new ReleaseTypeService(_dbf, _time, _realtime).SeedAsync(created.Value!.Id, ct);
         return created;
     }
 

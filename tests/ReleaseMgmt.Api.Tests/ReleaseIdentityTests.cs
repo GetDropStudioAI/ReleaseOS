@@ -117,8 +117,9 @@ public class ReleaseIdentityTests
         for (var i = 1; i <= d.NumberOfPages; i++)
         {
             var page = Flat(d.GetPage(i).Text);
-            Assert.Contains("Payments", page);
-            if (kind != "EvidencePack" || i > 1) Assert.Contains($"{w.A.Key} R26.10 (Payments)", page);   // the footer; page 1 of the pack has the mockup's footer instead
+            // the header names the workspace; the footer (page 1 of the pack: the identity line) names the key. Checked apart: a long footer wraps differently per platform's fonts.
+            Assert.True(page.Contains("Payments"), $"{kind} page {i} does not name the workspace");
+            Assert.True(page.Contains(w.A.Key), $"{kind} page {i} does not name the release key {w.A.Key}");
         }
         // D51: the generated-at stamp is UTC, with the display zone (America/Chicago) beside it
         var all = AllText(pdf);

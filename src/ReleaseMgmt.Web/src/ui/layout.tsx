@@ -122,10 +122,12 @@ export interface Column<T> { key: string; header: ReactNode; cell: (row: T) => R
 /**
  * Data table (D41): column headings, rows, an optional footer with the record count and sync time. With `onSelect`, rows are selectable: each row
  * is focusable, Up and Down move between rows, Enter or Space selects, and the selected row carries the selection tint and aria-current.
+ * `rowClass` adds a class to a row (the Inbox sets unread rows semibold with it). A screen with its own row keyboard (j / k, `useRowNav`) leaves `onSelect` off
+ * and marks the selected row with `selectedKey`.
  */
-export function DataTable<T>({ columns, rows, rowKey, caption, footer, selectedKey, onSelect, empty }: {
+export function DataTable<T>({ columns, rows, rowKey, caption, footer, selectedKey, onSelect, empty, rowClass }: {
   columns: Column<T>[]; rows: T[]; rowKey: (row: T) => string; caption: string; footer?: ReactNode; selectedKey?: string | null
-  onSelect?: (row: T) => void; empty?: ReactNode
+  onSelect?: (row: T) => void; empty?: ReactNode; rowClass?: (row: T) => string | undefined
 }) {
   const keys = (e: KeyboardEvent<HTMLTableRowElement>, row: T) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.(row); return }
@@ -145,7 +147,7 @@ export function DataTable<T>({ columns, rows, rowKey, caption, footer, selectedK
             const k = rowKey(row)
             const selected = selectedKey === k
             return (
-              <tr key={k} aria-current={selected ? 'true' : undefined} className={selected ? 'selected' : undefined}
+              <tr key={k} aria-current={selected ? 'true' : undefined} className={[selected ? 'selected' : '', rowClass?.(row) ?? ''].join(' ').trim() || undefined}
                 tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined} onKeyDown={onSelect ? e => keys(e, row) : undefined}>
                 {columns.map(c => <td key={c.key} className={[c.align === 'end' ? 'end' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined}>{c.cell(row)}</td>)}
               </tr>

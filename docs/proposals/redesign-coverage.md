@@ -101,7 +101,7 @@ The routes come from `route.ts` (`View`). The sidebar labels come from `shell/na
 | Sync health | `/sync` | `SyncHealth.tsx`: banner, connectors, mismatches, open alerts, resolved history, alert detail, watchdog line, and the **webhook allowlist** | REOS-94 links to it | None | `Not covered` |
 | My work | `/work` | `MyWork.tsx`: what is assigned to me, by due date | — | None | `Not covered` |
 | Inbox | `/inbox` | `Inbox.tsx`: notifications, unread in semibold, mark read, open the target | REOS-94 (the bell only) | bell icon | `Not covered` |
-| Analytics | `/analytics` | `AnalyticsScreen.tsx`: period, six headline figures, a chart per metric, CSV / XLSX / SVG per chart | — (REOS-95 has one throughput chart) | None | `Not covered` |
+| Analytics | `/analytics` | `AnalyticsScreen.tsx`: period, six headline figures, a chart per metric, CSV / XLSX / SVG per chart | — (REOS-95 has one throughput chart) | None | `Built` (REOS-132, Q-132a) |
 | Imports & exports | `/importexport` | `ImportExport.tsx`, `GridExports.tsx`: preview with `+ ~ = ✗`, errors, warnings, Append/Upsert, recent imports, 18 grids as CSV and XLSX | — | None | `Not covered` |
 | Gallery | `/gallery` | review page | REOS-93 | — | `Covered` |
 | Create workspace, members and roles | — | none | REOS-106 | None | `Story only` |

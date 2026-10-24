@@ -43,3 +43,10 @@ export function download(name: string, blob: Blob) {
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
+
+/** A quick period (REOS-132): the `days` before the as-of UTC day, up to that day; only fills the two dates, the query is the same as typed dates. */
+export function presetRange(asOf: string, days: number): { from: string; to: string } {
+  const end = new Date(`${asOf.slice(0, 10)}T00:00:00Z`)
+  const start = new Date(end.getTime() - days * 86_400_000)
+  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }
+}

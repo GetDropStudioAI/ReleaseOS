@@ -10,8 +10,8 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261024201644_Triggers")]
-    partial class Triggers
+    [Migration("20261024222250_Schema")]
+    partial class Schema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2186,6 +2186,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("ReleaseTypeId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ReleaseVersionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("RiskTier")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -2236,6 +2239,8 @@ namespace ReleaseMgmt.Infrastructure.Migrations
 
                     b.HasIndex("ReleaseTypeId");
 
+                    b.HasIndex("ReleaseVersionId");
+
                     b.HasIndex("RollbackRehearsedByUserId");
 
                     b.HasIndex("TemplateId");
@@ -2282,6 +2287,38 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("WorkspaceId");
 
                     b.ToTable("ReleaseTypes", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ReleaseVersions", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("ReleaseVersions", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -3896,6 +3933,11 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .HasForeignKey("ReleaseTypeId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseVersions", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseVersionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("RollbackRehearsedByUserId")
@@ -3920,6 +3962,15 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .HasForeignKey("DefaultTemplateId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ReleaseVersions", b =>
+                {
                     b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
                         .WithMany()
                         .HasForeignKey("WorkspaceId")

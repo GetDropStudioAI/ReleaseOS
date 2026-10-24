@@ -4,6 +4,7 @@ import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, 
 import { dueText } from './approvalsApi.ts'
 import { RANGES, attentionTone, getOverview, successTone, windowText, type ActivityRow, type AttentionItem, type Overview as Data } from './overviewApi.ts'
 import { ThroughputChart } from './ThroughputChart.tsx'
+import { ChainBriefView } from '../versions/ChainStrip.tsx'
 
 /**
  * The Organization overview (REOS-95, Figma 6:4718): four metric cards, release throughput, the release activity table, what needs attention, and environment
@@ -32,7 +33,7 @@ export function Overview({ refreshKey, canCreate, onCreate, onOpen }: { refreshK
   const { cards } = data
   const delta = cards.deploymentSuccess.deltaPts
   const columns: Column<ActivityRow>[] = [
-    { key: 'release', header: 'Release', cell: r => <TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => onOpen(r.trainId)}>{r.title}</button>} secondary={`${r.products} ${r.products === 1 ? 'product' : 'products'}${r.blockers ? ` · ${r.blockers} ${r.blockers === 1 ? 'blocker' : 'blockers'}` : ''}`} /> },
+    { key: 'release', header: 'Release', cell: r => <><TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => onOpen(r.trainId)}>{r.title}</button>} secondary={`${r.products} ${r.products === 1 ? 'product' : 'products'}${r.blockers ? ` · ${r.blockers} ${r.blockers === 1 ? 'blocker' : 'blockers'}` : ''}`} />{r.chain && <ChainBriefView brief={r.chain} currentId={r.trainId} />}</> },
     { key: 'status', header: 'Status', cell: r => <StatusChip>{r.displayStatus}</StatusChip> },
     { key: 'risk', header: 'Risk', cell: r => r.riskTier },
     { key: 'window', header: 'Window', cell: r => { const w = windowText(r); return <TwoLine primary={w.utc} secondary={w.local ?? undefined} /> } },

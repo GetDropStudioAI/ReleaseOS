@@ -11,12 +11,13 @@ import { switchTo } from './workspace'
 import { useWorkspaces } from './shell/WorkspaceGate'
 import { errMsg } from './format'
 import { ReleaseTypesTab } from './mgmt/ReleaseTypes'
+import { VersionsTab } from './mgmt/Versions'
 
 /**
  * Teams & settings (REOS-129, G7): people, teams, holidays and the workspace itself, each a table with a panel beside it (D41). The Workspace tab (REOS-106,
  * D45) manages who belongs to the current workspace and in which role, and creates new workspaces; it is for RTEs and Release Managers (the Admin policy).
  */
-type Tab = 'users' | 'teams' | 'holidays' | 'types' | 'workspace'
+type Tab = 'users' | 'teams' | 'holidays' | 'types' | 'versions' | 'workspace'
 
 /** The tab lives in the query string (/admin?tab=teams) so a refresh or a shared link reopens it; route.ts only owns the path. */
 const tabFromUrl = (allowed: Tab[]): Tab => { const t = new URLSearchParams(window.location.search).get('tab') as Tab | null; return t && allowed.includes(t) ? t : 'users' }
@@ -350,17 +351,17 @@ function CreateWorkspacePanel({ myId, onCreated }: { myId: string; onCreated: ()
 }
 
 export default function Admin({ canEdit, me }: { canEdit: boolean; me: Me }) {
-  const allowed = useMemo<Tab[]>(() => (canEdit ? ['users', 'teams', 'holidays', 'types', 'workspace'] : ['users', 'teams', 'holidays', 'types']), [canEdit])
+  const allowed = useMemo<Tab[]>(() => (canEdit ? ['users', 'teams', 'holidays', 'types', 'versions', 'workspace'] : ['users', 'teams', 'holidays', 'types', 'versions']), [canEdit])
   const [tab, setTab] = useState<Tab>(() => tabFromUrl(allowed))
   const choose = (t: string) => { setTab(t as Tab); tabToUrl(t as Tab) }
   const tabs = [
-    { id: 'users', label: 'Users' }, { id: 'teams', label: 'Teams' }, { id: 'holidays', label: 'Holidays' }, { id: 'types', label: 'Release types' },
+    { id: 'users', label: 'Users' }, { id: 'teams', label: 'Teams' }, { id: 'holidays', label: 'Holidays' }, { id: 'types', label: 'Release types' }, { id: 'versions', label: 'Versions' },
     ...(canEdit ? [{ id: 'workspace', label: 'Workspace' }] : []),
   ]
   return (
     <div className="os-page">
         <PageHeading trail={['Management', 'Teams & settings']} title="Teams & settings"
-          description="The people, teams, calendars and release types the workspace runs on, and who belongs to it." />
+          description="The people, teams, calendars, release types and versions the workspace runs on, and who belongs to it." />
         <div>
           <Tabs tabs={tabs} value={tab} onChange={choose} label="Teams and settings sections" group="adm" />
           <TabPanel id={tab} group="adm">
@@ -368,6 +369,7 @@ export default function Admin({ canEdit, me }: { canEdit: boolean; me: Me }) {
             {tab === 'teams' && <TeamsTab canEdit={canEdit} />}
             {tab === 'holidays' && <HolidaysTab canEdit={canEdit} />}
             {tab === 'types' && <ReleaseTypesTab canEdit={canEdit} />}
+            {tab === 'versions' && <VersionsTab canEdit={canEdit} />}
             {tab === 'workspace' && canEdit && <WorkspaceTab myId={me.id} />}
           </TabPanel>
         </div>

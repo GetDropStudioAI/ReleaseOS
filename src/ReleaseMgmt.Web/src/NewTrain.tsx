@@ -6,12 +6,13 @@ import { useDraft } from './session'
 import { SidePanel, InputZoneNote } from './ui'
 import { listReleaseTypes } from './mgmt/releaseTypesApi.ts'
 import { BETA_NUMBERS, activeTypes, startsFrom, typeProblem, type ReleaseTypeRow } from './mgmt/releaseTypesLogic.ts'
+import { listVersions, type VersionView } from './versions/versionsApi.ts'
 
 /** How the new train starts (REOS-80). Underlined text choices, never a segmented control (UI.md). */
 export type NewTrainMode = 'blank' | 'template' | 'copy'
-export interface NewTrainDraft { open: boolean; mode: NewTrainMode; templateId: string; sourceId: string; title: string; target: string; risk: string; start: string; end: string; typeId?: string; betaNumber?: string }   // REOS-116: a session draft saved before the type existed has neither
+export interface NewTrainDraft { open: boolean; mode: NewTrainMode; templateId: string; sourceId: string; title: string; target: string; risk: string; start: string; end: string; typeId?: string; betaNumber?: string; versionId?: string }   // REOS-11; RT2 adds the optional version6: a session draft saved before the type existed has neither
 export const newTrainKey = 'newtrain'
-export const emptyNewTrain = (): NewTrainDraft => ({ open: true, mode: 'blank', templateId: '', sourceId: '', title: '', target: '', risk: '', start: '', end: '', typeId: '', betaNumber: '' })
+export const emptyNewTrain = (): NewTrainDraft => ({ open: true, mode: 'blank', templateId: '', sourceId: '', title: '', target: '', risk: '', start: '', end: '', typeId: '', betaNumber: '', versionId: '' })
 
 const MODES: { mode: NewTrainMode; label: string }[] = [{ mode: 'blank', label: 'Blank' }, { mode: 'template', label: 'From template' }, { mode: 'copy', label: 'Copy of a train' }]
 const TIERS = ['Low', 'Moderate', 'High', 'VeryHigh']
@@ -28,6 +29,7 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
   const [draft, setDraft] = useDraft<NewTrainDraft>(newTrainKey)
   const [templates, setTemplates] = useState<TemplateRow[] | null>(null)
   const [types, setTypes] = useState<ReleaseTypeRow[] | null>(null)
+  const [versions, setVersions] = useState<VersionView[]>([])   // RT2 (D48): the version this release joins, optional; a failed load just leaves the choice out
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<CreatedTrain | null>(null)
@@ -36,6 +38,7 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
   const close = () => setDraft({ ...d, open: false })   // Close keeps what was typed (a session draft); Discard and Done drop it
 
   useEffect(() => { getTemplates().then(ts => setTemplates(ts.filter(t => t.status === 'Approved'))).catch(e => { setTemplates([]); setErr(errMsg(e, 'Could not load the templates.')) }) }, [])
+  useEffect(() => { listVersions().then(setVersions).catch(() => setVersions([])) }, [])
   useEffect(() => { listReleaseTypes().then(setTypes).catch(e => { setTypes([]); setErr(errMsg(e, 'Could not load the release types.')) }) }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) close() }
@@ -72,7 +75,7 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
         ? await cloneTrain(d.sourceId, { title: d.title.trim(), targetReleaseDate: d.target, riskTier: risk })
         : await createTrain({
             title: d.title.trim(), targetReleaseDate: d.target, riskTier: risk, templateId: d.mode === 'template' ? d.templateId : null,
-            releaseTypeId: live.length > 0 ? d.typeId || null : null, betaNumber: type?.isBeta ? Number(d.betaNumber) : null,
+            releaseTypeId: live.length > 0 ? d.typeId || null : null, betaNumber: type?.isBeta ? Number(d.betaNumber) : null, releaseVersionId: d.versionId || null,
             windowStartsAt: d.mode === 'template' && d.start ? zonedInputToUtc(d.start) : null, windowEndsAt: d.mode === 'template' && d.end ? zonedInputToUtc(d.end) : null,
           })
       setDraft({ ...emptyNewTrain(), mode: d.mode })   // the form is done with; the drawer stays open to show what was created
@@ -144,6 +147,11 @@ export function NewTrainDrawer({ trains, onCreated }: { trains: StreamRow[]; onC
                 {BETA_NUMBERS.map(n => <option key={n} value={n}>{type.name} {n}</option>)}
               </select></p>}
             {typeStarts && <p className="muted">A {type!.name} release starts from the “{typeStarts}” template: its gates and schedule. Choose From template to start from another.</p>}
+            {versions.length > 0 && <p><label className="cap" htmlFor="nt-version">Version (optional)</label>
+              <select id="nt-version" className="line block" value={d.versionId ?? ''} onChange={e => set({ versionId: e.target.value })}>
+                <option value="">Not in a version</option>
+                {versions.map(v => <option key={v.id} value={v.id}>{v.name} ({v.chain.length} {v.chain.length === 1 ? 'release' : 'releases'})</option>)}
+              </select></p>}
             {type && d.mode === 'blank' && !typeStarts && <p className="muted">{type.name} has no default template, so the release starts blank.</p>}
           </>)
         : <p className="muted">A copy keeps the original&apos;s release type{source?.type ? `, ${source.type.name}` : ''}.</p>}

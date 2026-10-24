@@ -15,6 +15,7 @@ export interface Day { date: string; successful: number; withIssues: number; uns
 export interface ActivityRow {
   trainId: string; title: string; status: string; displayStatus: string; closeCode: string | null; riskTier: string; targetReleaseDate: string
   windowStartsAt: string | null; windowEndsAt: string | null; endedAt: string | null; products: number; blockers: number
+  chain?: import('../versions/versionsApi.ts').ChainBrief | null   // RT2 (D48)
 }
 
 export const RANGES = [{ value: '7', label: 'Last 7 days' }, { value: '14', label: 'Last 14 days' }, { value: '30', label: 'Last 30 days' }, { value: '90', label: 'Last 90 days' }]

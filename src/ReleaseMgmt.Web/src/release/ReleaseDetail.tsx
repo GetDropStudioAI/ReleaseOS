@@ -20,6 +20,11 @@ import { AdvisoryItems, ContingencyLine } from '../Advisories'
 import { day, errMsg, plural, splitId, tMinus } from '../format'
 import { announce } from '../announce'
 import { typeLabel } from '../mgmt/releaseTypesLogic'
+import { ChainStrip } from '../versions/ChainStrip'
+import { openRelease } from '../versions/navigate'
+import { VersionPanel } from '../versions/VersionPanel'
+import { getTrainVersion } from '../versions/versionsApi'
+import { stepsOf, warningsById } from '../versions/versionsLogic'
 import { browserZone } from '../shell/clock'
 import { serverNow } from '../time'
 import type { Mode } from '../route'
@@ -84,6 +89,9 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
   const changeRecord = useLoad(() => getChangeRecord(t.id).catch(() => null), [t.id, refreshKey])
   const model = useLoad(() => get<{ type: { id: string; name: string } | null; betaNumber: number | null }>(`/api/v1/trains/${t.id}/release`).catch(() => null), [t.id, refreshKey])   // REOS-116: the release's type
 
+  const ver = useLoad(() => getTrainVersion(t.id), [t.id, refreshKey])   // RT2 (D48): the version this release is in, shared by the context row and the Dependencies tab
+  const inVersion = ver.data?.version ?? null
+
   const { id: relId, name } = splitId(t.title)
   const open = t.status === 'Planning' || t.status === 'Gated' || t.status === 'Executing'
   const blockers = r?.blockers.length ?? 0
@@ -99,7 +107,7 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
   const checklistGate = t.gates.find(g => g.id === p.chosenGate) ?? t.gates.find(g => !isPassed(g.status)) ?? t.gates[t.gates.length - 1]
 
   const counts: Record<TabId, number | undefined> = {
-    overview: undefined, services: products.data?.products.length, dependencies: adv ? adv.collisions.length : undefined,
+    overview: undefined, services: products.data?.products.length, dependencies: adv ? adv.collisions.length + (adv.version ? 1 : 0) : undefined,
     approvals: decisions.data ? decisionsOpen.length : undefined, activity: undefined,
   }
   const tabs: TabItem[] = TABS.map(id => ({ id, label: TAB_LABEL[id], count: counts[id] }))
@@ -143,11 +151,13 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
         <StatusChip tone={sc.tone}>{sc.word}</StatusChip>
         <StatusChip tone={rc.tone}>{rc.word}</StatusChip>
         <span className="rd-fact"><span className="rd-k">Type</span> {model.data?.type ? <span>{typeLabel(model.data.type, model.data.betaNumber)}</span> : <span className="rd-na">Not set</span>}</span>
+        <span className="rd-fact"><span className="rd-k">Version</span> {inVersion ? <span>{inVersion.name} <span className="rd-na">· {inVersion.chain.find(c => c.trainId === t.id)?.label}, {inVersion.chain.find(c => c.trainId === t.id)?.position} of {inVersion.chain.length}</span></span> : <span className="rd-na">{ver.data ? 'None' : '…'}</span>}</span>
         <span className="rd-fact"><span className="rd-k">Team</span> <span className="rd-na">{NOT_RECORDED}</span></span>
         <span className="rd-fact"><span className="rd-k">Owner</span> <span className="rd-na">{NOT_RECORDED}</span></span>
         {t.changeTicketNumber && <span className="rd-fact"><span className="rd-k">Change</span> <span className="mono">{t.changeTicketNumber}</span></span>}
         <WindowLine trainId={t.id} canEdit={canPlan} refreshKey={refreshKey} onChanged={onChanged} collisions={adv?.collisions} />
       </div>
+      {inVersion && inVersion.chain.length > 1 && <div className="rd-chain"><ChainStrip steps={stepsOf(inVersion)} name={inVersion.name} currentId={t.id} warnings={warningsById(inVersion)} compact onOpen={openRelease} /></div>}
       <div className="rd-actions" role="group" aria-label="Release actions">
         <Button onClick={() => p.onMode('rehearsal')}>Rehearsal</Button>
         {canDecide && <Button onClick={recordGo}>{goDraft ? 'Cancel Go/No-Go' : 'Record Go/No-Go'}</Button>}
@@ -167,7 +177,7 @@ export function ReleaseDetail(p: ReleaseDetailProps) {
         <Products trainId={t.id} refreshKey={refreshKey} selection={selection} onSelect={onSelect} canPlan={canPlan} trainStatus={t.status} onChanged={onChanged} manifestVersion={t.version} />
       </TabPanel>}
       {tab === 'dependencies' && <TabPanel id="dependencies" group="release">
-        <Dependencies adv={adv} />
+        <Dependencies adv={adv} t={t} canPlan={canPlan} ver={ver} onChanged={onChanged} />
       </TabPanel>}
       {tab === 'approvals' && <TabPanel id="approvals" group="release">
         <div className="rd-stack">
@@ -264,7 +274,7 @@ function Overview(p: ReleaseDetailProps & {
             })}
             {p.others.map((b, i) => <li key={i}><span className="bad" aria-hidden="true">✗</span><span className="sr-only">Not met:</span> {b.failure.message}</li>)}
             {r.ready && <li className="ok">✓ Ready for {t.nextStatus}</li>}
-            {adv && <AdvisoryItems contingency={adv.contingency} collisions={adv.collisions} item="li" />}
+            {adv && <AdvisoryItems contingency={adv.contingency} collisions={adv.collisions} version={adv.version} item="li" />}
           </ul>
         </Panel>
       )}
@@ -280,8 +290,8 @@ function Overview(p: ReleaseDetailProps & {
 }
 
 // ---- Dependencies ---------------------------------------------------------------------------------------------------------------------------
-/** Cross-release dependencies are out of v1 (PROJECT_SCOPE section 2); what the app does know is the windows that overlap this one and what they share. */
-function Dependencies({ adv }: { adv: Advisories | null }) {
+/** Cross-release dependencies are out of v1 (PROJECT_SCOPE section 2) except the links of one version's releases (D48, RT2); besides those the app knows the windows that overlap this one and what they share. */
+function Dependencies({ adv, t, canPlan, ver, onChanged }: { adv: Advisories | null; t: TrainDetail; canPlan: boolean; ver: Parameters<typeof VersionPanel>[0]['load']; onChanged: () => void }) {
   const collisions = adv?.collisions ?? []
   const columns: Column<NonNullable<Advisories['collisions']>[number]>[] = [
     { key: 'other', header: 'Release', cell: c => <TwoLine primary={c.otherTitle} secondary={c.otherStatus} /> },
@@ -290,13 +300,14 @@ function Dependencies({ adv }: { adv: Advisories | null }) {
   ]
   return (
     <div className="rd-stack">
+      <VersionPanel t={t} canPlan={canPlan} load={ver} onChanged={onChanged} />
       <Panel label="Overlapping windows" title="Overlapping windows" subtitle="Releases whose deployment window overlaps this one and shares a service or CI. Advisory: nothing is blocked."
         meta={<StatusChip tone={collisions.length ? 'warning' : 'success'}>{collisions.length ? plural(collisions.length, 'overlap') : 'No overlaps'}</StatusChip>}>
         {adv === null ? <LoadingState what="the overlapping windows" /> : <DataTable caption="Overlapping windows" columns={columns} rows={collisions} rowKey={c => c.otherTrainId} empty="No other release overlaps this window." />}
       </Panel>
       {adv?.contingency && <Panel label="Contingency" title="Rollback contingency"><ContingencyLine c={adv.contingency} /></Panel>}
       <Panel label="External dependencies" title="External dependencies">
-        <EmptyState title="Not tracked in this version">Dependencies between releases and on external services (a payments API at a minimum version, a Redis cluster) are not recorded yet. Overlapping windows above are the only dependency signal.</EmptyState>
+        <EmptyState title="Not tracked yet">Dependencies on external services (a payments API at a minimum version, a Redis cluster) and between releases outside one version are not recorded. The version chain and the overlapping windows above are the only dependency signals.</EmptyState>
       </Panel>
     </div>
   )

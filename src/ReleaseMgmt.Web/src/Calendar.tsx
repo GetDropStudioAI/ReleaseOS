@@ -9,6 +9,8 @@ import {
 } from './calendarModel'
 import './calendar.css'
 import { listReleaseTypes } from './mgmt/releaseTypesApi'
+import { ChainBriefView } from './versions/ChainStrip'
+import { briefText } from './versions/versionsLogic'
 import { sortTypes, type ReleaseTypeRow } from './mgmt/releaseTypesLogic'
 import { browserZone } from './shell/clock'
 import { serverNow } from './time'
@@ -107,6 +109,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
   const rows = useMemo(() => (data ? releaseRows(data, byDay, days) : []), [data, byDay, days])
   const gridRows = useMemo(() => { const g = [...(days.some(d => fz.has(d)) ? [FREEZE_ROW] : []), ...rows.map(r => r.id)]; return g.length ? g : [EMPTY_ROW] }, [rows, days, fz])
   const activeRow = focusRow && gridRows.includes(focusRow) ? focusRow : gridRows[0] ?? ''
+  const chainLine = (id: string) => { const c = data?.trains.find(t => t.id === id)?.chain; return c ? briefText(c) : null }   // RT2 (D48): the release's place in its version, under its name
   // Focus follows a keyboard move. The cell may not exist yet (the next week is still loading, or its rows differ): keep trying until it does.
   useEffect(() => {
     if (!kb.current || !view.fresh) return   // wait for the new range: its rows decide which cell can take focus
@@ -157,7 +160,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
     : ''
 
   const upcomingCols: Column<NonNullable<typeof upcomingTrains>[number]>[] = [
-    { key: 'release', header: 'Release', cell: x => <TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => openTrain(x.t.id)}>{x.t.title}</button>} secondary={`${riskLabel(x.t.riskTier)} risk`} /> },
+    { key: 'release', header: 'Release', cell: x => <><TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => openTrain(x.t.id)}>{x.t.title}</button>} secondary={`${riskLabel(x.t.riskTier)} risk`} />{x.t.chain && <ChainBriefView brief={x.t.chain} currentId={x.t.id} />}</> },
     { key: 'window', header: 'Window · UTC', cell: x => {
       if (!x.t.window) return <TwoLine primary={`Target ${dayLabel(x.t.targetDate)}`} secondary="No deployment window" />
       const s = stamp(x.t.window.startsAt, zone)
@@ -237,7 +240,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
                           return (
                             <tr key={rid}>
                               <th scope="row" className="os-cal-rowhead">
-                                {r ? <TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`].filter(Boolean).join(' · ')} />
+                                {r ? <TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`, chainLine(r.id)].filter(Boolean).join(' · ')} />
                                   : rid === EMPTY_ROW ? <TwoLine primary={emptyFilter ? 'No releases match these filters' : 'No releases this week'} secondary={emptyFilter ? 'Change the filters, or go to another week' : 'Go to another week, or plan a release'} />
                                   : <TwoLine primary="Freeze and chill" secondary="Windows that restrict changes" />}
                               </th>
@@ -377,7 +380,7 @@ function Timeline({ data, days, today, rows, byDay, onOpen, emptyFilter }: {
         ))}
         {spans.map(({ r, from, to, n }) => (
           <div role="row" key={r.id} className="os-timeline-row">
-            <div role="rowheader" className="os-timeline-label"><TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`].filter(Boolean).join(' · ')} /></div>
+            <div role="rowheader" className="os-timeline-label"><TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`, data.trains.find(t => t.id === r.id)?.chain?.label && `${data.trains.find(t => t.id === r.id)!.chain!.versionName} ${data.trains.find(t => t.id === r.id)!.chain!.label}`].filter(Boolean).join(' · ')} /></div>
             <div role="cell" className="os-timeline-cell" style={{ gridColumn: `${col(from)} / ${col(to) + 1}` }}>
               <button type="button" className={`os-timeline-bar ${r.status === 'Executing' ? 'info' : r.status === 'Complete' ? 'success' : r.status === 'Aborted' ? 'danger' : 'neutral'}`} data-testid="timeline-bar"
                 title={`${r.title}: ${n} dated ${n === 1 ? 'item' : 'items'}, ${dayLabel(from)} to ${dayLabel(to)}`} onClick={() => onOpen(r.id)}>

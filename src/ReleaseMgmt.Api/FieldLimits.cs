@@ -135,7 +135,7 @@ public static class FieldLimits
         [typeof(NewTrainInput)] = new()
         {
             ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code, ["TemplateId"] = Id, ["WindowStartsAt"] = Code, ["WindowEndsAt"] = Code,
-            ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["ReleaseBranch"] = ReleaseModelLimits.MaxBranch, ["OnCallUserId"] = Id, ["OnCallTeamId"] = Id, ["ReleaseTypeId"] = Id, ["EnvironmentIds"] = Id,
+            ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["ReleaseBranch"] = ReleaseModelLimits.MaxBranch, ["OnCallUserId"] = Id, ["OnCallTeamId"] = Id, ["ReleaseTypeId"] = Id, ["EnvironmentIds"] = Id, ["ReleaseVersionId"] = Id,
         },
         [typeof(NewProductInput)] = new() { ["ProductName"] = Name, ["VersionTag"] = Tag, ["ProjectCode"] = Tag, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey },
         [typeof(CloneTrainInput)] = new() { ["Title"] = Name, ["TargetReleaseDate"] = Code, ["RiskTier"] = Code },
@@ -149,6 +149,10 @@ public static class FieldLimits
         [typeof(ReleaseModelEndpoints.KeyPrefixBody)] = new() { ["KeyPrefix"] = ReleaseKeys.MaxPrefix },
         [typeof(NewReleaseType)] = new() { ["Name"] = ReleaseModelLimits.MaxReleaseTypeName, ["DefaultTemplateId"] = Id },
         [typeof(ReleaseTypePatch)] = new() { ["Name"] = ReleaseModelLimits.MaxReleaseTypeName, ["DefaultTemplateId"] = Id },
+        // REOS-117 (RT2): versions, a release joining one, and the next release of a chain
+        [typeof(ReleaseModelEndpoints.VersionNameBody)] = new() { ["Name"] = ReleaseModelLimits.MaxVersionName },
+        [typeof(ReleaseModelEndpoints.TrainVersionBody)] = new() { ["VersionId"] = Id },
+        [typeof(NextReleaseInput)] = new() { ["ReleaseTypeId"] = Id, ["Title"] = Name, ["TargetReleaseDate"] = Code },
         // REOS-109: environments, the service catalog and a product's link to it
         [typeof(NewEnvironment)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id },
         [typeof(EnvironmentPatch)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id, ["Clear"] = Code },

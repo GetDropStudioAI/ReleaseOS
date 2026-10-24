@@ -99,6 +99,7 @@ builder.Services.AddSingleton<WorkspaceService>();      // REOS-104 workspaces (
 builder.Services.AddSingleton<WorkspaceMembersService>();   // REOS-106 switcher list, create workspace, members
 builder.Services.AddSingleton<ReleaseModelService>();   // REOS-107 key, owner, team, branch, on-call, type, target environments
 builder.Services.AddSingleton<ReleaseTypeService>();    // REOS-107 / RT1 release types per workspace
+builder.Services.AddSingleton<ReleaseVersionService>();   // REOS-117 / RT2 versions: a product version's releases in a chain
 builder.Services.AddSingleton<EnvironmentService>();    // REOS-109 environments
 builder.Services.AddSingleton<ServiceCatalogService>(); // REOS-109 service catalog
 builder.Services.AddSingleton<IngestKeyService>();      // REOS-110 per-workspace API keys (hash only)

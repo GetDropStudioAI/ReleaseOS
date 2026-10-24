@@ -180,6 +180,7 @@ CREATE TABLE ReleaseTrains (
     OnCallTeamId TEXT REFERENCES Teams(Id) CHECK (OnCallTeamId IS NULL OR OnCallUserId IS NULL),
     ReleaseTypeId TEXT REFERENCES ReleaseTypes(Id),       -- RT1 (D46): Beta, CERT, PenTest Cert, Production, ...; required for a new release once the workspace has types (trg_Train_TypeRules_Insert)
     BetaNumber INTEGER CHECK (BetaNumber IS NULL OR BetaNumber BETWEEN 1 AND 3),   -- RT1 (D48): Beta 1, 2 or 3; set exactly when the type is a Beta type (ReleaseTypes.IsBeta)
+    ReleaseVersionId TEXT REFERENCES ReleaseVersions(Id),   -- RT2 (D48): the product version this release belongs to; its releases form a chain ordered by type, then Beta number (a release in a version has a type)
     CHECK ((CurrentStatus = 'Complete') = (CloseCode IS NOT NULL))
 );
 
@@ -724,6 +725,16 @@ CREATE TABLE ReleaseTypes (                               -- RT1 (D46): a per-wo
     Version INTEGER NOT NULL DEFAULT 1,
     WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
     IsBeta INTEGER NOT NULL DEFAULT 0 CHECK (IsBeta IN (0,1)),   -- RT1 (D48): a release of this type carries its number, 1 to 3 (ReleaseTrains.BetaNumber); the seeded Beta type has it
+    UNIQUE (WorkspaceId, Name)
+);
+
+CREATE TABLE ReleaseVersions (                            -- RT2 (D48): one product version; its releases (Beta 1 to 3, CERT, PenTest Cert, Production) are linked through ReleaseTrains.ReleaseVersionId
+    Id TEXT PRIMARY KEY,
+    Name TEXT NOT NULL COLLATE NOCASE CHECK (length(trim(Name)) BETWEEN 1 AND 100),
+    ArchivedAt TEXT,
+    Version INTEGER NOT NULL DEFAULT 1,
+    CreatedAt TEXT NOT NULL,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
     UNIQUE (WorkspaceId, Name)
 );
 
@@ -1280,14 +1291,16 @@ CREATE TRIGGER trg_Train_TypeRules_Insert BEFORE INSERT ON ReleaseTrains
 BEGIN
     SELECT RAISE(ABORT, 'A release needs a release type')
      WHERE NEW.ReleaseTypeId IS NULL AND EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.WorkspaceId = NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'A release in a version needs a release type') WHERE NEW.ReleaseVersionId IS NOT NULL AND NEW.ReleaseTypeId IS NULL;
     SELECT RAISE(ABORT, 'Only a Beta release carries a Beta number')
      WHERE NEW.BetaNumber IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.IsBeta = 1);
     SELECT RAISE(ABORT, 'A Beta release needs its number, 1 to 3')
      WHERE NEW.BetaNumber IS NULL AND EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.IsBeta = 1);
 END;
-CREATE TRIGGER trg_Train_TypeRules_Update BEFORE UPDATE OF ReleaseTypeId, BetaNumber ON ReleaseTrains
+CREATE TRIGGER trg_Train_TypeRules_Update BEFORE UPDATE OF ReleaseTypeId, BetaNumber, ReleaseVersionId ON ReleaseTrains
 BEGIN
     SELECT RAISE(ABORT, 'A release cannot lose its release type') WHERE NEW.ReleaseTypeId IS NULL AND OLD.ReleaseTypeId IS NOT NULL;
+    SELECT RAISE(ABORT, 'A release in a version needs a release type') WHERE NEW.ReleaseVersionId IS NOT NULL AND NEW.ReleaseTypeId IS NULL;
     SELECT RAISE(ABORT, 'Only a Beta release carries a Beta number')
      WHERE NEW.BetaNumber IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.IsBeta = 1);
     SELECT RAISE(ABORT, 'A Beta release needs its number, 1 to 3')
@@ -1401,8 +1414,10 @@ BEGIN
      WHERE EXISTS (SELECT 1 FROM Teams x WHERE x.Id = NEW.OnCallTeamId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
     SELECT RAISE(ABORT, 'The release type belongs to another workspace')
      WHERE EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'The version belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseVersions x WHERE x.Id = NEW.ReleaseVersionId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
 END;
-CREATE TRIGGER trg_Ws_ReleaseTrains_Update BEFORE UPDATE OF WorkspaceId, TemplateId, ClonedFromTrainId, OwnerUserId, OwnerTeamId, OnCallUserId, OnCallTeamId, ReleaseTypeId ON ReleaseTrains
+CREATE TRIGGER trg_Ws_ReleaseTrains_Update BEFORE UPDATE OF WorkspaceId, TemplateId, ClonedFromTrainId, OwnerUserId, OwnerTeamId, OnCallUserId, OnCallTeamId, ReleaseTypeId, ReleaseVersionId ON ReleaseTrains
 BEGIN
     SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
     SELECT RAISE(ABORT, 'The template belongs to another workspace')
@@ -1419,6 +1434,8 @@ BEGIN
      WHERE EXISTS (SELECT 1 FROM Teams x WHERE x.Id = NEW.OnCallTeamId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
     SELECT RAISE(ABORT, 'The release type belongs to another workspace')
      WHERE EXISTS (SELECT 1 FROM ReleaseTypes x WHERE x.Id = NEW.ReleaseTypeId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'The version belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseVersions x WHERE x.Id = NEW.ReleaseVersionId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
 END;
 CREATE TRIGGER trg_Ws_Teams_Insert BEFORE INSERT ON Teams
 BEGIN
@@ -1693,6 +1710,8 @@ BEGIN
     SELECT RAISE(ABORT, 'The template belongs to another workspace')
      WHERE EXISTS (SELECT 1 FROM TrainTemplates x WHERE x.Id = NEW.DefaultTemplateId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
 END;
+CREATE TRIGGER trg_Ws_ReleaseVersions_Update BEFORE UPDATE OF WorkspaceId ON ReleaseVersions
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
 CREATE TRIGGER trg_Ws_Environments_Insert BEFORE INSERT ON Environments
 BEGIN
     SELECT RAISE(ABORT, 'The webhook destination belongs to another workspace')
@@ -1853,3 +1872,6 @@ CREATE UNIQUE INDEX UX_Approvals_OneOpenPerTarget ON Approvals(ReleaseTrainId, E
 CREATE INDEX IX_Approvals_Workspace ON Approvals(WorkspaceId, Status, DueAt);
 CREATE INDEX IX_Audit_Chain ON AuditEvents(WorkspaceId, Id);
 CREATE INDEX IX_Audit_Unsealed ON AuditEvents(Id) WHERE Hash IS NULL;
+-- RT2 (D48): one release per type (and Beta number) in a version; an aborted release frees its place
+CREATE UNIQUE INDEX UX_Trains_VersionSlot ON ReleaseTrains(ReleaseVersionId, ReleaseTypeId, COALESCE(BetaNumber, 0))
+    WHERE ReleaseVersionId IS NOT NULL AND CurrentStatus <> 'Aborted';

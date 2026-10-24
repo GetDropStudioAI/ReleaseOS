@@ -21,10 +21,10 @@ public sealed record NewProductInput(string? ProductName, string? VersionTag, st
 
 /// <summary><c>POST /trains</c>: a blank train, or one built from an Approved template when <see cref="TemplateId"/> is set. Dates are strings so a bad one is a readable 422, not a 400.
 /// REOS-107: the release's owner, team, branch, on-call and target environments are optional. REOS-116 (D46, D48): the release type is required once the workspace has types (a Beta type also takes its number, 1 to 3),
-/// and the type's default template is used when no template is named.</summary>
+/// and the type's default template is used when no template is named. RT2 (D48): <see cref="ReleaseVersionId"/> puts the release into a version (it needs a type, and its place must be free).</summary>
 public sealed record NewTrainInput(string? Title, string? TargetReleaseDate, string? RiskTier, string? TemplateId = null, string? WindowStartsAt = null, string? WindowEndsAt = null,
     IReadOnlyList<NewProductInput>? Products = null, string? OwnerUserId = null, string? OwnerTeamId = null, string? ReleaseBranch = null, string? OnCallUserId = null,
-    string? OnCallTeamId = null, string? ReleaseTypeId = null, IReadOnlyList<string>? EnvironmentIds = null, int? BetaNumber = null);
+    string? OnCallTeamId = null, string? ReleaseTypeId = null, IReadOnlyList<string>? EnvironmentIds = null, int? BetaNumber = null, string? ReleaseVersionId = null);
 
 /// <summary><c>POST /trains/{id}:clone</c>. The risk tier defaults to the source train's.</summary>
 public sealed record CloneTrainInput(string? Title, string? TargetReleaseDate, string? RiskTier = null);
@@ -65,6 +65,16 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             f.AddRange(await ReleaseModelService.ValidateAsync(db, fields.OwnerUserId, fields.OwnerTeamId, fields.ReleaseBranch, fields.OnCallUserId, fields.OnCallTeamId, fields.ReleaseTypeId, fields.EnvironmentIds, ct,
                 betaNumber: fields.BetaNumber, requireType: true, checkBeta: true));
 
+            var versionId = Blank(input.ReleaseVersionId);
+            if (versionId is not null)
+            {
+                var version = await db.Set<ReleaseVersions>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == versionId, ct);
+                if (version is null) f.Add(new(ReleaseModelGuards.VersionInvalid, "The version does not exist in this workspace"));
+                else if (version.ArchivedAt is not null) f.Add(new(ReleaseModelGuards.VersionInvalid, $"The version \"{version.Name}\" is archived"));
+                else if (fields.ReleaseTypeId is null) f.Add(new(ReleaseModelGuards.VersionInvalid, "Choose a release type: a version orders its releases by type"));
+                else f.AddRange(await ReleaseVersionService.CheckSlotAsync(db, version.Id, fields.ReleaseTypeId, fields.BetaNumber, null, ct));
+            }
+
             var notes = new List<string>();
             TrainTemplates? template = null;
             var templateId = Blank(input.TemplateId);
@@ -96,6 +106,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
                 ReleaseKey = await ReleaseKeyAllocator.AllocateAsync(db, ct),
             };
             ReleaseModelService.Apply(train, fields);
+            train.ReleaseVersionId = versionId;
             db.Set<ReleaseTrains>().Add(train);
             ReleaseModelService.AddEnvironments(db, train.Id, fields.EnvironmentIds);
             await db.SaveChangesAsync(ct);   // the parent first: every child references it
@@ -158,7 +169,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
 
             Audit(db, actor, train.Id, "ReleaseTrain", train.Id, "Create", null, new
             {
-                train.Title, targetReleaseDate = target.Value.ToString("yyyy-MM-dd"), train.RiskTier, source = template is null ? "Blank" : "Template", templateId = template?.Id, template = template?.Name, fromReleaseType = fromType && template is not null,
+                train.Title, targetReleaseDate = target.Value.ToString("yyyy-MM-dd"), train.RiskTier, source = template is null ? "Blank" : "Template", templateId = template?.Id, template = template?.Name, fromReleaseType = fromType && template is not null, 
                 release = ReleaseModelService.Snapshot(train, fields.EnvironmentIds ?? []),
             });
             await db.SaveChangesAsync(ct);

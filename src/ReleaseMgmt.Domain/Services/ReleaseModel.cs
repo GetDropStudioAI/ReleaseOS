@@ -13,6 +13,10 @@ public static class ReleaseModelGuards
     public const string ReleaseTypeRequired = "ReleaseTypeRequired";
     /// <summary>RT1 (D48): a Beta release carries its number, 1 to 3; no other release does.</summary>
     public const string BetaNumberInvalid = "BetaNumberInvalid";
+    /// <summary>RT2 (D48): a version's name, its place in the chain, and a release joining or leaving it.</summary>
+    public const string VersionInvalid = "VersionInvalid";
+    public const string VersionNameTaken = "VersionNameTaken";
+    public const string VersionSlotTaken = "VersionSlotTaken";
     public const string EnvironmentInvalid = "EnvironmentInvalid";
     public const string EnvironmentNameTaken = "EnvironmentNameTaken";
     public const string ServiceInvalid = "ServiceInvalid";
@@ -46,7 +50,7 @@ public static partial class ReleaseKeys
 /// <summary>Field limits the schema's CHECKs also hold, shared by the services and the API's body limits.</summary>
 public static class ReleaseModelLimits
 {
-    public const int MaxBranch = 200, MaxEnvironmentName = 100, MaxRegion = 60, MaxReleaseTypeName = 100, MinBetaNumber = 1, MaxBetaNumber = 3, MaxServiceKey = 60, MaxServiceName = 200,
+    public const int MaxBranch = 200, MaxEnvironmentName = 100, MaxRegion = 60, MaxReleaseTypeName = 100, MaxVersionName = 100, MinBetaNumber = 1, MaxBetaNumber = 3, MaxServiceKey = 60, MaxServiceName = 200,
         MaxRepository = 300, MaxProjectCode = 100, MaxKeyName = 100, MaxExternalId = 200, MaxReleaseVersion = 100, MaxEventMessage = 2000, MaxEventsPerCall = 100,
         MaxCanarySteps = 20;
 }

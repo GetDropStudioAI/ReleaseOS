@@ -1,4 +1,4 @@
-import type { ContingencyView, WindowCollision } from './api'
+import type { ChainWarning, ContingencyView, WindowCollision } from './api'
 import { dur } from './format'
 import { rangeText, timeText } from './utcTime'
 
@@ -24,11 +24,12 @@ export function ContingencyLine({ c }: { c: ContingencyView }) {
 }
 
 /** The same advisories as readiness-line items, after the guards: ▲ in warning colour and the word "advisory", so they never read as blockers. */
-export function AdvisoryItems({ contingency, collisions, item: Item = 'span' }: { contingency: ContingencyView | null; collisions: WindowCollision[]; item?: 'span' | 'li' }) {
+export function AdvisoryItems({ contingency, collisions, version, item: Item = 'span' }: { contingency: ContingencyView | null; collisions: WindowCollision[]; version?: ChainWarning | null; item?: 'span' | 'li' }) {
   return (
     <>
       {contingency?.state === 'low' && <Item><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Contingency {contingency.percent}%, below {contingency.minPercent}% <span className="muted">(advisory)</span></Item>}
       {contingency?.state === 'over' && <Item><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> The plan ends {dur(-contingency.spareMin!)} after the rollback deadline <span className="muted">(advisory)</span></Item>}
+      {version && <Item><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Version: {version.message} <span className="muted">(advisory)</span></Item>}
       {collisions.map(c => <Item key={c.otherTrainId}><span className="warn" aria-hidden="true">▲</span><span className="sr-only">Advisory:</span> Window {collisionText(c)} <span className="muted">(advisory)</span></Item>)}
     </>)
 }

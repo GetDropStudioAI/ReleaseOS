@@ -41,6 +41,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<IcsTokens>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<ConnectorState>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<ReleaseTypes>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-107/109/110
+        b.Entity<ReleaseVersions>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-117 (RT2)
         b.Entity<Environments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<CatalogServices>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<IngestKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
@@ -118,7 +119,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         ["RunId"] = typeof(RunbookRuns), ["StepId"] = typeof(RunbookSteps), ["DependsOnStepId"] = typeof(RunbookSteps), ["DecisionId"] = typeof(GoNoGoDecisions),
         ["PirId"] = typeof(PostImplementationReviews), ["CommTemplateId"] = typeof(CommTemplates), ["DispatchId"] = typeof(CommDispatches),
         ["WebhookDestinationId"] = typeof(WebhookDestinations), ["FreezeWindowId"] = typeof(FreezeWindows), ["ExportJobId"] = typeof(ExportJobs),
-        ["OnCallTeamId"] = typeof(Teams), ["ReleaseTypeId"] = typeof(ReleaseTypes), ["EnvironmentId"] = typeof(Environments), ["CatalogServiceId"] = typeof(CatalogServices),
+        ["OnCallTeamId"] = typeof(Teams), ["ReleaseTypeId"] = typeof(ReleaseTypes), ["ReleaseVersionId"] = typeof(ReleaseVersions), ["EnvironmentId"] = typeof(Environments), ["CatalogServiceId"] = typeof(CatalogServices),
         ["DefaultTemplateId"] = typeof(TrainTemplates), ["ControlWebhookDestinationId"] = typeof(WebhookDestinations), ["DeploymentId"] = typeof(Deployments), ["IngestKeyId"] = typeof(IngestKeys),
         ["PolicyId"] = typeof(ApprovalPolicies), ["ApprovalId"] = typeof(Approvals), ["BreachId"] = typeof(ThresholdBreaches),
     };
@@ -187,6 +188,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
             nameof(FreezeWindows) => Set<FreezeWindows>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(ExportJobs) => Set<ExportJobs>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(ReleaseTypes) => Set<ReleaseTypes>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
+            nameof(ReleaseVersions) => Set<ReleaseVersions>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(Environments) => Set<Environments>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(CatalogServices) => Set<CatalogServices>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(Deployments) => Set<Deployments>().Where(x => list.Contains(x.Id)).Select(x => x.Id),

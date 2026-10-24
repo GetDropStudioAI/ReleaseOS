@@ -113,3 +113,6 @@
 .rd .os-table th, .rd .os-table td { padding-left: var(--gap-md); padding-right: var(--gap-md); }
 .rd .os-table th { white-space: normal; }
 .rd .os-table td.mono { overflow-wrap: anywhere; }
+
+/* RT2 (D48): the compact chain under the context row */
+.rd-chain { margin-top: calc(-1 * var(--gap-sm)); }

@@ -153,6 +153,9 @@ public static class FieldLimits
         [typeof(ReleaseModelEndpoints.VersionNameBody)] = new() { ["Name"] = ReleaseModelLimits.MaxVersionName },
         [typeof(ReleaseModelEndpoints.TrainVersionBody)] = new() { ["VersionId"] = Id },
         [typeof(NextReleaseInput)] = new() { ["ReleaseTypeId"] = Id, ["Title"] = Name, ["TargetReleaseDate"] = Code },
+        // REOS-118 (RT3): clients
+        [typeof(NewClient)] = new() { ["Name"] = ReleaseModelLimits.MaxClientName, ["Segment"] = Code, ["CertEnvironmentId"] = Id },
+        [typeof(ClientPatch)] = new() { ["Name"] = ReleaseModelLimits.MaxClientName, ["Segment"] = Code, ["CertEnvironmentId"] = Id },
         // REOS-109: environments, the service catalog and a product's link to it
         [typeof(NewEnvironment)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id },
         [typeof(EnvironmentPatch)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id, ["Clear"] = Code },

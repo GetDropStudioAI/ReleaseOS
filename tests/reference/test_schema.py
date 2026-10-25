@@ -257,7 +257,7 @@ roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='t
          if 'WorkspaceId' in [c[1] for c in db6.execute(f"PRAGMA table_info({t})")]]
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
-            'ReleaseTypes','ReleaseVersions','Environments','CatalogServices','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
+            'ReleaseTypes','ReleaseVersions','Environments','CatalogServices','Clients','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
             'ApprovalPolicies','Approvals']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
@@ -651,38 +651,66 @@ check(db9, "UPDATE ReleaseTypes SET IsBeta=0 WHERE Id='tyD'", True, "an unused t
 check(db9, "INSERT INTO ReleaseTypes(Id,Name,IsBeta) VALUES('tyE','Odd',2)", False, "a Beta flag that is not 0 or 1", expect="CHECK")
 
 # ---- Versions (REOS-117, RT2, D48): a version groups the releases of one product version; one release per type (and Beta number) in it ----
-db10 = db_fresh()
-db10.executescript("""
+db11 = db_fresh()
+db11.executescript("""
 INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','2026-10-20T14:00:00Z');
 INSERT INTO ReleaseTypes(Id,Name,SortOrder,IsBeta) VALUES('tyB','Beta',10,1),('tyC','CERT',20,0),('tyP','Production',40,0);
 INSERT INTO ReleaseTypes(Id,Name,WorkspaceId) VALUES('tyX','Production','w2');
 """)
 V = "INSERT INTO ReleaseVersions(Id,Name,CreatedAt,WorkspaceId) VALUES(?,?,?,?)"
-check(db10, V, True, "a version", ('v1', 'Orion 5.2', NOW, 'default'))
-check(db10, V, False, "a version name twice in a workspace (any case)", ('v2', 'ORION 5.2', NOW, 'default'), expect="UNIQUE")
-check(db10, V, True, "the same version name in another workspace", ('v3', 'Orion 5.2', NOW, 'w2'))
-check(db10, V, False, "a blank version name", ('v4', '  ', NOW, 'default'), expect="CHECK")
-check(db10, "UPDATE ReleaseVersions SET WorkspaceId='w2' WHERE Id='v1'", False, "a version moved to another workspace", expect="cannot move to another workspace")
+check(db11, V, True, "a version", ('v1', 'Orion 5.2', NOW, 'default'))
+check(db11, V, False, "a version name twice in a workspace (any case)", ('v2', 'ORION 5.2', NOW, 'default'), expect="UNIQUE")
+check(db11, V, True, "the same version name in another workspace", ('v3', 'Orion 5.2', NOW, 'w2'))
+check(db11, V, False, "a blank version name", ('v4', '  ', NOW, 'default'), expect="CHECK")
+check(db11, "UPDATE ReleaseVersions SET WorkspaceId='w2' WHERE Id='v1'", False, "a version moved to another workspace", expect="cannot move to another workspace")
 T = "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseTypeId,BetaNumber,ReleaseVersionId,WorkspaceId,CurrentStatus) VALUES(?,?,'2026-11-30',?,?,?,?,?,?,?)"
-check(db10, T, True, "Beta 1 of a version", ('r1', 'a', NOW, NOW, 'tyB', 1, 'v1', 'default', 'Planning'))
-check(db10, T, True, "Beta 2 of the same version", ('r2', 'b', NOW, NOW, 'tyB', 2, 'v1', 'default', 'Planning'))
-check(db10, T, True, "CERT of the same version", ('r3', 'c', NOW, NOW, 'tyC', None, 'v1', 'default', 'Planning'))
-check(db10, T, False, "a second Beta 1 in the same version", ('r4', 'd', NOW, NOW, 'tyB', 1, 'v1', 'default', 'Planning'), expect="UNIQUE")
-check(db10, T, False, "a second CERT in the same version", ('r4', 'd', NOW, NOW, 'tyC', None, 'v1', 'default', 'Gated'), expect="UNIQUE")
-check(db10, T, True, "a CERT outside any version", ('r5', 'e', NOW, NOW, 'tyC', None, None, 'default', 'Planning'))
-check(db10, T, True, "another CERT outside any version", ('r6', 'f', NOW, NOW, 'tyC', None, None, 'default', 'Planning'))
-check(db10, T, False, "a release in a version without a type", ('r7', 'g', NOW, NOW, None, None, 'v1', 'default', 'Planning'), expect="needs a release type")
-check(db10, T, False, "a release in another workspace's version", ('r8', 'h', NOW, NOW, 'tyX', None, 'v1', 'w2', 'Planning'), expect="version belongs to another workspace")
-check(db10, "UPDATE ReleaseTrains SET CurrentStatus='Aborted', ActualEndAt=NULL WHERE Id='r3'", True, "a release in a version aborted")
-check(db10, T, True, "a new CERT once the first one was aborted", ('r9', 'i', NOW, NOW, 'tyC', None, 'v1', 'default', 'Planning'))
-check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r5'", False, "a second live CERT linked into the version", expect="UNIQUE")
-check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v3' WHERE Id='r5'", False, "a release linked to another workspace's version", expect="version belongs to another workspace")
-check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId=NULL WHERE Id='r2'", True, "a release unlinked from its version")
-check(db10, "UPDATE ReleaseTrains SET BetaNumber=1 WHERE Id='r2'", True, "a Beta release renumbered while outside a version")
-check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r2'", False, "a release linked into a slot a live release holds", expect="UNIQUE")
-check(db10, "UPDATE ReleaseTrains SET BetaNumber=3 WHERE Id='r2'", True, "a release given a free number")
-check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r2'", True, "a release linked into a free slot")
-check(db10, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseVersionId) VALUES('r10','j','2026-11-30',?,?,'v1')", False, "a release linked to a version at insert without a type", (NOW, NOW), expect="needs a release type")
+check(db11, T, True, "Beta 1 of a version", ('r1', 'a', NOW, NOW, 'tyB', 1, 'v1', 'default', 'Planning'))
+check(db11, T, True, "Beta 2 of the same version", ('r2', 'b', NOW, NOW, 'tyB', 2, 'v1', 'default', 'Planning'))
+check(db11, T, True, "CERT of the same version", ('r3', 'c', NOW, NOW, 'tyC', None, 'v1', 'default', 'Planning'))
+check(db11, T, False, "a second Beta 1 in the same version", ('r4', 'd', NOW, NOW, 'tyB', 1, 'v1', 'default', 'Planning'), expect="UNIQUE")
+check(db11, T, False, "a second CERT in the same version", ('r4', 'd', NOW, NOW, 'tyC', None, 'v1', 'default', 'Gated'), expect="UNIQUE")
+check(db11, T, True, "a CERT outside any version", ('r5', 'e', NOW, NOW, 'tyC', None, None, 'default', 'Planning'))
+check(db11, T, True, "another CERT outside any version", ('r6', 'f', NOW, NOW, 'tyC', None, None, 'default', 'Planning'))
+check(db11, T, False, "a release in a version without a type", ('r7', 'g', NOW, NOW, None, None, 'v1', 'default', 'Planning'), expect="needs a release type")
+check(db11, T, False, "a release in another workspace's version", ('r8', 'h', NOW, NOW, 'tyX', None, 'v1', 'w2', 'Planning'), expect="version belongs to another workspace")
+check(db11, "UPDATE ReleaseTrains SET CurrentStatus='Aborted', ActualEndAt=NULL WHERE Id='r3'", True, "a release in a version aborted")
+check(db11, T, True, "a new CERT once the first one was aborted", ('r9', 'i', NOW, NOW, 'tyC', None, 'v1', 'default', 'Planning'))
+check(db11, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r5'", False, "a second live CERT linked into the version", expect="UNIQUE")
+check(db11, "UPDATE ReleaseTrains SET ReleaseVersionId='v3' WHERE Id='r5'", False, "a release linked to another workspace's version", expect="version belongs to another workspace")
+check(db11, "UPDATE ReleaseTrains SET ReleaseVersionId=NULL WHERE Id='r2'", True, "a release unlinked from its version")
+check(db11, "UPDATE ReleaseTrains SET BetaNumber=1 WHERE Id='r2'", True, "a Beta release renumbered while outside a version")
+check(db11, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r2'", False, "a release linked into a slot a live release holds", expect="UNIQUE")
+check(db11, "UPDATE ReleaseTrains SET BetaNumber=3 WHERE Id='r2'", True, "a release given a free number")
+check(db11, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r2'", True, "a release linked into a free slot")
+check(db11, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseVersionId) VALUES('r10','j','2026-11-30',?,?,'v1')", False, "a release linked to a version at insert without a type", (NOW, NOW), expect="needs a release type")
+# ---- Clients (REOS-118, RT3, D47): Standard or OnDemand; only an OnDemand client has a CERT environment, one of its own workspace's ----
+db10 = db_fresh()
+db10.executescript("""
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','2026-10-20T14:00:00Z');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt) VALUES('eC','CERT','Staging','2026-10-20T14:00:00Z');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt,WorkspaceId) VALUES('eX','CERT','Staging','2026-10-20T14:00:00Z','w2');
+""")
+C = "INSERT INTO Clients(Id,Name,Segment,CertEnvironmentId,CreatedAt,WorkspaceId) VALUES(?,?,?,?,?,?)"
+check(db10, C, True, "a Standard client with no CERT environment", ('c1', 'Acme', 'Standard', None, NOW, 'default'))
+check(db10, C, True, "an OnDemand client with a CERT environment of its workspace", ('c2', 'Globex', 'OnDemand', 'eC', NOW, 'default'))
+check(db10, C, False, "a Standard client with a CERT environment", ('c3', 'Initech', 'Standard', 'eC', NOW, 'default'), expect="Only an On-Demand client has a CERT environment")
+check(db10, C, False, "an OnDemand client without a CERT environment", ('c4', 'Hooli', 'OnDemand', None, NOW, 'default'), expect="needs a CERT environment")
+check(db10, C, False, "a segment that is neither Standard nor OnDemand", ('c5', 'Umbrella', 'Premium', None, NOW, 'default'), expect="CHECK")
+check(db10, C, False, "an OnDemand client whose CERT environment is another workspace's", ('c6', 'Soylent', 'OnDemand', 'eX', NOW, 'default'), expect="belongs to another workspace")
+check(db10, C, False, "a client whose name is taken in the workspace (any case)", ('c7', 'ACME', 'Standard', None, NOW, 'default'), expect="UNIQUE")
+check(db10, C, True, "the same name in another workspace", ('c8', 'Acme', 'Standard', None, NOW, 'w2'))
+check(db10, C, False, "a blank name", ('c9', '   ', 'Standard', None, NOW, 'default'), expect="CHECK")
+check(db10, C, False, "a name over 200 characters", ('c10', 'x' * 201, 'Standard', None, NOW, 'default'), expect="CHECK")
+check(db10, "UPDATE Clients SET Segment='Standard' WHERE Id='c2'", False, "an OnDemand client made Standard with its environment kept", expect="Only an On-Demand client has a CERT environment")
+check(db10, "UPDATE Clients SET Segment='Standard', CertEnvironmentId=NULL WHERE Id='c2'", True, "an OnDemand client made Standard with the environment cleared")
+check(db10, "UPDATE Clients SET Segment='OnDemand' WHERE Id='c2'", False, "a client made OnDemand without an environment", expect="needs a CERT environment")
+check(db10, "UPDATE Clients SET Segment='OnDemand', CertEnvironmentId='eC' WHERE Id='c2'", True, "a client made OnDemand with an environment")
+check(db10, "UPDATE Clients SET CertEnvironmentId=NULL WHERE Id='c2'", False, "an OnDemand client loses its environment", expect="needs a CERT environment")
+check(db10, "UPDATE Clients SET CertEnvironmentId='eC' WHERE Id='c1'", False, "a Standard client given an environment", expect="Only an On-Demand client has a CERT environment")
+check(db10, "UPDATE Clients SET CertEnvironmentId='eX' WHERE Id='c2'", False, "an OnDemand client moved to another workspace's environment", expect="belongs to another workspace")
+check(db10, "UPDATE Clients SET WorkspaceId='w2' WHERE Id='c1'", False, "a client moved to another workspace", expect="cannot move to another workspace")
+check(db10, "UPDATE Clients SET Name='Acme Corp', Version=2 WHERE Id='c1'", True, "a client renamed")
+check(db10, "INSERT INTO ImportJobs(Id,Kind,FileName,Sha256,RowCount,Status,UploadedByUserId,CreatedAt) VALUES('ij1','Clients','c.csv','00',1,'Previewed','rte','2026-10-20T14:00:00Z')", True, "a Clients import job")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

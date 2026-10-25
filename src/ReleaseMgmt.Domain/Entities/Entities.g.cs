@@ -717,6 +717,20 @@ public class Environments
     public int CanaryObservationSeconds { get; set; } = 600;
 }
 
+public class Clients
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public string Segment { get; set; } = "";
+    public string? CertEnvironmentId { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
 public class TrainEnvironments
 {
     public string ReleaseTrainId { get; set; } = "";

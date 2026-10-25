@@ -1,8 +1,6 @@
 -- Upgrade 010 (REOS-117, RT2; D48): versions link a product version's releases (Beta 1 to 3, CERT, PenTest Cert, Production).
--- From: migrations 20261024201636_Schema + 20261024201644_Triggers (after 008).
--- To:   migrations 20261024222250_Schema + 20261024222257_Triggers.
--- 009 is reserved for REOS-118 (RT3) and was not applied when this was written: if it has been, its migration pair replaces the "From" pair in the guard
--- below and this script's "To" pair is the one the combined schema ends with (re-generate them together; docs/QUESTIONS.md Q-117a).
+-- From: migrations 20261024211850_Schema + 20261024211901_Triggers (after 009).
+-- To:   migrations 20261025001928_Schema + 20261025001939_Triggers.
 -- Run with the app stopped and after a backup (docs/RUNBOOK_OPERATIONS.md section 8):  sqlite3 releaseos.db < db/upgrades/010_release_versions.sql
 -- One transaction. Text below is verbatim from db/schema.sql:
 --  * New table ReleaseVersions (empty), new unique index UX_Trains_VersionSlot (no release is in a version yet, so it starts empty).
@@ -16,10 +14,10 @@
 PRAGMA foreign_keys=OFF;
 BEGIN IMMEDIATE;
 
--- Refuses to run twice or against the wrong database: the INSERT fails on the CHECK unless exactly 008's migrations are recorded.
+-- Refuses to run twice or against the wrong database: the INSERT fails on the CHECK unless exactly 009's migrations are recorded.
 CREATE TEMP TABLE _upgrade_guard (ok INTEGER CHECK (ok = 1));
 INSERT INTO _upgrade_guard SELECT (SELECT group_concat(MigrationId, ',') FROM (SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId))
-    = '20261024201636_Schema,20261024201644_Triggers';
+    = '20261024211850_Schema,20261024211901_Triggers';
 DROP TABLE _upgrade_guard;
 
 DROP TRIGGER trg_Audit_NoUpdate;
@@ -72,6 +70,8 @@ DROP TRIGGER trg_Train_AssignKey;
 DROP TRIGGER trg_Train_TypeRules_Insert;
 DROP TRIGGER trg_Train_TypeRules_Update;
 DROP TRIGGER trg_ReleaseType_BetaFlagLocked;
+DROP TRIGGER trg_Client_SegmentRules_Insert;
+DROP TRIGGER trg_Client_SegmentRules_Update;
 DROP TRIGGER trg_Deployment_Transition;
 DROP TRIGGER trg_DeploymentEvent_NoUpdate;
 DROP TRIGGER trg_Step_RunPaused;
@@ -134,6 +134,8 @@ DROP TRIGGER trg_Ws_ReleaseTypes_Insert;
 DROP TRIGGER trg_Ws_ReleaseTypes_Update;
 DROP TRIGGER trg_Ws_Environments_Insert;
 DROP TRIGGER trg_Ws_Environments_Update;
+DROP TRIGGER trg_Ws_Clients_Insert;
+DROP TRIGGER trg_Ws_Clients_Update;
 DROP TRIGGER trg_Ws_CatalogServices_Insert;
 DROP TRIGGER trg_Ws_CatalogServices_Update;
 DROP TRIGGER trg_Ws_IngestKeys_Update;
@@ -166,6 +168,7 @@ CREATE TABLE ReleaseVersions (                            -- RT2 (D48): one prod
     UNIQUE (WorkspaceId, Name)
 );
 ALTER TABLE ReleaseTrains ADD COLUMN ReleaseVersionId TEXT REFERENCES ReleaseVersions(Id);
+-- RT2 (D48): one release per type (and Beta number) in a version; an aborted release frees its place
 CREATE UNIQUE INDEX UX_Trains_VersionSlot ON ReleaseTrains(ReleaseVersionId, ReleaseTypeId, COALESCE(BetaNumber, 0))
     WHERE ReleaseVersionId IS NOT NULL AND CurrentStatus <> 'Aborted';
 
@@ -420,6 +423,16 @@ CREATE TRIGGER trg_ReleaseType_BetaFlagLocked BEFORE UPDATE OF IsBeta ON Release
 BEGIN
     SELECT RAISE(ABORT, 'A release type that releases use cannot become or stop being a Beta type')
      WHERE EXISTS (SELECT 1 FROM ReleaseTrains t WHERE t.ReleaseTypeId = OLD.Id);
+END;
+CREATE TRIGGER trg_Client_SegmentRules_Insert BEFORE INSERT ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'Only an On-Demand client has a CERT environment') WHERE NEW.Segment = 'Standard' AND NEW.CertEnvironmentId IS NOT NULL;
+    SELECT RAISE(ABORT, 'An On-Demand client needs a CERT environment') WHERE NEW.Segment = 'OnDemand' AND NEW.CertEnvironmentId IS NULL;
+END;
+CREATE TRIGGER trg_Client_SegmentRules_Update BEFORE UPDATE OF Segment, CertEnvironmentId ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'Only an On-Demand client has a CERT environment') WHERE NEW.Segment = 'Standard' AND NEW.CertEnvironmentId IS NOT NULL;
+    SELECT RAISE(ABORT, 'An On-Demand client needs a CERT environment') WHERE NEW.Segment = 'OnDemand' AND NEW.CertEnvironmentId IS NULL;
 END;
 CREATE TRIGGER trg_Deployment_Transition BEFORE UPDATE OF State ON Deployments WHEN NEW.State <> OLD.State
 BEGIN
@@ -804,6 +817,17 @@ BEGIN
     SELECT RAISE(ABORT, 'The webhook destination belongs to another workspace')
      WHERE EXISTS (SELECT 1 FROM WebhookDestinations x WHERE x.Id = NEW.ControlWebhookDestinationId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
 END;
+CREATE TRIGGER trg_Ws_Clients_Insert BEFORE INSERT ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'The environment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Environments x WHERE x.Id = NEW.CertEnvironmentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Clients_Update BEFORE UPDATE OF WorkspaceId, CertEnvironmentId ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The environment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Environments x WHERE x.Id = NEW.CertEnvironmentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
 CREATE TRIGGER trg_Ws_CatalogServices_Insert BEFORE INSERT ON CatalogServices
 BEGIN
     SELECT RAISE(ABORT, 'The team belongs to another workspace')
@@ -915,10 +939,10 @@ BEGIN
 END;
 
 -- The app's startup migration must see the new migrations as applied.
-DELETE FROM __EFMigrationsHistory WHERE MigrationId IN ('20261024201636_Schema', '20261024201644_Triggers');
+DELETE FROM __EFMigrationsHistory WHERE MigrationId IN ('20261024211850_Schema', '20261024211901_Triggers');
 INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES
-    ('20261024222250_Schema', '10.0.12'),
-    ('20261024222257_Triggers', '10.0.12');
+    ('20261025001928_Schema', '10.0.12'),
+    ('20261025001939_Triggers', '10.0.12');
 
 COMMIT;
 PRAGMA foreign_keys=ON;

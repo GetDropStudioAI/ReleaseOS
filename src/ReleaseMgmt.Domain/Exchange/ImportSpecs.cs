@@ -41,11 +41,11 @@ public static class ExchangeGuards
     public const string UnknownGrid = "UnknownGrid";
 }
 
-/// <summary>The nine import kinds (PROJECT_SCOPE 9, and the ImportJobs.Kind CHECK). Column order is the order the section lists them: required first, then optional.</summary>
+/// <summary>The ten import kinds (PROJECT_SCOPE 9, and the ImportJobs.Kind CHECK). Column order is the order the section lists them: required first, then optional.</summary>
 public static class ImportKinds
 {
     public const string Trains = "Trains", Products = "Products", Gates = "Gates", Tasks = "Tasks", RunbookSteps = "RunbookSteps",
-                        ExternalLinks = "ExternalLinks", Holidays = "Holidays", Users = "Users", Teams = "Teams";
+                        ExternalLinks = "ExternalLinks", Holidays = "Holidays", Users = "Users", Teams = "Teams", Clients = "Clients";
 
     public static readonly string[] RiskTiers = ["Low", "Moderate", "High", "VeryHigh"];
     public static readonly string[] Sections = ["PreCheck", "Deploy", "Verify", "Rollback", "Hypercare"];
@@ -82,6 +82,7 @@ public static class ImportKinds
         new(Holidays, "Holidays", "holidays", [Req("Day", ColumnType.Date), Req("Name", max: 200)], ["Day"], Plan: false, Admin: true),
         new(Users, "Users", "users", [Req("Email", ColumnType.Email, max: 254), Req("DisplayName", max: 200), Req("Role", ColumnType.Enum, UserRoles), Opt("Handle", ColumnType.Handle)], ["Email"], Plan: false, Admin: true),
         new(Teams, "Teams", "teams", [Req("Handle", ColumnType.Handle), Req("Name", max: 200), Req("Members", ColumnType.EmailList, allowEmpty: true)], ["Handle"], Plan: false, Admin: true),
+        new(Clients, "Clients", "clients", [Req("Name", max: 200), Req("Segment", ColumnType.Enum, Services.ClientSegments.Labels), Opt("CertEnvironment", max: 100, hint: "the CERT environment's name; required for an On-Demand client, empty for a Standard one")], ["Name"], Plan: false, Admin: false),
     ];
 
     public static ImportKindSpec? Get(string? kind) => All.FirstOrDefault(k => string.Equals(k.Kind, kind, StringComparison.OrdinalIgnoreCase));

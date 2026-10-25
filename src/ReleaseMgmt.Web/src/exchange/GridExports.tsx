@@ -6,7 +6,7 @@ import { DataTable, ErrorState, FilterSelect, LoadingState, Panel, TwoLine, type
 
 /**
  * The grid catalogue (PROJECT_SCOPE 9, REOS-49, REOS-133): every grid as CSV and XLSX. Plain links, so the browser downloads them with the session cookie.
- * Grids of the nine import kinds say so: their files re-import unchanged. A train filter narrows the grids that have one.
+ * Grids of the ten import kinds say so: their files re-import unchanged. A train filter narrows the grids that have one.
  */
 export function GridExports({ me }: { me: Me }) {
   const [grids, setGrids] = useState<GridInfo[] | null>(null)

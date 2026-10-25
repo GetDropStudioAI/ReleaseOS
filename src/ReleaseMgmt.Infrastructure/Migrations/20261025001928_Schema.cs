@@ -5,7 +5,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
-    /// <summary>Creates the 68 tables and 41 indexes, and the default workspace's row, by executing db/schema.sql's DDL and INSERT verbatim
+    /// <summary>Creates the 69 tables and 41 indexes, and the default workspace's row, by executing db/schema.sql's DDL and INSERT verbatim
     /// (the contract, CLAUDE.md rule 1). The EF model (ModelMap) is asserted against the result by SchemaContractTests. Forward-only.</summary>
     public partial class Schema : Migration
     {

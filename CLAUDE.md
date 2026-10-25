@@ -34,7 +34,7 @@ tests/reference/   Python oracle tests; must keep passing against db/schema.sql
 ```
 
 ## Non-negotiable rules
-1. **`db/schema.sql` is the contract** (68 tables, 134 triggers, 41 indexes). EF migrations must produce the same tables, CHECKs, indexes and triggers. Triggers go in one hand-written migration (`migrationBuilder.Sql`), verbatim and **in file order** (SQLite fires same-event triggers newest-first, and the error each rule reports depends on that order). If you need to change the schema, change `db/schema.sql` first, rerun `python3 tests/reference/test_schema.py`, then the migration.
+1. **`db/schema.sql` is the contract** (69 tables, 138 triggers, 41 indexes). EF migrations must produce the same tables, CHECKs, indexes and triggers. Triggers go in one hand-written migration (`migrationBuilder.Sql`), verbatim and **in file order** (SQLite fires same-event triggers newest-first, and the error each rule reports depends on that order). If you need to change the schema, change `db/schema.sql` first, rerun `python3 tests/reference/test_schema.py`, then the migration.
    - **Every entity** is configured with `ToTable(t => t.UseSqlReturningClause(false))`. EF Core's default save path (SQLite `RETURNING`) is not supported on tables with AFTER triggers.
    - A trigger `RAISE(ABORT, …)` surfaces as a `SqliteException`. Map it to 422 `{guard:"DbRule", message}`, never a 500. The service normally catches the rule first; the mapping covers races and clock skew.
    - SQLite migrations that rebuild a table silently drop its triggers. A CI test asserts the migrated database has exactly the trigger names in `db/schema.sql`; if a migration rebuilds a table, it must re-apply that table's triggers.

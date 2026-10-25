@@ -17,6 +17,9 @@ public static class ReleaseModelGuards
     public const string VersionInvalid = "VersionInvalid";
     public const string VersionNameTaken = "VersionNameTaken";
     public const string VersionSlotTaken = "VersionSlotTaken";
+    /// <summary>RT3 (D47): a client's name or segment is wrong, or a CERT environment is given to a Standard client or missing from an On-Demand one.</summary>
+    public const string ClientInvalid = "ClientInvalid";
+    public const string ClientNameTaken = "ClientNameTaken";
     public const string EnvironmentInvalid = "EnvironmentInvalid";
     public const string EnvironmentNameTaken = "EnvironmentNameTaken";
     public const string ServiceInvalid = "ServiceInvalid";
@@ -50,9 +53,27 @@ public static partial class ReleaseKeys
 /// <summary>Field limits the schema's CHECKs also hold, shared by the services and the API's body limits.</summary>
 public static class ReleaseModelLimits
 {
-    public const int MaxBranch = 200, MaxEnvironmentName = 100, MaxRegion = 60, MaxReleaseTypeName = 100, MaxVersionName = 100, MinBetaNumber = 1, MaxBetaNumber = 3, MaxServiceKey = 60, MaxServiceName = 200,
+    public const int MaxBranch = 200, MaxEnvironmentName = 100, MaxRegion = 60, MaxReleaseTypeName = 100, MaxVersionName = 100, MaxClientName = 200, MinBetaNumber = 1, MaxBetaNumber = 3, MaxServiceKey = 60, MaxServiceName = 200,
         MaxRepository = 300, MaxProjectCode = 100, MaxKeyName = 100, MaxExternalId = 200, MaxReleaseVersion = 100, MaxEventMessage = 2000, MaxEventsPerCall = 100,
         MaxCanarySteps = 20;
+}
+
+/// <summary>The two client segments (D47). The stored value has no space; people read "On-Demand".</summary>
+public static class ClientSegments
+{
+    public const string Standard = "Standard", OnDemand = "OnDemand";
+    public static readonly string[] All = [Standard, OnDemand];
+    /// <summary>What a person reads, and what the CSV import and export call the segments.</summary>
+    public static readonly string[] Labels = [Standard, "On-Demand"];
+
+    public static string Label(string segment) => segment == OnDemand ? "On-Demand" : segment;
+
+    /// <summary>Reads what a person or a file calls a segment ("On-Demand", "on demand", "OnDemand", "standard") into the stored value; null when it is neither.</summary>
+    public static string? Parse(string? text)
+    {
+        var t = new string((text ?? "").Where(c => !char.IsWhiteSpace(c) && c != '-' && c != '_').ToArray());
+        return All.FirstOrDefault(x => string.Equals(x, t, StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 /// <summary>A deployment's rollout state (D42) and the moves between states; trg_Deployment_Transition holds the same table as the backstop.</summary>

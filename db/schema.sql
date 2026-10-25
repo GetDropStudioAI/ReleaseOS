@@ -590,7 +590,7 @@ CREATE TABLE UserSessionState (
 
 CREATE TABLE ImportJobs (
     Id TEXT PRIMARY KEY,
-    Kind TEXT NOT NULL CHECK (Kind IN ('Trains','Gates','Tasks','RunbookSteps','Products','Holidays','Users','Teams','ExternalLinks')),
+    Kind TEXT NOT NULL CHECK (Kind IN ('Trains','Gates','Tasks','RunbookSteps','Products','Holidays','Users','Teams','ExternalLinks','Clients')),
     ReleaseTrainId TEXT REFERENCES ReleaseTrains(Id) ON DELETE SET NULL,
     FileName TEXT NOT NULL,
     Sha256 TEXT NOT NULL,
@@ -759,6 +759,20 @@ CREATE TABLE Environments (                               -- B6: where releases 
     WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
     ThresholdForSeconds INTEGER NOT NULL DEFAULT 120 CHECK (ThresholdForSeconds BETWEEN 0 AND 86400),   -- REOS-111: a threshold is breached when it is exceeded for this long (error rate above 0.5 % for 2 minutes)
     CanaryObservationSeconds INTEGER NOT NULL DEFAULT 600 CHECK (CanaryObservationSeconds BETWEEN 30 AND 86400),   -- how long a canary step is watched before the next promotion
+    UNIQUE (WorkspaceId, Name)
+);
+
+CREATE TABLE Clients (                                    -- RT3 (D47): a per-workspace list of clients; Standard or OnDemand. Only an OnDemand client has a CERT environment (trg_Client_SegmentRules_*)
+    Id TEXT PRIMARY KEY,
+    Name TEXT NOT NULL COLLATE NOCASE CHECK (length(trim(Name)) BETWEEN 1 AND 200),
+    Segment TEXT NOT NULL CHECK (Segment IN ('Standard','OnDemand')),
+    CertEnvironmentId TEXT REFERENCES Environments(Id),   -- one of the workspace's environments; set exactly when Segment is OnDemand
+    ArchivedAt TEXT,
+    LastChangedByUserId TEXT REFERENCES Users(Id),
+    LastChangedAt TEXT,
+    CreatedAt TEXT NOT NULL,
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
     UNIQUE (WorkspaceId, Name)
 );
 
@@ -1311,6 +1325,16 @@ BEGIN
     SELECT RAISE(ABORT, 'A release type that releases use cannot become or stop being a Beta type')
      WHERE EXISTS (SELECT 1 FROM ReleaseTrains t WHERE t.ReleaseTypeId = OLD.Id);
 END;
+CREATE TRIGGER trg_Client_SegmentRules_Insert BEFORE INSERT ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'Only an On-Demand client has a CERT environment') WHERE NEW.Segment = 'Standard' AND NEW.CertEnvironmentId IS NOT NULL;
+    SELECT RAISE(ABORT, 'An On-Demand client needs a CERT environment') WHERE NEW.Segment = 'OnDemand' AND NEW.CertEnvironmentId IS NULL;
+END;
+CREATE TRIGGER trg_Client_SegmentRules_Update BEFORE UPDATE OF Segment, CertEnvironmentId ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'Only an On-Demand client has a CERT environment') WHERE NEW.Segment = 'Standard' AND NEW.CertEnvironmentId IS NOT NULL;
+    SELECT RAISE(ABORT, 'An On-Demand client needs a CERT environment') WHERE NEW.Segment = 'OnDemand' AND NEW.CertEnvironmentId IS NULL;
+END;
 CREATE TRIGGER trg_Deployment_Transition BEFORE UPDATE OF State ON Deployments WHEN NEW.State <> OLD.State
 BEGIN
     SELECT RAISE(ABORT, 'Illegal deployment state transition')
@@ -1722,6 +1746,17 @@ BEGIN
     SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
     SELECT RAISE(ABORT, 'The webhook destination belongs to another workspace')
      WHERE EXISTS (SELECT 1 FROM WebhookDestinations x WHERE x.Id = NEW.ControlWebhookDestinationId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Clients_Insert BEFORE INSERT ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'The environment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Environments x WHERE x.Id = NEW.CertEnvironmentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_Clients_Update BEFORE UPDATE OF WorkspaceId, CertEnvironmentId ON Clients
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The environment belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Environments x WHERE x.Id = NEW.CertEnvironmentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
 END;
 CREATE TRIGGER trg_Ws_CatalogServices_Insert BEFORE INSERT ON CatalogServices
 BEGIN

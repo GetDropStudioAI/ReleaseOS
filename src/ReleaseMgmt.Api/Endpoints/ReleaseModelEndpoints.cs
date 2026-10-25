@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Services;
 namespace ReleaseMgmt.Api.Endpoints;
 
 /// <summary>
-/// The release model (REOS-107): a release's key, owner, team, branch, on-call, type and target environments, the workspace's key prefix, and the release types (RT1, D46) and the versions that chain a product version's releases (RT2, D48).
+/// The release model (REOS-107): a release's key, owner, team, branch, on-call, type and target environments, the workspace's key prefix, the release types (RT1, D46), the clients (RT3, D47) and the versions that chain a product version's releases (RT2, D48).
 /// Read: any signed-in role. Edit: planners (RTE, Release Manager); the key prefix is an Admin setting (same two roles in v1). Every edit needs If-Match (Q-004) and answers 409 with the current row when stale.
 /// </summary>
 public static class ReleaseModelEndpoints
@@ -62,5 +62,17 @@ public static class ReleaseModelEndpoints
             s.SetTrainVersionAsync(id, b.VersionId, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         api.MapPost("/trains/{id}:create-next", (string id, NextReleaseInput? b, ClaimsPrincipal u, ReleaseVersionService s, CancellationToken ct) =>
             s.CreateNextAsync(id, b ?? new NextReleaseInput(), ActorOf(u), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
+        // RT3 (D47): the workspace's clients, Standard or On-Demand. Read: any signed-in role. Create, edit, archive: planners. Edits need If-Match.
+        api.MapGet("/clients", async (bool? includeArchived, ClientService s, CancellationToken ct) => Results.Ok(await s.ListAsync(includeArchived == true, ct))).RequireAuthorization(Policies.Read);
+        api.MapGet("/clients/{id}", async (string id, ClientService s, CancellationToken ct) =>
+            await s.GetAsync(id, ct) is { } v ? Results.Ok(v) : Results.NotFound(new { message = "client not found" })).RequireAuthorization(Policies.Read);
+        api.MapPost("/clients", (NewClient b, ClaimsPrincipal u, ClientService s, CancellationToken ct) =>
+            Viewed(s.CreateAsync(b, ActorOf(u), ct), x => s.GetAsync(x.Id, ct))).RequireAuthorization(Policies.Plan);
+        api.MapPatch("/clients/{id}", (string id, ClientPatch b, ClaimsPrincipal u, HttpRequest r, ClientService s, CancellationToken ct) =>
+            Viewed(s.UpdateAsync(id, b, ActorOf(u), r.IfMatch(), ct), x => s.GetAsync(x.Id, ct))).RequireAuthorization(Policies.Plan);
+        api.MapPost("/clients/{id}:archive", (string id, ClaimsPrincipal u, HttpRequest r, ClientService s, CancellationToken ct) =>
+            Viewed(s.SetArchivedAsync(id, true, ActorOf(u), r.IfMatch(), ct), x => s.GetAsync(x.Id, ct))).RequireAuthorization(Policies.Plan);
+        api.MapPost("/clients/{id}:unarchive", (string id, ClaimsPrincipal u, HttpRequest r, ClientService s, CancellationToken ct) =>
+            Viewed(s.SetArchivedAsync(id, false, ActorOf(u), r.IfMatch(), ct), x => s.GetAsync(x.Id, ct))).RequireAuthorization(Policies.Plan);
     }
 }

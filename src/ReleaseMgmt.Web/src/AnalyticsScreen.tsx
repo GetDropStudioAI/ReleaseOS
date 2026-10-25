@@ -190,7 +190,8 @@ export default function AnalyticsScreen(_props: { me: Me }) {
       </Suspense>
     </TabPanel>
   </div>
-  if (!data) return <div className="os-page">{heading}{controls}{period}<LoadingState what="analytics" /></div>
+  // the selected tab always has its panel, loading or not (aria-controls names it)
+  if (!data) return <div className="os-page">{heading}{controls}{period}<TabPanel id="ops" group="an-view"><LoadingState what="analytics" /></TabPanel></div>
   return <div className="os-page">
     {heading}
     {controls}

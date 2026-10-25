@@ -156,6 +156,7 @@ public class ReleaseTrains
     public string? OnCallTeamId { get; set; }
     public string? ReleaseTypeId { get; set; }
     public int? BetaNumber { get; set; }
+    public string? ReleaseVersionId { get; set; }
 }
 
 public class ChangeRecords
@@ -680,6 +681,16 @@ public class ReleaseTypes
     public int Version { get; set; } = 1;
     public string WorkspaceId { get; set; } = "default";
     public bool IsBeta { get; set; } = false;
+}
+
+public class ReleaseVersions
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public DateTime? ArchivedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public DateTime CreatedAt { get; set; }
+    public string WorkspaceId { get; set; } = "default";
 }
 
 public class Environments

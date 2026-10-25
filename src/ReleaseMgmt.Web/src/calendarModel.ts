@@ -4,8 +4,9 @@
  */
 import { localClock } from './shell/clock.ts'
 import { chipTone, type Tone } from './ui/tone.ts'
+import type { ChainBrief } from './versions/versionsApi.ts'
 
-export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[]; type?: { id: string; name: string } | null; betaNumber?: number | null }
+export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[]; type?: { id: string; name: string } | null; betaNumber?: number | null; chain?: ChainBrief | null }
 export interface CalGate { id: string; name: string; class: string; status: string; dueOn: string; trainId: string; trainTitle: string; trainStatus: string }
 export interface CalFreeze { id: string; name: string; kind: 'Freeze' | 'Chill'; startsAt: string; endsAt: string; scope: string }
 export interface CalMilestone { id: string; name: string; dueOn: string; done: boolean; trainId: string; trainTitle: string; trainStatus: string }

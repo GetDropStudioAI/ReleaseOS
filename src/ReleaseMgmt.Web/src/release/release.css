@@ -120,3 +120,5 @@
 .cd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap-xs); }
 .cd-advisory .warn { color: var(--color-status-warning); }
 .cd-edit { display: flex; flex-direction: column; gap: var(--gap-md); border-top: var(--border-width) solid var(--color-border-subtle); padding-top: var(--gap-lg); }
+/* RT2 (D48): the compact chain under the context row */
+.rd-chain { margin-top: calc(-1 * var(--gap-sm)); }

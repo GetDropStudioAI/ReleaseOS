@@ -353,7 +353,7 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
             .Select(r => (string)r[0]!).Order().ToList();
         string[] expectedRoots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
             "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents",
-            "ReleaseTypes", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments", "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions",
+            "ReleaseTypes", "ReleaseVersions", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments", "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions",
             "ApprovalPolicies", "Approvals"];
         AssertTrue(roots.SequenceEqual(expectedRoots.Order()), "WorkspaceId on every root table, and only there", string.Join(",", roots));
         var moving = roots.Where(t => t != "AuditEvents" && Count(db6, "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name=?", $"trg_Ws_{t}_Update") == 0).ToList();
@@ -743,5 +743,41 @@ INSERT INTO AuditEvents(OccurredAt,EntityType,EntityId,Action,WorkspaceId) VALUE
         Check(db9, "INSERT INTO ReleaseTypes(Id,Name,IsBeta) VALUES('tyD','Spare',1)", true, "a Beta type with no releases");
         Check(db9, "UPDATE ReleaseTypes SET IsBeta=0 WHERE Id='tyD'", true, "an unused type stops being a Beta type");
         Check(db9, "INSERT INTO ReleaseTypes(Id,Name,IsBeta) VALUES('tyE','Odd',2)", false, "a Beta flag that is not 0 or 1", expect: "CHECK");
+    }
+
+    /// <summary>REOS-117 (RT2, D48): a version groups the releases of one product version; one live release per type (and Beta number) in it. Port of the oracle's version section.</summary>
+    [Fact]
+    public void Versions_link_releases_one_place_per_type_and_stay_in_their_workspace()
+    {
+        using var db10 = fx.Fresh();
+        Exec(db10, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','2026-10-20T14:00:00Z')");
+        Exec(db10, "INSERT INTO ReleaseTypes(Id,Name,SortOrder,IsBeta) VALUES('tyB','Beta',10,1),('tyC','CERT',20,0),('tyP','Production',40,0)");
+        Exec(db10, "INSERT INTO ReleaseTypes(Id,Name,WorkspaceId) VALUES('tyX','Production','w2')");
+        const string V = "INSERT INTO ReleaseVersions(Id,Name,CreatedAt,WorkspaceId) VALUES(?,?,?,?)";
+        Check(db10, V, true, "a version", ["v1", "Orion 5.2", Now, "default"]);
+        Check(db10, V, false, "a version name twice in a workspace (any case)", ["v2", "ORION 5.2", Now, "default"], "UNIQUE");
+        Check(db10, V, true, "the same version name in another workspace", ["v3", "Orion 5.2", Now, "w2"]);
+        Check(db10, V, false, "a blank version name", ["v4", "  ", Now, "default"], "CHECK");
+        Check(db10, "UPDATE ReleaseVersions SET WorkspaceId='w2' WHERE Id='v1'", false, "a version moved to another workspace", expect: "cannot move to another workspace");
+        const string T = "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseTypeId,BetaNumber,ReleaseVersionId,WorkspaceId,CurrentStatus) VALUES(?,?,'2026-11-30',?,?,?,?,?,?,?)";
+        Check(db10, T, true, "Beta 1 of a version", ["r1", "a", Now, Now, "tyB", 1, "v1", "default", "Planning"]);
+        Check(db10, T, true, "Beta 2 of the same version", ["r2", "b", Now, Now, "tyB", 2, "v1", "default", "Planning"]);
+        Check(db10, T, true, "CERT of the same version", ["r3", "c", Now, Now, "tyC", null, "v1", "default", "Planning"]);
+        Check(db10, T, false, "a second Beta 1 in the same version", ["r4", "d", Now, Now, "tyB", 1, "v1", "default", "Planning"], "UNIQUE");
+        Check(db10, T, false, "a second CERT in the same version", ["r4", "d", Now, Now, "tyC", null, "v1", "default", "Gated"], "UNIQUE");
+        Check(db10, T, true, "a CERT outside any version", ["r5", "e", Now, Now, "tyC", null, null, "default", "Planning"]);
+        Check(db10, T, true, "another CERT outside any version", ["r6", "f", Now, Now, "tyC", null, null, "default", "Planning"]);
+        Check(db10, T, false, "a release in a version without a type", ["r7", "g", Now, Now, null, null, "v1", "default", "Planning"], "needs a release type");
+        Check(db10, T, false, "a release in another workspace's version", ["r8", "h", Now, Now, "tyX", null, "v1", "w2", "Planning"], "version belongs to another workspace");
+        Check(db10, "UPDATE ReleaseTrains SET CurrentStatus='Aborted', ActualEndAt=NULL WHERE Id='r3'", true, "a release in a version aborted");
+        Check(db10, T, true, "a new CERT once the first one was aborted", ["r9", "i", Now, Now, "tyC", null, "v1", "default", "Planning"]);
+        Check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r5'", false, "a second live CERT linked into the version", expect: "UNIQUE");
+        Check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v3' WHERE Id='r5'", false, "a release linked to another workspace's version", expect: "version belongs to another workspace");
+        Check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId=NULL WHERE Id='r2'", true, "a release unlinked from its version");
+        Check(db10, "UPDATE ReleaseTrains SET BetaNumber=1 WHERE Id='r2'", true, "a Beta release renumbered while outside a version");
+        Check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r2'", false, "a release linked into a place a live release holds", expect: "UNIQUE");
+        Check(db10, "UPDATE ReleaseTrains SET BetaNumber=3 WHERE Id='r2'", true, "a release given a free number");
+        Check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r2'", true, "a release linked into a free place");
+        Check(db10, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseVersionId) VALUES('r10','j','2026-11-30',?,?,'v1')", false, "a release linked to a version at insert without a type", [Now, Now], "needs a release type");
     }
 }

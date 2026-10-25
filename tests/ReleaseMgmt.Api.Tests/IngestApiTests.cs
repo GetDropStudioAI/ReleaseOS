@@ -260,7 +260,10 @@ public class IngestApiTests
     [Fact]
     public async Task A_key_beyond_its_rate_limit_gets_429_with_Retry_After_and_other_keys_are_not_slowed()
     {
-        using var f = new ApiFactory(settings: new Dictionary<string, string> { ["Ingest:RequestsPerSecond"] = "1", ["Ingest:Burst"] = "3" });
+        // A frozen clock: the bucket refills 1 token a second, so on a slow runner (Windows CI took more than a second
+        // for five requests) the real clock handed out a fourth token and the test saw 4 Created, not 3.
+        using var f = new ApiFactory(settings: new Dictionary<string, string> { ["Ingest:RequestsPerSecond"] = "1", ["Ingest:Burst"] = "3" })
+            { Clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.Parse("2026-10-05T08:00:00Z")) };
         var (rte, ingest, _) = await Setup(f);
         var other = IngestTestKit.Client(f, IngestTestKit.Key(f, name: "Another job"));
         var codes = new List<HttpStatusCode>();

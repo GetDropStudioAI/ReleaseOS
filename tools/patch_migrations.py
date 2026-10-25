@@ -5,8 +5,8 @@ import re, glob, pathlib
 d = pathlib.Path(__file__).resolve().parent.parent / "src/ReleaseMgmt.Infrastructure/Migrations"
 NS = "ReleaseMgmt.Infrastructure.Migrations"
 BODY = {
- "Schema": ("Creates the 69 tables and 40 indexes, and the default workspace's row, by executing db/schema.sql's DDL and INSERT verbatim\n    /// (the contract, CLAUDE.md rule 1). The EF model (ModelMap) is asserted against the result by SchemaContractTests. Forward-only.", "SchemaSql.TablesAndIndexes().Concat(SchemaSql.Rows())"),
- "Triggers": ("Applies all 141 triggers from db/schema.sql verbatim and in file order (same-event triggers fire newest-first,\n    /// so order decides which rule's error a caller sees). A migration that rebuilds a table must re-apply that table's triggers;\n    /// SchemaContractTests fails if any trigger name is missing.", "SchemaSql.Triggers()"),
+ "Schema": ("Creates the 70 tables and 41 indexes, and the default workspace's row, by executing db/schema.sql's DDL and INSERT verbatim\n    /// (the contract, CLAUDE.md rule 1). The EF model (ModelMap) is asserted against the result by SchemaContractTests. Forward-only.", "SchemaSql.TablesAndIndexes().Concat(SchemaSql.Rows())"),
+ "Triggers": ("Applies all 142 triggers from db/schema.sql verbatim and in file order (same-event triggers fire newest-first,\n    /// so order decides which rule's error a caller sees). A migration that rebuilds a table must re-apply that table's triggers;\n    /// SchemaContractTests fails if any trigger name is missing.", "SchemaSql.Triggers()"),
 }
 for name, (doc, src) in BODY.items():
     f = glob.glob(str(d / f"*_{name}.cs"))

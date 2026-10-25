@@ -194,6 +194,34 @@ for sql, want, label in [
 t8.execute("UPDATE ReleaseTrains SET ReleaseTypeId = 'typ' WHERE Id = 'r2'")
 check(t8.execute("SELECT ReleaseTypeId FROM ReleaseTrains WHERE Id = 'r2'").fetchone() == ("typ",), "008: a release without a type can be given one")
 
+# Upgrade 010 (REOS-117, RT2): existing releases stay out of versions and keep every column, the new table starts empty, the new rules are live
+t10 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("010_"):
+        t10.execute("INSERT INTO ReleaseTypes (Id, Name, SortOrder, IsBeta) VALUES ('tyc', 'CERT', 20, 0), ('typ', 'Production', 40, 0)")
+        t10.execute("UPDATE ReleaseTrains SET ReleaseTypeId = 'tyc' WHERE Id = 'r1'")
+        t10.execute("UPDATE ReleaseTrains SET ReleaseTypeId = 'typ' WHERE Id = 'r2'")
+        t10.execute("INSERT INTO Workspaces (Id, Name, Slug, CreatedAt) VALUES ('w2', 'EU', 'eu', '2026-09-01T00:00:00Z')")
+        before10 = t10.execute("SELECT * FROM ReleaseTrains ORDER BY Id").fetchall()
+    t10.executescript(s.read_text())
+after10 = t10.execute("SELECT * FROM ReleaseTrains ORDER BY Id").fetchall()
+check([r[:-1] for r in after10] == before10 and all(r[-1] is None for r in after10), "010: existing releases keep every column and are in no version")
+check(t10.execute("SELECT COUNT(*) FROM ReleaseVersions").fetchone() == (0,), "010: the new table starts empty")
+for sql, want, label in [
+    ("INSERT INTO ReleaseVersions (Id, Name, CreatedAt) VALUES ('v1', 'Orion 5.2', '2026-09-03T00:00:00Z')", None, "010: a version can be created"),
+    ("INSERT INTO ReleaseVersions (Id, Name, CreatedAt, WorkspaceId) VALUES ('v2', 'Orion 5.2', '2026-09-03T00:00:00Z', 'w2')", None, "010: the same version name in another workspace"),
+    ("INSERT INTO ReleaseVersions (Id, Name, CreatedAt) VALUES ('v3', 'orion 5.2', '2026-09-03T00:00:00Z')", "UNIQUE", "010: a version name twice in a workspace is refused"),
+    ("UPDATE ReleaseTrains SET ReleaseVersionId = 'v2' WHERE Id = 'r1'", "version belongs to another workspace", "010: a release linked to another workspace's version is refused"),
+    ("UPDATE ReleaseTrains SET ReleaseVersionId = 'v1' WHERE Id = 'r1'", None, "010: a release can be linked to a version"),
+    ("UPDATE ReleaseTrains SET ReleaseTypeId = 'typ' WHERE Id = 'r1'", None, "010: a linked release can change type to a free place"),
+    ("UPDATE ReleaseTrains SET ReleaseVersionId = 'v1' WHERE Id = 'r2'", "UNIQUE", "010: two live releases of one type in a version are refused"),
+    ("UPDATE ReleaseVersions SET WorkspaceId = 'w2' WHERE Id = 'v1'", "cannot move to another workspace", "010: a version cannot move to another workspace"),
+]:
+    try:
+        t10.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+
 # Upgrade 009 (REOS-118): the rebuilt ImportJobs keeps its rows and takes the Clients kind, Clients starts empty, the new rules are live
 t9 = baseline_db()
 for s in SCRIPTS:

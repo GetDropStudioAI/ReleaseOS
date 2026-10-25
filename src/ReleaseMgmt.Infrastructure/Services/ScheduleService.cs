@@ -5,7 +5,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 
 namespace ReleaseMgmt.Infrastructure.Services;
 
-/// <summary>Changing TargetReleaseDate recomputes every gate's DueOn in business days (D9) and audits the change.</summary>
+/// <summary>Changing TargetReleaseDate recomputes every gate's DueOn in business days (D9) and audits the change. A release in a version (RT2) also hints the rest of its chain to refresh: the advisory against a later release is derived from the dates.</summary>
 public sealed class ScheduleService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     public Task<ServiceResult<ReleaseTrains>> ChangeTargetDateAsync(string trainId, DateOnly newTarget, Actor actor, int? expectedVersion = null, CancellationToken ct = default) =>
@@ -32,6 +32,7 @@ public sealed class ScheduleService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             t.LastChangedByUserId = actor.UserId; t.LastChangedAt = now; t.UpdatedAt = now; t.Version++;
             Audit(db, actor, trainId, "ReleaseTrain", trainId, "ChangeTargetDate", before,
                 new { target = newTarget.ToString("yyyy-MM-dd"), dueOn = gates.ToDictionary(g => g.GateName, g => g.DueOn.ToString("yyyy-MM-dd")), clientOfferedDatesMoved = moved == 0 ? (int?)null : moved });
+            if (t.ReleaseVersionId is not null) await ReleaseVersionService.TouchChainAsync(db, t.ReleaseVersionId, ct);   // RT2: a later release of the chain may now come too soon; its screen refetches
             await db.SaveChangesAsync(ct);
             return ServiceResult<ReleaseTrains>.Ok(t);
         }, ct);

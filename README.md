@@ -11,9 +11,9 @@ Scoping is complete. This folder is the seed of the repository: drop it in as th
 | `docs/MILESTONES.md` | M0–M8: a ready-to-paste prompt and a "Done when" acceptance test for each |
 | `docs/UI.md`, `docs/ui/tokens.css` | UI rules and design tokens (macOS look, works on Windows, light + dark) |
 | `docs/ui/mockups/` | 9 reference screens as standalone HTML + PNG |
-| `db/schema.sql` | The schema contract: 69 tables, 141 triggers, 40 indexes |
+| `db/schema.sql` | The schema contract: 70 tables, 142 triggers, 41 indexes |
 | `db/analytics.sql` | The 15 metric queries (M1–M15) |
-| `tests/reference/test_schema.py` | 82 enforcement tests against `schema.sql` (`python3 tests/reference/test_schema.py`) |
+| `tests/reference/test_schema.py` | 449 enforcement tests against `schema.sql` (`python3 tests/reference/test_schema.py`) |
 | `tests/reference/seed_and_query.py` | Seeds 6 months of history through the triggers and runs every metric (deterministic) |
 | `tests/reference/fixtures/seed.db`, `expected_metrics.json` | M7's acceptance data: the seeded database and every metric's exact expected rows |
 | `tests/reference/fixtures/r26-24-runbook.csv`, `r26-24-scenario.json` | M3's acceptance scenario: the runbook plan in CSV import format, plus setup, clock, actuals and the exact expected forecast |
@@ -30,7 +30,7 @@ Scoping is complete. This folder is the seed of the repository: drop it in as th
 ## Kickoff prompt (paste into Claude Code)
 ```
 Read CLAUDE.md, then docs/PROJECT_SCOPE.md, docs/DECISIONS.md and docs/MILESTONES.md in full.
-Confirm python3 tests/reference/test_schema.py passes (87/87).
+Confirm python3 tests/reference/test_schema.py passes (449/449).
 Then execute milestone M0 exactly as written in docs/MILESTONES.md.
 Do not make architectural decisions: anything not covered goes into docs/QUESTIONS.md.
 Stop when M0's "Done when" test passes and summarise what you built and anything you parked.

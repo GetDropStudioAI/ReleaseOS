@@ -14,7 +14,7 @@ public sealed record OverviewCards(ActiveReleasesCard ActiveReleases, RunningNow
 public sealed record AttentionItem(string Category, string Kind, string Title, string Detail, string TrainId, string TrainTitle, string DueAt, string EntityId, string? ActionBy);
 public sealed record DailyCompletions(string Date, int Successful, int WithIssues, int Unsuccessful);
 public sealed record ActivityRow(string TrainId, string Title, string Status, string DisplayStatus, string? CloseCode, string RiskTier, string TargetReleaseDate,
-    string? WindowStartsAt, string? WindowEndsAt, string? EndedAt, int Products, int Blockers);
+    string? WindowStartsAt, string? WindowEndsAt, string? EndedAt, int Products, int Blockers, ChainBrief? Chain = null);
 public sealed record OverviewPayload(string From, string To, string AsOf, OverviewCards Cards, IReadOnlyList<AttentionItem> Attention,
     IReadOnlyList<DailyCompletions> Throughput, IReadOnlyList<ActivityRow> Activity);
 
@@ -106,6 +106,7 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
         var closedProducts = await db.Set<BundledProducts>().AsNoTracking().Where(p => closedIds.Contains(p.ReleaseTrainId)).GroupBy(p => p.ReleaseTrainId)
             .Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
         var closedWindows = await db.Set<DeploymentWindows>().AsNoTracking().Where(w => closedIds.Contains(w.ReleaseTrainId)).ToDictionaryAsync(w => w.ReleaseTrainId, ct);
+        var chains = await advisories.ChainBriefsAsync(db, ct);   // RT2: a release in a version shows its chain
         ActivityRow Row(ReleaseTrains t, IReadOnlyDictionary<string, DeploymentWindows> ws, IReadOnlyDictionary<string, int> ps, int b)
         {
             ws.TryGetValue(t.Id, out var w);
@@ -117,7 +118,7 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
                 _ => "Failed",   // Aborted
             };
             return new ActivityRow(t.Id, t.Title, t.CurrentStatus, display, t.CloseCode, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
-                w?.StartsAt.ToString(Iso), w?.EndsAt.ToString(Iso), Ended(t)?.ToString(Iso), ps.GetValueOrDefault(t.Id), b);
+                w?.StartsAt.ToString(Iso), w?.EndsAt.ToString(Iso), Ended(t)?.ToString(Iso), ps.GetValueOrDefault(t.Id), b, chains.GetValueOrDefault(t.Id));
         }
         var activity = open.OrderBy(t => windows.TryGetValue(t.Id, out var w) ? w.StartsAt : Start(t.TargetReleaseDate)).ThenBy(t => t.Title, StringComparer.Ordinal).ThenBy(t => t.Id, StringComparer.Ordinal)
             .Select(t => Row(t, windows, productsPerTrain, blockers[t.Id]))

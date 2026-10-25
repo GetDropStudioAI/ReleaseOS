@@ -59,6 +59,10 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         }
     }
 
+    /// <summary>Marks a train whose screen shows something this call changed without changing the train's own row (RT2: a release's date moves a later release's chain warning).
+    /// Live clients get the usual TrainChanged hint after the commit, and refetch.</summary>
+    protected static void Touch(string trainId) => Touched.Value?.Add(trainId);
+
     /// <summary>A fresh context for read-only queries outside a write transaction.</summary>
     protected async Task<ReleaseDbContext> OpenAsync(CancellationToken ct) => await dbf.CreateDbContextAsync(ct);
 

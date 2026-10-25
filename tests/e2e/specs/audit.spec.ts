@@ -92,6 +92,8 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(rowsOf(page).nth(1)).toHaveClass(/selected/)
       await page.keyboard.press('ArrowUp')
       await expect(rowsOf(page).first()).toHaveClass(/selected/)
+      // the viewer moves focus to the row on the next frame; Enter before that lets the late row focus take it back from the panel (macOS CI, twice)
+      await expect(rowsOf(page).first()).toBeFocused()
       await page.keyboard.press('Enter')
       await expect(detail).toBeVisible()
       await expect(detail.getByRole('button', { name: /Close event details/ })).toBeFocused()

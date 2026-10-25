@@ -291,7 +291,7 @@ public static class DisasterRecoveryDrill
         Check("SQLite integrity_check", integrity == "ok", integrity);
         var restored = DbSnapshot.Read(db);
         var schemaTriggers = Regex.Matches(File.ReadAllText(Path.Combine(RepoRoot(), "db", "schema.sql")), @"^CREATE TRIGGER (\w+)", RegexOptions.Multiline).Select(m => m.Groups[1].Value).ToHashSet();
-        Check("Trigger set equals db/schema.sql", restored.Triggers.SetEquals(schemaTriggers) && schemaTriggers.Count == 141,
+        Check("Trigger set equals db/schema.sql", restored.Triggers.SetEquals(schemaTriggers) && schemaTriggers.Count == 142,
             $"{restored.Triggers.Count} triggers in the database, {schemaTriggers.Count} in schema.sql; missing [{string.Join(",", schemaTriggers.Except(restored.Triggers))}], extra [{string.Join(",", restored.Triggers.Except(schemaTriggers))}]");
         var diffs = truth.Counts.Where(kv => restored.Counts.GetValueOrDefault(kv.Key, -1) != kv.Value).Select(kv => $"{kv.Key}: {kv.Value} -> {restored.Counts.GetValueOrDefault(kv.Key, -1)}").ToList();
         Check("Row counts match in every table", diffs.Count == 0 && restored.Counts.Count == truth.Counts.Count, diffs.Count == 0 ? $"{restored.Counts.Count} tables, {restored.Counts.Values.Sum()} rows" : string.Join("; ", diffs));

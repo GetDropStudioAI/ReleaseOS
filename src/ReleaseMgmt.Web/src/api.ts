@@ -25,6 +25,7 @@ async function call<T>(method: string, url: string, body?: unknown, ifMatch?: nu
 export const get = <T,>(url: string) => call<T>('GET', url)
 export const post = <T,>(url: string, body?: unknown, ifMatch?: number) => call<T>('POST', url, body ?? {}, ifMatch)
 export const patch = <T,>(url: string, body: unknown, ifMatch?: number) => call<T>('PATCH', url, body, ifMatch)
+export const put = <T,>(url: string, body: unknown, ifMatch?: number) => call<T>('PUT', url, body, ifMatch)
 export const del = <T,>(url: string, ifMatch?: number) => call<T>('DELETE', url, undefined, ifMatch)
 
 export async function getMe(): Promise<Me | null> {
@@ -70,7 +71,9 @@ export const advanceTrain = (id: string, to: string, version: number) => post<un
 // REOS-85/88: advisories beside readiness (never guards)
 export interface ContingencyView { state: 'ok' | 'low' | 'over' | 'unknown'; reason: string | null; plannedMin: number | null; rollbackMin: number; plannedStart: string | null; plannedFinish: string | null; rollbackDeadline: string | null; spareMin: number | null; percent: number | null; minPercent: number }
 export interface WindowCollision { otherTrainId: string; otherTitle: string; otherStatus: string; otherStartsAt: string; otherEndsAt: string; sharedCis: string[]; sharedProducts: string[] }
-export interface Advisories { contingency: ContingencyView | null; collisions: WindowCollision[] }
+/** RT2 (D48): a release planned too soon after the one before it in its version's chain. */
+export interface ChainWarning { trainId: string; label: string; target: string; afterTrainId: string; afterLabel: string; afterTarget: string; earliestOn: string; shortByDays: number; message: string }
+export interface Advisories { contingency: ContingencyView | null; collisions: WindowCollision[]; version?: ChainWarning | null }
 export const getAdvisories = (id: string) => get<Advisories>(`/api/v1/trains/${id}/advisories`)
 export const completeTrain = (id: string, closeCode: string, notes: string | null, version: number) => post<unknown>(`/api/v1/trains/${id}:complete`, { closeCode, notes }, version)
 export const abortTrain = (id: string, reason: string, version: number) => post<unknown>(`/api/v1/trains/${id}:abort`, { reason }, version)
@@ -214,7 +217,7 @@ export const updateTemplate = (id: string, b: TemplateInput, version: number) =>
 export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
 // REOS-80 new train: blank, from an Approved template, or a copy of a prior train
 export interface NewTrainBody { title: string; targetReleaseDate: string; riskTier?: string | null; templateId?: string | null; windowStartsAt?: string | null; windowEndsAt?: string | null; products?: { productName: string; versionTag: string; projectCode: string }[]
-  releaseTypeId?: string | null; betaNumber?: number | null }   // REOS-116: the type is required once the workspace has types; a Beta type takes its number, 1 to 3
+  releaseTypeId?: string | null; betaNumber?: number | null; releaseVersionId?: string | null }   // REOS-116; RT2 adds the version: the type is required once the workspace has types; a Beta type takes its number, 1 to 3
 export interface CreatedTrain { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; source: 'Blank' | 'Template' | 'Clone'; templateId: string | null; clonedFromTrainId: string | null; version: number
   created: { products: number; gates: number; tasks: number; steps: number; dependencies: number; commTemplates: number; commSchedule: number; window: boolean }; notes: string[] }
 export const createTrain = (b: NewTrainBody) => post<CreatedTrain>('/api/v1/trains', b)

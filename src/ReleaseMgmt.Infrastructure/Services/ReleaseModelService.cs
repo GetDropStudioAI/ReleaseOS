@@ -137,7 +137,7 @@ public sealed class ReleaseModelService(IDbContextFactory<ReleaseDbContext> dbf,
     public static object Snapshot(ReleaseTrains t, IEnumerable<string> environmentIds) => new
     {
         key = t.ReleaseKey, ownerUserId = t.OwnerUserId, ownerTeamId = t.OwnerTeamId, branch = t.ReleaseBranch, onCallUserId = t.OnCallUserId, onCallTeamId = t.OnCallTeamId,
-        releaseTypeId = t.ReleaseTypeId, betaNumber = t.BetaNumber, environmentIds = environmentIds.Order(StringComparer.Ordinal).ToArray(),
+        releaseTypeId = t.ReleaseTypeId, betaNumber = t.BetaNumber, releaseVersionId = t.ReleaseVersionId, environmentIds = environmentIds.Order(StringComparer.Ordinal).ToArray(),
     };
 
     public Task<ServiceResult<ReleaseModelView>> UpdateAsync(string trainId, ReleasePatch p, Actor actor, int? expectedVersion, CancellationToken ct = default) =>
@@ -171,6 +171,12 @@ public sealed class ReleaseModelService(IDbContextFactory<ReleaseDbContext> dbf,
                 onUser == t.OnCallUserId ? null : onUser, onTeam == t.OnCallTeamId ? null : onTeam, type, wantEnvs, ct, keepType: t.ReleaseTypeId,
                 keepEnvironments: currentEnvs.Select(e => e.EnvironmentId).ToHashSet(), betaNumber: number, requireType: p.ReleaseTypeId is { Length: 0 }, checkBeta: typeChanged || numberChanged || p.BetaNumber is not null);
             if (f.Count > 0) return ServiceResult<ReleaseModelView>.Fail(f);
+
+            if (t.ReleaseVersionId is not null && type is not null && (typeChanged || numberChanged) && t.CurrentStatus != "Aborted")
+            {
+                var slot = await ReleaseVersionService.CheckSlotAsync(db, t.ReleaseVersionId, type, number, t.Id, ct);   // RT2: a release in a version keeps a free place of its own
+                if (slot.Count > 0) return ServiceResult<ReleaseModelView>.Fail(slot);
+            }
 
             var envChanged = wantEnvs is not null && !wantEnvs.ToHashSet().SetEquals(currentEnvs.Select(e => e.EnvironmentId));
             if (owner == t.OwnerUserId && ownerTeam == t.OwnerTeamId && branch == t.ReleaseBranch && type == t.ReleaseTypeId && !numberChanged && onUser == t.OnCallUserId && onTeam == t.OnCallTeamId && !envChanged)

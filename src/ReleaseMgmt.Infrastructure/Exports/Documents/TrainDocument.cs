@@ -104,7 +104,7 @@ public abstract class TrainDocument(ExportModel model, ExportOptions options) : 
 
     // ---- building blocks ------------------------------------------------------------------------------------------------------------------
 
-    protected static void Grid(IContainer c, Col[] cols, IEnumerable<Cell[]> rows)
+    internal static void Grid(IContainer c, Col[] cols, IEnumerable<Cell[]> rows)
     {
         c.Table(t =>
         {
@@ -117,7 +117,7 @@ public abstract class TrainDocument(ExportModel model, ExportOptions options) : 
     }
 
     /// <summary>Label / value rows (no header): 150 px = 112.5 pt label column as in the mockup.</summary>
-    protected static void KeyVal(IContainer c, IEnumerable<(string Key, Cell Value)> rows)
+    internal static void KeyVal(IContainer c, IEnumerable<(string Key, Cell Value)> rows)
     {
         c.Table(t =>
         {
@@ -130,7 +130,7 @@ public abstract class TrainDocument(ExportModel model, ExportOptions options) : 
         });
     }
 
-    protected static void Section(ColumnDescriptor col, string title, Action<IContainer> content, string? note = null)
+    internal static void Section(ColumnDescriptor col, string title, Action<IContainer> content, string? note = null)
     {
         col.Item().Column(s =>
         {
@@ -140,7 +140,7 @@ public abstract class TrainDocument(ExportModel model, ExportOptions options) : 
         });
     }
 
-    protected static void Empty(IContainer c, string text) => c.Text(text).FontColor(PdfStyle.Quiet);
+    internal static void Empty(IContainer c, string text) => c.Text(text).FontColor(PdfStyle.Quiet);
 
     public static string Clip(string? text, int max)
     {

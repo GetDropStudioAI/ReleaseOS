@@ -338,7 +338,7 @@ public class AnalyticsTypeFilterTests(AnalyticsFixture fx) : IClassFixture<Analy
         {
             db.Open();
             using var cmd = db.CreateCommand();
-            cmd.CommandText = "INSERT OR IGNORE INTO ReleaseTypes(Id,Name) VALUES('tA','Type A'),('tB','Type B'); UPDATE ReleaseTrains SET ReleaseTypeId = CASE WHEN rowid % 2 = 0 THEN 'tA' ELSE 'tB' END;";
+            cmd.CommandText = "INSERT OR IGNORE INTO ReleaseTypes(Id,Name) VALUES('tA','Type A'),('tB','Type B'); UPDATE ReleaseTrains SET ReleaseTypeId = CASE WHEN rowid % 2 = 0 THEN 'tA' ELSE 'tB' END WHERE WorkspaceId = 'default';";
             cmd.ExecuteNonQuery();
         }
         var c = fx.Web.CreateClient();

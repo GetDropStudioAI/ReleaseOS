@@ -169,3 +169,18 @@ export const BUILDERS: Record<string, OptionBuilder> = {
     })
   },
 }
+
+// REOS-121: the VP's on-time % per quarter, CERT and Production side by side. The recs are QuarterPoint rows (analyticsExecutive.ts onTimeByQuarter).
+BUILDERS.VP_ONTIME = (recs, p) => {
+  const labels = recs.map(r => s(r.label))
+  const series = (name: 'CERT' | 'Production', color: string) => ({
+    name, type: 'bar', barMaxWidth: 28, itemStyle: { color }, data: recs.map(r => n(r[name])),
+    label: barLabel(p, x => (typeof x.value === 'number' ? `${fmt(x.value)}%` : '')),
+  })
+  return base(p, {
+    legend: { ...legend(p), data: ['CERT', 'Production'] },
+    grid: { left: 44, right: 12, top: 34, bottom: 28 },
+    xAxis: catAxis(p, labels), yAxis: valueAxis(p, 'On time %', { min: 0, max: 100 }),
+    series: [series('CERT', p.accent), series('Production', p.ok)],
+  })
+}

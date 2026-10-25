@@ -2,17 +2,20 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEven
 import { ApiError, get, type Me } from './api'
 import { NONE_CELL, NO_DATA, chartTable, columnHeader, findingM2, findingM3, findingM4, findingM5, findingM6, findingM7, findingM8, findingM9, findingM10, findingM11, findingM13, findingM14, findingM15, headlines, normalize,
   type Metric, type MetricResponse, type Rec } from './analyticsFindings.ts'
-import { analyticsQuery, download, exportName, presetRange, svgWithTitle, toCsv, typeParam, workbookName, workbookUrl } from './analyticsExport.ts'
+import { download, exportName, presetRange, svgWithTitle, toCsv, typeParam, workbookName, workbookUrl } from './analyticsExport.ts'
 import { listReleaseTypes } from './mgmt/releaseTypesApi.ts'
 import { sortTypes, type ReleaseTypeRow } from './mgmt/releaseTypesLogic.ts'
 import { dueText } from './shell/approvalsApi.ts'
-import { Button, ErrorState, FilterSelect, LoadingState, MetricCard, Notice, PageHeading, Panel, type Tone } from './ui'
+import { chosenWorkspaces, defaultChoice, defaultGroup, execQuery, groupingsFor, parseView, portfolioPdfName, portfolioPdfUrl, quarterBasis, scopeHeading, VIEWS, type AnalyticsView, type Scope, type WorkspaceChoice } from './analyticsExecutive.ts'
+import { Button, ErrorState, FilterSelect, LoadingState, MetricCard, Notice, PageHeading, Panel, TabPanel, Tabs, type Tone } from './ui'
 import './analytics.css'
 import { announce } from './announce'
 import { useAction } from './useAction'
 
 // The chart module carries ECharts: it is fetched only when the first chart is about to draw.
 const AnalyticsChart = lazy(() => import('./AnalyticsChart'))
+// REOS-121: the VP and Director views are fetched when first opened.
+const AnalyticsExecutive = lazy(() => import('./AnalyticsViews'))
 
 /**
  * Screen 2, Analytics (REOS-47, mockups/Analytics.html): a period line, six headline figures, then one chart per metric, each titled with the finding computed
@@ -23,8 +26,8 @@ const IDS = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11',
 /** Metrics that are as-of snapshots and ignore the period (Q-046d). */
 const SNAPSHOT = new Set(['M6', 'M9', 'M14'])
 
-interface Spec { id: string; find: (r: Rec[]) => string; sub: string; height?: number; table?: boolean }
-const SPECS: Spec[] = [
+export interface Spec { id: string; find: (r: Rec[]) => string; sub: string; height?: number; table?: boolean }
+export const SPECS: Spec[] = [
   { id: 'M2', find: findingM2, sub: 'Slip vs the baseline captured at Code Freeze, days · M2', height: 230 },
   { id: 'M3', find: findingM3, sub: 'Gate cycle time, first In progress to Certified or Waived, days · M3', height: 230 },
   { id: 'M7', find: findingM7, sub: 'Runbook step overrun vs plan, live runs, minutes · M7', height: 240 },
@@ -47,11 +50,11 @@ const CARD_TONE: Record<'ok' | 'warn' | 'bad', Tone> = { ok: 'success', warn: 'w
 /** Period presets end on the as-of UTC day; they only fill the two dates and apply them, the same query as typing the dates. */
 const PRESETS = [{ label: 'Last 30 days', days: 30 }, { label: 'Last 90 days', days: 90 }, { label: 'Last 12 months', days: 365 }]
 
-interface Entry { metric?: Metric; error?: string }
+export interface Entry { metric?: Metric; error?: string }
 type Loaded = Record<string, Entry>
 
-async function loadAll(from: string, to: string, type: string): Promise<Loaded> {
-  const q = analyticsQuery(from, to, type)
+async function loadAll(from: string, to: string, type: string, choice: WorkspaceChoice): Promise<Loaded> {
+  const q = execQuery({ from, to, type, choice })
   const res = await Promise.allSettled(IDS.map(id => get<MetricResponse>(`/api/v1/analytics/${id}${q}`)))
   const out: Loaded = {}
   res.forEach((r, i) => { out[IDS[i]] = r.status === 'fulfilled' ? { metric: normalize(r.value) } : { error: r.reason instanceof Error ? r.reason.message : String(r.reason) } })
@@ -68,15 +71,32 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   useEffect(() => { listReleaseTypes(true).then(r => setTypes(sortTypes(r))).catch(() => setTypes([])) }, [])
   const [fatal, setFatal] = useState<string | null>(null)
   const seq = useRef(0)
+  // REOS-121 (D49): the view (kept in ?view=), the workspaces it reads (only the person's own, from /analytics/scope) and how the executive views group their rows
+  const [view, setView] = useState<AnalyticsView>(() => parseView(new URLSearchParams(window.location.search).get('view')))
+  const [scope, setScope] = useState<Scope | null>(null)
+  const [scopeErr, setScopeErr] = useState<string | null>(null)
+  const [choice, setChoice] = useState<WorkspaceChoice>(() => defaultChoice(view))
+  const choiceRef = useRef(choice)
+  const [groupBy, setGroupBy] = useState(() => defaultGroup(view))
+  const [applied, setApplied] = useState({ from: '', to: '' })
+  const [pdfErr, setPdfErr] = useState<string | null>(null)
+  const [asOfExec, setAsOfExec] = useState('')
+  useEffect(() => { get<Scope>('/api/v1/analytics/scope').then(setScope).catch(e => setScopeErr((e as Error).message)) }, [])
+  const changeView = (v: AnalyticsView) => {
+    setView(v); setChoice(defaultChoice(v)); choiceRef.current = defaultChoice(v); setGroupBy(defaultGroup(v))
+    const u = new URL(window.location.href); if (v === 'ops') u.searchParams.delete('view'); else u.searchParams.set('view', v)
+    window.history.replaceState(window.history.state, '', u)
+  }
+  const onWindow = useCallback((w: { from: string; to: string; asOf: string }) => { setFrom(w.from); setTo(w.to); setAsOfExec(w.asOf) }, [])
   const [workbookErr, setWorkbookErr] = useState<string | null>(null)
   const { run: act, pending } = useAction()
 
   // `say`: after Apply or Retry the new figures replace the old ones, so the result is spoken once (WCAG 4.1.3); the first load is not announced.
-  const run = useCallback(async (f: string, t: string, say = true, ty = typeRef.current) => {
+  const run = useCallback(async (f: string, t: string, say = true, ty = typeRef.current, ch = choiceRef.current) => {
     const my = ++seq.current
     setBusy(true); setFatal(null)
     try {
-      const d = await loadAll(f, t, ty)
+      const d = await loadAll(f, t, ty, ch)
       if (my !== seq.current) return
       setData(d)
       const any = Object.values(d).find(e => e.metric)?.metric
@@ -89,23 +109,32 @@ export default function AnalyticsScreen(_props: { me: Me }) {
       }
     } finally { if (my === seq.current) setBusy(false) }
   }, [])
-  useEffect(() => { void run('', '', false) }, [run])
+  useEffect(() => { if (view === 'ops') void run('', '', false) }, [run, view])
 
   const bad = !!from && !!to && from > to
-  const apply = (e: FormEvent) => { e.preventDefault(); if (!bad) void run(from, to) }
+  const apply = (e: FormEvent) => { e.preventDefault(); if (bad) return; if (view === 'ops') void run(from, to); else setApplied({ from, to }) }
   const failed = data && !fatal ? SPECS.filter(x => data[x.id]?.error).length : 0
 
   const rec = (id: string) => data?.[id]?.metric?.recs
   const kpis = headlines({ M1: rec('M1'), M2: rec('M2'), M10: rec('M10'), M12: rec('M12'), M13: rec('M13') })
-  const asOf = Object.values(data ?? {}).find(e => e.metric)?.metric?.asOf
+  const asOf = (view === 'ops' ? Object.values(data ?? {}).find(e => e.metric)?.metric?.asOf : asOfExec) || undefined
   const trains = rec('M1')?.[0]?.completed, gates = rec('M3')?.reduce((a, r) => a + (Number(r.samples) || 0), 0), steps = rec('M7')?.length
 
+  const exportPdf = () => act('pdf', async () => {
+    if (!asOf) return
+    setPdfErr(null)
+    try {
+      const r = await fetch(portfolioPdfUrl({ from, to, now: asOf, choice }))
+      if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null))
+      download(portfolioPdfName(from, to), await r.blob())
+    } catch (e) { setPdfErr((e as Error).message) }
+  })
   const exportWorkbook = () => act('workbook', async () => {
-    const m = Object.values(data ?? {}).find(e => e.metric)?.metric
+    const m = view === 'ops' ? Object.values(data ?? {}).find(e => e.metric)?.metric : asOf ? { from, to, asOf } : undefined
     if (!m) return
     setWorkbookErr(null)
     try {
-      const r = await fetch(workbookUrl(m.from, m.to, m.asOf, type))
+      const r = await fetch(workbookUrl(m.from, m.to, m.asOf, type) + execQuery({ choice, groupBy, grouped: true }).replace(/^\?/, '&'))
       if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null))
       download(workbookName(m.from, m.to), await r.blob())
     } catch (e) { setWorkbookErr((e as Error).message) }
@@ -114,7 +143,10 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   const asOfText = asOf ? dueText({ dueAt: asOf, dueOn: null }) : null
   const heading = <PageHeading trail={['Workspace', 'Analytics']} title="Analytics"
     description={<>{asOfText ? <>Data as of <span className="mono">{asOfText.utc}</span>{asOfText.local ? <> ({asOfText.local})</> : null}. </> : null}Blockers, scope churn and links are as of now and ignore the period.</>}
-    actions={asOf ? <Button disabled={!!pending} onClick={() => void exportWorkbook()} aria-label="Export all metrics as one XLSX workbook">{pending ? 'Workbook…' : 'Workbook (XLSX)'}</Button> : undefined} />
+    actions={asOf ? <>
+      {view === 'vp' && <Button disabled={!!pending} onClick={() => void exportPdf()} aria-label="Download the portfolio report as a PDF">{pending === 'pdf' ? 'Report…' : 'Portfolio report (PDF)'}</Button>}
+      <Button disabled={!!pending} onClick={() => void exportWorkbook()} aria-label="Export all metrics as one XLSX workbook">{pending === 'workbook' ? 'Workbook…' : 'Workbook (XLSX)'}</Button>
+    </> : undefined} />
 
   const period = <div>
     <form className="an-period" onSubmit={apply} aria-label="Period">
@@ -122,20 +154,49 @@ export default function AnalyticsScreen(_props: { me: Me }) {
       <label className="an-period-field">to <input className="an-date" type="date" value={to} onChange={e => setTo(e.target.value)} required /></label>
       <Button type="submit" variant="primary" disabled={busy || bad || !from || !to} aria-describedby={bad ? 'an-period-error' : undefined}>{busy ? 'Loading…' : 'Apply'}</Button>
       {asOf && <span className="an-presets" role="group" aria-label="Quick periods">
-        {PRESETS.map(p => <Button key={p.days} disabled={busy} onClick={() => { const r = presetRange(asOf, p.days); setFrom(r.from); setTo(r.to); void run(r.from, r.to) }}>{p.label}</Button>)}
+        {PRESETS.map(p => <Button key={p.days} disabled={busy} onClick={() => { const r = presetRange(asOf, p.days); setFrom(r.from); setTo(r.to); if (view === 'ops') void run(r.from, r.to); else setApplied(r) }}>{p.label}</Button>)}
       </span>}
       <FilterSelect label="Release type" value={type} options={[{ value: '', label: 'All release types' }, ...types.map(t => ({ value: t.id, label: t.name }))]}
-        onChange={v => { setType(v); typeRef.current = v; void run(from, to, true, v) }} />
+        onChange={v => { setType(v); typeRef.current = v; if (view === 'ops') void run(from, to, true, v) }} />
       {typeof trains === 'number' && <span className="an-period-count">{trains} completed {trains === 1 ? 'train' : 'trains'} · {gates ?? 0} gates timed · {steps ?? 0} live steps · dates are UTC days</span>}
     </form>
     {workbookErr && <div role="alert"><Notice tone="danger" title="Workbook export failed">{workbookErr}</Notice></div>}
+    {pdfErr && <div role="alert"><Notice tone="danger" title="Portfolio report failed">{pdfErr}</Notice></div>}
     {bad && <p id="an-period-error" className="an-period-error" role="alert">From must not be after to.</p>}
   </div>
 
-  if (!data) return <div className="os-page">{heading}{period}<LoadingState what="analytics" /></div>
+
+  // the workspaces this view reads: the person's own memberships only (GET /analytics/scope); one workspace means nothing to choose, and the screen says so
+  const mine = scope?.workspaces ?? []
+  const pickWorkspaces = (v: string) => { setChoice(v); choiceRef.current = v; if (view === 'ops') void run(from, to, true, typeRef.current, v) }
+  const wsOptions = [...(view === 'ops' ? [{ value: '', label: 'Current workspace' }] : []), { value: 'all', label: `All my workspaces (${mine.length})` }, ...mine.map(w => ({ value: w.slug, label: w.name }))]
+  const shown = scope ? chosenWorkspaces(scope, choice) : []
+  const controls = <div className="an-scope">
+    <Tabs tabs={VIEWS} value={view} onChange={v => changeView(v as AnalyticsView)} label="Analytics view" group="an-view" />
+    <div className="an-scope-row">
+      {scopeErr ? <Notice tone="danger" title="Your workspaces could not be loaded">{scopeErr}</Notice>
+        : !scope ? <span className="an-note">Loading your workspaces…</span>
+        : mine.length <= 1 ? <span className="an-note" data-testid="an-scope-single">Workspace: {mine[0]?.name ?? 'none'}. You belong to one workspace, so there is nothing to combine.</span>
+        : <span className="an-period-field"><span aria-hidden="true">Workspaces</span><FilterSelect label="Workspaces" value={choice} options={wsOptions} onChange={pickWorkspaces} /></span>}
+      {view !== 'ops' && <span className="an-period-field"><span aria-hidden="true">Group by</span><FilterSelect label="Group by" value={groupBy} options={groupingsFor(view).map(g => ({ value: g.value, label: g.label }))} onChange={setGroupBy} /></span>}
+    </div>
+    {scope && <p className="an-note" data-testid="an-scope-heading">{scopeHeading(shown, mine.length)}{view !== 'ops' ? <> · {quarterBasis(scope)}</> : null}</p>}
+  </div>
+
+  if (view !== 'ops') return <div className="os-page">{heading}{controls}{period}
+    <TabPanel id={view} group="an-view">
+      <Suspense fallback={<LoadingState what="analytics" />}>
+        <AnalyticsExecutive view={view} choice={choice} groupBy={groupBy} from={applied.from} to={applied.to} type={type} onWindow={onWindow} />
+      </Suspense>
+    </TabPanel>
+  </div>
+  // the selected tab always has its panel, loading or not (aria-controls names it)
+  if (!data) return <div className="os-page">{heading}{controls}{period}<TabPanel id="ops" group="an-view"><LoadingState what="analytics" /></TabPanel></div>
   return <div className="os-page">
     {heading}
+    {controls}
     {period}
+    <TabPanel id="ops" group="an-view">
     {fatal && <ErrorState what="Analytics" message={fatal} onRetry={busy ? undefined : () => void run(from, to)} />}
     {failed > 0 && <ErrorState what={`${failed} ${failed === 1 ? 'chart' : 'charts'}`} message={`${failed === 1 ? 'It' : 'They'} did not load; the others are current.`} onRetry={busy ? undefined : () => void run(from, to)} />}
 
@@ -146,12 +207,13 @@ export default function AnalyticsScreen(_props: { me: Me }) {
     </section>
 
     <section className="an-charts" aria-label="Charts">
-      {SPECS.map(s => <ChartCard key={s.id} spec={s} entry={data[s.id]} type={type} />)}
+      {SPECS.map(s => <ChartCard key={s.id} spec={s} entry={data[s.id]} type={type} extraQuery={execQuery({ choice }).replace(/^\?/, '&')} />)}
     </section>
+    </TabPanel>
   </div>
 }
 
-function ChartCard({ spec, entry, type }: { spec: Spec; entry?: Entry; type: string }) {
+export function ChartCard({ spec, entry, type, extraQuery = '' }: { spec: Spec; entry?: Entry; type: string; extraQuery?: string }) {
   const m = entry?.metric
   const finding = m ? spec.find(m.recs) : 'Could not load this chart'
   const empty = !!m && (m.recs.length === 0 || finding === NO_DATA)
@@ -172,7 +234,7 @@ function ChartCard({ spec, entry, type }: { spec: Spec; entry?: Entry; type: str
   const exportXlsx = () => act('xlsx', async () => {
     setErr(null)
     try {
-      const r = await fetch(`/api/v1/analytics/${spec.id}/xlsx?from=${encodeURIComponent(m!.from)}&to=${encodeURIComponent(m!.to)}&now=${encodeURIComponent(m!.asOf)}${typeParam(type)}`)
+      const r = await fetch(`/api/v1/analytics/${spec.id}/xlsx?from=${encodeURIComponent(m!.from)}&to=${encodeURIComponent(m!.to)}&now=${encodeURIComponent(m!.asOf)}${typeParam(type)}${extraQuery}`)
       if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => null))
       download(name('xlsx'), await r.blob())
     } catch (e) { setErr(`XLSX export failed: ${(e as Error).message}`) }

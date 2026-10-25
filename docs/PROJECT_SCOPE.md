@@ -45,7 +45,7 @@ Enforced by ASP.NET authorization policies on every endpoint; the database backs
 | ITSM | Jira + ServiceNow read-only polling, per-link state, mismatch rules, Sync Health | Write-back, inbound webhooks |
 | Comms | Template library, per-train copies, T-minus schedule, token hydration, copy / `mailto:` / allowlisted Teams-Slack webhooks, dispatch log | SMTP, scheduled auto-send |
 | Calendar | Month/week across trains + freeze windows, each release's type, version chain and client dates, filtered by type and client segment; ICS feeds | Environment booking |
-| Analytics | 15 metrics (§8), analytics screen, per-train scorecard | Ad hoc report builder |
+| Analytics | 24 metrics (§8): 15 per workspace, 9 executive across the person's workspaces (REOS-121); analytics screen with VP and Director views; per-train scorecard; portfolio PDF | Ad hoc report builder |
 | Import/export | CSV import (9 kinds), CSV+XLSX export of every grid, 4 PDFs, ICS | Excel import |
 | Session | Per-tab UI state, autosaved drafts, deep links | Co-editing |
 | Admin and support screens | Users, teams, holidays, webhooks, connectors, train templates, comm library, audit viewer, notifications inbox, My work, calendar (see `UI.md`, no mockups) | — |
@@ -177,7 +177,7 @@ REST under `/api/v1`. Mutations take `If-Match: <Version>`; 409 returns the curr
 | Integrations | `GET/POST /trains/{id}/links`, `GET /sync/health`, `GET /sync/alerts`, `POST /sync/alerts/{id}:resolve`, `POST /sync:run-now` |
 | Comms | `GET/POST /trains/{id}/comms`, `POST /comms/{id}:preview`, `POST /comms/{id}:dispatch {channel}`, `GET /trains/{id}/comm-schedule` |
 | Templates | `GET/POST /templates`, `GET/PUT /templates/{id}`, `POST /templates/{id}:approve` `:retire` `:new-version`, `/comm-library` |
-| Analytics | `GET /analytics/{metric}?from&to&train&product&riskTier&gateClass` (M1–M15) |
+| Analytics | `GET /analytics/{metric}?from&to&now&releaseTypeId&workspaces&groupBy` (M1–M24); `GET /analytics/scope`; `GET /analytics/xlsx`, `/analytics/{metric}/xlsx`, `/analytics/portfolio.pdf` (REOS-121). `train`, `product`, `riskTier` and `gateClass` are not supported (Q-046e) |
 | Import | `POST /imports/{kind}:preview` (multipart), `POST /imports/{id}:commit` |
 | Export | `GET /export/{grid}.csv` or `.xlsx`, `POST /exports {kind, trainId}` → job, `GET /exports/{id}` |
 | Calendar | `GET /calendar?from&to[&releaseTypeId][&segment]`, `GET /ics/{token}/trains/{id}.ics`, `GET /ics/{token}/all.ics`, `POST /me/ics-token:rotate` |
@@ -222,6 +222,24 @@ Reference: `docs/ui/mockups/*.html` (open in a browser) and `*.png`. Layout: thr
 | M14 | Sync health | links by state; stalest sync; open alerts |
 | M15 | Throughput | completed per month; median created→complete days |
 
+### Executive metrics (REOS-121, D49)
+
+M16 to M24 serve the VP and Director views. They read **across a set of workspaces** (`workspaces=` slugs, or `all`), always limited to the workspaces the person is a member of: a workspace they are not a member of is the same 404 `WorkspaceNotFound` as anywhere else, so a figure never includes one. No new role. Each row starts with six group columns (`workspace, team, release_type, version, segment, quarter`), `''` where the request (`groupBy=`) does not group by it. A quarter is calendar (`2026-Q3`) unless `Analytics:FiscalYearStartMonth` says otherwise (`FY2027-Q1`, Q-121a). A release's **track** is read from its type's name: `CERT`, `Production`, or `Other`. A release's **segment**: `Standard` for a Production release (every Standard client takes its date, D47), `On-Demand` when it has On-Demand client dates, else `No client segment`; one release can be in both segments, so segment rows are not additive.
+
+| Key | Metric | Definition |
+|---|---|---|
+| M16 | Time to restore | first Failed step of a rolled-back Live run → the run's end; median and longest |
+| M17 | Predictability and change failure | M1/M2 by group **and by track** (CERT and Production measured separately): completed, measured (has a baseline), on time, on-time %, median and longest slip; change failed (close code ≠ Successful) and its % |
+| M18 | Risk and compliance exceptions | per kind: waivers granted, freeze overrides granted, Go conditions left open past expiry, gates decertified, Compliance gates certified after `DueOn`, PIRs overdue |
+| M19 | Approval latency | median and p90 hours: waiver requested → approved; freeze override requested (audit row) → granted; a gate's last task done → certified |
+| M20 | Slip reasons | target moves after the baseline (audit rows): moves, days later/earlier, by reason. A reason is only what the records show (a No-Go decision with that new date); a manual move is "Not recorded" until a reason code exists (needs a `TargetChanges` table: owner decision, proposal 1.6 question 3) |
+| M21 | Risk exposure | **as of now**: open releases by risk tier: nearest target, past target, with blockers, open blockers, High/VeryHigh without a rehearsed rollback |
+| M22 | Throughput by group | completed releases and lead time (created → complete), median and p90 |
+| M23 | Deployment success and availability | deployments linked to a release: successful, failed, rolled back, success %, confirmed threshold breaches (availability ones apart) |
+| M24 | PIR follow-through | reviews of releases that ended in the period: held, held by their due date (`Pir:DueBusinessDays`), overdue now, review actions done and overdue |
+
+The **VP view** is portfolio and quarter rollups, change failure rate, time to restore, risk and compliance exceptions, risk exposure and deployment success. The **Director view** is team and version operations (M22, M17), gate cycle time (M3), blocker ageing (M9), slip reasons, approval latency and PIR follow-through. The analytics workbook takes `workspaces` and `groupBy` and holds M1 to M24; the **portfolio PDF** (`/analytics/portfolio.pdf`, QuestPDF, same page identity and UTC rule as the other PDFs, REOS-137/D51) prints the headline, quarter and workspace tables, lead time, exceptions and risk exposure for the workspaces asked for (all of the person's own by default).
+
 M10 and M15 are labelled release-level, not DORA (no CI/CD commit data in v1). Queries run via `SqlQuery<T>` with bound parameters. Evidence-pack generation writes the values it prints to `MetricSnapshots`.
 
 ## 9. Import and export
@@ -250,6 +268,7 @@ Rules (all enforced in code): UTF-8 (BOM ok), RFC 4180, header required, case-in
 | Runbook run sheet | PDF, CSV | before: plan, owners, deps, rollback; after: actuals, variance, skips with notes |
 | Audit evidence pack | PDF + ZIP | change record; certifications with timestamps + SoD check; transition log; waivers + freeze overrides with reasons; Go/No-Go + conditions; attachment manifest with SHA-256; audit-log extract; metric snapshot. ZIP adds files + `manifest.csv` (columns `workspace, release_key, owner, team, environments` follow `zip_path`) |
 | Post-release scorecard | PDF | planned vs actual, on-time, churn, variance, incidents/rollback, PIR |
+| Portfolio report | PDF | the person's workspaces for a period: headline, by quarter, by workspace (CERT and Production on-time apart), lead time, exceptions, risk exposure (REOS-121; rendered in the request, not an export job) |
 | Analytics workbook | XLSX | `GET /analytics/xlsx`: a `Parameters` sheet first (workspace, period, filters, generated-at in UTC with the display zone beside it, data as-of, a table of the sheets), then `M1`..`M15`, each equal to its per-metric download (REOS-141, Q-141a). Per-metric download: an `About` sheet with the workspace; the per-release metrics (M2, M6, M7, M8) add `release_key, owner, team, environments` after the metric columns |
 | Audit log | CSV | filtered events with before/after JSON |
 | Calendar | ICS | gate due dates, milestones, windows, freezes, and the Standard and On-Demand client dates of CERT and Production releases (release type and version in the category and description); stable UIDs; per-user revocable token; times only |

@@ -68,6 +68,8 @@ public class EndpointRoleMatrixTests
         GET /api/v1/analytics/{metric}                           Read
         GET /api/v1/analytics/{metric}/xlsx                      Read
         GET /api/v1/analytics/xlsx                               Read
+        GET /api/v1/analytics/portfolio.pdf                      Read
+        GET /api/v1/analytics/scope                              Read
         GET /api/v1/approvals                                    Read
         GET /api/v1/attachments                                  Read
         GET /api/v1/attachments/{id}                             Read

@@ -208,3 +208,5 @@
 /* Times (D44, REOS-136): UTC first and labelled; the person's own time beside it in the secondary text colour. */
 .os-time-local { color: var(--color-text-secondary); }
 .os-zone-note { display: block; color: var(--color-text-secondary); font-size: 0.85em; font-weight: 400; }
+/* RT5: a release's client dates, one line per segment and day (calendar upcoming list, overview activity) */
+.os-clientdates { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--gap-sm); }

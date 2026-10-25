@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  addDays, addMonths, applyFilters, conflictsOf, dayLabel, durationText, entriesByDay, freezeDays, NO_FILTER, rangeTitle, releaseRows, riskLabel, stamp, startOfWeek, utcDay, utcHM, visibleDays,
+  addDays, addMonths, applyFilters, conflictsOf, dayLabel, durationText, entriesByDay, filtered, freezeDays, NO_FILTER, rangeTitle, releaseRows, riskLabel, stamp, startOfWeek, utcDay, utcHM, visibleDays,
   type CalendarPayload,
 } from '../src/calendarModel.ts'
 
@@ -105,4 +105,66 @@ test('durations, risk names and the UTC stamp with the person\'s time beside it 
   assert.equal(riskLabel('VeryHigh'), 'Very high')
   assert.deepEqual(stamp('2026-10-23T14:00:00Z', 'America/Chicago'), { utc: '23 Oct 14:00 UTC', local: '09:00 CDT' })
   assert.deepEqual(stamp('2026-10-23T14:00:00Z', 'UTC'), { utc: '23 Oct 14:00 UTC', local: null })
+})
+
+// REOS-120 (RT5, D46 to D49): release types on the rows and cards, client dates as entries, and the type and client-segment filters.
+const clientPayload = (): CalendarPayload => ({
+  from: '2027-03-01', to: '2027-03-14',
+  trains: [
+    { id: 'prod', title: 'Orion Production', status: 'Planning', riskTier: 'Low', targetDate: '2027-03-05', window: null, type: { id: 'ty-prod', name: 'Production' }, clientKind: 'Production', segments: ['Standard', 'OnDemand'] },
+    { id: 'cert', title: 'Orion CERT', status: 'Gated', riskTier: 'Low', targetDate: '2027-03-01', window: null, type: { id: 'ty-cert', name: 'CERT' }, clientKind: 'Cert', segments: ['OnDemand'] },
+    { id: 'beta', title: 'Orion Beta 2', status: 'Executing', riskTier: 'Low', targetDate: '2027-03-03', window: null, type: { id: 'ty-beta', name: 'Beta' }, betaNumber: 2, clientKind: null, segments: [] },
+  ],
+  gates: [{ id: 'g1', name: 'Code Freeze', class: 'Standard', status: 'Pending', dueOn: '2027-03-02', trainId: 'cert', trainTitle: 'Orion CERT', trainStatus: 'Gated' }],
+  freezeWindows: [],
+  clientDates: [
+    { trainId: 'cert', trainTitle: 'Orion CERT', trainStatus: 'Gated', kind: 'Cert', segment: 'OnDemand', date: '2027-03-08', wave: 'On-Demand', count: 1, clients: ['Globex'] },
+    { trainId: 'prod', trainTitle: 'Orion Production', trainStatus: 'Planning', kind: 'Production', segment: 'Standard', date: '2027-03-05', wave: 'Standard', count: 2, clients: ['Acme', 'Zeta'] },
+    { trainId: 'prod', trainTitle: 'Orion Production', trainStatus: 'Planning', kind: 'Production', segment: 'OnDemand', date: '2027-03-12', wave: 'On-Demand', count: 3, clients: ['Globex', 'Initech', 'Umbrella'] },
+  ],
+})
+
+test('a target date names the release type, a numbered Beta its number; a release with no type says nothing extra', () => {
+  const day = entriesByDay(clientPayload(), '2027-03-01')
+  assert.equal(day.get('2027-03-03')!.find(e => e.kind === 'target')!.detail, 'Target date · Beta 2')
+  assert.equal(day.get('2027-03-05')!.find(e => e.kind === 'target')!.detail, 'Target date · Production')
+  assert.ok(day.get('2027-03-05')!.find(e => e.kind === 'target')!.title.includes('Production'))
+  const untyped = clientPayload(); untyped.trains[0].type = null
+  assert.equal(entriesByDay(untyped, '2027-03-01').get('2027-03-05')!.find(e => e.kind === 'target')!.detail, 'Target date')
+})
+
+test('client dates are entries on their day: the segment is a word in the chip, the clients are named, an On-Demand day on the Standard date says so', () => {
+  const day = entriesByDay(clientPayload(), '2027-03-01')
+  const std = day.get('2027-03-05')!.find(e => e.kind === 'client')!
+  assert.equal(std.label, 'Standard'); assert.equal(std.name, '◇ 2 Standard clients'); assert.equal(std.detail, 'Production · Acme, Zeta'); assert.equal(std.trainId, 'prod')
+  const od = day.get('2027-03-12')!.find(e => e.kind === 'client')!
+  assert.equal(od.label, 'On-Demand'); assert.equal(od.name, '◇ 3 On-Demand clients'); assert.equal(od.detail, 'Production · Globex, Initech +1')
+  assert.equal(day.get('2027-03-08')!.find(e => e.kind === 'client')!.detail, 'CERT · Globex')
+  const wave = clientPayload(); wave.clientDates![2] = { ...wave.clientDates![2], date: '2027-03-05', wave: 'Standard' }
+  assert.ok(entriesByDay(wave, '2027-03-01').get('2027-03-05')!.some(e => e.kind === 'client' && e.detail.endsWith('Standard wave')))
+})
+
+test('a release with only a client date in view still gets a row, with its type', () => {
+  const p = clientPayload(); p.trains = p.trains.filter(t => t.id === 'prod'); p.clientDates = p.clientDates!.filter(c => c.segment === 'OnDemand' && c.trainId === 'prod'); p.gates = []
+  const days = ['2027-03-08', '2027-03-09', '2027-03-10', '2027-03-11', '2027-03-12', '2027-03-13', '2027-03-14']
+  const rows = releaseRows(p, entriesByDay(p, '2027-03-01'), days)
+  assert.deepEqual(rows.map(r => [r.id, r.type]), [['prod', 'Production']])
+})
+
+test('filtering by segment narrows the releases and their client dates; combined keeps both segments; type and segment combine', () => {
+  const ids = (d: CalendarPayload) => d.trains.map(t => t.id)
+  const dates = (d: CalendarPayload) => d.clientDates!.map(c => `${c.trainId}:${c.segment}`)
+  const p = clientPayload()
+  assert.deepEqual(ids(applyFilters(p, NO_FILTER)), ['prod', 'cert', 'beta'])
+  const std = applyFilters(p, { ...NO_FILTER, segment: 'Standard' })
+  assert.deepEqual(ids(std), ['prod']); assert.deepEqual(dates(std), ['prod:Standard'])
+  const od = applyFilters(p, { ...NO_FILTER, segment: 'OnDemand' })
+  assert.deepEqual(ids(od), ['prod', 'cert']); assert.deepEqual(dates(od), ['cert:OnDemand', 'prod:OnDemand'])
+  const both = applyFilters(p, { ...NO_FILTER, segment: 'Combined' })
+  assert.deepEqual(ids(both), ['prod', 'cert']); assert.equal(both.clientDates!.length, 3)
+  const mix = applyFilters(p, { ...NO_FILTER, segment: 'OnDemand', type: 'ty-cert' })
+  assert.deepEqual(ids(mix), ['cert']); assert.deepEqual(dates(mix), ['cert:OnDemand'])
+  assert.deepEqual(ids(applyFilters(p, { ...NO_FILTER, type: 'ty-beta' })), ['beta']); assert.deepEqual(dates(applyFilters(p, { ...NO_FILTER, type: 'ty-beta' })), [])
+  assert.deepEqual(applyFilters(p, { ...NO_FILTER, segment: 'Standard' }).gates, [])   // CERT's gate follows its release out
+  assert.equal(filtered({ ...NO_FILTER, segment: 'Combined' }), true)
 })

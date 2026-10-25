@@ -44,7 +44,7 @@ Enforced by ASP.NET authorization policies on every endpoint; the database backs
 | Governance | Go/No-Go record with expiring conditions; freeze windows + reasoned, expiring overrides; SoD; PIR auto-required; hypercare / known issues | Hash-chained audit |
 | ITSM | Jira + ServiceNow read-only polling, per-link state, mismatch rules, Sync Health | Write-back, inbound webhooks |
 | Comms | Template library, per-train copies, T-minus schedule, token hydration, copy / `mailto:` / allowlisted Teams-Slack webhooks, dispatch log | SMTP, scheduled auto-send |
-| Calendar | Month/week across trains + freeze windows; ICS feeds | Environment booking |
+| Calendar | Month/week across trains + freeze windows, each release's type, version chain and client dates, filtered by type and client segment; ICS feeds | Environment booking |
 | Analytics | 15 metrics (§8), analytics screen, per-train scorecard | Ad hoc report builder |
 | Import/export | CSV import (9 kinds), CSV+XLSX export of every grid, 4 PDFs, ICS | Excel import |
 | Session | Per-tab UI state, autosaved drafts, deep links | Co-editing |
@@ -178,7 +178,7 @@ REST under `/api/v1`. Mutations take `If-Match: <Version>`; 409 returns the curr
 | Analytics | `GET /analytics/{metric}?from&to&train&product&riskTier&gateClass` (M1–M15) |
 | Import | `POST /imports/{kind}:preview` (multipart), `POST /imports/{id}:commit` |
 | Export | `GET /export/{grid}.csv` or `.xlsx`, `POST /exports {kind, trainId}` → job, `GET /exports/{id}` |
-| Calendar | `GET /calendar?from&to`, `GET /ics/{token}/trains/{id}.ics`, `GET /ics/{token}/all.ics`, `POST /me/ics-token:rotate` |
+| Calendar | `GET /calendar?from&to[&releaseTypeId][&segment]`, `GET /ics/{token}/trains/{id}.ics`, `GET /ics/{token}/all.ics`, `POST /me/ics-token:rotate` |
 | Session / me | `GET/PUT /me/session/{clientId}`, `GET /me/work`, `GET /me/notifications`, `POST /notifications/{id}:read` |
 | Audit | `GET /audit?train&entity&from&to`, `GET /audit.csv` (GovernanceOfficer, RTE) |
 | Admin | `/users`, `/teams`, `/holidays`, `/webhooks`, `/connectors` |
@@ -250,7 +250,7 @@ Rules (all enforced in code): UTF-8 (BOM ok), RFC 4180, header required, case-in
 | Post-release scorecard | PDF | planned vs actual, on-time, churn, variance, incidents/rollback, PIR |
 | Analytics workbook | XLSX | `GET /analytics/xlsx`: a `Parameters` sheet first (workspace, period, filters, generated-at in UTC with the display zone beside it, data as-of, a table of the sheets), then `M1`..`M15`, each equal to its per-metric download (REOS-141, Q-141a). Per-metric download: an `About` sheet with the workspace; the per-release metrics (M2, M6, M7, M8) add `release_key, owner, team, environments` after the metric columns |
 | Audit log | CSV | filtered events with before/after JSON |
-| Calendar | ICS | gate due dates, milestones, windows, freezes; stable UIDs; per-user revocable token; titles and times only |
+| Calendar | ICS | gate due dates, milestones, windows, freezes, and the Standard and On-Demand client dates of CERT and Production releases (release type and version in the category and description); stable UIDs; per-user revocable token; times only |
 
 Every PDF, the manifest, the grids and the analytics workbook say which workspace they came from and carry the release key, owner, team and environments (REOS-137). PDF times are UTC, labelled, with the display zone beside them (D51): `Mon 2 Nov 2026 14:14 UTC (09:14 CT)`; no second reading when `Display:TimeZone` is UTC. Mechanics: PDFs are `ExportJobs` background jobs; header = document name and workspace; footer = generated-at, generated-by, release key and title, workspace, train `Version`, page n of m; PDF SHA-256 stored. Charts in PDFs are the client's ECharts SVG sent with the request; unattended exports use ECharts `renderToSVGString` in a small Node step. CSV/XLSX cells starting `= + - @`, tab or CR are prefixed with `'` (OWASP CSV injection). Evidence packs are regenerated on demand, never cached.
 

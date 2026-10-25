@@ -56,6 +56,52 @@ public sealed class ClientScheduleService(IDbContextFactory<ReleaseDbContext> db
         return cx is null ? null : await ViewAsync(db, cx, OffsetDays, ct);
     }
 
+    /// <summary>
+    /// Who is on a release and on which day (RT4 rules, one place): Standard clients take the Standard date on a Production release only; an On-Demand client takes its chosen date, else its offered
+    /// date, else the default (Standard date plus the offset) while it has no row. An archived client is on the release only when it already has a row. Null kind (a type with no client dates): nobody.
+    /// </summary>
+    public static List<(Clients Client, ReleaseClientDates? Dates, DateOnly Date)> Plan(string? kind, DateOnly standard, int offset, IEnumerable<Clients> clients, IReadOnlyDictionary<string, ReleaseClientDates> dates)
+    {
+        var rows = new List<(Clients Client, ReleaseClientDates? Dates, DateOnly Date)>();
+        if (kind is null) return rows;
+        foreach (var c in clients)
+        {
+            dates.TryGetValue(c.Id, out var d);
+            if (c.Segment == ClientSegments.Standard) { if (kind == ClientScheduleKinds.Production && c.ArchivedAt is null) rows.Add((c, null, standard)); continue; }
+            if (c.ArchivedAt is not null && d is null) continue;   // an archived client with no row is not on this release
+            rows.Add((c, d, d is null ? standard.AddDays(offset) : d.ChosenDate ?? d.OfferedDate));
+        }
+        return rows;
+    }
+
+    /// <summary>One client's day on one release, for the calendar, the overview and the ICS feeds (RT5). <c>Changed</c> is when its row last changed (null: no row yet).</summary>
+    public sealed record ClientDay(string TrainId, string Kind, string ClientId, string Name, string Segment, DateOnly Date, string Wave, int Version, DateTime? Changed);
+
+    /// <summary>The client days of many releases in four queries (clients, rows, nothing per release). Releases of a type without client dates are absent from the result.</summary>
+    public static async Task<Dictionary<string, List<ClientDay>>> DaysAsync(ReleaseDbContext db, IReadOnlyCollection<ReleaseTrains> trains, int offset, CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, List<ClientDay>>();
+        var typeIds = trains.Select(t => t.ReleaseTypeId).OfType<string>().Distinct().ToList();
+        var kinds = (await db.Set<ReleaseTypes>().AsNoTracking().Where(x => typeIds.Contains(x.Id)).Select(x => new { x.Id, x.Name }).ToListAsync(ct))
+            .Select(x => (x.Id, Kind: ClientScheduleKinds.Of(x.Name))).Where(x => x.Kind is not null).ToDictionary(x => x.Id, x => x.Kind!);
+        var withKind = trains.Where(t => t.ReleaseTypeId is not null && kinds.ContainsKey(t.ReleaseTypeId)).ToList();
+        if (withKind.Count == 0) return result;
+        var clients = await db.Set<Clients>().AsNoTracking().ToListAsync(ct);
+        if (clients.Count == 0) return result;
+        var ids = withKind.Select(t => t.Id).ToList();
+        var rows = (await db.Set<ReleaseClientDates>().AsNoTracking().Where(d => ids.Contains(d.ReleaseTrainId)).ToListAsync(ct)).ToLookup(d => d.ReleaseTrainId);
+        foreach (var t in withKind)
+        {
+            var kind = kinds[t.ReleaseTypeId!];
+            var mine = rows[t.Id].ToDictionary(d => d.ClientId);
+            var days = Plan(kind, t.TargetReleaseDate, offset, clients, mine)
+                .Select(r => new ClientDay(t.Id, kind, r.Client.Id, r.Client.Name, r.Client.Segment, r.Date, r.Date == t.TargetReleaseDate ? "Standard" : "On-Demand", r.Dates?.Version ?? 0, r.Dates?.LastChangedAt ?? r.Dates?.CreatedAt))
+                .OrderBy(d => d.Date).ThenBy(d => d.Segment == ClientSegments.Standard ? 0 : 1).ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase).ThenBy(d => d.ClientId, StringComparer.Ordinal).ToList();
+            if (days.Count > 0) result[t.Id] = days;
+        }
+        return result;
+    }
+
     private async Task<ClientScheduleView> ViewAsync(ReleaseDbContext db, Context cx, int offset, CancellationToken ct)
     {
         var t = cx.Train;
@@ -69,14 +115,7 @@ public sealed class ClientScheduleService(IDbContextFactory<ReleaseDbContext> db
         var names = await db.Set<Users>().AsNoTracking().Where(u => who.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
 
         // One query for every window that touches any shown day; each row then tests its own UTC day.
-        var rows = new List<(Clients Client, ReleaseClientDates? Dates, DateOnly Date)>();
-        foreach (var c in clients)
-        {
-            dates.TryGetValue(c.Id, out var d);
-            if (c.Segment == ClientSegments.Standard) { if (cx.Kind == ClientScheduleKinds.Production && c.ArchivedAt is null) rows.Add((c, null, standard)); continue; }
-            if (c.ArchivedAt is not null && d is null) continue;   // an archived client with no row is not on this release
-            rows.Add((c, d, d is null ? standard.AddDays(offset) : d.ChosenDate ?? d.OfferedDate));
-        }
+        var rows = Plan(cx.Kind, standard, offset, clients, dates);
         var windows = new List<FreezeWindows>();
         if (rows.Count > 0)
         {

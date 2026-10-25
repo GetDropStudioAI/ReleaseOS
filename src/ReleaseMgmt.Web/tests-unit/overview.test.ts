@@ -1,7 +1,7 @@
 // REOS-95: the Overview's pure parts: the range, the chart's scale and wording, the card tones, and the window text.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { RANGES, attentionTone, chartMax, dayText, rangeFrom, shortDay, successTone, windowText, type ActivityRow, type Day } from '../src/shell/overviewApi.ts'
+import { RANGES, SEGMENT_FILTERS, attentionTone, chartMax, clientDateLines, dayText, rangeFrom, rowsForSegment, shortDay, successTone, windowText, type ActivityRow, type Day } from '../src/shell/overviewApi.ts'
 
 const day = (date: string, successful = 0, withIssues = 0, unsuccessful = 0): Day => ({ date, successful, withIssues, unsuccessful })
 
@@ -41,4 +41,30 @@ test('a release row shows its booked window in UTC, or its target date while non
   const row = { targetReleaseDate: '2026-10-28', windowStartsAt: '2026-10-28T02:00:00Z' } as ActivityRow
   assert.match(windowText(row).utc, /^28 Oct 2026, 02:00 UTC$/)
   assert.deepEqual(windowText({ ...row, windowStartsAt: null }), { utc: 'Target 28 Oct 2026', local: null })
+})
+
+// REOS-120 (RT5, D47): client dates on the activity rows and the client-segment filter.
+const row = (trainId: string, clientDates: ActivityRow['clientDates']): ActivityRow => ({
+  trainId, title: trainId, status: 'Planning', displayStatus: 'Planned', closeCode: null, riskTier: 'Low', targetReleaseDate: '2027-03-05', windowStartsAt: null, windowEndsAt: null, endedAt: null,
+  products: 0, blockers: 0, clientKind: clientDates ? 'Production' : null, clientDates,
+})
+const prod = row('prod', [{ segment: 'Standard', date: '2027-03-05', wave: 'Standard', count: 2 }, { segment: 'OnDemand', date: '2027-03-12', wave: 'On-Demand', count: 3 }])
+const cert = row('cert', [{ segment: 'OnDemand', date: '2027-02-26', wave: 'On-Demand', count: 1 }])
+const beta = row('beta', null)
+
+test('client dates read as one line per segment and day, in words', () => {
+  assert.deepEqual(clientDateLines(prod), ['Standard 5 Mar · 2 clients', 'On-Demand 12 Mar · 3 clients'])
+  assert.deepEqual(clientDateLines(cert), ['On-Demand 26 Feb · 1 client'])
+  assert.deepEqual(clientDateLines(beta), [])
+  assert.deepEqual(clientDateLines(row('x', [{ segment: 'OnDemand', date: '2027-03-05', wave: 'Standard', count: 2 }])), ['On-Demand 5 Mar · 2 clients (Standard wave)'])   // taking the Standard date is said in words
+})
+
+test('the segment filter keeps the releases that reach those clients; combined keeps every release with client dates', () => {
+  const rows = [prod, cert, beta]
+  assert.deepEqual(rowsForSegment(rows, 'all').map(r => r.trainId), ['prod', 'cert', 'beta'])
+  assert.deepEqual(rowsForSegment(rows, 'Combined').map(r => r.trainId), ['prod', 'cert'])
+  assert.deepEqual(rowsForSegment(rows, 'Standard').map(r => r.trainId), ['prod'])
+  assert.deepEqual(rowsForSegment(rows, 'OnDemand').map(r => r.trainId), ['prod', 'cert'])
+  assert.deepEqual(clientDateLines(prod, 'OnDemand'), ['On-Demand 12 Mar · 3 clients'])
+  assert.deepEqual(SEGMENT_FILTERS.map(o => o.value), ['all', 'Combined', 'Standard', 'OnDemand'])
 })

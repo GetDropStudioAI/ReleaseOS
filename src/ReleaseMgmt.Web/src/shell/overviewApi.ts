@@ -1,5 +1,6 @@
 import { get } from '../api.ts'
 import { dueText } from './approvalsApi.ts'
+import { segmentLabel } from '../mgmt/clientsLogic.ts'
 
 /** GET /overview?from&to (REOS-108, B2): everything on the Organization overview in one read. Definitions: docs/QUESTIONS.md Q-108a. */
 export interface Card { value: number | null; detail: string }
@@ -16,7 +17,11 @@ export interface ActivityRow {
   trainId: string; title: string; status: string; displayStatus: string; closeCode: string | null; riskTier: string; targetReleaseDate: string
   windowStartsAt: string | null; windowEndsAt: string | null; endedAt: string | null; products: number; blockers: number
   chain?: import('../versions/versionsApi.ts').ChainBrief | null   // RT2 (D48)
+  /** RT1 and RT5 (D46, D47): the release's type, and for a CERT or Production release the days its clients get it (one entry per segment and day). */
+  type?: { id: string; name: string } | null; betaNumber?: number | null
+  clientKind?: 'Cert' | 'Production' | null; clientDates?: ClientDay[] | null
 }
+export interface ClientDay { segment: 'Standard' | 'OnDemand'; date: string; wave: 'Standard' | 'On-Demand'; count: number }
 
 export const RANGES = [{ value: '7', label: 'Last 7 days' }, { value: '14', label: 'Last 14 days' }, { value: '30', label: 'Last 30 days' }, { value: '90', label: 'Last 90 days' }]
 
@@ -56,4 +61,19 @@ export const attentionTone = (n: number | null): 'warning' | 'neutral' => (n ?? 
 export function windowText(r: ActivityRow) {
   if (r.windowStartsAt) return dueText({ dueAt: r.windowStartsAt, dueOn: null })
   return { utc: `Target ${dueText({ dueAt: null, dueOn: r.targetReleaseDate }).utc}`, local: null }
+}
+
+/** The overview's client-segment choices are the calendar's (Standard + On-Demand together, Standard, On-Demand). */
+export { SEGMENT_FILTERS } from '../calendarModel.ts'
+
+/** The activity rows for a client-segment filter: all of them, those that have any client date (combined), or those that reach that segment's clients. */
+export function rowsForSegment(rows: ActivityRow[], segment: string): ActivityRow[] {
+  if (segment === 'all') return rows
+  return rows.filter(r => (r.clientDates ?? []).some(c => segment === 'Combined' || c.segment === segment))
+}
+
+/** One line per client day, in words: "Standard 5 Mar · 2 clients", "On-Demand 12 Mar · 3 clients". An On-Demand day that is the Standard date says so. Dates are calendar dates. */
+export function clientDateLines(r: Pick<ActivityRow, 'clientDates'>, segment = 'all'): string[] {
+  return (r.clientDates ?? []).filter(c => segment === 'all' || segment === 'Combined' || c.segment === segment)
+    .map(c => `${segmentLabel(c.segment)} ${shortDay(c.date)} · ${c.count} ${c.count === 1 ? 'client' : 'clients'}${c.segment === 'OnDemand' && c.wave === 'Standard' ? ' (Standard wave)' : ''}`)
 }

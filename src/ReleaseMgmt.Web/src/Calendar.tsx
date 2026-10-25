@@ -5,13 +5,14 @@ import { buildPath, ROOT, type Route } from './route'
 import { CalendarSubscribe } from './CalendarSubscribe'
 import {
   addDays, addMonths, applyFilters, conflictsOf, filtered, dayLabel, durationText, entriesByDay, freezeDays, NO_FILTER, parseDay, RISKS, rangeTitle, releaseRows, riskLabel, STATUSES,
-  startOfWeek, stamp, utcDay, visibleDays, type CalendarPayload, type CalFreeze, type Conflict, type Entry, type Filters, type Mode,
+  startOfWeek, stamp, utcDay, visibleDays, SEGMENT_FILTERS, kindText, trainTypeText, type CalendarPayload, type CalFreeze, type Conflict, type Entry, type Filters, type Mode,
 } from './calendarModel'
 import './calendar.css'
 import { listReleaseTypes } from './mgmt/releaseTypesApi'
 import { ChainBriefView } from './versions/ChainStrip'
 import { briefText } from './versions/versionsLogic'
-import { sortTypes, type ReleaseTypeRow } from './mgmt/releaseTypesLogic'
+import { sortTypes, typeLabel, type ReleaseTypeRow } from './mgmt/releaseTypesLogic'
+import { segmentLabel } from './mgmt/clientsLogic'
 import { browserZone } from './shell/clock'
 import { serverNow } from './time'
 import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, Notice, PageHeading, Panel, PropertyList, StatusChip, TabPanel, Tabs, TwoLine, type Column } from './ui'
@@ -148,25 +149,34 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
     if (!d) return null
     const clash = new Map<string, string[]>()
     for (const c of conflictsOf(d)) clash.set(c.trainId, [...(clash.get(c.trainId) ?? []), c.text])
+    const clients = new Map<string, NonNullable<CalendarPayload['clientDates']>>()
+    for (const c of d.clientDates ?? []) clients.set(c.trainId, [...(clients.get(c.trainId) ?? []), c])
     return d.trains.filter(t => t.status !== 'Complete' && t.status !== 'Aborted')
-      .map(t => ({ t, at: t.window ? t.window.startsAt : `${t.targetDate}T00:00:00Z`, why: clash.get(t.id) ?? [] }))
+      .map(t => {
+        const own = t.window ? t.window.startsAt : `${t.targetDate}T00:00:00Z`
+        const dates = clients.get(t.id) ?? []
+        // RT5: a release whose own date has passed but whose On-Demand clients are still to come stays in the list, at their next day
+        const next = dates.map(c => `${c.date}T00:00:00Z`).filter(x => x >= `${today}T00:00:00Z`).sort()[0]
+        return { t, at: own >= `${today}T00:00:00Z` || !next ? own : next, why: clash.get(t.id) ?? [], dates }
+      })
       .filter(x => x.at >= `${today}T00:00:00Z`).sort((a, b) => a.at.localeCompare(b.at) || a.t.title.localeCompare(b.t.title)).slice(0, 8)
   }, [upcoming.data, filters, today])
   const nextFreeze = ahead?.[0]
   const windowCount = (d: CalendarPayload | null) => d?.trains.filter(t => t.window).length ?? 0
   const shownEntries = days.flatMap(d => byDay.get(d) ?? [])
   const summary = data
-    ? `${shownEntries.filter(e => e.kind === 'window').length} release windows · ${shownEntries.filter(e => e.kind === 'target').length} target dates · ${shownEntries.filter(e => e.kind === 'milestone').length} milestones · ${new Set(data.freezeWindows.map(f => f.id)).size} freeze or chill windows`
+    ? `${shownEntries.filter(e => e.kind === 'window').length} release windows · ${shownEntries.filter(e => e.kind === 'target').length} target dates · ${shownEntries.filter(e => e.kind === 'milestone').length} milestones · ${shownEntries.filter(e => e.kind === 'client').length} client dates · ${new Set(data.freezeWindows.map(f => f.id)).size} freeze or chill windows`
     : ''
 
   const upcomingCols: Column<NonNullable<typeof upcomingTrains>[number]>[] = [
-    { key: 'release', header: 'Release', cell: x => <><TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => openTrain(x.t.id)}>{x.t.title}</button>} secondary={`${riskLabel(x.t.riskTier)} risk`} />{x.t.chain && <ChainBriefView brief={x.t.chain} currentId={x.t.id} />}</> },
+    { key: 'release', header: 'Release', cell: x => <><TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => openTrain(x.t.id)}>{x.t.title}</button>} secondary={[`${riskLabel(x.t.riskTier)} risk`, trainTypeText(x.t)].filter(Boolean).join(' · ')} />{x.t.chain && <ChainBriefView brief={x.t.chain} currentId={x.t.id} />}</> },
     { key: 'window', header: 'Window · UTC', cell: x => {
       if (!x.t.window) return <TwoLine primary={`Target ${dayLabel(x.t.targetDate)}`} secondary="No deployment window" />
       const s = stamp(x.t.window.startsAt, zone)
       return <TwoLine primary={s.utc} secondary={[durationText(x.t.window.startsAt, x.t.window.endsAt), s.local && `${s.local} for you`].filter(Boolean).join(' · ')} />
     } },
     { key: 'status', header: 'Status', cell: x => <StatusChip>{x.t.status}</StatusChip> },
+    { key: 'clients', header: 'Client dates', cell: x => x.dates.length ? <ul className="os-clientdates">{x.dates.map(c => <li key={`${c.segment}:${c.date}`}>{segmentLabel(c.segment)} {dayLabel(c.date)} <span className="os-muted">({kindText(c.kind)}, {c.count} {c.count === 1 ? 'client' : 'clients'})</span></li>)}</ul> : <span className="os-muted">None</span> },
     { key: 'conflicts', header: 'Conflicts', cell: x => x.why.length ? <span className="os-cal-conflict-text">▲ {x.why[0]}{x.why.length > 1 ? ` (+${x.why.length - 1} more)` : ''}</span> : <span className="os-muted">None</span> },
   ]
 
@@ -174,6 +184,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
     .filter(r => (filters.status === 'all' || r.status === filters.status) && (filters.risk === 'all' || r.riskTier === filters.risk) && (filters.type === 'all' || r.type?.id === filters.type)), [stream, filters])
   const listCols: Column<StreamRow>[] = [
     { key: 'release', header: 'Release', cell: r => <TwoLine primary={r.title} secondary={`${riskLabel(r.riskTier)} risk`} /> },
+    { key: 'type', header: 'Type', cell: r => r.type ? typeLabel(r.type, r.betaNumber) : <span className="os-muted">Not set</span> },
     { key: 'target', header: 'Target date · UTC', cell: r => <TwoLine primary={dayLabel(r.targetReleaseDate)} secondary={r.daysToTarget === 0 ? 'today' : r.daysToTarget > 0 ? `in ${r.daysToTarget} business days` : `${-r.daysToTarget} business days ago`} /> },
     { key: 'status', header: 'Status', cell: r => <StatusChip>{r.status}</StatusChip> },
     { key: 'blockers', header: 'Readiness', cell: r => r.blockers ? <StatusChip tone="warning">{`${r.blockers} ${r.blockers === 1 ? 'blocker' : 'blockers'}`}</StatusChip> : <StatusChip tone="success">No blockers</StatusChip> },
@@ -198,7 +209,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
 
   const loading = view.data === null && !view.error
   const body = view.error && !view.data ? <ErrorState what="The calendar" message={view.error} onRetry={view.retry} /> : loading ? <LoadingState what="the calendar" /> : null
-  const emptyFilter = filtered(filters)
+  const emptyFilter = filtered(tab === 'list' ? { ...filters, segment: 'all' } : filters)   // the Release list holds no client dates, so its filter row has no segment
 
   return (
     <div className="os-page">
@@ -212,6 +223,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
           <FilterSelect label="Status" value={filters.status} onChange={status => setFilters(f => ({ ...f, status }))} options={[{ value: 'all', label: 'All statuses' }, ...STATUSES.map(s => ({ value: s, label: s }))]} />
           <FilterSelect label="Risk tier" value={filters.risk} onChange={risk => setFilters(f => ({ ...f, risk }))} options={[{ value: 'all', label: 'All risk tiers' }, ...RISKS.map(r => ({ value: r.value, label: r.label }))]} />
           <FilterSelect label="Release type" value={filters.type} onChange={type => setFilters(f => ({ ...f, type }))} options={[{ value: 'all', label: 'All release types' }, ...types.map(t => ({ value: t.id, label: t.name }))]} />
+          {tab !== 'list' && <FilterSelect label="Client segment" value={filters.segment} onChange={segment => setFilters(f => ({ ...f, segment }))} options={SEGMENT_FILTERS} />}
         </div>
       </div>
 
@@ -240,7 +252,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
                           return (
                             <tr key={rid}>
                               <th scope="row" className="os-cal-rowhead">
-                                {r ? <TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`, chainLine(r.id)].filter(Boolean).join(' · ')} />
+                                {r ? <TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`, r.type, chainLine(r.id)].filter(Boolean).join(' · ')} />
                                   : rid === EMPTY_ROW ? <TwoLine primary={emptyFilter ? 'No releases match these filters' : 'No releases this week'} secondary={emptyFilter ? 'Change the filters, or go to another week' : 'Go to another week, or plan a release'} />
                                   : <TwoLine primary="Freeze and chill" secondary="Windows that restrict changes" />}
                               </th>
@@ -351,7 +363,7 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
 
 /** The Timeline tab (REOS-134): one bar per release across four weeks, from its first dated item to its last, with freezes as a band on top. */
 function Timeline({ data, days, today, rows, byDay, onOpen, emptyFilter }: {
-  data: CalendarPayload; days: string[]; today: string; rows: { id: string; title: string; status: string; riskTier?: string }[]; byDay: Map<string, Entry[]>
+  data: CalendarPayload; days: string[]; today: string; rows: { id: string; title: string; status: string; riskTier?: string; type?: string }[]; byDay: Map<string, Entry[]>
   onOpen: (id: string) => void; emptyFilter: boolean
 }) {
   const col = (d: string) => days.indexOf(d) + 2   // 1 is the row label
@@ -380,7 +392,7 @@ function Timeline({ data, days, today, rows, byDay, onOpen, emptyFilter }: {
         ))}
         {spans.map(({ r, from, to, n }) => (
           <div role="row" key={r.id} className="os-timeline-row">
-            <div role="rowheader" className="os-timeline-label"><TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`, data.trains.find(t => t.id === r.id)?.chain?.label && `${data.trains.find(t => t.id === r.id)!.chain!.versionName} ${data.trains.find(t => t.id === r.id)!.chain!.label}`].filter(Boolean).join(' · ')} /></div>
+            <div role="rowheader" className="os-timeline-label"><TwoLine primary={r.title} secondary={[r.status, r.riskTier && `${riskLabel(r.riskTier)} risk`, r.type, data.trains.find(t => t.id === r.id)?.chain?.label && `${data.trains.find(t => t.id === r.id)!.chain!.versionName} ${data.trains.find(t => t.id === r.id)!.chain!.label}`].filter(Boolean).join(' · ')} /></div>
             <div role="cell" className="os-timeline-cell" style={{ gridColumn: `${col(from)} / ${col(to) + 1}` }}>
               <button type="button" className={`os-timeline-bar ${r.status === 'Executing' ? 'info' : r.status === 'Complete' ? 'success' : r.status === 'Aborted' ? 'danger' : 'neutral'}`} data-testid="timeline-bar"
                 title={`${r.title}: ${n} dated ${n === 1 ? 'item' : 'items'}, ${dayLabel(from)} to ${dayLabel(to)}`} onClick={() => onOpen(r.id)}>

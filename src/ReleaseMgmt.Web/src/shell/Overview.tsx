@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, MetricCard, PageHeading, Panel, StatusChip, TwoLine, type Column } from '../ui'
 import { dueText } from './approvalsApi.ts'
-import { RANGES, attentionTone, getOverview, successTone, windowText, type ActivityRow, type AttentionItem, type Overview as Data } from './overviewApi.ts'
+import { RANGES, SEGMENT_FILTERS, attentionTone, clientDateLines, getOverview, rowsForSegment, successTone, windowText, type ActivityRow, type AttentionItem, type Overview as Data } from './overviewApi.ts'
 import { ThroughputChart } from './ThroughputChart.tsx'
 import { ChainBriefView } from '../versions/ChainStrip.tsx'
+import { typeLabel } from '../mgmt/releaseTypesLogic.ts'
+import { kindText } from '../calendarModel.ts'
 
 /**
  * The Organization overview (REOS-95, Figma 6:4718): four metric cards, release throughput, the release activity table, what needs attention, and environment
@@ -13,6 +15,7 @@ import { ChainBriefView } from '../versions/ChainStrip.tsx'
  */
 export function Overview({ refreshKey, canCreate, onCreate, onOpen }: { refreshKey: number; canCreate: boolean; onCreate: () => void; onOpen: (trainId: string, gateId?: string) => void }) {
   const [days, setDays] = useState('14')
+  const [segment, setSegment] = useState('all')   // RT5: the client-segment filter of the activity table
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
@@ -34,11 +37,14 @@ export function Overview({ refreshKey, canCreate, onCreate, onOpen }: { refreshK
   const delta = cards.deploymentSuccess.deltaPts
   const columns: Column<ActivityRow>[] = [
     { key: 'release', header: 'Release', cell: r => <><TwoLine primary={<button type="button" className="os-link os-link-button" onClick={() => onOpen(r.trainId)}>{r.title}</button>} secondary={`${r.products} ${r.products === 1 ? 'product' : 'products'}${r.blockers ? ` · ${r.blockers} ${r.blockers === 1 ? 'blocker' : 'blockers'}` : ''}`} />{r.chain && <ChainBriefView brief={r.chain} currentId={r.trainId} />}</> },
+    { key: 'type', header: 'Type', cell: r => r.type ? typeLabel(r.type, r.betaNumber) : <span className="os-muted">Not set</span> },
+    { key: 'clients', header: 'Client dates', cell: r => { const lines = clientDateLines(r, segment); return lines.length ? <><span className="os-muted">{kindText(r.clientKind ?? '')}</span><ul className="os-clientdates">{lines.map(l => <li key={l}>{l}</li>)}</ul></> : <span className="os-muted">None</span> } },
     { key: 'status', header: 'Status', cell: r => <StatusChip>{r.displayStatus}</StatusChip> },
     { key: 'risk', header: 'Risk', cell: r => r.riskTier },
     { key: 'window', header: 'Window', cell: r => { const w = windowText(r); return <TwoLine primary={w.utc} secondary={w.local ?? undefined} /> } },
   ]
   const attention = data.attention
+  const activity = rowsForSegment(data.activity, segment)
   return (
     <div className="os-page">
       {heading}
@@ -58,8 +64,9 @@ export function Overview({ refreshKey, canCreate, onCreate, onOpen }: { refreshK
         </Panel>
       </div>
       <Panel title="Release activity" subtitle="Open releases, then those completed or aborted in the range"
-        footer={<span>Showing {data.activity.length} {data.activity.length === 1 ? 'release' : 'releases'} · as of {dueText({ dueAt: data.asOf, dueOn: null }).utc}</span>}>
-        <DataTable caption="Release activity" columns={columns} rows={data.activity} rowKey={r => r.trainId} empty="No releases are open and none completed in this range." />
+        meta={<FilterSelect label="Client segment" value={segment} options={SEGMENT_FILTERS} onChange={setSegment} />}
+        footer={<span>Showing {activity.length} {activity.length === 1 ? 'release' : 'releases'} · as of {dueText({ dueAt: data.asOf, dueOn: null }).utc}</span>}>
+        <DataTable caption="Release activity" columns={columns} rows={activity} rowKey={r => r.trainId} empty={segment === 'all' ? 'No releases are open and none completed in this range.' : 'No release in this range has dates for these clients.'} />
       </Panel>
       <Panel title="Environment health">
         <EmptyState title="Environments are not tracked yet">Availability and change freezes per environment appear here once environments and deployments are in ReleaseOS (REOS-110).</EmptyState>

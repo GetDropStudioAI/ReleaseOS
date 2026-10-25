@@ -5,12 +5,23 @@
 import { localClock } from './shell/clock.ts'
 import { chipTone, type Tone } from './ui/tone.ts'
 import type { ChainBrief } from './versions/versionsApi.ts'
+import { typeLabel } from './mgmt/releaseTypesLogic.ts'
+import { segmentLabel } from './mgmt/clientsLogic.ts'
 
-export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[]; type?: { id: string; name: string } | null; betaNumber?: number | null; chain?: ChainBrief | null }
+export interface CalTrain { id: string; title: string; status: string; riskTier: string; targetDate: string; window: { startsAt: string; endsAt: string } | null; collisions?: { trainId: string; title: string; shared: string[] }[]; type?: { id: string; name: string } | null; betaNumber?: number | null; chain?: ChainBrief | null
+  /** RT5 (D47): "Cert" or "Production" when the release's type carries client dates, and the segments whose clients it reaches (regardless of the range shown). */
+  clientKind?: 'Cert' | 'Production' | null; segments?: Segment[] }
 export interface CalGate { id: string; name: string; class: string; status: string; dueOn: string; trainId: string; trainTitle: string; trainStatus: string }
 export interface CalFreeze { id: string; name: string; kind: 'Freeze' | 'Chill'; startsAt: string; endsAt: string; scope: string }
 export interface CalMilestone { id: string; name: string; dueOn: string; done: boolean; trainId: string; trainTitle: string; trainStatus: string }
-export interface CalendarPayload { from: string; to: string; trains: CalTrain[]; gates: CalGate[]; freezeWindows: CalFreeze[]; milestones?: CalMilestone[] }
+export type Segment = 'Standard' | 'OnDemand'
+/** RT5 (D47): the day some of a release's clients get it; one entry per release, segment and day. `wave` is "Standard" when the day is the release's Standard date. */
+export interface CalClientDate { trainId: string; trainTitle: string; trainStatus: string; kind: 'Cert' | 'Production'; segment: Segment; date: string; wave: 'Standard' | 'On-Demand'; count: number; clients: string[] }
+export interface CalendarPayload { from: string; to: string; trains: CalTrain[]; gates: CalGate[]; freezeWindows: CalFreeze[]; milestones?: CalMilestone[]; clientDates?: CalClientDate[] }
+
+/** "Production" for a numbered or plain type, "Beta 2" for a numbered Beta; empty when the release has no type. */
+export const trainTypeText = (t: Pick<CalTrain, 'type' | 'betaNumber'>): string => typeLabel(t.type, t.betaNumber)
+export const kindText = (kind: string): string => (kind === 'Cert' ? 'CERT' : kind)
 
 // ---- date arithmetic on 'YYYY-MM-DD' strings (calendar days, no zone) ----
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -56,20 +67,28 @@ export const RISKS: { value: string; label: string }[] = [
 ]
 export const riskLabel = (r: string) => RISKS.find(x => x.value === r)?.label ?? r
 
-export interface Filters { status: string; risk: string; type: string }   // 'all' or a value; type is a release type id (REOS-116)
-export const NO_FILTER: Filters = { status: 'all', risk: 'all', type: 'all' }
-export const filtered = (f: Filters) => f.status !== 'all' || f.risk !== 'all' || f.type !== 'all'
-const keeps = (f: Filters, status: string, risk: string | undefined, type?: string) => (f.status === 'all' || f.status === status) && (f.risk === 'all' || (risk !== undefined && f.risk === risk)) && (f.type === 'all' || (type !== undefined && f.type === type))
+export interface Filters { status: string; risk: string; type: string; segment: string }   // 'all' or a value; type is a release type id (REOS-116); segment is Standard, OnDemand or Combined (RT5)
+export const NO_FILTER: Filters = { status: 'all', risk: 'all', type: 'all', segment: 'all' }
+export const filtered = (f: Filters) => f.status !== 'all' || f.risk !== 'all' || f.type !== 'all' || f.segment !== 'all'
+/** The client-segment filter's choices. "Standard + On-Demand" is the combined view: the releases that have client dates, both segments side by side. */
+export const SEGMENT_FILTERS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All clients' }, { value: 'Combined', label: 'Standard + On-Demand' }, { value: 'Standard', label: 'Standard clients' }, { value: 'OnDemand', label: 'On-Demand clients' },
+]
+const reaches = (f: Filters, segments: Segment[] | undefined) => f.segment === 'all' || (segments ?? []).some(x => f.segment === 'Combined' || x === f.segment)
+const keeps = (f: Filters, status: string, risk: string | undefined, type?: string, segments?: Segment[]) =>
+  (f.status === 'all' || f.status === status) && (f.risk === 'all' || (risk !== undefined && f.risk === risk)) && (f.type === 'all' || (type !== undefined && f.type === type)) && reaches(f, segments)
 
 /** The filters narrow trains, and the gates and milestones that belong to them, together; freezes are the workspace's and are never filtered. */
 export function applyFilters(d: CalendarPayload, f: Filters): CalendarPayload {
   if (!filtered(f)) return d
   const risk = new Map(d.trains.map(t => [t.id, t.riskTier]))
   const type = new Map(d.trains.map(t => [t.id, t.type?.id]))
-  const trainOk = (id: string, status: string) => keeps(f, status, risk.get(id), type.get(id))
+  const segs = new Map(d.trains.map(t => [t.id, t.segments]))
+  const trainOk = (id: string, status: string) => keeps(f, status, risk.get(id), type.get(id), segs.get(id))
   return {
     ...d,
-    trains: d.trains.filter(t => keeps(f, t.status, t.riskTier, t.type?.id)),
+    trains: d.trains.filter(t => keeps(f, t.status, t.riskTier, t.type?.id, t.segments)),
+    clientDates: (d.clientDates ?? []).filter(c => trainOk(c.trainId, c.trainStatus) && (f.segment === 'all' || f.segment === 'Combined' || c.segment === f.segment)),
     gates: d.gates.filter(g => trainOk(g.trainId, g.trainStatus)),
     milestones: (d.milestones ?? []).filter(m => trainOk(m.trainId, m.trainStatus)),
   }
@@ -98,7 +117,7 @@ export function conflictsOf(d: CalendarPayload): Conflict[] {
 
 // ---- entries of a day ----
 export interface Entry {
-  key: string; kind: 'window' | 'target' | 'gate' | 'milestone'; trainId: string; gateId?: string; trainTitle: string; trainStatus: string; status: string
+  key: string; kind: 'window' | 'target' | 'gate' | 'milestone' | 'client'; trainId: string; gateId?: string; trainTitle: string; trainStatus: string; status: string
   /** The status word shown in the card's chip, and its tone (the word is always shown: colour only repeats it). */
   label: string; tone: Tone
   /** First line (the card's name) and the second (time range or what it is). */
@@ -116,12 +135,13 @@ export function entriesByDay(d: CalendarPayload, today: string): Map<string, Ent
   const clash = conflictsOf(d)
   for (const t of d.trains) {
     const word = t.status.toLowerCase()
+    const ty = trainTypeText(t)
     const why = clash.filter(c => c.trainId === t.id).map(c => c.text)
     if (t.window) {
       add(utcDay(t.window.startsAt), { key: `w:${t.id}`, kind: 'window', trainId: t.id, trainTitle: t.title, trainStatus: t.status, status: t.status, label: t.status, tone: chipTone(t.status), name: t.title,
         detail: `${utcHM(t.window.startsAt)}–${utcHM(t.window.endsAt)} UTC`, title: `${t.title}, deployment window ${utcHM(t.window.startsAt)} to ${utcHM(t.window.endsAt)} UTC, ${word}`, conflict: why[0] })
     }
-    add(t.targetDate, { key: `t:${t.id}`, kind: 'target', trainId: t.id, trainTitle: t.title, trainStatus: t.status, status: t.status, label: t.status, tone: chipTone(t.status), name: t.title, detail: 'Target date', title: `${t.title}, target release date, ${word}` })
+    add(t.targetDate, { key: `t:${t.id}`, kind: 'target', trainId: t.id, trainTitle: t.title, trainStatus: t.status, status: t.status, label: t.status, tone: chipTone(t.status), name: t.title, detail: ty ? `Target date · ${ty}` : 'Target date', title: `${t.title}${ty ? `, ${ty}` : ''}, target release date, ${word}` })
   }
   for (const g of d.gates)
     add(g.dueOn, { key: `g:${g.id}`, kind: 'gate', trainId: g.trainId, gateId: g.id, trainTitle: g.trainTitle, trainStatus: g.trainStatus, status: g.status, label: cap(GATE_WORD[g.status] ?? g.status.toLowerCase()), tone: chipTone(g.status), name: `${g.name} due`, detail: g.trainTitle, title: `${g.name} gate of ${g.trainTitle}, due, ${GATE_WORD[g.status] ?? g.status.toLowerCase()}` })
@@ -129,6 +149,15 @@ export function entriesByDay(d: CalendarPayload, today: string): Map<string, Ent
   for (const ms of d.milestones ?? []) {
     const state = ms.done ? 'done' : ms.dueOn < today ? 'overdue' : 'open'
     add(ms.dueOn, { key: `m:${ms.id}`, kind: 'milestone', trainId: ms.trainId, trainTitle: ms.trainTitle, trainStatus: ms.trainStatus, status: state, label: cap(state), tone: MILESTONE_TONE[state], name: `◆ ${ms.name}`, detail: ms.trainTitle, title: `Milestone ${ms.name} of ${ms.trainTitle}, ${state}` })
+  }
+  // RT5 (D47): the days the release's clients get it. The chip says the segment in words ("Standard", "On-Demand"); colour only repeats it.
+  for (const c of d.clientDates ?? []) {
+    const seg = segmentLabel(c.segment), what = kindText(c.kind)
+    const names = c.clients.length <= 2 ? c.clients.join(', ') : `${c.clients.slice(0, 2).join(', ')} +${c.clients.length - 2}`
+    const wave = c.segment === 'OnDemand' && c.wave === 'Standard' ? ' · Standard wave' : ''
+    add(c.date, { key: `c:${c.trainId}:${c.segment}:${c.date}`, kind: 'client', trainId: c.trainId, trainTitle: c.trainTitle, trainStatus: c.trainStatus, status: seg, label: seg, tone: c.segment === 'Standard' ? 'neutral' : 'info',
+      name: `◇ ${c.count} ${c.segment === 'Standard' ? 'Standard' : 'On-Demand'} ${c.count === 1 ? 'client' : 'clients'}`, detail: `${what} · ${names}${wave}`,
+      title: `${c.trainTitle}, ${what} for ${seg} ${c.count === 1 ? 'client' : 'clients'} ${c.clients.join(', ')}, ${c.date}${wave}` })
   }
   return m
 }
@@ -151,7 +180,7 @@ export function durationText(startsAt: string, endsAt: string): string {
   return `${min}m window`
 }
 
-export interface ReleaseRow { id: string; title: string; status: string; riskTier?: string }
+export interface ReleaseRow { id: string; title: string; status: string; riskTier?: string; type?: string }
 /** The week grid's rows: each release with an entry on a visible day (its own windows, target, gates or milestones), in order of its first one. */
 export function releaseRows(d: CalendarPayload, byDay: Map<string, Entry[]>, days: string[]): ReleaseRow[] {
   const known = new Map(d.trains.map(t => [t.id, t]))
@@ -159,7 +188,7 @@ export function releaseRows(d: CalendarPayload, byDay: Map<string, Entry[]>, day
   for (const day of days) for (const e of byDay.get(day) ?? []) {
     if (rows.has(e.trainId)) continue
     const t = known.get(e.trainId)
-    rows.set(e.trainId, { id: e.trainId, title: e.trainTitle, status: t?.status ?? e.trainStatus, riskTier: t?.riskTier })
+    rows.set(e.trainId, { id: e.trainId, title: e.trainTitle, status: t?.status ?? e.trainStatus, riskTier: t?.riskTier, type: t ? trainTypeText(t) || undefined : undefined })
   }
   return [...rows.values()]
 }

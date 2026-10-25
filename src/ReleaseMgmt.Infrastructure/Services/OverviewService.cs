@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Domain.Entities;
 using ReleaseMgmt.Infrastructure.Persistence;
 using ReleaseMgmt.Infrastructure.Reminders;
@@ -14,7 +16,10 @@ public sealed record OverviewCards(ActiveReleasesCard ActiveReleases, RunningNow
 public sealed record AttentionItem(string Category, string Kind, string Title, string Detail, string TrainId, string TrainTitle, string DueAt, string EntityId, string? ActionBy);
 public sealed record DailyCompletions(string Date, int Successful, int WithIssues, int Unsuccessful);
 public sealed record ActivityRow(string TrainId, string Title, string Status, string DisplayStatus, string? CloseCode, string RiskTier, string TargetReleaseDate,
-    string? WindowStartsAt, string? WindowEndsAt, string? EndedAt, int Products, int Blockers, ChainBrief? Chain = null);
+    string? WindowStartsAt, string? WindowEndsAt, string? EndedAt, int Products, int Blockers, ChainBrief? Chain = null,
+    NamedRef? Type = null, int? BetaNumber = null, string? ClientKind = null, IReadOnlyList<OverviewClientDay>? ClientDates = null);
+/// <summary>RT5: the day some of a release's clients get it (one entry per segment and day; <c>Segment</c> is "Standard" or "OnDemand", <c>Wave</c> "Standard" when the day is the Standard date).</summary>
+public sealed record OverviewClientDay(string Segment, string Date, string Wave, int Count);
 public sealed record OverviewPayload(string From, string To, string AsOf, OverviewCards Cards, IReadOnlyList<AttentionItem> Attention,
     IReadOnlyList<DailyCompletions> Throughput, IReadOnlyList<ActivityRow> Activity);
 
@@ -32,7 +37,7 @@ public sealed record OverviewPayload(string From, string To, string AsOf, Overvi
 /// </list>
 /// A gate's due time is the end of its <c>DueOn</c> day in <c>Display:TimeZone</c> (business days are counted there). Read-only.
 /// </summary>
-public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, TrainLifecycleService lifecycle, AdvisoryService advisories, DisplayClock clock)
+public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, TrainLifecycleService lifecycle, AdvisoryService advisories, DisplayClock clock, IConfiguration? config = null)
 {
     public const int DefaultDays = 14;
     public const int MaxRangeDays = 400;
@@ -107,6 +112,10 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             .Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
         var closedWindows = await db.Set<DeploymentWindows>().AsNoTracking().Where(w => closedIds.Contains(w.ReleaseTrainId)).ToDictionaryAsync(w => w.ReleaseTrainId, ct);
         var chains = await advisories.ChainBriefsAsync(db, ct);   // RT2: a release in a version shows its chain
+        var shown = open.Concat(closedInRange).ToList();   // RT1/RT5: the type and the client days of every row shown
+        var typeIds = shown.Select(t => t.ReleaseTypeId).OfType<string>().Distinct().ToList();
+        var types = await db.Set<ReleaseTypes>().AsNoTracking().Where(x => typeIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new NamedRef(x.Id, x.Name), ct);
+        var clientDays = await ClientScheduleService.DaysAsync(db, shown, ClientScheduleKinds.OffsetFrom(config?[ClientScheduleKinds.OffsetKey]), ct);
         ActivityRow Row(ReleaseTrains t, IReadOnlyDictionary<string, DeploymentWindows> ws, IReadOnlyDictionary<string, int> ps, int b)
         {
             ws.TryGetValue(t.Id, out var w);
@@ -118,7 +127,11 @@ public sealed class OverviewService(IDbContextFactory<ReleaseDbContext> dbf, Tim
                 _ => "Failed",   // Aborted
             };
             return new ActivityRow(t.Id, t.Title, t.CurrentStatus, display, t.CloseCode, t.RiskTier, t.TargetReleaseDate.ToString("yyyy-MM-dd"),
-                w?.StartsAt.ToString(Iso), w?.EndsAt.ToString(Iso), Ended(t)?.ToString(Iso), ps.GetValueOrDefault(t.Id), b, chains.GetValueOrDefault(t.Id));
+                w?.StartsAt.ToString(Iso), w?.EndsAt.ToString(Iso), Ended(t)?.ToString(Iso), ps.GetValueOrDefault(t.Id), b, chains.GetValueOrDefault(t.Id),
+                t.ReleaseTypeId is { } ty && types.TryGetValue(ty, out var type) ? type : null, t.BetaNumber,
+                clientDays.TryGetValue(t.Id, out var cd) ? cd[0].Kind : null,
+                clientDays.TryGetValue(t.Id, out var days) ? [.. days.GroupBy(d => (d.Segment, d.Date)).OrderBy(g => g.Key.Date).ThenBy(g => g.Key.Segment == ClientSegments.Standard ? 0 : 1)
+                    .Select(g => new OverviewClientDay(g.Key.Segment, g.Key.Date.ToString("yyyy-MM-dd"), g.First().Wave, g.Count()))] : null);
         }
         var activity = open.OrderBy(t => windows.TryGetValue(t.Id, out var w) ? w.StartsAt : Start(t.TargetReleaseDate)).ThenBy(t => t.Title, StringComparer.Ordinal).ThenBy(t => t.Id, StringComparer.Ordinal)
             .Select(t => Row(t, windows, productsPerTrain, blockers[t.Id]))

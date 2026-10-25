@@ -50,7 +50,7 @@ table.os-cal.week td { min-height: 72px; }
 .os-cal-card.info { border-left-color: var(--color-accent-fill); background: var(--color-bg-accent-subtle); }
 .os-cal-card.warning { border-left-color: var(--color-status-warning); background: var(--color-bg-warning-subtle); }
 .os-cal-card.danger { border-left-color: var(--color-status-danger); background: var(--color-bg-danger-subtle); }
-.os-cal-card.gate, .os-cal-card.milestone { background: transparent; border-left-width: 2px; }
+.os-cal-card.gate, .os-cal-card.milestone, .os-cal-card.client { background: transparent; border-left-width: 2px; }
 .os-cal-card.conflict { outline: var(--border-width) dashed var(--color-status-warning); }
 .os-cal-card:hover .os-cal-card-name { text-decoration: underline; text-underline-offset: 3px; }
 .os-cal-card:focus-visible { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }

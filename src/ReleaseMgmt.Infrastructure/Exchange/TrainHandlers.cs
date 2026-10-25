@@ -209,6 +209,9 @@ internal sealed class TrainsHandler : KindHandler
                     // ... and every gate's DueOn (business days, D9)
                     foreach (var g in await env.Db.Set<StageGates>().Where(g => g.ReleaseTrainId == t.Id).ToListAsync(ct))
                     { g.DueOn = BusinessDays.SubtractBusinessDays(t.TargetReleaseDate, g.OffsetDays, env.Holidays); g.Version++; }
+                    // RT7 (Q9): ... and every milestone that came from a template, by its offset
+                    await Services.MilestoneService.ShiftWithTargetAsync(env.Db, t.Id, t.TargetReleaseDate, env.Now, env.Actor.UserId,
+                        (m, was) => env.Audit(t.Id, "Milestone", m.Id, "MovedWithTarget", new { dueOn = was.ToString("yyyy-MM-dd") }, new { dueOn = m.DueOn.ToString("yyyy-MM-dd"), m.OffsetDays, m.Version }), ct);
                 }
                 if (p.Changed.Contains("RiskTier")) t.RiskTier = p.After["RiskTier"];
                 if (p.Changed.Contains("Template")) t.TemplateId = templateId;
@@ -346,6 +349,10 @@ internal sealed class GatesHandler : TrainScopedHandler
     {
         PlanLock(env, row, r, p);
         OwnerActive(env, row, p, ((OwnerPayload)r.Payload!).User);
+        // RT7 (Q8): a Compliance gate that came from an approved template cannot be downgraded by file either.
+        if (p.Op == RowOp.Updated && p.Changed.Contains("GateClass") && p.After["GateClass"] is { Length: > 0 } cls && cls != "Compliance"
+            && env.Db.Set<StageGates>().AsNoTracking().Any(g => g.Id == p.Existing!.Id && g.TemplateLocked == 1))
+            env.Err(row.Row, "GateClass", $"Gate {p.Existing!.Cells["GateName"]} is a Compliance gate from the approved template and cannot be made {cls}; request a waiver to skip it");
         if (p.Op == RowOp.Updated && p.Existing!.ReadOnly.FirstOrDefault(x => x.Key == "#Status").Value is "Certified" or "Waived" && p.Changed.Count > 0)
             env.Err(row.Row, p.Changed[0], $"Gate {p.Existing.Cells["GateName"]} is {p.Existing.ReadOnly.First(x => x.Key == "#Status").Value}; a certified or waived gate cannot be redefined by file");
     }

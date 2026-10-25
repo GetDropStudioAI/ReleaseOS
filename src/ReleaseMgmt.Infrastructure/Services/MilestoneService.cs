@@ -8,7 +8,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 
 /// <summary>A milestone as the workspace shows it. <c>TMinus</c> is business days from <c>DueOn</c> to the train's target (the gate timeline's axis).</summary>
 public sealed record MilestoneView(string Id, string TrainId, string Name, string DueOn, int TMinus, string? OwnerUserId, string? OwnerTeamId, string? OwnerName,
-    string? Note, bool Done, string? DoneAt, string? DoneByUserId, string? DoneBy, string? LastChangedByUserId, string? LastChangedAt, int Version);
+    string? Note, bool Done, string? DoneAt, string? DoneByUserId, string? DoneBy, string? LastChangedByUserId, string? LastChangedAt, int Version, int? OffsetDays = null);
 
 /// <summary>New milestone. Owner is optional: a person, a team, or nobody (Q-0841).</summary>
 public sealed record NewMilestone(string? Name, DateOnly? DueOn, string? OwnerUserId, string? OwnerTeamId, string? Note);
@@ -24,6 +24,24 @@ public sealed record MilestonePatch(string? Name, DateOnly? DueOn, string? Owner
 public sealed class MilestoneService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
 {
     private const string Entity = "Milestone";
+
+    /// <summary>
+    /// RT7 (Q9): the release's target date moved. Every milestone that came from a template (it has an offset) is dated again from the new target; a fixed-date milestone stays. Called by every
+    /// path that moves the target (ScheduleService, the Trains CSV import), inside its transaction. <paramref name="audited"/> writes the milestone's own audit row. Returns how many moved.
+    /// </summary>
+    public static async Task<int> ShiftWithTargetAsync(ReleaseDbContext db, string trainId, DateOnly newTarget, DateTime now, string? actorUserId, Action<TrainMilestones, DateOnly> audited, CancellationToken ct)
+    {
+        var moved = 0;
+        foreach (var m in await db.Set<TrainMilestones>().Where(x => x.ReleaseTrainId == trainId && x.OffsetDays != null).ToListAsync(ct))
+        {
+            var due = newTarget.AddDays(m.OffsetDays!.Value);
+            if (due == m.DueOn) continue;
+            var was = m.DueOn;
+            m.DueOn = due; m.Version++; m.LastChangedByUserId = actorUserId; m.LastChangedAt = now;
+            audited(m, was); moved++;
+        }
+        return moved;
+    }
 
     /// <summary>Null when the train does not exist. Ordered by due date, then name.</summary>
     public async Task<List<MilestoneView>?> ListAsync(string trainId, CancellationToken ct = default)
@@ -56,7 +74,7 @@ public sealed class MilestoneService(IDbContextFactory<ReleaseDbContext> dbf, Ti
             m.OwnerUserId, m.OwnerTeamId,
             m.OwnerUserId is not null ? people.GetValueOrDefault(m.OwnerUserId) : m.OwnerTeamId is not null ? teams.GetValueOrDefault(m.OwnerTeamId) : null,
             m.Note, m.IsDone, Iso(m.DoneAt), m.DoneByUserId, m.DoneByUserId is not null ? people.GetValueOrDefault(m.DoneByUserId) : null,
-            m.LastChangedByUserId, Iso(m.LastChangedAt), m.Version))];
+            m.LastChangedByUserId, Iso(m.LastChangedAt), m.Version, m.OffsetDays))];
     }
 
     private static string? Iso(DateTime? t) => t?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
@@ -72,7 +90,7 @@ public sealed class MilestoneService(IDbContextFactory<ReleaseDbContext> dbf, Ti
 
     private static object Snapshot(TrainMilestones m) => new
     {
-        name = m.Name, dueOn = m.DueOn.ToString("yyyy-MM-dd"), ownerUserId = m.OwnerUserId, ownerTeamId = m.OwnerTeamId, note = m.Note, done = m.IsDone, version = m.Version,
+        name = m.Name, dueOn = m.DueOn.ToString("yyyy-MM-dd"), ownerUserId = m.OwnerUserId, ownerTeamId = m.OwnerTeamId, note = m.Note, done = m.IsDone, version = m.Version, offsetDays = m.OffsetDays,
     };
 
     private void Stamp(TrainMilestones m, Actor actor, DateTime now, bool bump = true)
@@ -118,6 +136,8 @@ public sealed class MilestoneService(IDbContextFactory<ReleaseDbContext> dbf, Ti
             var (newName, newDue) = (name.Trim(), p.DueOn ?? m.DueOn);
             if (newName == m.Name && newDue == m.DueOn && ownerUser == m.OwnerUserId && ownerTeam == m.OwnerTeamId && note == m.Note)
                 return ServiceResult<TrainMilestones>.Ok(m);   // nothing to change: no Version bump, no audit row
+            // RT7 (Q9): a date set by hand is a fixed date; a milestone that came from a template stops moving with the target.
+            if (newDue != m.DueOn) m.OffsetDays = null;
             m.Name = newName; m.DueOn = newDue; m.OwnerUserId = ownerUser; m.OwnerTeamId = ownerTeam; m.Note = note;
             Stamp(m, actor, Now);
             Audit(db, actor, m.ReleaseTrainId, Entity, m.Id, "Update", before, Snapshot(m));

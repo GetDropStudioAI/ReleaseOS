@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { openPage, primaryNav, signIn } from './support'
+import { approveAsGovernanceOfficer, openPage, primaryNav, signIn } from './support'
 
 // REOS-117 (RT2, D48): versions. A version links the releases of one product version in a chain (Beta 1 to 3, CERT, PenTest Cert, Production). The chain shows on the release page,
 // the calendar and the overview; moving one release's date flags a later release that now comes too soon (an advisory, nothing blocked); the next release is created from the previous
@@ -104,16 +104,20 @@ test('the next release is created from the previous one, in the same version, fr
   const name = `E2E Orion ${stamp}c`
   await signIn(page, 'ver-next-rm@example.com', 'ReleaseManager')
   // CERT's default template: two gates
-  const tpl = await page.evaluate(async n => {
+  const made = await page.evaluate(async n => {
     const json = { 'Content-Type': 'application/json' }
     const t = await (await fetch('/api/v1/templates', { method: 'POST', headers: json, body: JSON.stringify({ name: n, defaultRiskTier: 'High',
       gates: [{ gateName: 'Ver Freeze', gateClass: 'Standard', offsetDays: 5, requiredBeforeStatus: 'Gated' }, { gateName: 'Ver CAB', gateClass: 'Compliance', offsetDays: 1, requiredBeforeStatus: 'Executing' }], steps: [], schedule: [] }) })).json() as { id: string; version: number }
-    await fetch(`/api/v1/templates/${t.id}:approve`, { method: 'POST', headers: { ...json, 'If-Match': String(t.version) }, body: '{}' })
+    return t as { id: string; version: number }
+  }, `E2E ver template ${stamp}`)
+  await approveAsGovernanceOfficer(page, made)   // not the author, and a Governance Officer for the Compliance gate (RT7)
+  const tpl = await page.evaluate(async t => {
+    const json = { 'Content-Type': 'application/json' }
     const types = await (await fetch('/api/v1/release-types')).json() as { id: string; name: string; version: number; defaultTemplate: { id: string } | null }[]
     const cert = types.find(x => x.name === 'CERT')!
     if (!cert.defaultTemplate) await fetch(`/api/v1/release-types/${cert.id}`, { method: 'PATCH', headers: { ...json, 'If-Match': String(cert.version) }, body: JSON.stringify({ defaultTemplateId: t.id }) })
     return cert.defaultTemplate ? 'existing' : 'ours'
-  }, `E2E ver template ${stamp}`)
+  }, made)
   expect(['ours', 'existing']).toContain(tpl)
 
   // Beta 1 on its own, then a version started from the release page

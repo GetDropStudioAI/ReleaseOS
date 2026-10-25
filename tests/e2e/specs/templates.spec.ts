@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test'
 import { signIn, signOut } from './support'
 
 // REOS-38: governed train templates, entirely inline (no modals). Draft -> Approved -> Retired.
-test('a Release Manager drafts, approves and retires a template; a Viewer sees it read only', async ({ page }) => {
+// REOS-122 (RT7): the author does not approve, so a second Release Manager approves what the first drafted.
+test('a Release Manager drafts a template, another approves it and retires it; a Viewer sees it read only', async ({ page }) => {
   const name = `E2E template ${Date.now()}`
   await signIn(page, 'templates-rm@example.com', 'ReleaseManager')
   await page.click('nav[aria-label=Primary] a:has-text("Templates")')
@@ -29,9 +30,18 @@ test('a Release Manager drafts, approves and retires a template; a Viewer sees i
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.locator('table.os-table tr', { hasText: 'Code Freeze v2' })).toBeVisible()
 
+  // the author does not approve: the button is off and says why, in words
+  const approve = page.getByRole('button', { name: 'Approve', exact: true })
+  await expect(approve).toBeDisabled()
+  await expect(page.getByText('You created this template, so someone else approves it')).toBeVisible()
+  await signOut(page)
+
+  await signIn(page, 'templates-rm2@example.com', 'ReleaseManager')
+  await page.click('nav[aria-label=Primary] a:has-text("Templates")')
+  await page.locator('table.os-table tr', { hasText: name }).click()
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
   await expect(row).toContainText('Approved')
-  await expect(row).toContainText('templates-rm')
+  await expect(row).toContainText('templates-rm2')
   await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0)           // approved templates are immutable
 
   await page.getByRole('button', { name: 'Retire', exact: true }).click()                        // a confirmation dialog that starts on Cancel

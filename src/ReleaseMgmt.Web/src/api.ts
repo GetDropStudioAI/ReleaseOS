@@ -81,7 +81,9 @@ export const abortTrain = (id: string, reason: string, version: number) => post<
 export interface ProductRow { id: string; name: string; versionTag: string; projectCode: string; tasksDone: number; tasksTotal: number; openBlockers: string[]; health: string }
 export interface ProductsResponse { tasksDone: number; tasksTotal: number; products: ProductRow[] }
 export interface TaskRow { id: string; description: string; owner: string | null; product: string | null; done: boolean; completedAt: string | null; completedBy: string | null; version: number }
-export interface GateDetail { id: string; trainId: string; trainStatus: string; name: string; class: string; status: string; dueOn: string; tMinus: number; ownerName: string | null; version: number; tasks: TaskRow[]; certify: { eligible: boolean; reasons: string[] } }
+export interface GateDetail { id: string; trainId: string; trainStatus: string; name: string; class: string; status: string; dueOn: string; tMinus: number; ownerName: string | null; version: number; tasks: TaskRow[]; certify: { eligible: boolean; reasons: string[] }
+  /** RT7 (Q8): a Compliance gate from the approved template; it cannot be removed or made Standard */
+  templateLocked?: boolean }
 export interface WindowRow { startsAt: string; endsAt: string; version: number }
 export interface Owner { id: string; name: string; kind: 'user' | 'team' }
 export const getProducts = (id: string) => get<ProductsResponse>(`/api/v1/trains/${id}/products`)
@@ -202,24 +204,32 @@ export interface MyWorkData {
 }
 export const getMyWork = () => get<MyWorkData>('/api/v1/me/work')
 // REOS-38 train templates
-export interface TemplateRow { id: string; name: string; status: string; defaultRiskTier: string; approvedByUserId: string | null; approvedByName: string | null; approvedAt: string | null; reviewDueOn: string | null; reviewOverdue: boolean; gateCount: number; stepCount: number; scheduleCount: number; version: number }
-export interface TemplateGate { id?: string; gateName: string; gateClass: string; sequenceOrder?: number; offsetDays: number; requiredBeforeStatus: string; ownerTeamId: string | null; ownerTeamName?: string | null }
+export interface TemplateRow { id: string; name: string; status: string; defaultRiskTier: string; approvedByUserId: string | null; approvedByName: string | null; approvedAt: string | null; reviewDueOn: string | null; reviewOverdue: boolean; gateCount: number; stepCount: number; scheduleCount: number; version: number
+  // REOS-122 (RT7): versions, the author, tasks and milestones
+  versionNo: number; supersedesTemplateId: string | null; supersededByTemplateId: string | null; createdByUserId: string | null; createdByName: string | null; lastEditedByUserId: string | null; lastEditedByName: string | null; taskCount: number; milestoneCount: number }
+export interface TemplateTask { id?: string; taskDescription: string; sequenceOrder?: number; ownerTeamId: string | null; ownerTeamName?: string | null }
+export interface TemplateGate { id?: string; gateName: string; gateClass: string; sequenceOrder?: number; offsetDays: number; requiredBeforeStatus: string; ownerTeamId: string | null; ownerTeamName?: string | null; tasks?: TemplateTask[] }
 export interface TemplateStep { id?: string; stepCode: string; section: string; title: string; offsetMinutes: number; plannedDurationMin: number; ownerTeamId: string | null; ownerTeamName?: string | null }
 export interface TemplateSchedule { id?: string; libraryTemplateId: string; libraryName?: string; templateType?: string; offsetDays: number }
-export interface TemplateDetail { template: TemplateRow; gates: TemplateGate[]; steps: TemplateStep[]; schedule: TemplateSchedule[] }
-export interface TemplateInput { name: string; defaultRiskTier: string; gates: TemplateGate[]; steps: TemplateStep[]; schedule: TemplateSchedule[] }
+/** Calendar days from the target; negative is before it. */
+export interface TemplateMilestone { id?: string; name: string; offsetDays: number; sequenceOrder?: number; ownerTeamId: string | null; ownerTeamName?: string | null }
+export interface TemplateVersionLine { id: string; versionNo: number; status: string; approvedByName: string | null; approvedAt: string | null }
+export interface TemplateChange { area: string; kind: 'Added' | 'Removed' | 'Changed'; subject: string; detail: string; compliance: boolean }
+export interface TemplateDetail { template: TemplateRow; gates: TemplateGate[]; steps: TemplateStep[]; schedule: TemplateSchedule[]
+  milestones: TemplateMilestone[]; versions: TemplateVersionLine[]; changes: TemplateChange[]; complianceChanged: boolean; needsGovernanceApproval: boolean }
+export interface TemplateInput { name: string; defaultRiskTier: string; gates: TemplateGate[]; steps: TemplateStep[]; schedule: TemplateSchedule[]; milestones: TemplateMilestone[] }
 export interface LibraryOption { id: string; name: string; templateType: string }
 export const getTemplates = () => get<TemplateRow[]>('/api/v1/templates')
 export const getTemplate = (id: string) => get<TemplateDetail>(`/api/v1/templates/${id}`)
 export const getLibraryOptions = () => get<LibraryOption[]>('/api/v1/templates/library-options')
 export const createTemplate = (b: TemplateInput) => post<TemplateDetail>('/api/v1/templates', b)
 export const updateTemplate = (id: string, b: TemplateInput, version: number) => call<TemplateDetail>('PUT', `/api/v1/templates/${id}`, b, version)
-export const templateAction = (id: string, action: 'approve' | 'retire', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
+export const templateAction = (id: string, action: 'approve' | 'retire' | 'new-version', version: number) => post<TemplateDetail>(`/api/v1/templates/${id}:${action}`, {}, version)
 // REOS-80 new train: blank, from an Approved template, or a copy of a prior train
 export interface NewTrainBody { title: string; targetReleaseDate: string; riskTier?: string | null; templateId?: string | null; windowStartsAt?: string | null; windowEndsAt?: string | null; products?: { productName: string; versionTag: string; projectCode: string }[]
   releaseTypeId?: string | null; betaNumber?: number | null; releaseVersionId?: string | null }   // REOS-116; RT2 adds the version: the type is required once the workspace has types; a Beta type takes its number, 1 to 3
 export interface CreatedTrain { id: string; title: string; status: string; riskTier: string; targetReleaseDate: string; source: 'Blank' | 'Template' | 'Clone'; templateId: string | null; clonedFromTrainId: string | null; version: number
-  created: { products: number; gates: number; tasks: number; steps: number; dependencies: number; commTemplates: number; commSchedule: number; window: boolean }; notes: string[] }
+  created: { products: number; gates: number; tasks: number; steps: number; dependencies: number; commTemplates: number; commSchedule: number; window: boolean; milestones: number }; notes: string[] }
 export const createTrain = (b: NewTrainBody) => post<CreatedTrain>('/api/v1/trains', b)
 export const cloneTrain = (sourceId: string, b: { title: string; targetReleaseDate: string; riskTier?: string | null }) => post<CreatedTrain>(`/api/v1/trains/${encodeURIComponent(sourceId)}:clone`, b)
 

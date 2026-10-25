@@ -5,6 +5,7 @@ import { day, errMsg, tMinus } from './format'
 import { displayZone, serverNow } from './time'
 import { useDraft } from './session'
 import { Conflict, isConflict } from './Conflict'
+import { milestoneOffset } from './templateLogic'
 import { addMilestone, editMilestone, getMilestones, milestoneAction, removeMilestone, type Milestone, type MilestoneInput } from './milestonesApi'
 
 /**
@@ -112,6 +113,7 @@ export function MilestonesSection({ trainId, rows, error, canPlan, onChanged }: 
                       <button type="button" className="text" disabled={busy} onClick={() => save(m)}>Save</button>{' '}
                       <button type="button" className="text" onClick={() => setEditing(undefined)}>Cancel</button>
                     </span>
+                    {m.offsetDays != null && <p className="muted">This milestone came from the template and moves with the target. A date you set here fixes it.</p>}
                     {conflict && <p className="conflict-actions"><button type="button" className="text" onClick={() => save(m, (conflict.body?.current as { version?: number } | undefined)?.version)}>Overwrite with mine</button>{' '}
                       <button type="button" className="text" onClick={() => { setEditing(undefined); setConflict(null) }}>Use theirs</button></p>}
                   </td>
@@ -120,7 +122,8 @@ export function MilestonesSection({ trainId, rows, error, canPlan, onChanged }: 
                 <tr key={m.id} data-testid="milestone-row">
                   <td className={`nowrap ${st.cls}`}><span className="ms-glyph" aria-hidden="true">◆</span> {st.word}</td>
                   <td className="wrap"><span className="label">{m.name}</span>{m.note && <span className="muted"> · {m.note}</span>}</td>
-                  <td className="nowrap">{day(m.dueOn)} · <span className="mono">{tMinus(m.tMinus)}</span></td>
+                  <td className="nowrap">{day(m.dueOn)} · <span className="mono">{tMinus(m.tMinus)}</span>
+                    {m.offsetDays != null && <span className="muted"> · moves with the target ({milestoneOffset(m.offsetDays)})</span>}</td>
                   <td>{m.ownerName ?? <span className="muted">—</span>}</td>
                   <td className="mono muted nowrap">{m.done && m.doneAt ? <><Time at={m.doneAt} date />{m.doneBy ? <span className="ms-by"> · {m.doneBy}</span> : null}</> : '—'}</td>
                   <td className="nowrap">

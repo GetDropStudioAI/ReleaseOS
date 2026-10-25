@@ -29,7 +29,7 @@ public sealed record NewTrainInput(string? Title, string? TargetReleaseDate, str
 /// <summary><c>POST /trains/{id}:clone</c>. The risk tier defaults to the source train's.</summary>
 public sealed record CloneTrainInput(string? Title, string? TargetReleaseDate, string? RiskTier = null);
 
-public sealed record CreatedCounts(int Products, int Gates, int Tasks, int Steps, int Dependencies, int CommTemplates, int CommSchedule, bool Window);
+public sealed record CreatedCounts(int Products, int Gates, int Tasks, int Steps, int Dependencies, int CommTemplates, int CommSchedule, bool Window, int Milestones = 0);
 
 /// <summary>What was created. <see cref="Notes"/> says what was deliberately not copied or was substituted, in words the drawer shows as they are.</summary>
 public sealed record CreatedTrain(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, string Source, string? TemplateId, string? ClonedFromTrainId,
@@ -41,8 +41,10 @@ public sealed record CreatedTrain(string Id, string Title, string Status, string
 /// row per inserted row), except the T-minus schedule, which reuses the seed and writes its one <c>Seed</c> row (Q-043e). New trains always start in Planning:
 /// no status is set here beyond the column default, and gates start Pending.
 /// </summary>
-public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, DisplayClock clock, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
+public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, DisplayClock clock, IRealtimePublisher? realtime = null, TemplateGovernanceOptions? governance = null) : ServiceBase(dbf, time, realtime)
 {
+    private readonly TemplateGovernanceOptions options = governance ?? new();
+
     // Field limits follow the CSV import (ImportKinds): Title 200, ProductName 200, VersionTag 100, ProjectCode 100.
     public const int MaxTitle = 200, MaxProductName = 200, MaxVersionTag = 100, MaxProjectCode = 100, MaxProducts = 200;
     private static readonly string[] Tiers = ["Low", "Moderate", "High", "VeryHigh"];
@@ -125,21 +127,48 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
                 Audit(db, actor, train.Id, "BundledProduct", row.Id, "Create", null, new { row.ProductName, row.VersionTag, row.ProjectCode, row.CatalogServiceId });
             }
 
-            int gates = 0, steps = 0, schedule = 0, comms = 0;
+            int gates = 0, tasks = 0, milestones = 0, steps = 0, schedule = 0, comms = 0;
             if (template is not null)
             {
                 var holidays = await HolidaysAsync(db, ct);
-                foreach (var tg in await db.Set<TemplateGates>().AsNoTracking().Where(g => g.TemplateId == template.Id).OrderBy(g => g.SequenceOrder).ToListAsync(ct))
+                var templateGates = await db.Set<TemplateGates>().AsNoTracking().Where(g => g.TemplateId == template.Id).OrderBy(g => g.SequenceOrder).ToListAsync(ct);
+                var gateIds = new Dictionary<string, string>();
+                foreach (var tg in templateGates)
                 {
                     // Q-080a: the template's team owns the gate; a gate with no team goes to the person creating the train (who can reassign it).
+                    // RT7 (Q8): a Compliance gate of an approved template is locked on the release: a planner can neither remove nor downgrade it (Templates:LockComplianceGates).
                     var g = new StageGates
                     {
                         Id = Ids.New(), ReleaseTrainId = train.Id, GateName = tg.GateName, GateClass = tg.GateClass, SequenceOrder = tg.SequenceOrder, OffsetDays = tg.OffsetDays,
                         DueOn = BusinessDays.SubtractBusinessDays(target.Value, tg.OffsetDays, holidays), RequiredBeforeStatus = tg.RequiredBeforeStatus,
                         OwnerTeamId = tg.OwnerTeamId, OwnerUserId = tg.OwnerTeamId is null ? actor.UserId : null, LastChangedByUserId = actor.UserId, LastChangedAt = now,
+                        TemplateLocked = options.LockComplianceGates && tg.GateClass == "Compliance" ? 1 : 0,
                     };
-                    db.Set<StageGates>().Add(g); gates++;
-                    Audit(db, actor, train.Id, "StageGate", g.Id, "Create", null, new { g.GateName, g.GateClass, g.SequenceOrder, g.OffsetDays, dueOn = g.DueOn.ToString("yyyy-MM-dd"), g.RequiredBeforeStatus, g.OwnerUserId, g.OwnerTeamId, fromTemplate = template.Id });
+                    db.Set<StageGates>().Add(g); gates++; gateIds[tg.Id] = g.Id;
+                    Audit(db, actor, train.Id, "StageGate", g.Id, "Create", null, new { g.GateName, g.GateClass, g.SequenceOrder, g.OffsetDays, dueOn = g.DueOn.ToString("yyyy-MM-dd"), g.RequiredBeforeStatus, g.OwnerUserId, g.OwnerTeamId, fromTemplate = template.Id, locked = g.TemplateLocked == 1 ? true : (bool?)null });
+                }
+                if (templateGates.Count > 0) await db.SaveChangesAsync(ct);   // gates before the tasks that reference them
+                // RT7: the template's checklist tasks go onto the same gates. Like a gate, a task with no team goes to the person creating the release.
+                foreach (var tk in await db.Set<TemplateTasks>().AsNoTracking().Where(k => k.TemplateId == template.Id).OrderBy(k => k.SequenceOrder).ToListAsync(ct))
+                {
+                    var task = new ChecklistTasks
+                    {
+                        Id = Ids.New(), StageGateId = gateIds[tk.TemplateGateId], TaskDescription = tk.TaskDescription, SequenceOrder = tk.SequenceOrder,
+                        OwnerTeamId = tk.OwnerTeamId, OwnerUserId = tk.OwnerTeamId is null ? actor.UserId : null, LastChangedByUserId = actor.UserId, LastChangedAt = now,
+                    };
+                    db.Set<ChecklistTasks>().Add(task); tasks++;
+                    Audit(db, actor, train.Id, "ChecklistTask", task.Id, "Create", null, new { gateId = task.StageGateId, description = task.TaskDescription, task.OwnerUserId, task.OwnerTeamId, fromTemplateTask = tk.Id });
+                }
+                // RT7 (Q9): the template's milestones are dated from the target; with Templates:MilestonesMoveWithTarget they keep the offset and move with it.
+                foreach (var tm in await db.Set<TemplateMilestones>().AsNoTracking().Where(m => m.TemplateId == template.Id).OrderBy(m => m.SequenceOrder).ToListAsync(ct))
+                {
+                    var m = new TrainMilestones
+                    {
+                        Id = Ids.New(), ReleaseTrainId = train.Id, Name = tm.Name, DueOn = target.Value.AddDays(tm.OffsetDays), OwnerTeamId = tm.OwnerTeamId,
+                        OffsetDays = options.MilestonesMoveWithTarget ? tm.OffsetDays : null, LastChangedByUserId = actor.UserId, LastChangedAt = now,
+                    };
+                    db.Set<TrainMilestones>().Add(m); milestones++;
+                    Audit(db, actor, train.Id, "Milestone", m.Id, "Add", null, new { name = m.Name, dueOn = m.DueOn.ToString("yyyy-MM-dd"), ownerTeamId = m.OwnerTeamId, offsetDays = m.OffsetDays, fromTemplateMilestone = tm.Id, version = m.Version });
                 }
                 var templateSteps = await db.Set<TemplateSteps>().AsNoTracking().Where(s => s.TemplateId == template.Id).OrderBy(s => s.OffsetMinutes).ThenBy(s => s.StepCode).ToListAsync(ct);
                 if (templateSteps.Count > 0 && win is null)
@@ -173,7 +202,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
                 release = ReleaseModelService.Snapshot(train, fields.EnvironmentIds ?? []),
             });
             await db.SaveChangesAsync(ct);
-            return ServiceResult<CreatedTrain>.Ok(View(train, template is null ? "Blank" : "Template", new CreatedCounts(products.Count, gates, 0, steps, 0, comms, schedule, win is not null), notes));
+            return ServiceResult<CreatedTrain>.Ok(View(train, template is null ? "Blank" : "Template", new CreatedCounts(products.Count, gates, tasks, steps, 0, comms, schedule, win is not null, milestones), notes));
         }, ct);
 
     public Task<ServiceResult<CreatedTrain>> CloneAsync(string sourceId, CloneTrainInput input, Actor actor, CancellationToken ct = default) =>
@@ -197,9 +226,11 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
             var reassigned = 0;
             string? Owner(string? userId) { if (userId is null || active.Contains(userId)) return userId; reassigned++; return actor.UserId; }
 
+            // RT7 (Q8): a copy of a release whose Compliance gates are locked by their template keeps the template, so the copies of those gates stay locked.
+            var keepsLocks = src.TemplateId is not null && await db.Set<StageGates>().AsNoTracking().AnyAsync(g => g.ReleaseTrainId == src.Id && g.TemplateLocked == 1, ct);
             var train = new ReleaseTrains
             {
-                Id = Ids.New(), Title = title, ClonedFromTrainId = src.Id, TargetReleaseDate = newTarget, RiskTier = input.RiskTier ?? src.RiskTier,
+                Id = Ids.New(), Title = title, ClonedFromTrainId = src.Id, TemplateId = keepsLocks ? src.TemplateId : null, TargetReleaseDate = newTarget, RiskTier = input.RiskTier ?? src.RiskTier,
                 CreatedAt = now, UpdatedAt = now, LastChangedByUserId = actor.UserId, LastChangedAt = now,
                 ReleaseKey = await ReleaseKeyAllocator.AllocateAsync(db, ct),
             };
@@ -239,7 +270,7 @@ public sealed class TrainCreationService(IDbContextFactory<ReleaseDbContext> dbf
                 {
                     Id = Ids.New(), ReleaseTrainId = train.Id, GateName = sg.GateName, GateClass = sg.GateClass, SequenceOrder = sg.SequenceOrder, OffsetDays = sg.OffsetDays,
                     DueOn = BusinessDays.SubtractBusinessDays(newTarget, sg.OffsetDays, holidays), RequiredBeforeStatus = sg.RequiredBeforeStatus,
-                    OwnerUserId = ownerUser, OwnerTeamId = sg.OwnerTeamId, LastChangedByUserId = actor.UserId, LastChangedAt = now,
+                    OwnerUserId = ownerUser, OwnerTeamId = sg.OwnerTeamId, LastChangedByUserId = actor.UserId, LastChangedAt = now, TemplateLocked = keepsLocks ? sg.TemplateLocked : 0,
                 };
                 db.Set<StageGates>().Add(g); gateMap[sg.Id] = g.Id;
                 Audit(db, actor, train.Id, "StageGate", g.Id, "Create", null, new { g.GateName, g.GateClass, g.SequenceOrder, g.OffsetDays, dueOn = g.DueOn.ToString("yyyy-MM-dd"), g.RequiredBeforeStatus, g.OwnerUserId, g.OwnerTeamId, fromGate = sg.Id });

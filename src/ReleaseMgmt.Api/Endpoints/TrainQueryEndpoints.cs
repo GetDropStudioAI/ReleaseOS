@@ -14,7 +14,7 @@ public static class TrainQueryEndpoints
 {
     public sealed record StreamRow(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, int Blockers, string[] Gates, string? CloseCode, string? EndedOn, int Version,
         string? Key = null, PersonRef? Owner = null, TeamRef? OwnerTeam = null, NamedRef? Type = null, EnvironmentRef[]? Environments = null, int? BetaNumber = null);   // REOS-125: the release model beside each row, for the Releases table's columns and filters
-    public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, int TMinus, string RequiredBeforeStatus, string? OwnerName, string? CertifiedBy, string? CertifiedOn, int TasksDone, int TasksTotal, int Version, int SequenceOrder);   // SequenceOrder: REOS-81 (insert a gate before another)
+    public sealed record GateRow(string Id, string Name, string Class, string Status, string DueOn, int TMinus, string RequiredBeforeStatus, string? OwnerName, string? CertifiedBy, string? CertifiedOn, int TasksDone, int TasksTotal, int Version, int SequenceOrder, bool TemplateLocked = false);   // TemplateLocked: RT7 (Q8), a Compliance gate from the approved template   // SequenceOrder: REOS-81 (insert a gate before another)
     public sealed record TrainDetail(string Id, string Title, string Status, string RiskTier, string TargetReleaseDate, int DaysToTarget, string? ChangeTicketNumber, string? CloseCode, bool RollbackRehearsed, string? NextStatus, int Version, GateRow[] Gates);
 
     public sealed record FreezeAhead(string Id, string Name, string Kind, string StartsAt, string EndsAt, string Scope, bool Active, int OverridesGranted);
@@ -24,7 +24,7 @@ public static class TrainQueryEndpoints
     public sealed record Certify(bool Eligible, string[] Reasons);
     // REOS-81: SequenceOrder, OffsetDays, RequiredBeforeStatus and the owner ids let the Inspector edit the gate's definition.
     public sealed record GateDetail(string Id, string TrainId, string TrainStatus, string Name, string Class, string Status, string DueOn, int TMinus, string? OwnerName, int Version, TaskRow[] Tasks, Certify Certify,
-                                    int SequenceOrder, int OffsetDays, string RequiredBeforeStatus, string? OwnerUserId, string? OwnerTeamId, string TargetReleaseDate);
+                                    int SequenceOrder, int OffsetDays, string RequiredBeforeStatus, string? OwnerUserId, string? OwnerTeamId, string TargetReleaseDate, bool TemplateLocked = false);
     public sealed record WindowBody(DateTime StartsAt, DateTime EndsAt);
     public sealed record WindowRow(string StartsAt, string EndsAt, int Version);
 
@@ -151,7 +151,7 @@ public static class TrainQueryEndpoints
                     k.BundledProductId is null ? null : products.GetValueOrDefault(k.BundledProductId), k.IsCompleted, k.CompletedAt?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
                     k.CompletedByUserId is null ? null : people.GetValueOrDefault(k.CompletedByUserId), k.Version))],
                 new Certify(reasons.Count == 0, [.. reasons]),
-                g.SequenceOrder, g.OffsetDays, g.RequiredBeforeStatus, g.OwnerUserId, g.OwnerTeamId, train.TargetReleaseDate.ToString("yyyy-MM-dd")));
+                g.SequenceOrder, g.OffsetDays, g.RequiredBeforeStatus, g.OwnerUserId, g.OwnerTeamId, train.TargetReleaseDate.ToString("yyyy-MM-dd"), g.TemplateLocked == 1));
         }).RequireAuthorization(Policies.Read);
 
         api.MapGet("/trains/{id}/window", async (string id, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
@@ -192,7 +192,7 @@ public static class TrainQueryEndpoints
                 [.. gates.Select(g => new GateRow(g.Id, g.GateName, g.GateClass, g.Status, g.DueOn.ToString("yyyy-MM-dd"), BusinessDays.Between(g.DueOn, t.TargetReleaseDate, holidays),
                     g.RequiredBeforeStatus, g.OwnerUserId is null ? teamNames.GetValueOrDefault(g.OwnerTeamId ?? "") : people.GetValueOrDefault(g.OwnerUserId),
                     g.CertifiedByUserId is null ? null : people.GetValueOrDefault(g.CertifiedByUserId), g.CertifiedAt?.ToString("yyyy-MM-dd"),
-                    tasks[g.Id].Count(k => k.IsCompleted), tasks[g.Id].Count(), g.Version, g.SequenceOrder))]));
+                    tasks[g.Id].Count(k => k.IsCompleted), tasks[g.Id].Count(), g.Version, g.SequenceOrder, g.TemplateLocked == 1))]));
         }).RequireAuthorization(Policies.Read);
     }
 }

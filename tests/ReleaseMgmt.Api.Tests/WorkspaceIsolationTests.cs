@@ -50,6 +50,9 @@ public class WorkspaceIsolationTests
         INSERT INTO TeamMembers(TeamId,UserId) VALUES('tma','ua');
         INSERT INTO Holidays(Day,Name) VALUES('2026-12-24','{Marker} Eve');
         INSERT INTO TrainTemplates(Id,Name) VALUES('tpa','{Marker} Template');
+        INSERT INTO TemplateGates(Id,TemplateId,GateName,GateClass,SequenceOrder,OffsetDays,RequiredBeforeStatus) VALUES('tga','tpa','{Marker} Template Gate','Compliance',1,2,'Executing');
+        INSERT INTO TemplateTasks(Id,TemplateId,TemplateGateId,TaskDescription,SequenceOrder) VALUES('tka','tpa','tga','{Marker} Template Task',1);
+        INSERT INTO TemplateMilestones(Id,TemplateId,Name,OffsetDays,SequenceOrder) VALUES('tmka','tpa','{Marker} Template Milestone',-14,1);
         INSERT INTO CommTemplateLibrary(Id,TemplateType,Name,Audience,SubjectLine,MarkdownBody) VALUES('la','Tminus28','{Marker} Library','All','{Marker} subject','{Marker} body');
         INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,RiskTier,CreatedAt,UpdatedAt) VALUES('ta','{Marker} Train','2026-11-30','High','{t}','{t}');
         INSERT INTO ReleaseTypes(Id,Name,SortOrder) VALUES('rta','{Marker} Type',10);
@@ -136,6 +139,8 @@ public class WorkspaceIsolationTests
             $"SELECT * FROM GoNoGoConditions WHERE DecisionId IN (SELECT Id FROM GoNoGoDecisions WHERE ReleaseTrainId IN {trains})",
             $"SELECT * FROM PirActions WHERE PirId IN (SELECT Id FROM PostImplementationReviews WHERE ReleaseTrainId IN {trains})",
             $"SELECT * FROM CommDispatches WHERE CommTemplateId IN (SELECT Id FROM CommTemplates WHERE ReleaseTrainId IN {trains})",
+            "SELECT * FROM TemplateTasks WHERE TemplateId IN (SELECT Id FROM TrainTemplates WHERE WorkspaceId='default')",   // REOS-122 (RT7)
+            "SELECT * FROM TemplateMilestones WHERE TemplateId IN (SELECT Id FROM TrainTemplates WHERE WorkspaceId='default')",
         }.ToList();
         foreach (var root in new[] { "Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
                      "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "ReleaseVersions", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments",

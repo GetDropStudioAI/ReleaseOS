@@ -265,6 +265,37 @@ for params, want, label in [
     except sqlite3.IntegrityError as e:
         check(want is not None and want in str(e), label)
 
+# Upgrade 012 (REOS-122): TrainTemplates is rebuilt with its rows, the new template tables start empty, no gate is locked, the new rules are live
+t12 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("012_"):
+        t12.executescript("""
+            INSERT INTO TemplateGates (Id, TemplateId, GateName, GateClass, SequenceOrder, OffsetDays, RequiredBeforeStatus) VALUES ('tg1', 'tp1', 'Compliance Sign-off', 'Compliance', 1, 2, 'Executing');
+            INSERT INTO StageGates (Id, ReleaseTrainId, GateName, GateClass, SequenceOrder, OffsetDays, DueOn, OwnerUserId) VALUES ('g2', 'r1', 'Compliance Sign-off', 'Compliance', 2, 2, '2026-10-28', 'u1');
+            INSERT INTO TrainMilestones (Id, ReleaseTrainId, Name, DueOn) VALUES ('m1', 'r1', 'Code complete', '2026-10-16');
+        """)
+    t12.executescript(s.read_text())
+check(t12.execute("SELECT Id, Name, Status, ApprovedByUserId, VersionNo, CreatedByUserId, LastEditedByUserId, SupersedesTemplateId, WorkspaceId FROM TrainTemplates").fetchall()
+      == [("tp1", "Monthly", "Approved", "u1", 1, None, None, None, "default")], "012: the template is kept, as version 1 with no recorded author")
+check(t12.execute("SELECT TemplateId FROM ReleaseTrains WHERE Id = 'r1'").fetchone() == ("tp1",), "012: a release still points at its template")
+check(t12.execute("SELECT COUNT(*) FROM TemplateGates").fetchone() == (1,), "012: the template's gates are kept by the rebuild")
+check(t12.execute("SELECT COUNT(*) FROM TemplateTasks").fetchone() == (0,) and t12.execute("SELECT COUNT(*) FROM TemplateMilestones").fetchone() == (0,), "012: no template task or milestone is made by the script")
+check(t12.execute("SELECT TemplateLocked FROM StageGates WHERE Id = 'g2'").fetchone() == (0,), "012: an existing gate is not locked")
+check(t12.execute("SELECT OffsetDays FROM TrainMilestones WHERE Id = 'm1'").fetchone() == (None,), "012: an existing milestone keeps its fixed date")
+check(t12.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND (name LIKE 'trg_Template_%' OR name LIKE 'trg_Gate_TemplateLocked_%')").fetchone() == (5,), "012: the template governance rules are in place")
+for sql, want, label in [
+    ("INSERT INTO TrainTemplates (Id, Name, VersionNo, SupersedesTemplateId) VALUES ('tp2', 'Monthly', 2, 'tp1')", None, "012: a second version keeps the name"),
+    ("INSERT INTO TrainTemplates (Id, Name, VersionNo) VALUES ('tp3', 'Monthly', 2)", "UNIQUE", "012: the same name and version twice is refused"),
+    ("INSERT INTO TrainTemplates (Id, Name, Status, ApprovedByUserId, ApprovedAt, CreatedByUserId) VALUES ('tp4', 'Own', 'Approved', 'u1', '2026-09-01T00:00:00Z', 'u1')", "author of a template cannot approve it", "012: the author approving their own template is refused"),
+    ("UPDATE StageGates SET GateClass = 'Standard' WHERE Id = 'g2'", None, "012: an unlocked Compliance gate can still be downgraded"),
+    ("INSERT INTO TemplateMilestones (Id, TemplateId, Name, OffsetDays, SequenceOrder) VALUES ('tm1', 'tp1', 'Code complete', -14, 1)", None, "012: a template milestone"),
+    ("INSERT INTO TemplateTasks (Id, TemplateId, TemplateGateId, TaskDescription, SequenceOrder) VALUES ('tk1', 'tp1', 'tg1', 'SOX evidence', 1)", None, "012: a template task"),
+]:
+    try:
+        t12.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

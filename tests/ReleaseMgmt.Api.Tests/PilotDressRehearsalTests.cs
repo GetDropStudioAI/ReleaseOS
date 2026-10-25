@@ -81,10 +81,10 @@ public class PilotDressRehearsalTests
         var qa = await SignIn(Roles.Viewer, "quinn@pilot.test", "Quinn Abbot");   // a contributor: owns one task, one step and one PIR action
         string rteId = UserId(root, "rae@pilot.test"), rmId = UserId(root, "rel@pilot.test"), govId = UserId(root, "gina@pilot.test"), qaId = UserId(root, "quinn@pilot.test");
 
-        // ---- 1. A Release Manager approves the shipped template (it is seeded as a Draft: the seed never fabricates an approval) ----------------
-        var standard = (await Get(rm, "/api/v1/templates")).EnumerateArray().Single(t => t.GetProperty("name").GetString() == "Standard release");
+        // ---- 1. A Governance Officer approves the shipped template (it is seeded as a Draft: the seed never fabricates an approval; it has Compliance gates, so a Governance Officer approves it, RT7) ----
+        var standard = (await Get(gov, "/api/v1/templates")).EnumerateArray().Single(t => t.GetProperty("name").GetString() == "Standard release");
         var templateId = standard.GetProperty("id").GetString()!;
-        await Ok(Send(rm, Post, $"/api/v1/templates/{templateId}:approve", ifMatch: standard.GetProperty("version").GetInt32()), "approve the template");
+        await Ok(Send(gov, Post, $"/api/v1/templates/{templateId}:approve", ifMatch: standard.GetProperty("version").GetInt32()), "approve the template");
 
         // ---- 2. The RTE creates the train from it: products, window, the four default gates and the T-minus message plan in one step ------------
         var target = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21);

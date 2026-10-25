@@ -18,6 +18,8 @@ public static class ModelMap
         b.Entity<TrainTemplates>(e => { e.ToTable("TrainTemplates"); e.HasKey(e => e.Id);  });
         b.Entity<TemplateGates>(e => { e.ToTable("TemplateGates"); e.HasKey(e => e.Id);  });
         b.Entity<TemplateSteps>(e => { e.ToTable("TemplateSteps"); e.HasKey(e => e.Id);  });
+        b.Entity<TemplateTasks>(e => { e.ToTable("TemplateTasks"); e.HasKey(e => e.Id);  });
+        b.Entity<TemplateMilestones>(e => { e.ToTable("TemplateMilestones"); e.HasKey(e => e.Id);  });
         b.Entity<TemplateCommSchedule>(e => { e.ToTable("TemplateCommSchedule"); e.HasKey(e => e.Id);  });
         b.Entity<CommTemplateLibrary>(e => { e.ToTable("CommTemplateLibrary"); e.HasKey(e => e.Id);  });
         b.Entity<ReleaseTrains>(e => { e.ToTable("ReleaseTrains"); e.HasKey(e => e.Id);  });
@@ -90,10 +92,18 @@ public static class ModelMap
         b.Entity<Holidays>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainTemplates>().HasOne<Users>().WithMany().HasForeignKey(e => e.ApprovedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TrainTemplates>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainTemplates>().HasOne<Users>().WithMany().HasForeignKey(e => e.CreatedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainTemplates>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastEditedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TrainTemplates>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.SupersedesTemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateGates>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateGates>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateSteps>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateSteps>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TemplateTasks>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TemplateTasks>().HasOne<TemplateGates>().WithMany().HasForeignKey(e => e.TemplateGateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TemplateTasks>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TemplateMilestones>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<TemplateMilestones>().HasOne<Teams>().WithMany().HasForeignKey(e => e.OwnerTeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateCommSchedule>().HasOne<TrainTemplates>().WithMany().HasForeignKey(e => e.TemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TemplateCommSchedule>().HasOne<CommTemplateLibrary>().WithMany().HasForeignKey(e => e.LibraryTemplateId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CommTemplateLibrary>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);

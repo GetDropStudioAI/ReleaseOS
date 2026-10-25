@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Tests;
 
 /// <summary>
-/// Port of tests/reference/test_schema.py: same 362 cases, same order, same expected messages, run against the
+/// Port of tests/reference/test_schema.py: the same cases, same order, same expected messages, run against the
 /// EF-migrated database (not schema.sql directly). The Python oracle stays and must keep passing.
 /// Sections that share a database in the oracle share one in-order scenario here.
 /// </summary>
@@ -779,5 +779,90 @@ INSERT INTO AuditEvents(OccurredAt,EntityType,EntityId,Action,WorkspaceId) VALUE
         Check(db10, "UPDATE ReleaseTrains SET BetaNumber=3 WHERE Id='r2'", true, "a release given a free number");
         Check(db10, "UPDATE ReleaseTrains SET ReleaseVersionId='v1' WHERE Id='r2'", true, "a release linked into a free place");
         Check(db10, "INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,ReleaseVersionId) VALUES('r10','j','2026-11-30',?,?,'v1')", false, "a release linked to a version at insert without a type", [Now, Now], "needs a release type");
+    }
+
+    /// <summary>REOS-122 (RT7): template tasks and milestones, versions, the approver is not the author, locked Compliance gates, milestone offsets. Port of the oracle's template governance section.</summary>
+    [Fact]
+    public void Template_governance_tasks_milestones_versions_separation_of_duties_and_locked_gates()
+    {
+        using var db12 = fx.Fresh();
+        Exec(db12, $@"
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','{Now}');
+INSERT INTO Teams(Id,Handle,Name) VALUES('tm1','ops','Ops');
+INSERT INTO Teams(Id,Handle,Name,WorkspaceId) VALUES('tmx','euops','EU Ops','w2');
+INSERT INTO TrainTemplates(Id,Name,CreatedByUserId,LastEditedByUserId) VALUES('v1','Monthly','rte','rte');
+INSERT INTO TemplateGates(Id,TemplateId,GateName,GateClass,SequenceOrder,OffsetDays,RequiredBeforeStatus) VALUES
+  ('v1g1','v1','Code Freeze','Standard',1,5,'Gated'),('v1g2','v1','Compliance Sign-off','Compliance',2,2,'Executing');
+INSERT INTO TemplateTasks(Id,TemplateId,TemplateGateId,TaskDescription,SequenceOrder) VALUES('v1k1','v1','v1g2','SOX evidence uploaded',1);");
+        const string A = "UPDATE TrainTemplates SET Status='Approved', ApprovedByUserId=?, ApprovedAt=? WHERE Id=?";
+        Check(db12, A, false, "the author approves their own template", ["rte", Now, "v1"], "author of a template cannot approve it");
+        Exec(db12, "UPDATE TrainTemplates SET LastEditedByUserId='rm' WHERE Id='v1'");
+        Check(db12, A, false, "the person who last changed the content approves it", ["rm", Now, "v1"], "author of a template cannot approve it");
+        Exec(db12, "UPDATE TrainTemplates SET LastEditedByUserId='rte' WHERE Id='v1'");
+        Check(db12, A, true, "a Release Manager other than the author approves it", ["rm", Now, "v1"]);
+        Check(db12, "INSERT INTO TrainTemplates(Id,Name,Status,ApprovedByUserId,ApprovedAt,CreatedByUserId) VALUES('vx','Other','Approved','rte',?, 'rte')", false, "a template inserted already approved by its author", [Now], "author of a template cannot approve it");
+        Check(db12, "INSERT INTO TrainTemplates(Id,Name,Status,ApprovedByUserId,ApprovedAt) VALUES('vy','Seeded','Approved','rte',?)", true, "an approved template with no recorded author (made before RT7)", [Now]);
+
+        const string V2 = "INSERT INTO TrainTemplates(Id,Name,VersionNo,SupersedesTemplateId,CreatedByUserId,LastEditedByUserId) VALUES(?,?,?,?,'rm','rm')";
+        Check(db12, V2, true, "a new version keeps the name with the next version number", ["v2", "Monthly", 2, "v1"]);
+        Check(db12, V2, false, "a second version 2 of the same name", ["v2b", "Monthly", 2, "v1"], "UNIQUE");
+        Check(db12, V2, false, "version 0", ["v0", "Monthly", 0, "v1"], "CHECK");
+        Check(db12, "UPDATE TrainTemplates SET SupersedesTemplateId='v2' WHERE Id='v2'", false, "a template that supersedes itself", expect: "CHECK");
+        Exec(db12, "INSERT INTO TrainTemplates(Id,Name,WorkspaceId) VALUES('wx','Monthly','w2')");
+        Check(db12, "INSERT INTO TrainTemplates(Id,Name,VersionNo,SupersedesTemplateId,WorkspaceId) VALUES('wy','Monthly',2,'wx','w2')", true, "a version that supersedes one in its own workspace");
+        Check(db12, "INSERT INTO TrainTemplates(Id,Name,VersionNo,SupersedesTemplateId,WorkspaceId) VALUES('wz','Other',2,'v1','w2')", false, "a version that supersedes a template of another workspace", expect: "previous version belongs to another workspace");
+        Check(db12, "UPDATE TrainTemplates SET SupersedesTemplateId='wx' WHERE Id='v2'", false, "a version moved to supersede another workspace's template", expect: "previous version belongs to another workspace");
+        Check(db12, "INSERT INTO TrainTemplates(Id,Name,WorkspaceId) VALUES('wm','Monthly','w2')", false, "the same name and version twice in a workspace", expect: "UNIQUE");
+        Exec(db12, @"
+INSERT INTO TemplateGates(Id,TemplateId,GateName,GateClass,SequenceOrder,OffsetDays,RequiredBeforeStatus) VALUES
+  ('v2g1','v2','Code Freeze','Standard',1,4,'Gated'),('v2g2','v2','Compliance Sign-off','Compliance',2,2,'Executing');
+INSERT INTO TemplateTasks(Id,TemplateId,TemplateGateId,TaskDescription,SequenceOrder) VALUES('v2k1','v2','v2g2','SOX evidence uploaded',1);");
+
+        const string K = "INSERT INTO TemplateTasks(Id,TemplateId,TemplateGateId,TaskDescription,OwnerTeamId,SequenceOrder) VALUES(?,?,?,?,?,?)";
+        Check(db12, K, true, "a template task on a gate of its template", ["k2", "v1", "v1g1", "Tag repos", "tm1", 1]);
+        Check(db12, K, false, "a second task at the same place on the gate", ["k3", "v1", "v1g1", "Tag repos again", null, 1], "UNIQUE");
+        Check(db12, K, false, "a task on a gate of another template", ["k4", "v1", "v2g1", "Elsewhere", null, 5], "gate belongs to another template");
+        Check(db12, K, false, "a task owned by another workspace's team", ["k5", "v1", "v1g1", "Foreign", "tmx", 6], "team belongs to another workspace");
+        Check(db12, K, false, "a blank task description", ["k6", "v1", "v1g1", "   ", null, 7], "CHECK");
+        Check(db12, K, false, "a task description over 500 characters", ["k7", "v1", "v1g1", new string('x', 501), null, 8], "CHECK");
+        Check(db12, "UPDATE TemplateTasks SET TemplateGateId='v2g1' WHERE Id='k2'", false, "a task moved to a gate of another template", expect: "gate belongs to another template");
+        Exec(db12, "INSERT INTO TrainTemplates(Id,Name) VALUES('del','To delete')");
+        Exec(db12, "INSERT INTO TemplateGates(Id,TemplateId,GateName,SequenceOrder,OffsetDays,RequiredBeforeStatus) VALUES('delg','del','G',1,1,'Gated')");
+        Exec(db12, "INSERT INTO TemplateTasks(Id,TemplateId,TemplateGateId,TaskDescription,SequenceOrder) VALUES('delk','del','delg','t',1)");
+        Exec(db12, "DELETE FROM TemplateGates WHERE Id='delg'");
+        AssertTrue((long)Rows(db12, "SELECT COUNT(*) FROM TemplateTasks WHERE Id='delk'").Single()[0]! == 0, "deleting a template gate removes its tasks");
+
+        const string M = "INSERT INTO TemplateMilestones(Id,TemplateId,Name,OffsetDays,OwnerTeamId,SequenceOrder) VALUES(?,?,?,?,?,?)";
+        Check(db12, M, true, "a template milestone 14 days before the target", ["m1", "v1", "Code complete", -14, "tm1", 1]);
+        Check(db12, M, true, "a template milestone after the target", ["m2", "v1", "Hypercare exit", 7, null, 2]);
+        Check(db12, M, false, "a milestone at the same place twice", ["m3", "v1", "Again", -3, null, 1], "UNIQUE");
+        Check(db12, M, false, "an offset over a year", ["m4", "v1", "Far", -366, null, 3], "CHECK");
+        Check(db12, M, false, "a blank milestone name", ["m5", "v1", " ", -3, null, 4], "CHECK");
+        Check(db12, M, false, "a milestone owned by another workspace's team", ["m6", "v1", "Foreign", -3, "tmx", 5], "team belongs to another workspace");
+        Check(db12, "UPDATE TemplateMilestones SET OwnerTeamId='tmx' WHERE Id='m1'", false, "a milestone given another workspace's team", expect: "team belongs to another workspace");
+        Exec(db12, "DELETE FROM TrainTemplates WHERE Id='del'");
+        AssertTrue((long)Rows(db12, "SELECT COUNT(*) FROM TemplateTasks WHERE TemplateId='del'").Single()[0]! == 0, "deleting a template removes its tasks and milestones");
+
+        const string TM = "INSERT INTO TrainMilestones(Id,ReleaseTrainId,Name,DueOn,OwnerTeamId,OffsetDays) VALUES(?,'t1',?,?,?,?)";
+        Check(db12, TM, true, "a release milestone with an offset from the target", ["rm1", "Code complete", "2026-10-16", "tm1", -14]);
+        Check(db12, TM, true, "a release milestone with a fixed date (no offset)", ["rm2", "UAT", "2026-10-21", null, null]);
+        Check(db12, TM, false, "a release milestone offset over a year", ["rm3", "Far", "2026-10-21", null, 400], "CHECK");
+
+        Exec(db12, "UPDATE ReleaseTrains SET TemplateId='v1' WHERE Id='t1'");
+        Exec(db12, $"INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt) VALUES('t2','Plain','2026-11-30','{Now}','{Now}')");
+        const string G = "INSERT INTO StageGates(Id,ReleaseTrainId,GateName,GateClass,SequenceOrder,OffsetDays,DueOn,RequiredBeforeStatus,OwnerUserId,TemplateLocked) VALUES(?,?,?,?,?,2,'2026-10-28','Executing','gov1',?)";
+        Check(db12, G, true, "a Compliance gate from the template, locked", ["lg1", "t1", "Compliance from template", "Compliance", 10, 1]);
+        Check(db12, G, false, "a locked Standard gate", ["lg2", "t1", "Standard locked", "Standard", 11, 1], "CHECK");
+        Check(db12, G, false, "a locked gate on a release made without a template", ["lg3", "t2", "No template", "Compliance", 1, 1], "Only a gate of a release made from a template");
+        Check(db12, G, true, "a Compliance gate a planner added, not locked", ["lg4", "t1", "Added by a planner", "Compliance", 12, 0]);
+        Check(db12, "UPDATE StageGates SET GateClass='Standard' WHERE Id='lg1'", false, "a locked Compliance gate downgraded", expect: "cannot be downgraded or unlocked");
+        Check(db12, "UPDATE StageGates SET TemplateLocked=0 WHERE Id='lg1'", false, "a locked gate unlocked", expect: "cannot be downgraded or unlocked");
+        Check(db12, "DELETE FROM StageGates WHERE Id='lg1'", false, "a locked Compliance gate removed", expect: "cannot be removed");
+        Check(db12, "UPDATE StageGates SET OwnerUserId='gov2', Version=2 WHERE Id='lg1'", true, "a locked gate given another owner");
+        Check(db12, "UPDATE StageGates SET OffsetDays=3, DueOn='2026-10-27' WHERE Id='lg1'", true, "a locked gate moved to another day");
+        Check(db12, "UPDATE StageGates SET GateClass='Standard' WHERE Id='lg4'", true, "an unlocked Compliance gate downgraded");
+        Check(db12, "DELETE FROM StageGates WHERE Id='lg4'", true, "an unlocked gate removed");
+        Exec(db12, "DELETE FROM ReleaseTrains WHERE Id='t1'");
+        AssertTrue((long)Rows(db12, "SELECT COUNT(*) FROM StageGates WHERE ReleaseTrainId='t1'").Single()[0]! == 0, "deleting a release removes its locked gates too");
     }
 }

@@ -266,12 +266,13 @@ function gateInput(d: GateDraft, owners: Owner[], forEdit: boolean): GateInput |
   return { gateName: d.name.trim(), gateClass: d.gateClass, requiredBeforeStatus: d.requiredBefore, ...due, ...ownerPart, ...(!forEdit && d.position ? { sequenceOrder: Number(d.position) } : {}) }
 }
 
-function GateFields({ d, set, owners, stack, positions, trainStatus }: { d: GateDraft; set: (d: GateDraft) => void; owners: Owner[]; stack?: boolean; positions?: { value: string; label: string }[]; trainStatus?: string }) {
+function GateFields({ d, set, owners, stack, positions, trainStatus, classLocked }: { d: GateDraft; set: (d: GateDraft) => void; owners: Owner[]; stack?: boolean; positions?: { value: string; label: string }[]; trainStatus?: string; classLocked?: boolean }) {
   const requiredChoices = REQUIRED_BEFORE.filter(r => trainStatus !== 'Gated' || r !== 'Gated' || d.requiredBefore === 'Gated')
   return (
     <div className={stack ? 'inline-form stack' : 'inline-form'}>
       <label>Gate <input className={stack ? 'line block' : 'line'} value={d.name} onChange={e => set({ ...d, name: e.target.value })} placeholder="QA Sign-off" /></label>
-      <label>Class <select className="line" value={d.gateClass} onChange={e => set({ ...d, gateClass: e.target.value })}>{GATE_CLASSES.map(c => <option key={c}>{c}</option>)}</select></label>
+      <label>Class <select className="line" value={d.gateClass} disabled={classLocked} onChange={e => set({ ...d, gateClass: e.target.value })}>{GATE_CLASSES.map(c => <option key={c}>{c}</option>)}</select></label>
+      {classLocked && <span className="muted">This Compliance gate came from the approved template, so it stays Compliance.</span>}
       <span>
         <span className="tabs" role="group" aria-label="Due by">
           <button type="button" className="choice" aria-pressed={d.mode === 'offset'} onClick={() => set({ ...d, mode: 'offset' })}>Days before target</button>
@@ -349,15 +350,16 @@ function GateDefinitionActions({ gate, onRemoved, onChanged }: { gate: GateDefin
     catch (e) { if (isConflict(e)) setConflict(e); else setErr(errMsg(e)); setConfirming(false); onChanged() }
   }
   return (<>
-    {draft && <div role="group" aria-label="Edit gate"><GateFields d={draft} set={setDraft} owners={owners} stack trainStatus={gate.trainStatus} /></div>}
+    {draft && <div role="group" aria-label="Edit gate"><GateFields d={draft} set={setDraft} owners={owners} stack trainStatus={gate.trainStatus} classLocked={gate.templateLocked} /></div>}
     <p className="actions-col">
       {draft
         ? <><button type="button" className="text" onClick={() => setDraft(undefined)}>Cancel</button><button type="button" className="text" onClick={() => save()}>Save gate</button></>
         : <>{!closed && <button type="button" className="text" onClick={start}>Edit gate</button>}
-            {gate.status === 'Pending' && !confirming && <button type="button" className="text destructive" onClick={() => { setErr(null); setConfirming(true) }}>Remove gate</button>}</>}
+            {gate.status === 'Pending' && !gate.templateLocked && !confirming && <button type="button" className="text destructive" onClick={() => { setErr(null); setConfirming(true) }}>Remove gate</button>}</>}
     </p>
     {closed && !draft && <p className="muted">{gate.status === 'Certified' ? 'Reopen the gate to change its definition.' : 'A waived gate is final; add a new gate instead.'}</p>}
-    {!closed && gate.status !== 'Pending' && !draft && <p className="muted">Only a pending gate can be removed.</p>}
+    {gate.templateLocked && !draft && <p className="muted">This Compliance gate came from the approved template, so it cannot be removed or made Standard. To skip it, request a waiver.</p>}
+    {!gate.templateLocked && !closed && gate.status !== 'Pending' && !draft && <p className="muted">Only a pending gate can be removed.</p>}
     {confirming && (
       <div role="group" aria-label="Confirm removal">
         <p className="bad">Remove {gate.name}{gate.tasks.length > 0 ? ` and its ${gate.tasks.length === 1 ? 'task' : `${gate.tasks.length} tasks`}` : ''}? This cannot be undone.</p>
@@ -504,6 +506,7 @@ export function Inspector({ selection, trainId, canPlan, refreshKey, onClose, on
       { label: 'Due', value: <>{day(gate.dueOn)} · <span className="mono">{tMinus(gate.tMinus)}</span></> }, { label: 'Owner', value: gate.ownerName ?? '—' },
       { label: 'Tasks', value: `${gate.tasks.filter(t => t.done).length} of ${gate.tasks.length} done` },
       ...('requiredBeforeStatus' in gate ? [{ label: 'Required before', value: (gate as GateDefinition).requiredBeforeStatus }] : []),
+      ...(gate.templateLocked ? [{ label: 'Template', value: <StatusChip tone="info">Locked by template</StatusChip> }] : []),
     ]} />
     <div className="ins-actions">
       {canStart && <Button variant="primary" disabled={!!pending} onClick={() => void act('Starting…', () => gateAction(gate.id, 'start', gate.version), 'Gate started.')}>{busy('Starting…', 'Start gate')}</Button>}

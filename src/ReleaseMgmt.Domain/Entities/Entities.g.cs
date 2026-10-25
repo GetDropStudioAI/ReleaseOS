@@ -74,6 +74,10 @@ public class TrainTemplates
     public DateOnly? ReviewDueOn { get; set; }
     public int Version { get; set; } = 1;
     public string WorkspaceId { get; set; } = "default";
+    public string? CreatedByUserId { get; set; }
+    public string? LastEditedByUserId { get; set; }
+    public int VersionNo { get; set; } = 1;
+    public string? SupersedesTemplateId { get; set; }
 }
 
 public class TemplateGates
@@ -99,6 +103,28 @@ public class TemplateSteps
     public int OffsetMinutes { get; set; }
     public int PlannedDurationMin { get; set; }
     public string? OwnerTeamId { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class TemplateTasks
+{
+    public string Id { get; set; } = Ids.New();
+    public string TemplateId { get; set; } = "";
+    public string TemplateGateId { get; set; } = "";
+    public string TaskDescription { get; set; } = "";
+    public string? OwnerTeamId { get; set; }
+    public int SequenceOrder { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class TemplateMilestones
+{
+    public string Id { get; set; } = Ids.New();
+    public string TemplateId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public int OffsetDays { get; set; }
+    public string? OwnerTeamId { get; set; }
+    public int SequenceOrder { get; set; }
     public int Version { get; set; } = 1;
 }
 
@@ -219,6 +245,7 @@ public class StageGates
     public string? LastChangedByUserId { get; set; }
     public DateTime? LastChangedAt { get; set; }
     public int Version { get; set; } = 1;
+    public int TemplateLocked { get; set; } = 0;
 }
 
 public class GateTransitions
@@ -669,6 +696,7 @@ public class TrainMilestones
     public string? LastChangedByUserId { get; set; }
     public DateTime? LastChangedAt { get; set; }
     public int Version { get; set; } = 1;
+    public int? OffsetDays { get; set; }
 }
 
 public class ReleaseTypes

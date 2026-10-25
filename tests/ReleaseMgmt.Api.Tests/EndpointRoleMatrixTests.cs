@@ -204,6 +204,7 @@ public class EndpointRoleMatrixTests
         POST /api/v1/tasks/{id}:reopen                           Owned
         POST /api/v1/teams                                       Admin
         POST /api/v1/templates                                   Admin
+        POST /api/v1/templates/{id}:new-version                  Admin
         POST /api/v1/templates/{id}:approve                      Approvers
         POST /api/v1/templates/{id}:retire                       Approvers
         POST /api/v1/trains                                      Plan

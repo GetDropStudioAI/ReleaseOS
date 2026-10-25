@@ -24,11 +24,12 @@ public class TemplateTests
         return (await Json(r)).GetProperty("guard").GetString()!;
     }
 
-    private static object Body(string name = "Payments release", int gates = 2, object? schedule = null) => new
+    // Gate 2 is a Compliance gate only when asked: approving a template with one needs a Governance Officer (Q10), which the tests of the plain lifecycle leave out.
+    private static object Body(string name = "Payments release", int gates = 2, object? schedule = null, bool compliance = false) => new
     {
         name,
         defaultRiskTier = "High",
-        gates = Enumerable.Range(1, gates).Select(n => new { gateName = $"Gate {n}", gateClass = n == 2 ? "Compliance" : "Standard", offsetDays = 6 - n, requiredBeforeStatus = n == 2 ? "Executing" : "Gated" }).ToArray(),
+        gates = Enumerable.Range(1, gates).Select(n => new { gateName = $"Gate {n}", gateClass = compliance && n == 2 ? "Compliance" : "Standard", offsetDays = 6 - n, requiredBeforeStatus = n == 2 ? "Executing" : "Gated" }).ToArray(),
         steps = new[] { new { stepCode = "PRE-1", section = "PreCheck", title = "Health check", offsetMinutes = -30, plannedDurationMin = 15 } },
         schedule = schedule ?? Array.Empty<object>(),
     };

@@ -17,3 +17,8 @@
 .an-note { font-size: var(--type-small); color: var(--color-text-secondary); margin: var(--gap-sm) 0 0; }
 .an-failures { display: flex; flex-direction: column; gap: var(--gap-md); }
 .an-date:focus-visible, .an-date:focus-within { outline: 2px solid var(--color-accent-fill); outline-offset: 2px; }
+
+/* REOS-121: the view switch, the workspace scope and the executive panels. */
+.an-scope { display: flex; flex-direction: column; gap: var(--gap-md); }
+.an-scope-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md) var(--gap-lg); }
+.an-exec { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap-lg); }

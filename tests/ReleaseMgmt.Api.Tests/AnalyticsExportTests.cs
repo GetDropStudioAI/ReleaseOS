@@ -14,7 +14,7 @@ namespace ReleaseMgmt.Api.Tests;
 /// </summary>
 public class AnalyticsExportTests(AnalyticsFixture fx) : IClassFixture<AnalyticsFixture>
 {
-    public static IEnumerable<object[]> Metrics() => Enumerable.Range(1, 15).Select(i => new object[] { $"M{i}" });
+    public static IEnumerable<object[]> Metrics() => Enumerable.Range(1, 24).Select(i => new object[] { $"M{i}" });
     private const string Q = "from=2026-01-01&to=2026-12-31&now=2026-09-28T12%3A00%3A00Z";
 
     private async Task<HttpClient> As(string role)
@@ -124,14 +124,14 @@ public class AnalyticsExportTests(AnalyticsFixture fx) : IClassFixture<Analytics
         Assert.Equal("analytics-workbook-2026-01-01_2026-12-31.xlsx", res.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
         Assert.Contains("no-store", res.Headers.CacheControl!.ToString());
         using var wb = new XLWorkbook(await res.Content.ReadAsStreamAsync());
-        Assert.Equal(["Parameters", .. Enumerable.Range(1, 15).Select(i => $"M{i}")], wb.Worksheets.Select(w => w.Name).ToArray());
-        foreach (var id in Enumerable.Range(1, 15).Select(i => $"M{i}"))
+        Assert.Equal(["Parameters", .. Enumerable.Range(1, 24).Select(i => $"M{i}")], wb.Worksheets.Select(w => w.Name).ToArray());
+        foreach (var id in Enumerable.Range(1, 24).Select(i => $"M{i}"))
         {
             using var one = new XLWorkbook(await c.GetStreamAsync($"/api/v1/analytics/{id}/xlsx?{Q}"));
             WorkbookAssert.SameCells(one.Worksheet(id), wb.Worksheet(id), id);
         }
         var rowsOn = wb.Worksheet("Parameters").RowsUsed().Where(r => r.Cell(1).GetString() is ['M', ..]).ToDictionary(r => r.Cell(1).GetString(), r => r.Cell(4).GetDouble());
-        Assert.Equal(15, rowsOn.Count);
+        Assert.Equal(24, rowsOn.Count);
         foreach (var (id, n) in rowsOn) Assert.Equal(wb.Worksheet(id).LastRowUsed()!.RowNumber() - 1, (int)n);
     }
 
@@ -152,7 +152,7 @@ public class AnalyticsExportTests(AnalyticsFixture fx) : IClassFixture<Analytics
         Assert.Equal("America/Chicago", V("Display zone"));
         Assert.False(string.IsNullOrEmpty(V("Workspace")));
         Assert.Contains("None", V("Filters"));
-        Assert.All(p.RowsUsed().Where(r => r.Cell(1).GetString() is ['M', ..]), r => Assert.Equal(r.Cell(1).GetString() is "M6" or "M9" or "M14" ? "As of now" : "In the period", r.Cell(5).GetString()));
+        Assert.All(p.RowsUsed().Where(r => r.Cell(1).GetString() is ['M', ..]), r => Assert.Equal(r.Cell(1).GetString() is "M6" or "M9" or "M14" or "M21" ? "As of now" : "In the period", r.Cell(5).GetString()));
     }
 
     private static string Beside2(DateTime generated, string zone)

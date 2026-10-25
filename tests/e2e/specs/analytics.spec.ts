@@ -226,7 +226,7 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(`workbook, ${scheme} theme`, () => {
     test.use({ colorScheme: scheme })
 
-    test('the Workbook (XLSX) button downloads a real .xlsx with a Parameters sheet and M1..M15, and axe is clean', async ({ page }) => {
+    test('the Workbook (XLSX) button downloads a real .xlsx with a Parameters sheet and M1..M24, and axe is clean', async ({ page }) => {
       await openAnalytics(page, `analytics-workbook-${scheme}@example.com`)
       const button = page.getByRole('button', { name: 'Export all metrics as one XLSX workbook' })
       await expect(button).toBeVisible()
@@ -239,8 +239,8 @@ for (const scheme of ['light', 'dark'] as const) {
       expect(bytes.subarray(0, 2).toString('latin1')).toBe('PK')                    // a zip container
       const names = bytes.toString('latin1')                                        // zip entry names are stored in the clear
       expect(names).toContain('xl/workbook.xml')
-      expect(names).toContain('xl/worksheets/sheet16.xml')                          // Parameters + 15 metrics
-      expect(names).not.toContain('xl/worksheets/sheet17.xml')
+      expect(names).toContain('xl/worksheets/sheet25.xml')                          // Parameters + 24 metrics (REOS-121)
+      expect(names).not.toContain('xl/worksheets/sheet26.xml')
       await expect(button).toBeEnabled()
       await scan(page, `analytics after the workbook download (${scheme})`)
 

@@ -12,7 +12,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Api.Endpoints;
 
 /// <summary>
-/// REOS-47: <c>GET /api/v1/analytics/{metric}/xlsx?from&amp;to&amp;now</c> returns the same rows as the JSON endpoint as a workbook (Q-047b). Same window rules, same roles
+/// REOS-47: <c>GET /api/v1/analytics/{metric}/xlsx?from&amp;to&amp;now</c> (and, REOS-121, <c>workspaces</c> and <c>groupBy</c>) returns the same rows as the JSON endpoint as a workbook (Q-047b). Same window rules, same roles
 /// (any signed-in role reads, anonymous 401), read-only. CSV is produced in the browser from the JSON the screen already holds (Q-047c), so only XLSX needs a server.
 /// </summary>
 public static class AnalyticsExportEndpoints
@@ -21,37 +21,66 @@ public static class AnalyticsExportEndpoints
 
     public static void MapAnalyticsExport(this RouteGroupBuilder api)
     {
-        api.MapGet("/analytics/{metric}/xlsx", async (string metric, HttpRequest req, AnalyticsService svc, TimeProvider time, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
+        api.MapGet("/analytics/{metric}/xlsx", async (string metric, HttpRequest req, AnalyticsService svc, TimeProvider time, AnalyticsScope scope, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
         {
             var info = AnalyticsService.Find(metric);
-            if (info is null) return Results.NotFound(new { message = $"Unknown metric {metric}; use M1..M15 (GET /api/v1/analytics lists them)" });
-            if (!AnalyticsEndpoints.TryWindow(req, time, out var w, out var bad)) return bad!;
+            if (info is null) return Results.NotFound(new { message = $"Unknown metric {metric}; use M1..M24 (GET /api/v1/analytics lists them)" });
+            var r = await AnalyticsEndpoints.WindowAsync(req, time, scope, ct);
+            if (r.Bad is not null) return r.Bad;
+            var w = r.Window!;
+            if (w.GroupBy.Count > 0 && !info.Grouped) return AnalyticsEndpoints.Bad($"groupBy applies to the executive metrics M16 to M24; {info.Id} is not grouped");
             var rows = await svc.RunAsync(info.Id, w, ct);
             // REOS-137: the workbook says which workspace it is from and, for the per-release metrics, which release each row is (key, owner, team, environments)
             await using var db = await dbf.CreateDbContextAsync(ct);
-            var workspace = await ReleaseFacts.WorkspaceNameAsync(db, ct);
-            var releases = HasTitle(info) ? await ReleaseFacts.LoadAsync(db, null, ct) : null;
+            var workspace = await WorkspaceTextAsync(db, req, r, ct);
+            var releases = HasTitle(info) && r.Workspaces.Count == 1 ? await ReleaseFacts.LoadAsync(db, null, ct) : null;   // a title names a release only within one workspace
             var bytes = Workbook(info, w, rows, workspace, releases, await TypeNameAsync(db, w, ct));
-            var snapshot = info.Id is "M6" or "M9" or "M14";
-            var name = $"analytics-{info.Id.ToLowerInvariant()}-{(snapshot ? "asof-" + w.ToText : w.FromText + "_" + w.ToText)}.xlsx";
+            var name = $"analytics-{info.Id.ToLowerInvariant()}-{(info.Snapshot ? "asof-" + w.ToText : w.FromText + "_" + w.ToText)}.xlsx";
             req.HttpContext.Response.Headers.CacheControl = "no-store";
             return Results.File(bytes, XlsxContentType, name);
         }).RequireAuthorization(Policies.Read);
 
         // REOS-141 (G19): every metric in one workbook. A literal segment, so it never collides with /analytics/{metric}.
-        api.MapGet("/analytics/xlsx", async (HttpRequest req, AnalyticsService svc, TimeProvider time, DisplayClock clock, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
+        api.MapGet("/analytics/xlsx", async (HttpRequest req, AnalyticsService svc, TimeProvider time, DisplayClock clock, AnalyticsScope scope, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
         {
-            if (!AnalyticsEndpoints.TryWindow(req, time, out var w, out var bad)) return bad!;
+            var r = await AnalyticsEndpoints.WindowAsync(req, time, scope, ct);
+            if (r.Bad is not null) return r.Bad;
+            var w = r.Window!;
             var results = new List<(MetricInfo Info, IReadOnlyList<object> Rows)>();
             foreach (var info in AnalyticsService.Catalog) results.Add((info, await svc.RunAsync(info.Id, w, ct)));
             await using var db = await dbf.CreateDbContextAsync(ct);
-            var workspace = await ReleaseFacts.WorkspaceNameAsync(db, ct);
-            var releases = await ReleaseFacts.LoadAsync(db, null, ct);
-            var bytes = FullWorkbook(results, w, workspace, releases, time.GetUtcNow().UtcDateTime, clock, await TypeNameAsync(db, w, ct));
+            var workspace = await WorkspaceTextAsync(db, req, r, ct);
+            var releases = r.Workspaces.Count == 1 ? await ReleaseFacts.LoadAsync(db, null, ct) : null;
+            var bytes = FullWorkbook(results, w, workspace, releases, time.GetUtcNow().UtcDateTime, clock, await TypeNameAsync(db, w, ct), r.Workspaces.Count);
             req.HttpContext.Response.Headers.CacheControl = "no-store";
             return Results.File(bytes, XlsxContentType, $"analytics-workbook-{w.FromText}_{w.ToText}.xlsx");
         }).RequireAuthorization(Policies.Read);
+
+        // REOS-121: the portfolio report, one PDF for the workspaces asked for (all the person's own by default). Same page identity and UTC rule as the train PDFs (REOS-137, D51).
+        // Rendered in the request (a handful of tables, no queue): a licence that is not set is the same readable 422 as the train exports.
+        api.MapGet("/analytics/portfolio.pdf", async (HttpRequest req, AnalyticsService svc, TimeProvider time, AnalyticsScope scope, PortfolioReportBuilder builder, DisplayClock clock, IDbContextFactory<ReleaseDbContext> dbf, CancellationToken ct) =>
+        {
+            var r = await AnalyticsEndpoints.WindowAsync(req, time, scope, ct, defaultAll: true);
+            if (r.Bad is not null) return r.Bad;
+            var w = r.Window! with { GroupBy = [] };
+            var mine = await scope.MineAsync(req.HttpContext, ct);
+            var uid = req.HttpContext.User.FindFirst("uid")?.Value;
+            string by;
+            await using (var db = await dbf.CreateDbContextAsync(ct))
+                by = uid is null ? "unknown" : await db.Set<Users>().AsNoTracking().Where(u => u.Id == uid).Select(u => u.DisplayName).SingleOrDefaultAsync(ct) ?? uid;
+            var now = time.GetUtcNow().UtcDateTime;
+            var report = await builder.BuildAsync(w, [.. r.Workspaces.Select(x => x.Name)], mine.Count, now, by, clock, ct);
+            byte[] pdf;
+            try { pdf = builder.Render(report); }
+            catch (ExportConfigException ex) { return Results.Json(new { guard = ExportGuards.Licence, message = ex.Message }, statusCode: StatusCodes.Status422UnprocessableEntity); }
+            req.HttpContext.Response.Headers.CacheControl = "no-store";
+            return Results.File(pdf, "application/pdf", $"portfolio-report-{w.FromText}_{w.ToText}.pdf");
+        }).RequireAuthorization(Policies.Read);
     }
+
+    /// <summary>The workspace line of a workbook: the current workspace's name as before, or the names of the workspaces the request asked for.</summary>
+    private static async Task<string> WorkspaceTextAsync(ReleaseDbContext db, HttpRequest req, AnalyticsEndpoints.Resolved r, CancellationToken ct) =>
+        req.Query.ContainsKey(AnalyticsScope.Query) ? string.Join(", ", r.Workspaces.Select(x => x.Name)) : await ReleaseFacts.WorkspaceNameAsync(db, ct);
 
     /// <summary>REOS-116: the name of the release type the window is limited to (the id when it no longer exists), or null when it is not limited.</summary>
     private static async Task<string?> TypeNameAsync(ReleaseDbContext db, AnalyticsWindow w, CancellationToken ct) =>
@@ -125,6 +154,7 @@ public static class AnalyticsExportEndpoints
         (string, string)[] meta = [("Metric", $"{info.Id} {info.Title}"), ("Unit", info.Unit), ("From", w.FromText), ("To", w.ToText), ("Data as of", w.NowText), ("Workspace", workspace),
             ("Releases", CarryText(titleAt >= 0))];
         if (releaseType is not null) meta = [.. meta, ("Release type", releaseType)];   // REOS-116: only when the export is limited to one type
+        if (info.Grouped) meta = [.. meta, ("Grouped by", GroupText(w)), ("Quarters", QuarterText(w))];   // REOS-121
         for (var i = 0; i < meta.Length; i++) { about.Cell(i + 1, 1).Value = meta[i].Item1; about.Cell(i + 1, 1).Style.Font.Bold = true; about.Cell(i + 1, 2).Value = meta[i].Item2; }
         about.Columns().AdjustToContents();
 
@@ -133,15 +163,18 @@ public static class AnalyticsExportEndpoints
         return ms.ToArray();
     }
 
-    /// <summary>Metrics that are as-of snapshots and ignore the period (Q-046d); the same three the file names and the screen mark.</summary>
-    private static readonly HashSet<string> Snapshots = ["M6", "M9", "M14"];
+    /// <summary>What the executive metrics were grouped by, in words (REOS-121).</summary>
+    private static string GroupText(AnalyticsWindow w) => w.GroupBy.Count == 0 ? "Nothing: one row per measure for the whole scope" : string.Join(", ", w.GroupBy);
+
+    private static string QuarterText(AnalyticsWindow w) => w.FiscalYearStartMonth == 1 ? "Calendar quarters (2026-Q3 = July to September)" : $"Fiscal quarters, the year starts in month {w.FiscalYearStartMonth} (FY2027-Q1 = the first quarter of the year that ends in 2027)";
 
     /// <summary>
     /// REOS-141 (G19): the whole analytics set as one workbook. Sheet 1 "Parameters" says what the file is (workspace, period, filters, data as-of, generated-at in UTC with the display zone beside it, D51)
-    /// and lists the metric sheets; then one sheet per metric (M1..M15), each built by <see cref="AddMetricSheet"/>, the same code as the per-metric download, from the same query run
+    /// and lists the metric sheets; then one sheet per metric (M1..M24), each built by <see cref="AddMetricSheet"/>, the same code as the per-metric download, from the same query run
     /// with the same window, so every sheet holds exactly the per-metric export's rows. Text is stored as text, never as a formula (Q-047b). <paramref name="generatedAt"/> comes from the injected clock.
     /// </summary>
-    public static byte[] FullWorkbook(IReadOnlyList<(MetricInfo Info, IReadOnlyList<object> Rows)> metrics, AnalyticsWindow w, string workspace, IReadOnlyDictionary<string, ReleaseFact>? releases, DateTime generatedAt, DisplayClock clock, string? releaseType = null)
+    public static byte[] FullWorkbook(IReadOnlyList<(MetricInfo Info, IReadOnlyList<object> Rows)> metrics, AnalyticsWindow w, string workspace, IReadOnlyDictionary<string, ReleaseFact>? releases, DateTime generatedAt, DisplayClock clock, string? releaseType = null,
+        int workspaceCount = 1)
     {
         using var wb = new XLWorkbook();
         var fmt = new PdfFmt(clock);
@@ -150,14 +183,17 @@ public static class AnalyticsExportEndpoints
         (string Name, string Value, string Beside)[] meta =
         [
             ("Workbook", "ReleaseOS analytics", ""),
-            ("Workspace", workspace, ""),
+            (workspaceCount > 1 ? "Workspaces" : "Workspace", workspace, ""),
             ("Generated at (UTC)", Utc(generatedAt), fmt.Beside(generatedAt)),
             ("Display zone", clock.Zone.Id, ""),
             ("Period from (UTC day)", w.FromText, ""),
             ("Period to (UTC day)", w.ToText, ""),
             ("Data as of (UTC)", Utc(w.Now), fmt.Beside(w.Now)),
-            ("Filters", releaseType is null ? "None: every metric reads the whole workspace. Product, risk tier and gate class are not supported (Q-046e)" : $"Release type: {releaseType}. M11 (freeze windows) has no type. Product, risk tier and gate class are not supported (Q-046e)", ""),
-            ("Period", "M6, M9 and M14 are as of now and ignore the period", ""),
+            ("Filters", releaseType is null ? workspaceCount > 1 ? "None: every metric reads the whole of each workspace. Product, risk tier and gate class are not supported (Q-046e)" : "None: every metric reads the whole workspace. Product, risk tier and gate class are not supported (Q-046e)" : $"Release type: {releaseType}. M11 (freeze windows) has no type. Product, risk tier and gate class are not supported (Q-046e)", ""),
+            ("Period", "M6, M9, M14 and M21 are as of now and ignore the period", ""),
+            ("Grouped by", $"{GroupText(w)} (M16 to M24; M1 to M15 are not grouped)", ""),
+            ("Quarters", QuarterText(w), ""),
+            ("Scope", workspaceCount > 1 ? "Only workspaces you are a member of are included (D49). The release columns (key, owner, team, environments) are given only when one workspace is read" : "One workspace", ""),
         ];
         for (var i = 0; i < meta.Length; i++)
         {
@@ -173,7 +209,7 @@ public static class AnalyticsExportEndpoints
         {
             AddMetricSheet(wb, info, rows, releases);
             ps.Cell(r, 1).Value = info.Id; ps.Cell(r, 2).Value = info.Title; ps.Cell(r, 3).Value = info.Unit; ps.Cell(r, 4).Value = rows.Count;
-            ps.Cell(r, 5).Value = Snapshots.Contains(info.Id) ? "As of now" : "In the period";
+            ps.Cell(r, 5).Value = info.Snapshot ? "As of now" : "In the period";
             ps.Cell(r, 6).Value = CarryText(HasTitle(info));
             r++;
         }

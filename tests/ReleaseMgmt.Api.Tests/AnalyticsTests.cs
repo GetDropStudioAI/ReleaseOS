@@ -175,17 +175,20 @@ public class AnalyticsTests(AnalyticsFixture fx) : IClassFixture<AnalyticsFixtur
     [Fact]
     public void The_catalog_covers_every_query_in_the_oracle_in_order()
     {
-        var names = fx.Expected.GetProperty("metrics").EnumerateObject().Select(m => (m.Value.GetProperty("key").GetString()!, m.Name)).ToArray();
+        var names = fx.Expected.GetProperty("metrics").EnumerateObject().Concat(fx.Expected.GetProperty("executive").GetProperty("cases")[0].GetProperty("metrics").EnumerateObject())
+            .Select(m => (m.Value.GetProperty("key").GetString()!, m.Name)).ToArray();
         Assert.Equal(names, AnalyticsService.Catalog.Select(m => (m.Id, m.Name)).ToArray());
-        foreach (var m in AnalyticsService.Catalog)
+        foreach (var m in AnalyticsService.Catalog.Where(m => !m.Grouped))
             Assert.Equal(Expected(m.Id).Metric.GetProperty("columns").EnumerateArray().Select(c => c.GetString()), m.Columns.Select(c => c.Name));
+        foreach (var m in fx.Expected.GetProperty("executive").GetProperty("cases")[0].GetProperty("metrics").EnumerateObject())   // REOS-121: the executive metrics, in the columns the oracle returns
+            Assert.Equal(m.Value.GetProperty("columns").EnumerateArray().Select(c => c.GetString()), AnalyticsService.Find(m.Value.GetProperty("key").GetString())!.Columns.Select(c => c.Name));
     }
 
     [Fact]
     public void Embedded_sql_is_db_analytics_sql()
     {
         var onDisk = AnalyticsSql.Parse(File.ReadAllText(Path.Combine(AnalyticsFixture.Root, "db", "analytics.sql")));
-        Assert.Equal(15, onDisk.Count);
+        Assert.Equal(24, onDisk.Count);   // M1..M15, and M16..M24 (REOS-121)
         foreach (var (name, sql) in onDisk) Assert.Equal(sql, AnalyticsSql.Get(name));
         Assert.Equal(onDisk.Keys.OrderBy(x => x), AnalyticsSql.Names.OrderBy(x => x));
     }
@@ -251,18 +254,18 @@ public class AnalyticsTests(AnalyticsFixture fx) : IClassFixture<AnalyticsFixtur
     public async Task An_unknown_metric_is_404_and_a_query_name_is_accepted()
     {
         var client = await As(Roles.Viewer);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/v1/analytics/m16")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/v1/analytics/m25")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/v1/analytics/x'%20OR%201=1")).StatusCode);
         var body = JsonDocument.Parse(await client.GetStringAsync("/api/v1/analytics/on_time_rate?now=2026-09-28T12:00:00Z")).RootElement;
         Assert.Equal("M1", body.GetProperty("metric").GetString());
     }
 
     [Fact]
-    public async Task The_index_lists_the_fifteen_metrics()
+    public async Task The_index_lists_the_twentyfour_metrics()
     {
         var client = await As(Roles.Viewer);
         var idx = JsonDocument.Parse(await client.GetStringAsync("/api/v1/analytics")).RootElement;
-        Assert.Equal(Enumerable.Range(1, 15).Select(i => $"M{i}"), idx.EnumerateArray().Select(m => m.GetProperty("id").GetString()));
+        Assert.Equal(Enumerable.Range(1, 24).Select(i => $"M{i}"), idx.EnumerateArray().Select(m => m.GetProperty("id").GetString()));
         Assert.All(idx.EnumerateArray(), m =>
         {
             Assert.False(string.IsNullOrEmpty(m.GetProperty("title").GetString()));
@@ -298,8 +301,8 @@ public class AnalyticsTests(AnalyticsFixture fx) : IClassFixture<AnalyticsFixtur
     [Fact]
     public async Task Running_every_metric_never_modifies_the_seed_and_the_seed_is_not_migrated()
     {
-        foreach (var i in Enumerable.Range(1, 15)) await Service.RunAsync($"M{i}", ExpectedWindow());
-        foreach (var i in Enumerable.Range(1, 15)) Assert.Equal(HttpStatusCode.OK, (await (await As(Roles.RTE)).GetAsync($"/api/v1/analytics/m{i}")).StatusCode);
+        foreach (var i in Enumerable.Range(1, 24)) await Service.RunAsync($"M{i}", ExpectedWindow());
+        foreach (var i in Enumerable.Range(1, 24)) Assert.Equal(HttpStatusCode.OK, (await (await As(Roles.RTE)).GetAsync($"/api/v1/analytics/m{i}")).StatusCode);
         Assert.Equal(fx.OriginalHashBefore, AnalyticsFixture.Hash(fx.SeedCopy));
         Assert.Equal(fx.OriginalHashBefore, AnalyticsFixture.Hash(fx.OriginalSeed));   // and the checked-in fixture itself
         using var c = new SqliteConnection($"Data Source={fx.SeedCopy};Mode=ReadOnly;Pooling=False");

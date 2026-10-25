@@ -12,6 +12,8 @@ using ReleaseMgmt.Api.Exports;
 using ReleaseMgmt.Api.Reminders;
 using ReleaseMgmt.Infrastructure.Services;
 using ReleaseMgmt.Infrastructure.Analytics;
+using ReleaseMgmt.Infrastructure.Exports;
+using ReleaseMgmt.Infrastructure.Reminders;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Backup;
@@ -114,7 +116,11 @@ builder.Services.AddSingleton<MilestoneService>();   // train milestones (Q-0840
 builder.Services.AddSingleton(new AttachmentOptions(config["Attachments:Directory"] ?? AttachmentOptions.DefaultDirectory, config.GetValue("Attachments:MaxBytes", AttachmentOptions.HardMaxBytes)));
 builder.Services.AddSingleton<AttachmentService>();
 builder.Services.AddSingleton<AuditQueryService>();   // REOS-38 audit viewer (read-only)
-builder.Services.AddSingleton<AnalyticsService>();   // REOS-46 analytics M1-M15 (read-only, own connection)
+builder.Services.AddSingleton(AnalyticsOptions.From(config));   // REOS-121 (Q-121a): Analytics:FiscalYearStartMonth; a bad value stops the start naming the key
+builder.Services.AddSingleton(sp => new PirDueMap(sp.GetRequiredService<DisplayClock>(), PirDue.BusinessDaysFrom(config)));   // REOS-121: PIR due dates for M18 and M24, counted as the reminders count them
+builder.Services.AddSingleton<ReleaseMgmt.Api.Auth.AnalyticsScope>();   // REOS-121 (D49): analytics read across the person's own workspaces
+builder.Services.AddSingleton<AnalyticsService>();   // REOS-46 analytics M1-M24 (read-only, own connection)
+builder.Services.AddSingleton<PortfolioReportBuilder>();   // REOS-121 the portfolio PDF
 builder.Services.AddSingleton<IAnalyticsConnectionFactory>(new SqliteAnalyticsConnectionFactory(connectionString));
 builder.Services.AddSingleton<ReleaseMgmt.Api.Sync.SyncHealthService>();   // REOS-42 sync health, connector-wide banner state, webhook allowlist
 builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration

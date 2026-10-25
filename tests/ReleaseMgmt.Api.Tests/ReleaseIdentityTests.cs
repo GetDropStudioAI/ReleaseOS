@@ -251,7 +251,7 @@ public class ReleaseIdentityTests
     {
         var w = await Setup(); using var _f = w.F;
         const string Q = "from=2026-01-01&to=2026-12-31&now=2026-09-28T12:00:00Z";
-        var ids = Enumerable.Range(1, 15).Select(i => $"M{i}").ToList();
+        var ids = Enumerable.Range(1, 24).Select(i => $"M{i}").ToList();
         foreach (var (mine, other) in new[] { (w.A, w.B), (w.B, w.A) })
         {
             using var wb = new XLWorkbook(new MemoryStream(await mine.Client.GetByteArrayAsync($"/api/v1/analytics/xlsx?{Q}")));

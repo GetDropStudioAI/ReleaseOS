@@ -16,6 +16,8 @@ public static class ReleaseModelGuards
     /// <summary>RT3 (D47): a client's name or segment is wrong, or a CERT environment is given to a Standard client or missing from an On-Demand one.</summary>
     public const string ClientInvalid = "ClientInvalid";
     public const string ClientNameTaken = "ClientNameTaken";
+    /// <summary>RT4 (D47): a client date is refused: not a CERT or Production release, a Standard client, a chosen date before the Standard date, a closed release, or a malformed date.</summary>
+    public const string ClientDateInvalid = "ClientDateInvalid";
     public const string EnvironmentInvalid = "EnvironmentInvalid";
     public const string EnvironmentNameTaken = "EnvironmentNameTaken";
     public const string ServiceInvalid = "ServiceInvalid";
@@ -69,6 +71,33 @@ public static class ClientSegments
     {
         var t = new string((text ?? "").Where(c => !char.IsWhiteSpace(c) && c != '-' && c != '_').ToArray());
         return All.FirstOrDefault(x => string.Equals(x, t, StringComparison.OrdinalIgnoreCase));
+    }
+}
+
+/// <summary>
+/// RT4 (D47): which releases carry client dates. A CERT release gives each On-Demand client its CERT date; a Production release gives every Standard client the release's date and each
+/// On-Demand client its own. Release types are a per-workspace list (D46), so the kind is read from the type's name (ignoring case): "CERT" and "Production", as RT1's backfill reads "Production".
+/// </summary>
+public static class ClientScheduleKinds
+{
+    public const string Cert = "Cert", Production = "Production";
+    /// <summary>Config key <c>Release:OnDemandOffsetDays</c>: calendar days from the Standard date to an On-Demand client's offered date (proposal question 21, provisional).</summary>
+    public const string OffsetKey = "Release:OnDemandOffsetDays";
+    public const int DefaultOffsetDays = 7, MaxOffsetDays = 90;
+
+    public static string? Of(string? releaseTypeName) => (releaseTypeName ?? "").Trim().ToUpperInvariant() switch { "CERT" => Cert, "PRODUCTION" => Production, _ => null };
+
+    /// <summary>A calendar date written as yyyy-MM-dd and nothing else.</summary>
+    public static bool TryParseDay(string? text, out DateOnly day) =>
+        DateOnly.TryParseExact((text ?? "").Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out day);
+
+    /// <summary>The offset from the configuration; a value that is not a whole number from 0 to 90 is an error (the app refuses to start rather than offer dates nobody chose).</summary>
+    public static int OffsetFrom(string? configured)
+    {
+        if (string.IsNullOrWhiteSpace(configured)) return DefaultOffsetDays;
+        if (!int.TryParse(configured, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) || n > MaxOffsetDays)
+            throw new InvalidOperationException($"{OffsetKey} must be a whole number of calendar days from 0 to {MaxOffsetDays}, not \"{configured}\"");
+        return n;
     }
 }
 

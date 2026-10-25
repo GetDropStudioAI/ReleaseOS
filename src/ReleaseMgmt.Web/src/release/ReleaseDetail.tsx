@@ -20,6 +20,7 @@ import { AdvisoryItems, ContingencyLine } from '../Advisories'
 import { day, errMsg, plural, splitId, tMinus } from '../format'
 import { announce } from '../announce'
 import { typeLabel } from '../mgmt/releaseTypesLogic'
+import { ClientDates } from './ClientDates'
 import { browserZone } from '../shell/clock'
 import { serverNow } from '../time'
 import type { Mode } from '../route'
@@ -254,6 +255,8 @@ function Overview(p: ReleaseDetailProps & {
         </Panel>
         <Panel label="Release properties" title="Release properties"><PropertyList items={props} /></Panel>
       </div>
+
+      <ClientDates key={t.id} trainId={t.id} refreshKey={p.refreshKey} canPlan={p.canPlan} />
 
       {t.nextStatus && r && (
         <Panel label="Readiness" title={`To reach ${t.nextStatus}`} subtitle={`${p.guardsTotal - r.blockers.length} of ${p.guardsTotal} checks met`}>

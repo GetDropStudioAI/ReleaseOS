@@ -201,8 +201,12 @@ internal sealed class TrainsHandler : KindHandler
                 var t = byId[p.Existing!.Id];
                 if (p.Changed.Contains("TargetReleaseDate"))
                 {
+                    var oldTarget = t.TargetReleaseDate;
                     t.TargetReleaseDate = ParseDay(p.After["TargetReleaseDate"]);
-                    // as ScheduleService: a new target date moves every gate's DueOn (business days, D9)
+                    // as ScheduleService: a new target date moves every On-Demand client's offered date (RT4) ...
+                    await Services.ClientScheduleService.ShiftOfferedAsync(env.Db, t.Id, oldTarget, t.TargetReleaseDate, env.Now, env.Actor.UserId,
+                        (d, was, now) => env.Audit(t.Id, Services.ClientScheduleService.Entity, d.Id, "OfferedMoved", new { offeredDate = was }, new { offeredDate = now, d.Version }), ct);
+                    // ... and every gate's DueOn (business days, D9)
                     foreach (var g in await env.Db.Set<StageGates>().Where(g => g.ReleaseTrainId == t.Id).ToListAsync(ct))
                     { g.DueOn = BusinessDays.SubtractBusinessDays(t.TargetReleaseDate, g.OffsetDays, env.Holidays); g.Version++; }
                 }

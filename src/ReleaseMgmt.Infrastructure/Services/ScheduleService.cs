@@ -19,15 +19,19 @@ public sealed class ScheduleService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             var gates = await db.Set<StageGates>().Where(g => g.ReleaseTrainId == trainId).OrderBy(g => g.SequenceOrder).ToListAsync(ct);
             var before = new { target = t.TargetReleaseDate.ToString("yyyy-MM-dd"), dueOn = gates.ToDictionary(g => g.GateName, g => g.DueOn.ToString("yyyy-MM-dd")) };
             var now = Now;
+            var oldTarget = t.TargetReleaseDate;
             t.TargetReleaseDate = newTarget;
             foreach (var g in gates)
             {
                 g.DueOn = BusinessDays.SubtractBusinessDays(newTarget, g.OffsetDays, holidays);
                 g.Version++; // no Status change, so no trigger fires; LastChanged* stay untouched
             }
+            // RT4: every On-Demand client's offered date moves with the Standard date; a chosen date stays where the client put it.
+            var moved = await ClientScheduleService.ShiftOfferedAsync(db, trainId, oldTarget, newTarget, now, actor.UserId,
+                (d, was, nowDate) => Audit(db, actor, trainId, ClientScheduleService.Entity, d.Id, "OfferedMoved", new { offeredDate = was }, new { offeredDate = nowDate, d.Version }), ct);
             t.LastChangedByUserId = actor.UserId; t.LastChangedAt = now; t.UpdatedAt = now; t.Version++;
             Audit(db, actor, trainId, "ReleaseTrain", trainId, "ChangeTargetDate", before,
-                new { target = newTarget.ToString("yyyy-MM-dd"), dueOn = gates.ToDictionary(g => g.GateName, g => g.DueOn.ToString("yyyy-MM-dd")) });
+                new { target = newTarget.ToString("yyyy-MM-dd"), dueOn = gates.ToDictionary(g => g.GateName, g => g.DueOn.ToString("yyyy-MM-dd")), clientOfferedDatesMoved = moved == 0 ? (int?)null : moved });
             await db.SaveChangesAsync(ct);
             return ServiceResult<ReleaseTrains>.Ok(t);
         }, ct);

@@ -6,7 +6,7 @@ using ReleaseMgmt.Infrastructure.Services;
 namespace ReleaseMgmt.Api.Endpoints;
 
 /// <summary>
-/// The release model (REOS-107): a release's key, owner, team, branch, on-call, type and target environments, the workspace's key prefix, the release types (RT1, D46) and the clients (RT3, D47).
+/// The release model (REOS-107): a release's key, owner, team, branch, on-call, type and target environments, the workspace's key prefix, the release types (RT1, D46) the clients (RT3, D47) and their dates on a release (RT4).
 /// Read: any signed-in role. Edit: planners (RTE, Release Manager); the key prefix is an Admin setting (same two roles in v1). Every edit needs If-Match (Q-004) and answers 409 with the current row when stale.
 /// </summary>
 public static class ReleaseModelEndpoints
@@ -54,5 +54,14 @@ public static class ReleaseModelEndpoints
             Viewed(s.SetArchivedAsync(id, true, ActorOf(u), r.IfMatch(), ct), x => s.GetAsync(x.Id, ct))).RequireAuthorization(Policies.Plan);
         api.MapPost("/clients/{id}:unarchive", (string id, ClaimsPrincipal u, HttpRequest r, ClientService s, CancellationToken ct) =>
             Viewed(s.SetArchivedAsync(id, false, ActorOf(u), r.IfMatch(), ct), x => s.GetAsync(x.Id, ct))).RequireAuthorization(Policies.Plan);
+
+        // RT4 (D47): the clients' dates on a CERT or Production release, Standard and On-Demand combined. Read: any signed-in role. Record or clear a date, schedule the On-Demand clients: planners.
+        // The If-Match of a client's date is its row's Version, or 0 for a client with no row yet.
+        api.MapGet("/trains/{id}/client-schedule", async (string id, ClientScheduleService s, CancellationToken ct) =>
+            await s.GetAsync(id, ct) is { } v ? Results.Ok(v) : Results.NotFound(new { message = "train not found" })).RequireAuthorization(Policies.Read);
+        api.MapPatch("/trains/{id}/client-schedule/{client}", (string id, string client, ClientDatePatch b, ClaimsPrincipal u, HttpRequest r, ClientScheduleService s, CancellationToken ct) =>
+            Viewed(s.SetAsync(id, client, b, ActorOf(u), r.IfMatch(), ct), _ => s.GetAsync(id, ct))).RequireAuthorization(Policies.Plan);
+        api.MapPost("/trains/{id}/client-schedule:schedule", (string id, ClaimsPrincipal u, ClientScheduleService s, CancellationToken ct) =>
+            Viewed(s.ScheduleAllAsync(id, ActorOf(u), ct), _ => s.GetAsync(id, ct))).RequireAuthorization(Policies.Plan);
     }
 }

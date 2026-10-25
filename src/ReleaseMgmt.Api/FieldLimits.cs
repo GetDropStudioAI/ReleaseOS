@@ -152,6 +152,8 @@ public static class FieldLimits
         // REOS-118 (RT3): clients
         [typeof(NewClient)] = new() { ["Name"] = ReleaseModelLimits.MaxClientName, ["Segment"] = Code, ["CertEnvironmentId"] = Id },
         [typeof(ClientPatch)] = new() { ["Name"] = ReleaseModelLimits.MaxClientName, ["Segment"] = Code, ["CertEnvironmentId"] = Id },
+        // REOS-119 (RT4): client dates (yyyy-MM-dd; the parser refuses anything else, the limit keeps a long body out)
+        [typeof(ClientDatePatch)] = new() { ["OfferedDate"] = Code, ["ChosenDate"] = Code },
         // REOS-109: environments, the service catalog and a product's link to it
         [typeof(NewEnvironment)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id },
         [typeof(EnvironmentPatch)] = new() { ["Name"] = ReleaseModelLimits.MaxEnvironmentName, ["Kind"] = Code, ["Region"] = ReleaseModelLimits.MaxRegion, ["ControlWebhookDestinationId"] = Id, ["Clear"] = Code },

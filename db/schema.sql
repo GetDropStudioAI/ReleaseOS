@@ -765,6 +765,23 @@ CREATE TABLE Clients (                                    -- RT3 (D47): a per-wo
     UNIQUE (WorkspaceId, Name)
 );
 
+CREATE TABLE ReleaseClientDates (                         -- RT4 (D47): an On-Demand client's date on a CERT or Production release. OfferedDate is ours (Standard date + Release:OnDemandOffsetDays when the row is made, and it moves with the release's date); ChosenDate is the client's own
+    Id TEXT PRIMARY KEY,
+    ReleaseTrainId TEXT NOT NULL REFERENCES ReleaseTrains(Id) ON DELETE CASCADE,
+    ClientId TEXT NOT NULL REFERENCES Clients(Id),
+    OfferedDate TEXT NOT NULL CHECK (date(OfferedDate) IS OfferedDate),   -- a calendar date 'YYYY-MM-DD'
+    ChosenDate TEXT CHECK (date(ChosenDate) IS ChosenDate),               -- NULL = the client takes the offered date
+    ChosenByUserId TEXT REFERENCES Users(Id),             -- who recorded the chosen date, and when (each change is also an AuditEvents row)
+    ChosenAt TEXT,
+    LastChangedByUserId TEXT REFERENCES Users(Id),
+    LastChangedAt TEXT,
+    CreatedAt TEXT NOT NULL,
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    UNIQUE (ReleaseTrainId, ClientId),
+    CHECK ((ChosenDate IS NULL) = (ChosenByUserId IS NULL) AND (ChosenDate IS NULL) = (ChosenAt IS NULL))
+);
+
 CREATE TABLE TrainEnvironments (                          -- a release's target environments; changes are audited on the train
     ReleaseTrainId TEXT NOT NULL REFERENCES ReleaseTrains(Id) ON DELETE CASCADE,
     EnvironmentId TEXT NOT NULL REFERENCES Environments(Id),
@@ -1322,6 +1339,15 @@ BEGIN
     SELECT RAISE(ABORT, 'Only an On-Demand client has a CERT environment') WHERE NEW.Segment = 'Standard' AND NEW.CertEnvironmentId IS NOT NULL;
     SELECT RAISE(ABORT, 'An On-Demand client needs a CERT environment') WHERE NEW.Segment = 'OnDemand' AND NEW.CertEnvironmentId IS NULL;
 END;
+CREATE TRIGGER trg_ClientDate_Rules_Insert BEFORE INSERT ON ReleaseClientDates
+BEGIN
+    SELECT RAISE(ABORT, 'Only an On-Demand client has its own date on a release')
+     WHERE EXISTS (SELECT 1 FROM Clients c WHERE c.Id = NEW.ClientId AND c.Segment <> 'OnDemand');
+END;
+CREATE TRIGGER trg_ClientDate_Rules_Update BEFORE UPDATE OF ReleaseTrainId, ClientId ON ReleaseClientDates
+BEGIN
+    SELECT RAISE(ABORT, 'A client date keeps its release and client') WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId OR NEW.ClientId IS NOT OLD.ClientId;
+END;
 CREATE TRIGGER trg_Deployment_Transition BEFORE UPDATE OF State ON Deployments WHEN NEW.State <> OLD.State
 BEGIN
     SELECT RAISE(ABORT, 'Illegal deployment state transition')
@@ -1738,6 +1764,17 @@ BEGIN
     SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
     SELECT RAISE(ABORT, 'The environment belongs to another workspace')
      WHERE EXISTS (SELECT 1 FROM Environments x WHERE x.Id = NEW.CertEnvironmentId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ReleaseClientDates_Insert BEFORE INSERT ON ReleaseClientDates
+BEGIN
+    SELECT RAISE(ABORT, 'The train belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ReleaseTrains x WHERE x.Id = NEW.ReleaseTrainId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+    SELECT RAISE(ABORT, 'The client belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Clients x WHERE x.Id = NEW.ClientId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ReleaseClientDates_Update BEFORE UPDATE OF WorkspaceId ON ReleaseClientDates
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
 END;
 CREATE TRIGGER trg_Ws_CatalogServices_Insert BEFORE INSERT ON CatalogServices
 BEGIN

@@ -10,8 +10,8 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261024211901_Triggers")]
-    partial class Triggers
+    [Migration("20261024235735_Schema")]
+    partial class Schema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2165,6 +2165,66 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ReleaseClientDates", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChosenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChosenByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChosenDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OfferedDate")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReleaseTrainId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChosenByUserId");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.HasIndex("ReleaseTrainId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("ReleaseClientDates", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ReleaseTrains", b =>
                 {
                     b.Property<string>("Id")
@@ -3918,6 +3978,37 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
                         .WithMany()
                         .HasForeignKey("ReleaseTrainId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.ReleaseClientDates", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("ChosenByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Clients", null)
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseTrainId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });

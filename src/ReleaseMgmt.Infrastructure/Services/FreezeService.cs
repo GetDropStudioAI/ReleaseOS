@@ -50,6 +50,19 @@ public sealed class FreezeService(IDbContextFactory<ReleaseDbContext> dbf, TimeP
             .OrderBy(f => f.StartsAt).FirstOrDefaultAsync(ct);
     }
 
+    /// <summary>
+    /// RT4: the Freeze and Chill windows of the train's workspace that overlap [<paramref name="from"/>, <paramref name="to"/>) and cover one of the train's products (a window with no
+    /// product pattern covers all). Advisory only: a client date inside one is warned about, never refused (Advisories style); overrides are not considered, they are per release and
+    /// per step start, not per client date.
+    /// </summary>
+    public static async Task<List<FreezeWindows>> OverlappingAsync(ReleaseDbContext db, string trainId, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        var workspace = await db.Set<ReleaseTrains>().Where(t => t.Id == trainId).Select(t => t.WorkspaceId).SingleAsync(ct);
+        return await db.Set<FreezeWindows>().AsNoTracking().Where(f => f.WorkspaceId == workspace && f.StartsAt < to && f.EndsAt > from
+                && (f.ProductPattern == null || db.Set<BundledProducts>().Any(p => p.ReleaseTrainId == trainId && EF.Functions.Glob(p.ProductName, f.ProductPattern))))
+            .OrderBy(f => f.StartsAt).ThenBy(f => f.Id).ToListAsync(ct);
+    }
+
     public static GuardFailure LockoutFailure(FreezeWindows w, string stepCode) =>
         new(Guards.FreezeLockout, $"Step {stepCode} cannot start: freeze window '{w.Name}' is in force until {w.EndsAt:yyyy-MM-dd HH:mm}Z and this train has no unexpired override. A Release Manager or Governance Officer (not the requester) can grant one.");
 

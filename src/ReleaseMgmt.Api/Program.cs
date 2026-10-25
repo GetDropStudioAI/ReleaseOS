@@ -100,6 +100,8 @@ builder.Services.AddSingleton<WorkspaceMembersService>();   // REOS-106 switcher
 builder.Services.AddSingleton<ReleaseModelService>();   // REOS-107 key, owner, team, branch, on-call, type, target environments
 builder.Services.AddSingleton<ReleaseTypeService>();    // REOS-107 / RT1 release types per workspace
 builder.Services.AddSingleton<ClientService>();    // REOS-118 (RT3) clients per workspace
+ClientScheduleKinds.OffsetFrom(builder.Configuration[ClientScheduleKinds.OffsetKey]);   // REOS-119 (RT4): a bad Release:OnDemandOffsetDays stops the start
+builder.Services.AddSingleton<ClientScheduleService>();   // REOS-119 (RT4) client dates on CERT and Production releases
 builder.Services.AddSingleton<EnvironmentService>();    // REOS-109 environments
 builder.Services.AddSingleton<ServiceCatalogService>(); // REOS-109 service catalog
 builder.Services.AddSingleton<IngestKeyService>();      // REOS-110 per-workspace API keys (hash only)

@@ -720,6 +720,22 @@ public class Clients
     public string WorkspaceId { get; set; } = "default";
 }
 
+public class ReleaseClientDates
+{
+    public string Id { get; set; } = Ids.New();
+    public string ReleaseTrainId { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public DateOnly OfferedDate { get; set; }
+    public DateOnly? ChosenDate { get; set; }
+    public string? ChosenByUserId { get; set; }
+    public DateTime? ChosenAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
 public class TrainEnvironments
 {
     public string ReleaseTrainId { get; set; } = "";

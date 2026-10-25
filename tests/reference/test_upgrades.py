@@ -215,6 +215,28 @@ for sql, want, label in [
     except sqlite3.IntegrityError as e:
         check(want is not None and want in str(e), label)
 
+# Upgrade 011 (REOS-119): ReleaseClientDates starts empty, clients and releases are kept, the new rules are live
+t11 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("011_"):
+        t11.execute("INSERT INTO Environments (Id, Name, Kind, CreatedAt) VALUES ('envc', 'CERT', 'Staging', '2026-09-03T00:00:00Z')")
+        t11.execute("INSERT INTO Clients (Id, Name, Segment, CertEnvironmentId, CreatedAt) VALUES ('c2', 'Globex', 'OnDemand', 'envc', '2026-09-04T00:00:00Z')")
+        t11.execute("INSERT INTO Clients (Id, Name, Segment, CreatedAt) VALUES ('c1', 'Acme', 'Standard', '2026-09-04T00:00:00Z')")
+    t11.executescript(s.read_text())
+check(t11.execute("SELECT COUNT(*) FROM ReleaseClientDates").fetchone() == (0,), "011: no client date is made by the script")
+check(t11.execute("SELECT Id, Segment, WorkspaceId FROM Clients ORDER BY Id").fetchall() == [("c1", "Standard", "default"), ("c2", "OnDemand", "default")], "011: clients kept")
+check(t11.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_ClientDate_%'").fetchone() == (2,), "011: the client date rules are in place")
+CD = "INSERT INTO ReleaseClientDates (Id, ReleaseTrainId, ClientId, OfferedDate, CreatedAt) VALUES (?, 'r1', ?, '2026-11-06', '2026-09-04T00:00:00Z')"
+for params, want, label in [
+    (("d1", "c2"), None, "011: an On-Demand client's offered date"),
+    (("d2", "c1"), "Only an On-Demand client has its own date", "011: a Standard client's own date is refused"),
+    (("d3", "c2"), "UNIQUE", "011: a second row for the same release and client is refused"),
+]:
+    try:
+        t11.execute(CD, params); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

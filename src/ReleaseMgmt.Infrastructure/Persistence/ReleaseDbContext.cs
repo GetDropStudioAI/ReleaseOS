@@ -43,6 +43,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<ReleaseTypes>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-107/109/110
         b.Entity<Environments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<Clients>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-118 (RT3)
+        b.Entity<ReleaseClientDates>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-119 (RT4)
         b.Entity<CatalogServices>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<IngestKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<Deployments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);

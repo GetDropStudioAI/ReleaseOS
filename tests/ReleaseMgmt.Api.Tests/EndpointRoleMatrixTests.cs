@@ -268,6 +268,9 @@ public class EndpointRoleMatrixTests
         PATCH /api/v1/clients/{id}                               Plan
         POST /api/v1/clients/{id}:archive                        Plan
         POST /api/v1/clients/{id}:unarchive                      Plan
+        GET /api/v1/trains/{id}/client-schedule                  Read
+        PATCH /api/v1/trains/{id}/client-schedule/{client}       Plan
+        POST /api/v1/trains/{id}/client-schedule:schedule        Plan
         GET /api/v1/release-types                                Read
         POST /api/v1/release-types                               Plan
         PATCH /api/v1/release-types/{id}                         Plan

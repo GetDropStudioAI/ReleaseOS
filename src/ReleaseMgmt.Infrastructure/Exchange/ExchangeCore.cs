@@ -157,6 +157,9 @@ internal sealed class ApplyEnv(ReleaseDbContext db, Actor actor, DateTime now, A
     public HashSet<DateOnly> Holidays { get; set; } = [];
 
     /// <summary>Bump each train at most once per job (the trains moved: other open previews and parser previews are now stale, like BulkCommit).</summary>
+    /// <summary>An audit row for a write the handler makes outside a planned row (a client date that moved with an imported target date).</summary>
+    public void Audit(string? trainId, string entityType, string entityId, string action, object? before, object? after) => audit(trainId, entityType, entityId, action, before, after);
+
     public void Bump(string? trainId) { if (trainId is not null) TrainsToBump.Add(trainId); }
 
     /// <summary>One AuditEvents row per changed or created row: Before/After hold only the columns that changed (all columns for an insert).</summary>

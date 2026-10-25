@@ -257,7 +257,7 @@ roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='t
          if 'WorkspaceId' in [c[1] for c in db6.execute(f"PRAGMA table_info({t})")]]
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
-            'ReleaseTypes','Environments','CatalogServices','Clients','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
+            'ReleaseTypes','Environments','CatalogServices','Clients','ReleaseClientDates','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
             'ApprovalPolicies','Approvals']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
@@ -678,6 +678,39 @@ check(db10, "UPDATE Clients SET CertEnvironmentId='eX' WHERE Id='c2'", False, "a
 check(db10, "UPDATE Clients SET WorkspaceId='w2' WHERE Id='c1'", False, "a client moved to another workspace", expect="cannot move to another workspace")
 check(db10, "UPDATE Clients SET Name='Acme Corp', Version=2 WHERE Id='c1'", True, "a client renamed")
 check(db10, "INSERT INTO ImportJobs(Id,Kind,FileName,Sha256,RowCount,Status,UploadedByUserId,CreatedAt) VALUES('ij1','Clients','c.csv','00',1,'Previewed','rte','2026-10-20T14:00:00Z')", True, "a Clients import job")
+
+# ---- Client dates on a release (REOS-119, RT4, D47): an OnDemand client's offered and chosen date, one row per release and client ----
+db11 = db_fresh()
+db11.executescript(f"""
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','{NOW}');
+INSERT INTO Environments(Id,Name,Kind,CreatedAt) VALUES('eC','CERT','Staging','{NOW}');
+INSERT INTO Clients(Id,Name,Segment,CreatedAt) VALUES('cs','Acme','Standard','{NOW}');
+INSERT INTO Clients(Id,Name,Segment,CertEnvironmentId,CreatedAt) VALUES('co','Globex','OnDemand','eC','{NOW}');
+INSERT INTO Clients(Id,Name,Segment,CertEnvironmentId,CreatedAt) VALUES('co2','Initech','OnDemand','eC','{NOW}');
+INSERT INTO Clients(Id,Name,Segment,CreatedAt,WorkspaceId) VALUES('cx','Hooli','Standard','{NOW}','w2');
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt) VALUES('tp','Prod','2026-12-01','{NOW}','{NOW}');
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,WorkspaceId) VALUES('tx','EU','2026-12-01','{NOW}','{NOW}','w2');
+""")
+D = "INSERT INTO ReleaseClientDates(Id,ReleaseTrainId,ClientId,OfferedDate,ChosenDate,ChosenByUserId,ChosenAt,CreatedAt,WorkspaceId) VALUES(?,?,?,?,?,?,?,?,?)"
+check(db11, D, True, "an OnDemand client offered a date", ('d1', 'tp', 'co', '2026-12-08', None, None, None, NOW, 'default'))
+check(db11, D, True, "an OnDemand client with a chosen date, who and when", ('d2', 'tp', 'co2', '2026-12-08', '2026-12-10', 'rte', NOW, NOW, 'default'))
+check(db11, D, False, "a Standard client on the dates list", ('d3', 'tp', 'cs', '2026-12-08', None, None, None, NOW, 'default'), expect="Only an On-Demand client")
+check(db11, D, False, "a second row for the same release and client", ('d4', 'tp', 'co', '2026-12-09', None, None, None, NOW, 'default'), expect="UNIQUE")
+check(db11, D, False, "a chosen date nobody recorded", ('d5', 'tp', 'co2', '2026-12-08', '2026-12-10', None, None, NOW, 'default'), expect="CHECK")
+check(db11, D, False, "a recorder without a chosen date", ('d6', 'tp', 'co2', '2026-12-08', None, 'rte', NOW, NOW, 'default'), expect="CHECK")
+check(db11, D, False, "an offered date that is not a calendar date", ('d7', 'tp', 'co2', '2026-13-45', None, None, None, NOW, 'default'), expect="CHECK")
+check(db11, D, False, "a chosen date written as a timestamp", ('d8', 'tp', 'co2', '2026-12-08', '2026-12-10T00:00:00Z', 'rte', NOW, NOW, 'default'), expect="CHECK")
+check(db11, D, False, "a release of another workspace", ('d9', 'tx', 'co', '2026-12-08', None, None, None, NOW, 'default'), expect="belongs to another workspace")
+check(db11, D, False, "a client of another workspace", ('d10', 'tp', 'cx', '2026-12-08', None, None, None, NOW, 'default'), expect="belongs to another workspace")
+check(db11, "UPDATE ReleaseClientDates SET OfferedDate='2026-12-09', Version=2 WHERE Id='d1'", True, "an offered date moved")
+check(db11, "UPDATE ReleaseClientDates SET ChosenDate='2026-12-11', ChosenByUserId='rte', ChosenAt=? WHERE Id='d1'", True, "a chosen date recorded", (NOW,))
+check(db11, "UPDATE ReleaseClientDates SET ChosenDate=NULL, ChosenByUserId=NULL, ChosenAt=NULL WHERE Id='d1'", True, "a chosen date cleared")
+check(db11, "UPDATE ReleaseClientDates SET ChosenDate=NULL WHERE Id='d2'", False, "a chosen date cleared without clearing who and when", expect="CHECK")
+check(db11, "UPDATE ReleaseClientDates SET ClientId='co2' WHERE Id='d1'", False, "a date moved to another client", expect="keeps its release and client")
+check(db11, "UPDATE ReleaseClientDates SET ReleaseTrainId='tx' WHERE Id='d1'", False, "a date moved to another release", expect="keeps its release and client")
+check(db11, "UPDATE ReleaseClientDates SET WorkspaceId='w2' WHERE Id='d1'", False, "a date moved to another workspace", expect="cannot move to another workspace")
+db11.execute("DELETE FROM ReleaseTrains WHERE Id='tp'")
+assert_true(db11.execute("SELECT COUNT(*) FROM ReleaseClientDates").fetchone()[0] == 0, "deleting a release removes its client dates")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

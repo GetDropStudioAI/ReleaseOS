@@ -85,7 +85,7 @@ CREATE TABLE Holidays (                                   -- business-day offset
 -- =====================================================================
 CREATE TABLE TrainTemplates (
     Id TEXT PRIMARY KEY,
-    Name TEXT NOT NULL,                                   -- unique within the workspace
+    Name TEXT NOT NULL,                                   -- unique within the workspace per version number: a new version (RT7) keeps the name
     Status TEXT NOT NULL DEFAULT 'Draft' CHECK (Status IN ('Draft','Approved','Retired')),
     DefaultRiskTier TEXT NOT NULL DEFAULT 'Moderate' CHECK (DefaultRiskTier IN ('Low','Moderate','High','VeryHigh')),
     ApprovedByUserId TEXT REFERENCES Users(Id),
@@ -93,8 +93,13 @@ CREATE TABLE TrainTemplates (
     ReviewDueOn TEXT,                                     -- re-review cycle (default +12 months on approval)
     Version INTEGER NOT NULL DEFAULT 1,
     WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
-    UNIQUE (WorkspaceId, Name),
-    CHECK ((Status = 'Approved') = (ApprovedByUserId IS NOT NULL AND ApprovedAt IS NOT NULL))
+    CreatedByUserId TEXT REFERENCES Users(Id),            -- RT7: the author, set by the service; NULL for a template made before RT7 or by the seed
+    LastEditedByUserId TEXT REFERENCES Users(Id),         -- RT7: whoever last changed its content; an approver is neither this person nor the author (trg_Template_ApproverNotAuthor_*)
+    VersionNo INTEGER NOT NULL DEFAULT 1 CHECK (VersionNo >= 1),   -- RT7: 1 for a new template; a new version of an Approved template is VersionNo + 1 under the same name
+    SupersedesTemplateId TEXT REFERENCES TrainTemplates(Id),       -- RT7: the version this one replaces; approving this one retires that one (the service, in one transaction)
+    UNIQUE (WorkspaceId, Name, VersionNo),
+    CHECK ((Status = 'Approved') = (ApprovedByUserId IS NOT NULL AND ApprovedAt IS NOT NULL)),
+    CHECK (SupersedesTemplateId IS NULL OR SupersedesTemplateId <> Id)
 );
 
 CREATE TABLE TemplateGates (
@@ -121,6 +126,28 @@ CREATE TABLE TemplateSteps (                              -- runbook skeleton
     OwnerTeamId TEXT REFERENCES Teams(Id),
     Version INTEGER NOT NULL DEFAULT 1,
     UNIQUE (TemplateId, StepCode)
+);
+
+CREATE TABLE TemplateTasks (                              -- RT7: a checklist task of a template gate; a release made from the template gets it on that gate
+    Id TEXT PRIMARY KEY,
+    TemplateId TEXT NOT NULL REFERENCES TrainTemplates(Id) ON DELETE CASCADE,
+    TemplateGateId TEXT NOT NULL REFERENCES TemplateGates(Id) ON DELETE CASCADE,
+    TaskDescription TEXT NOT NULL CHECK (length(trim(TaskDescription)) BETWEEN 1 AND 500),
+    OwnerTeamId TEXT REFERENCES Teams(Id),                -- none: the person who creates the release owns the task, as for a gate (Q-080a)
+    SequenceOrder INTEGER NOT NULL,
+    Version INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (TemplateGateId, SequenceOrder)
+);
+
+CREATE TABLE TemplateMilestones (                         -- RT7: a named key date dated from the target; a release made from the template gets it, and it moves with the target
+    Id TEXT PRIMARY KEY,
+    TemplateId TEXT NOT NULL REFERENCES TrainTemplates(Id) ON DELETE CASCADE,
+    Name TEXT NOT NULL CHECK (length(trim(Name)) BETWEEN 1 AND 200),
+    OffsetDays INTEGER NOT NULL CHECK (OffsetDays BETWEEN -365 AND 365),   -- calendar days from the target; negative is before it (T-14 => -14), like the T-minus plan
+    OwnerTeamId TEXT REFERENCES Teams(Id),
+    SequenceOrder INTEGER NOT NULL,
+    Version INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (TemplateId, SequenceOrder)
 );
 
 CREATE TABLE TemplateCommSchedule (                       -- T-minus plan
@@ -247,6 +274,7 @@ CREATE TABLE StageGates (
     LastChangedByUserId TEXT REFERENCES Users(Id),        -- service sets on every write; trigger logs it
     LastChangedAt TEXT,                                   -- service sets from its clock (test clock in tests)
     Version INTEGER NOT NULL DEFAULT 1,
+    TemplateLocked INTEGER NOT NULL DEFAULT 0 CHECK (TemplateLocked IN (0,1) AND (TemplateLocked = 0 OR GateClass = 'Compliance')),   -- RT7: a Compliance gate that came from an approved template; it cannot be removed or downgraded on the release (trg_Gate_TemplateLocked_*)
     UNIQUE (ReleaseTrainId, SequenceOrder),
     CHECK ((OwnerUserId IS NULL) <> (OwnerTeamId IS NULL)),
     CHECK ((Status IN ('Certified','Waived')) = (CertifiedByUserId IS NOT NULL AND CertifiedAt IS NOT NULL))
@@ -709,6 +737,7 @@ CREATE TABLE TrainMilestones (                            -- "Code complete", "U
     LastChangedByUserId TEXT REFERENCES Users(Id),
     LastChangedAt TEXT,
     Version INTEGER NOT NULL DEFAULT 1,
+    OffsetDays INTEGER CHECK (OffsetDays IS NULL OR OffsetDays BETWEEN -365 AND 365),   -- RT7: set on a milestone that came from a template: calendar days from the target, so DueOn moves with it; NULL is a fixed date
     CHECK (OwnerUserId IS NULL OR OwnerTeamId IS NULL),
     CHECK ((IsDone = 1) = (DoneAt IS NOT NULL AND DoneByUserId IS NOT NULL))
 );
@@ -1432,8 +1461,12 @@ END;
 -- Roots: WorkspaceId never changes
 CREATE TRIGGER trg_Ws_Holidays_Update BEFORE UPDATE OF WorkspaceId ON Holidays WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
 BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
-CREATE TRIGGER trg_Ws_TrainTemplates_Update BEFORE UPDATE OF WorkspaceId ON TrainTemplates WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
-BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_TrainTemplates_Update BEFORE UPDATE OF WorkspaceId, SupersedesTemplateId ON TrainTemplates
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The previous version belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM TrainTemplates x WHERE x.Id = NEW.SupersedesTemplateId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
 CREATE TRIGGER trg_Ws_CommTemplateLibrary_Update BEFORE UPDATE OF WorkspaceId ON CommTemplateLibrary WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
 BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
 CREATE TRIGGER trg_Ws_FreezeWindows_Update BEFORE UPDATE OF WorkspaceId ON FreezeWindows WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
@@ -1573,6 +1606,39 @@ BEGIN
     SELECT RAISE(ABORT, 'The library template belongs to another workspace')
      WHERE EXISTS (SELECT 1 FROM CommTemplateLibrary x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
                     WHERE x.Id = NEW.LibraryTemplateId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TrainTemplates_Insert BEFORE INSERT ON TrainTemplates
+BEGIN
+    SELECT RAISE(ABORT, 'The previous version belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM TrainTemplates x WHERE x.Id = NEW.SupersedesTemplateId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TemplateTasks_Insert BEFORE INSERT ON TemplateTasks
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The gate belongs to another template')
+     WHERE EXISTS (SELECT 1 FROM TemplateGates x WHERE x.Id = NEW.TemplateGateId AND x.TemplateId IS NOT NEW.TemplateId);
+END;
+CREATE TRIGGER trg_Ws_TemplateTasks_Update BEFORE UPDATE OF TemplateId, TemplateGateId, OwnerTeamId ON TemplateTasks
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+    SELECT RAISE(ABORT, 'The gate belongs to another template')
+     WHERE EXISTS (SELECT 1 FROM TemplateGates x WHERE x.Id = NEW.TemplateGateId AND x.TemplateId IS NOT NEW.TemplateId);
+END;
+CREATE TRIGGER trg_Ws_TemplateMilestones_Insert BEFORE INSERT ON TemplateMilestones
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_TemplateMilestones_Update BEFORE UPDATE OF TemplateId, OwnerTeamId ON TemplateMilestones
+BEGIN
+    SELECT RAISE(ABORT, 'The team belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM Teams x JOIN TrainTemplates p ON p.Id = NEW.TemplateId
+                    WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT p.WorkspaceId);
 END;
 
 -- Train rows: teams, library templates and webhooks from the train's workspace; products, gates and comm templates from the same train
@@ -1906,6 +1972,36 @@ BEGIN
     SELECT RAISE(ABORT, 'An approval keeps its release and environment')
      WHERE NEW.ReleaseTrainId IS NOT OLD.ReleaseTrainId OR NEW.EnvironmentId IS NOT OLD.EnvironmentId;
 END;
+
+-- =====================================================================
+-- 10c. Template governance (RT7, REOS-122; D10, D14)
+-- A Governance Officer approving a template whose Compliance gates changed is a service rule behind Templates:ComplianceChangeNeedsGovernanceOfficer (open question Q10, docs/QUESTIONS.md Q-122a), not a trigger.
+-- =====================================================================
+-- The approver of a template is not its author: not the person who created it nor the one who last changed its content (separation of duties).
+-- The service checks first and answers 422 TemplateApproverIsAuthor; these two triggers are the backstop for any other writer.
+CREATE TRIGGER trg_Template_ApproverNotAuthor_Insert BEFORE INSERT ON TrainTemplates
+WHEN NEW.Status = 'Approved' AND NEW.ApprovedByUserId IS NOT NULL
+ AND (NEW.ApprovedByUserId IS NEW.CreatedByUserId OR NEW.ApprovedByUserId IS NEW.LastEditedByUserId)
+BEGIN SELECT RAISE(ABORT, 'Separation of duties: the author of a template cannot approve it'); END;
+
+CREATE TRIGGER trg_Template_ApproverNotAuthor_Update BEFORE UPDATE OF Status, ApprovedByUserId ON TrainTemplates
+WHEN NEW.Status = 'Approved' AND NEW.ApprovedByUserId IS NOT NULL
+ AND (NEW.ApprovedByUserId IS NEW.CreatedByUserId OR NEW.ApprovedByUserId IS NEW.LastEditedByUserId)
+BEGIN SELECT RAISE(ABORT, 'Separation of duties: the author of a template cannot approve it'); END;
+
+-- A Compliance gate that came from an approved template (StageGates.TemplateLocked) stays on the release as a Compliance gate. Skipping it is a waiver (D10), not an edit.
+CREATE TRIGGER trg_Gate_TemplateLocked_Insert BEFORE INSERT ON StageGates
+WHEN NEW.TemplateLocked = 1
+ AND NOT EXISTS (SELECT 1 FROM ReleaseTrains t WHERE t.Id = NEW.ReleaseTrainId AND t.TemplateId IS NOT NULL)
+BEGIN SELECT RAISE(ABORT, 'Only a gate of a release made from a template can come from a template'); END;
+
+CREATE TRIGGER trg_Gate_TemplateLocked_Update BEFORE UPDATE OF GateClass, TemplateLocked ON StageGates
+WHEN OLD.TemplateLocked = 1 AND (NEW.GateClass <> 'Compliance' OR NEW.TemplateLocked = 0)
+BEGIN SELECT RAISE(ABORT, 'A Compliance gate from the approved template cannot be downgraded or unlocked; request a waiver to skip it'); END;
+
+CREATE TRIGGER trg_Gate_TemplateLocked_Delete BEFORE DELETE ON StageGates
+WHEN OLD.TemplateLocked = 1 AND EXISTS (SELECT 1 FROM ReleaseTrains t WHERE t.Id = OLD.ReleaseTrainId)
+BEGIN SELECT RAISE(ABORT, 'A Compliance gate from the approved template cannot be removed; request a waiver to skip it'); END;
 
 -- =====================================================================
 -- 11. Indexes

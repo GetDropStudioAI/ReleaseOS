@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261025024857_Schema")]
+    [Migration("20261025034543_Schema")]
     partial class Schema
     {
         /// <inheritdoc />
@@ -2620,6 +2620,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("TemplateLocked")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
@@ -2890,6 +2893,42 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TemplateMilestones", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OffsetDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OwnerTeamId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SequenceOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TemplateId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerTeamId");
+
+                    b.HasIndex("TemplateId");
+
+                    b.ToTable("TemplateMilestones", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TemplateSteps", b =>
                 {
                     b.Property<string>("Id")
@@ -2930,6 +2969,45 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("TemplateId");
 
                     b.ToTable("TemplateSteps", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TemplateTasks", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerTeamId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SequenceOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TaskDescription")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TemplateGateId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TemplateId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerTeamId");
+
+                    b.HasIndex("TemplateGateId");
+
+                    b.HasIndex("TemplateId");
+
+                    b.ToTable("TemplateTasks", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -3045,6 +3123,9 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("OffsetDays")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("OwnerTeamId")
                         .HasColumnType("TEXT");
 
@@ -3086,8 +3167,14 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.Property<string>("ApprovedByUserId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("DefaultRiskTier")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastEditedByUserId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
@@ -3101,7 +3188,13 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("SupersedesTemplateId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("VersionNo")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("WorkspaceId")
@@ -3111,6 +3204,12 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LastEditedByUserId");
+
+                    b.HasIndex("SupersedesTemplateId");
 
                     b.HasIndex("WorkspaceId");
 
@@ -4329,12 +4428,46 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TemplateMilestones", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Teams", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerTeamId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.TrainTemplates", null)
+                        .WithMany()
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TemplateSteps", b =>
                 {
                     b.HasOne("ReleaseMgmt.Domain.Entities.Teams", null)
                         .WithMany()
                         .HasForeignKey("OwnerTeamId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.TrainTemplates", null)
+                        .WithMany()
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.TemplateTasks", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Teams", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerTeamId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.TemplateGates", null)
+                        .WithMany()
+                        .HasForeignKey("TemplateGateId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
 
                     b.HasOne("ReleaseMgmt.Domain.Entities.TrainTemplates", null)
                         .WithMany()
@@ -4407,6 +4540,21 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()
                         .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastEditedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.TrainTemplates", null)
+                        .WithMany()
+                        .HasForeignKey("SupersedesTemplateId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)

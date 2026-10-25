@@ -6,6 +6,8 @@ export interface Milestone {
   ownerUserId: string | null; ownerTeamId: string | null; ownerName: string | null; note: string | null
   done: boolean; doneAt: string | null; doneByUserId: string | null; doneBy: string | null
   lastChangedByUserId: string | null; lastChangedAt: string | null; version: number
+  /** RT7 (Q9): calendar days from the target when the milestone came from a template and moves with it; null is a fixed date */
+  offsetDays?: number | null
 }
 export interface MilestoneInput { name: string; dueOn: string; ownerUserId: string | null; ownerTeamId: string | null; note: string }
 

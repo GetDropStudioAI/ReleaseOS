@@ -9,7 +9,7 @@ namespace ReleaseMgmt.Api.Endpoints;
 
 /// <summary>
 /// Train templates (REOS-38, PROJECT_SCOPE section 6): read for every role, draft create/edit for RTE and Release Manager (admin, v1),
-/// approve and retire for Release Manager and Governance Officer (Q-038t1). No endpoint sets a Status: approve and retire are actions.
+/// approve and retire for Release Manager and Governance Officer (Q-038t1), a new version for the drafting roles (RT7). No endpoint sets a Status: approve and retire are actions.
 /// </summary>
 public static class TemplateEndpoints
 {
@@ -28,6 +28,9 @@ public static class TemplateEndpoints
             s.CreateAsync(b, ActorOf(u), ct).ToHttpAsync()).RequireAuthorization(Policies.Admin);
         api.MapPut("/templates/{id}", (string id, TemplateInput b, ClaimsPrincipal u, HttpRequest r, TemplateService s, CancellationToken ct) =>
             s.UpdateAsync(id, b, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Admin);
+        // RT7: an Approved template gets a new version (a Draft under the same name); the person who asks is its author.
+        api.MapPost("/templates/{id}:new-version", (string id, ClaimsPrincipal u, HttpRequest r, TemplateService s, CancellationToken ct) =>
+            s.NewVersionAsync(id, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Admin);
         api.MapPost("/templates/{id}:approve", (string id, ClaimsPrincipal u, HttpRequest r, TemplateService s, CancellationToken ct) =>
             s.ApproveAsync(id, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Approvers);
         api.MapPost("/templates/{id}:retire", (string id, ClaimsPrincipal u, HttpRequest r, TemplateService s, CancellationToken ct) =>

@@ -435,4 +435,6 @@ The answers overrule this document's recommendations on topics 3 and 4. Betas an
 | REOS-121 | RT6 Executive analytics | Across the person's workspaces (D49); by type, segment, client and quarter; VP and Director views; the analytics workbook and a portfolio PDF | REOS-105, RT1, RT4 |
 | REOS-122 | RT7 Template governance | Templates carry tasks and milestones; versions; the approver is not the author; Compliance gates locked (pending questions 8 and 10) | RT1 |
 
+Built (REOS-122): questions 8, 9 and 10 are built to the recommended defaults, each behind a `Templates:*` key; `docs/QUESTIONS.md` Q-122a records them as "Built to ..., say if wrong".
+
 The other questions in section 6 (2, 7, 8, 9, 10, 13, 14, 15) and those in redesign-coverage.md are still open.

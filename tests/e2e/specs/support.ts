@@ -80,3 +80,17 @@ export async function firstStep(page: Page, trainId: string) {
     return steps[0]
   }, trainId)
 }
+
+/**
+ * REOS-122 (RT7): the approver of a template is not its author, and a Governance Officer approves a Compliance gate. A spec that drafts a template through the API as the signed-in
+ * person has it approved here, by a Governance Officer in a context of their own (shared demo database, one fixed e2e user).
+ */
+export async function approveAsGovernanceOfficer(page: Page, template: { id: string; version: number }) {
+  const ctx = await page.context().browser()!.newContext()
+  try {
+    const gov = await ctx.newPage()
+    await signIn(gov, 'e2e-template-gov@example.com', 'GovernanceOfficer')
+    const status = await gov.evaluate(async t => (await fetch(`/api/v1/templates/${t.id}:approve`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': String(t.version) }, body: '{}' })).status, template)
+    if (status !== 200) throw new Error(`approve failed: ${status}`)
+  } finally { await ctx.close() }
+}

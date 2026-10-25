@@ -20,7 +20,7 @@ public class TrainCreationTests
     // Far enough ahead that every gate offset lands after today, whatever day the suite runs.
     private static string Target(int days = 60) => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(days).ToString("yyyy-MM-dd");
 
-    private static async Task<string> ApprovedTemplate(HttpClient rte, HttpClient rm, string name = "Quarterly")
+    private static async Task<string> ApprovedTemplate(HttpClient rte, HttpClient approver, string name = "Quarterly")
     {
         var r = await rte.PostAsJsonAsync("/api/v1/templates", new
         {
@@ -31,7 +31,7 @@ public class TrainCreationTests
         });
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var id = (await Json(r)).GetProperty("id").GetString()!;
-        Assert.Equal(HttpStatusCode.OK, (await rm.PostAsync($"/api/v1/templates/{id}:approve", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await approver.PostAsync($"/api/v1/templates/{id}:approve", null)).StatusCode);   // it has a Compliance gate, so a Governance Officer (RT7)
         return id;
     }
 
@@ -60,7 +60,8 @@ public class TrainCreationTests
         using var f = new ApiFactory();
         var rte = await As(f, Roles.RTE, "rte@x.com");
         var rm = await As(f, Roles.ReleaseManager, "rm@x.com");
-        var tpl = await ApprovedTemplate(rte, rm);
+        var gov = await As(f, Roles.GovernanceOfficer, "gov@x.com");
+        var tpl = await ApprovedTemplate(rte, gov);
         var target = Target();
         var start = DateOnly.Parse(target).ToString("yyyy-MM-dd") + "T08:00:00Z";
         var end = DateOnly.Parse(target).ToString("yyyy-MM-dd") + "T12:00:00Z";

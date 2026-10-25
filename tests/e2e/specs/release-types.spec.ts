@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { openPage, releaseRow, signIn } from './support'
+import { approveAsGovernanceOfficer, openPage, releaseRow, signIn } from './support'
 
 // REOS-116 (RT1, D46, D48): release types. Teams & settings has a Release types tab (table + side panel, archive behind a confirmation); a new release must name its type, a Beta its
 // number, and starts from the type's default template; the Releases list, the calendar and analytics filter by type. Adds its own types, template and trains (unique names) to the shared demo database.
@@ -17,17 +17,17 @@ async function scan(page: Page, where: string) {
 
 /** An Approved template with two gates, through the API as the signed-in Release Manager. */
 async function approvedTemplate(page: Page, name: string) {
-  return page.evaluate(async n => {
+  const template = await page.evaluate(async n => {
     const json = { 'Content-Type': 'application/json' }
     const t = await (await fetch('/api/v1/templates', { method: 'POST', headers: json, body: JSON.stringify({
       name: n, defaultRiskTier: 'High',
       gates: [{ gateName: 'RT Freeze', gateClass: 'Standard', offsetDays: 5, requiredBeforeStatus: 'Gated' }, { gateName: 'RT CAB', gateClass: 'Compliance', offsetDays: 1, requiredBeforeStatus: 'Executing' }],
       steps: [], schedule: [],
     }) })).json() as { id: string; version: number }
-    const ok = await fetch(`/api/v1/templates/${t.id}:approve`, { method: 'POST', headers: { ...json, 'If-Match': String(t.version) }, body: '{}' })
-    if (!ok.ok) throw new Error(`approve failed: ${ok.status}`)
-    return t.id
+    return t
   }, name)
+  await approveAsGovernanceOfficer(page, template)   // not the author, and a Governance Officer for the Compliance gate (RT7)
+  return template.id
 }
 
 const typesTable = (page: Page) => page.getByRole('table', { name: 'Release types' })

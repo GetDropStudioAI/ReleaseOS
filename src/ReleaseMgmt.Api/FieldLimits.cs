@@ -117,8 +117,10 @@ public static class FieldLimits
         // UI session state (the Ui JSON itself is held to 256 KB by the schema CHECK and SessionService)
         [typeof(SessionEndpoints.PutSessionBody)] = new() { ["ActiveTrainId"] = Id },
         // Train templates (REOS-38)
-        [typeof(TemplateInput)] = new() { ["Name"] = Name, ["DefaultRiskTier"] = Code },   // Gates, Steps, Schedule: their rows below
+        [typeof(TemplateInput)] = new() { ["Name"] = Name, ["DefaultRiskTier"] = Code },   // Gates, Steps, Schedule, Milestones: their rows below
         [typeof(TemplateGateInput)] = new() { ["GateName"] = Name, ["GateClass"] = Code, ["RequiredBeforeStatus"] = Code, ["OwnerTeamId"] = Id },
+        [typeof(TemplateTaskInput)] = new() { ["TaskDescription"] = TemplateService.MaxTaskDescription, ["OwnerTeamId"] = Id },   // REOS-122 (RT7)
+        [typeof(TemplateMilestoneInput)] = new() { ["Name"] = TemplateService.MaxMilestoneName, ["OwnerTeamId"] = Id },
         // REOS-84: train milestones (the service's own limits, which the schema's CHECKs also hold)
         [typeof(MilestoneEndpoints.AddMilestoneBody)] = new() { ["Name"] = MilestoneRules.MaxName, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Note"] = MilestoneRules.MaxNote },
         [typeof(MilestoneEndpoints.PatchMilestoneBody)] = new() { ["Name"] = MilestoneRules.MaxName, ["OwnerUserId"] = Id, ["OwnerTeamId"] = Id, ["Note"] = MilestoneRules.MaxNote },

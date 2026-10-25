@@ -90,6 +90,7 @@ builder.Services.AddSingleton<FreezeService>();
 builder.Services.AddSingleton<CloseoutService>();
 builder.Services.AddHostedService<ReleaseMgmt.Api.Realtime.SessionStateJanitor>();
 builder.Services.AddSingleton<AdminService>();
+builder.Services.AddSingleton(TemplateGovernanceOptions.From(builder.Configuration));   // REOS-122 (RT7): Templates:* keys for the owner's open questions 8 to 10 (Q-122a)
 builder.Services.AddSingleton<TemplateService>();   // REOS-38
 builder.Services.AddSingleton<TrainCreationService>();   // REOS-80 new train: blank, from template, clone
 builder.Services.AddSingleton<IReadinessService, ReadinessService>();

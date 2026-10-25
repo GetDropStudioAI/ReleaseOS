@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn } from './support'
+import { approveAsGovernanceOfficer, signIn } from './support'
 
 // REOS-80 / REOS-125: "New train" on the Releases page opens the right drawer (no modal) with three ways to start: Blank, From template, Copy of a train.
 // Each way creates a Planning train and opens its workspace. Adds its own trains and template to the shared demo database (unique names).
@@ -17,17 +17,17 @@ async function scan(page: Page, where: string) {
 
 /** An Approved template with two gates (one team-less) and one step, through the API as the signed-in Release Manager. */
 async function approvedTemplate(page: Page, name: string) {
-  return page.evaluate(async n => {
+  const template = await page.evaluate(async n => {
     const json = { 'Content-Type': 'application/json' }
     const t = await (await fetch('/api/v1/templates', { method: 'POST', headers: json, body: JSON.stringify({
       name: n, defaultRiskTier: 'High',
       gates: [{ gateName: 'E2E Freeze', gateClass: 'Standard', offsetDays: 5, requiredBeforeStatus: 'Gated' }, { gateName: 'E2E CAB', gateClass: 'Compliance', offsetDays: 1, requiredBeforeStatus: 'Executing' }],
       steps: [{ stepCode: 'PRE-1', section: 'PreCheck', title: 'E2E health check', offsetMinutes: -30, plannedDurationMin: 15 }], schedule: [],
     }) })).json() as { id: string; version: number }
-    const ok = await fetch(`/api/v1/templates/${t.id}:approve`, { method: 'POST', headers: { ...json, 'If-Match': String(t.version) }, body: '{}' })
-    if (!ok.ok) throw new Error(`approve failed: ${ok.status}`)
-    return t.id
+    return t
   }, name)
+  await approveAsGovernanceOfficer(page, template)   // not the author, and a Governance Officer for the Compliance gate (RT7)
+  return template.id
 }
 
 const drawer = (page: Page) => page.locator('aside[aria-label=Inspector]')

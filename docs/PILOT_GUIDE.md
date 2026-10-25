@@ -7,7 +7,7 @@ M8 is done when **the pilot RTE runs a real release without a spreadsheet and a 
 | Person | Role in the app | Their part |
 |---|---|---|
 | Pilot RTE | RTE | Creates and plans the train, runs the gates and the runbook, sends the messages, completes the train |
-| Release Manager | ReleaseManager | Approves the template, records the Go/No-Go decision and its conditions |
+| Release Manager | ReleaseManager | Drafts and approves templates (never one they wrote), records the Go/No-Go decision and its conditions |
 | Governance Officer | GovernanceOfficer | Certifies the Compliance gates, closes the conditions they own, holds and closes the PIR, generates and accepts the evidence pack |
 | Contributors (developers, QA, ops) | Viewer | Complete the checklist tasks, runbook steps and PIR actions they own; nothing else is open to them |
 | Operator | none needed | Installs and runs the host ([RUNBOOK_OPERATIONS.md](RUNBOOK_OPERATIONS.md)) |
@@ -22,7 +22,7 @@ Separation of duties is enforced: the person who certifies a Compliance gate mus
 4. **Calendar.** On **Admin** → Holidays, check the holidays: gate due dates count business days back from the target date.
 5. **Teams.** If tasks or steps belong to a team rather than a person, create the team and its members on **Admin** → Teams. Its handle (`@payments`) is what the pasted checklist uses.
 6. **Connectors.** On **Connectors**, enter the Jira and ServiceNow credentials (a read-only service account) and use **Test connection**. **Sync health** must show no open alert.
-7. **Template.** On **Templates**, the Release Manager (or a Governance Officer) reviews the "Standard release" template and approves it. It ships as a Draft with four gates (Code Freeze, QA Sign-off, Compliance Sign-off, CAB Approval) and the T-minus message plan. Change the gates first if the team's process differs: the train copies the template at creation.
+7. **Template.** On **Templates**, a Governance Officer reviews the "Standard release" template and approves it (it has Compliance gates, so a Governance Officer approves it; nobody who wrote a template approves it). It ships as a Draft with four gates (Code Freeze, QA Sign-off, Compliance Sign-off, CAB Approval) and the T-minus message plan. Change the gates first if the team's process differs: the train copies the template at creation.
 
 ## 3. Where the spreadsheet's contents go
 

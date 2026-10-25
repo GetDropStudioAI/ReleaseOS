@@ -185,6 +185,10 @@ public sealed class PlanStructureService(IDbContextFactory<ReleaseDbContext> dbf
             if (Blank(patch.OwnerUserId) is not null && Blank(patch.OwnerTeamId) is not null)
                 return ServiceResult<StageGates>.Fail(new GuardFailure(Guards.InvalidGate, "A gate needs exactly one owner: a person or a team"));
 
+            // RT7 (Q8): a Compliance gate that came from an approved template stays a Compliance gate (trg_Gate_TemplateLocked_Update is the backstop).
+            if (g.TemplateLocked == 1 && Trim(patch.GateClass) is { Length: > 0 } wanted && wanted != "Compliance")
+                return ServiceResult<StageGates>.Fail(new GuardFailure(TemplateGuards.GateLockedByTemplate,
+                    $"{g.GateName} is a Compliance gate from the approved template and cannot be made {wanted}; to skip it, request a waiver"));
             var before = Snapshot(g);
             var oldRequired = g.RequiredBeforeStatus;
             if (patch.GateName is not null) g.GateName = Trim(patch.GateName);
@@ -214,6 +218,10 @@ public sealed class PlanStructureService(IDbContextFactory<ReleaseDbContext> dbf
             if (VersionMismatch(expectedVersion, g.Version)) return ServiceResult<StageGates>.Conflict(g);
             var train = await db.Set<ReleaseTrains>().SingleAsync(t => t.Id == g.ReleaseTrainId, ct);
             if (Locked(train, "gates") is { } locked) return ServiceResult<StageGates>.Fail(locked);
+            // RT7 (Q8): checked first, so the reason is the template's rule and not the gate's state (trg_Gate_TemplateLocked_Delete is the backstop).
+            if (g.TemplateLocked == 1)
+                return ServiceResult<StageGates>.Fail(new GuardFailure(TemplateGuards.GateLockedByTemplate,
+                    $"{g.GateName} is a Compliance gate from the approved template and cannot be removed; to skip it, request a waiver"));
             if (g.Status != "Pending")
                 return ServiceResult<StageGates>.Fail(new GuardFailure(Guards.GateNotRemovable, $"{g.GateName} is {Word(g.Status)}; only a pending gate can be removed"));
             // A Pending gate has normally never moved, but the transition log is append-only (a trigger refuses the cascade), so say so plainly first.

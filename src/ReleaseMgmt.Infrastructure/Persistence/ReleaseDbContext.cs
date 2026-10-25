@@ -63,6 +63,8 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<TeamMembers>().HasQueryFilter(e => WorkspaceId == null || Set<Teams>().Any(p => p.Id == e.TeamId && p.WorkspaceId == WorkspaceId));
         b.Entity<TemplateGates>().HasQueryFilter(e => WorkspaceId == null || Set<TrainTemplates>().Any(p => p.Id == e.TemplateId && p.WorkspaceId == WorkspaceId));
         b.Entity<TemplateSteps>().HasQueryFilter(e => WorkspaceId == null || Set<TrainTemplates>().Any(p => p.Id == e.TemplateId && p.WorkspaceId == WorkspaceId));
+        b.Entity<TemplateTasks>().HasQueryFilter(e => WorkspaceId == null || Set<TrainTemplates>().Any(p => p.Id == e.TemplateId && p.WorkspaceId == WorkspaceId));   // REOS-122 (RT7)
+        b.Entity<TemplateMilestones>().HasQueryFilter(e => WorkspaceId == null || Set<TrainTemplates>().Any(p => p.Id == e.TemplateId && p.WorkspaceId == WorkspaceId));
         b.Entity<TemplateCommSchedule>().HasQueryFilter(e => WorkspaceId == null || Set<TrainTemplates>().Any(p => p.Id == e.TemplateId && p.WorkspaceId == WorkspaceId));
         b.Entity<MetricSnapshots>().HasQueryFilter(e => WorkspaceId == null || Set<ExportJobs>().Any(p => p.Id == e.ExportJobId && p.WorkspaceId == WorkspaceId));
 
@@ -124,6 +126,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         ["OnCallTeamId"] = typeof(Teams), ["ReleaseTypeId"] = typeof(ReleaseTypes), ["ReleaseVersionId"] = typeof(ReleaseVersions), ["CertEnvironmentId"] = typeof(Environments), ["EnvironmentId"] = typeof(Environments), ["CatalogServiceId"] = typeof(CatalogServices),
         ["DefaultTemplateId"] = typeof(TrainTemplates), ["ControlWebhookDestinationId"] = typeof(WebhookDestinations), ["DeploymentId"] = typeof(Deployments), ["IngestKeyId"] = typeof(IngestKeys),
         ["PolicyId"] = typeof(ApprovalPolicies), ["ApprovalId"] = typeof(Approvals), ["BreachId"] = typeof(ThresholdBreaches),
+        ["SupersedesTemplateId"] = typeof(TrainTemplates), ["TemplateGateId"] = typeof(TemplateGates),   // REOS-122 (RT7)
     };
 
     /// <summary>
@@ -179,6 +182,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
             nameof(BundledProducts) => Set<BundledProducts>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(Teams) => Set<Teams>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(TrainTemplates) => Set<TrainTemplates>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
+            nameof(TemplateGates) => Set<TemplateGates>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(CommTemplateLibrary) => Set<CommTemplateLibrary>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(RunbookRuns) => Set<RunbookRuns>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(RunbookSteps) => Set<RunbookSteps>().Where(x => list.Contains(x.Id)).Select(x => x.Id),

@@ -29,9 +29,12 @@ public sealed class ScheduleService(IDbContextFactory<ReleaseDbContext> dbf, Tim
             // RT4: every On-Demand client's offered date moves with the Standard date; a chosen date stays where the client put it.
             var moved = await ClientScheduleService.ShiftOfferedAsync(db, trainId, oldTarget, newTarget, now, actor.UserId,
                 (d, was, nowDate) => Audit(db, actor, trainId, ClientScheduleService.Entity, d.Id, "OfferedMoved", new { offeredDate = was }, new { offeredDate = nowDate, d.Version }), ct);
+            // RT7 (Q9): a milestone that came from a template moves with the target by its offset.
+            var milestonesMoved = await MilestoneService.ShiftWithTargetAsync(db, trainId, newTarget, now, actor.UserId,
+                (m, was) => Audit(db, actor, trainId, "Milestone", m.Id, "MovedWithTarget", new { dueOn = was.ToString("yyyy-MM-dd") }, new { dueOn = m.DueOn.ToString("yyyy-MM-dd"), m.OffsetDays, m.Version }), ct);
             t.LastChangedByUserId = actor.UserId; t.LastChangedAt = now; t.UpdatedAt = now; t.Version++;
             Audit(db, actor, trainId, "ReleaseTrain", trainId, "ChangeTargetDate", before,
-                new { target = newTarget.ToString("yyyy-MM-dd"), dueOn = gates.ToDictionary(g => g.GateName, g => g.DueOn.ToString("yyyy-MM-dd")), clientOfferedDatesMoved = moved == 0 ? (int?)null : moved });
+                new { target = newTarget.ToString("yyyy-MM-dd"), dueOn = gates.ToDictionary(g => g.GateName, g => g.DueOn.ToString("yyyy-MM-dd")), clientOfferedDatesMoved = moved == 0 ? (int?)null : moved, milestonesMoved = milestonesMoved == 0 ? (int?)null : milestonesMoved });
             if (t.ReleaseVersionId is not null) await ReleaseVersionService.TouchChainAsync(db, t.ReleaseVersionId, ct);   // RT2: a later release of the chain may now come too soon; its screen refetches
             await db.SaveChangesAsync(ct);
             return ServiceResult<ReleaseTrains>.Ok(t);

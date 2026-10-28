@@ -119,7 +119,7 @@ test('Inbox: Unread only filter, Mark read and Mark all read', async ({ page }) 
 test('Inbox: a new notification arrives live and the nav count updates without a reload', async ({ page }) => {
   await signIn(page, 'inbox-live@example.com')
   await page.goto('/inbox')
-  await expect(page.getByText('No notifications yet.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Unread only' })).toBeVisible()   // the page is loaded; not "empty", because other specs' drills notify every RTE meanwhile
   const d = await drill(page)   // the drill's late-start notice is pushed over SignalR (NotificationCreated)
   await expect(ownNotices(page, d.title)).toBeVisible()
   await expect(inboxBell(page)).toHaveAccessibleName(/^Inbox, \d+ unread$/)

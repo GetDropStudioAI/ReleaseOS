@@ -375,7 +375,7 @@ function GateDefinitionActions({ gate, onRemoved, onChanged }: { gate: GateDefin
 }
 
 // ---- Checklist of the selected gate ----------------------------------------------------------------------------------------------------------
-export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, onChanged }: { gateId: string; trainId: string; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void }) {
+export function Checklist({ gateId, trainId, canPlan = false, refreshKey, selection, onSelect, onChanged }: { gateId: string; trainId: string; canPlan?: boolean; refreshKey: number; selection: Selection; onSelect: (s: Selection) => void; onChanged: () => void }) {
   const [gate, setGate] = useState<GateDetail | null>(null)
   const [draft, setDraft] = useDraft<{ text: string; ownerId: string }>(`addTask:${gateId}`)   // survives a closed tab (session engine)
   const adding = draft !== undefined
@@ -412,10 +412,11 @@ export function Checklist({ gateId, trainId, refreshKey, selection, onSelect, on
   }
   const cancel = () => { setDraft(undefined); setErr(null); setBad(null); requestAnimationFrame(() => addBtn.current?.focus()) }
   const invalid = (f: 'text' | 'owner') => bad === f ? { 'aria-invalid': true, 'aria-describedby': errId } : {}
+  // Adding tasks is the Plan policy: not offered to a role the server would refuse (REOS-142). Mark done stays: the task's owner may complete it (REOS-53).
   return (
     <Panel label="Checklist" title={`${gate.name} · checklist`}
-      meta={<><span><span className="mono">{done} / {gate.tasks.length}</span> done</span><Button onClick={openBulk}>Paste tasks</Button><Button ref={addBtn} aria-expanded={adding} onClick={toggleForm}>Add task</Button></>}>
-      {adding && (
+      meta={<><span><span className="mono">{done} / {gate.tasks.length}</span> done</span>{canPlan && <><Button onClick={openBulk}>Paste tasks</Button><Button ref={addBtn} aria-expanded={adding} onClick={toggleForm}>Add task</Button></>}</>}>
+      {adding && canPlan && (
         <form onSubmit={add}><p className="inline-form">
           <label>Task <input ref={taskRef} className="line wide" value={text} onChange={e => setDraft({ text: e.target.value, ownerId })} placeholder="What has to happen" {...invalid('text')} /></label>{' '}
           <label>Owner <select className="line" value={ownerId} onChange={e => setDraft({ text, ownerId: e.target.value })} {...invalid('owner')}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>{' '}

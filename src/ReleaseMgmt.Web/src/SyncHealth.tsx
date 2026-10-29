@@ -235,6 +235,8 @@ export function SyncHealth({ me }: { me: Me }) {
   }, [filters, days])
 
   const loadRef = useRef(load); loadRef.current = load
+  const [, setTick] = useState(0)   // "N min ago" is computed while rendering: re-render every 30 s so it moves without a reload (REOS-142)
+  useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 30_000); return () => clearInterval(t) }, [])
   useEffect(() => { void load() }, [load])
   useEffect(() => onSyncChanged(() => { void loadRef.current() }), [])   // SyncAlertRaised, a reconnect, or an alert resolved here
 

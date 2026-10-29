@@ -9,7 +9,7 @@ import { CommSchedule } from './CommSchedule'
 import { scan } from './commTokens'
 import { isConflict } from './Conflict'
 import { useFocusWhen } from './focus'
-import { Button, ConflictNotice, DataTable, FilterSelect, LoadingState, PageHeading, Panel, StatusChip, TwoLine, type Column } from './ui'
+import { Button, ConflictNotice, DataTable, ErrorState, FilterSelect, LoadingState, PageHeading, Panel, StatusChip, TwoLine, type Column } from './ui'
 import { Field, Problem, SelectInput, TextInput } from './mgmt/forms'
 
 // REOS-43/44: the comm template library, full width (UI.md: "as Comms drawer, full width"; layout and copy from mockups/Comms.html).
@@ -127,6 +127,7 @@ export function CommLibrary({ me, trainId: current }: { me: Me; trainId?: string
   const canEdit = me.roles.includes('RTE') || me.roles.includes('ReleaseManager')
   const [tokens, setTokens] = useState<CommToken[]>([])
   const [library, setLibrary] = useState<LibraryTemplate[] | null>(null)
+  const [libraryError, setLibraryError] = useState<string | null>(null)
   const [trains, setTrains] = useState<StreamRow[]>([])
   const [trainId, setTrainId] = useState('')
   const [messages, setMessages] = useState<TrainMessage[]>([])
@@ -149,7 +150,7 @@ export function CommLibrary({ me, trainId: current }: { me: Me; trainId?: string
   const dirty = !!source && JSON.stringify(source.draft) !== JSON.stringify(draft)
 
   const loadLibrary = useCallback(async () => {
-    try { setLibrary(await getCommLibrary()) } catch (e) { setProblem((e as Error).message) }
+    try { setLibrary(await getCommLibrary()); setLibraryError(null) } catch (e) { setLibraryError((e as Error).message) }
   }, [])
   const loadMessages = useCallback(async (id: string) => {
     if (!id) { setMessages([]); return [] as TrainMessage[] }
@@ -264,7 +265,7 @@ export function CommLibrary({ me, trainId: current }: { me: Me; trainId?: string
       </div>
 
       <Panel title="Library templates" subtitle="Shared source text; each train gets its own editable copy" meta={library ? `${library.length} ${library.length === 1 ? 'template' : 'templates'}` : undefined}>
-        {library === null && !problem ? <LoadingState what="the library" /> : (
+        {library === null ? (libraryError ? <ErrorState what="The library" message={libraryError} onRetry={() => void loadLibrary()} /> : <LoadingState what="the library" />) : (
           <DataTable caption="Library templates" columns={columnsLib} rows={library ?? []} rowKey={l => l.id} selectedKey={sel?.kind === 'library' ? sel.id : null} onSelect={pickLibrary}
             empty={`The library is empty. ${canEdit ? 'Create the first template.' : 'An RTE or Release Manager can add templates.'}`} />
         )}

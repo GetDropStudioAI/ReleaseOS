@@ -31,8 +31,8 @@ const OUTCOME = {
 } as const
 type Outcome = keyof typeof OUTCOME
 
-export function Orchestration({ trains, trainId, mode, selection, live, refreshKey, canPlan, canAudit, onRoute, onChanged, onOpenTrain, onOpenDeployment, onOpenLogs }: {
-  trains: StreamRow[] | null; trainId: string | null; mode: Mode; selection: Route['selection']; live: LiveState; refreshKey: number; canPlan: boolean; canAudit: boolean
+export function Orchestration({ trains, trainsError, onReloadTrains, trainId, mode, selection, live, refreshKey, canPlan, canAudit, onRoute, onChanged, onOpenTrain, onOpenDeployment, onOpenLogs }: {
+  trains: StreamRow[] | null; trainsError?: string | null; onReloadTrains?: () => void; trainId: string | null; mode: Mode; selection: Route['selection']; live: LiveState; refreshKey: number; canPlan: boolean; canAudit: boolean
   onRoute: (r: Partial<Route>, replace?: boolean) => void; onChanged: () => void; onOpenTrain: (trainId: string) => void; onOpenDeployment: (id: string) => void; onOpenLogs: () => void
 }) {
   useTick()
@@ -128,7 +128,8 @@ export function Orchestration({ trains, trainId, mode, selection, live, refreshK
       <PageHeading trail={trail} title="Orchestration pipeline" description={train ? `${train.title} · Coordinated progressive delivery, stage by stage.` : 'Coordinated progressive delivery across your releases.'} actions={actions} />
       {live !== 'live' && data && <StaleBanner offline since={data.at.slice(11, 19) + ' UTC'} onRefresh={reload} />}
       {trains && trains.length === 0 && <EmptyState title="No releases yet">Orchestration shows a release's run. Create or import a release first.</EmptyState>}
-      {!trains && <LoadingState what="the releases" />}
+      {!trains && !trainsError && <LoadingState what="the releases" />}
+      {!trains && trainsError && <ErrorState what="The release list" message={trainsError} onRetry={onReloadTrains} />}
       {error && <ErrorState what="The run" message={error} onRetry={reload} />}
       {trainId && !data && !error && <LoadingState what="the run" />}
       {data && !canPlan && <ReadOnlyNotice>You can follow this run but not start, pause or end it. An RTE or Release Manager does that.</ReadOnlyNotice>}

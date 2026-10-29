@@ -15,14 +15,14 @@ async function scan(page: Page, where: string) {
 }
 
 const table = (page: Page) => page.getByRole('table', { name: 'Services' })
-const row = (page: Page, text: string | RegExp) => table(page).locator('tbody tr', { hasText: text })
+const row = (page: Page, text: string | RegExp) => table(page).locator('tbody tr:not(:has(.os-table-empty))', { hasText: text })
 const add = (page: Page) => page.getByRole('group', { name: 'Add service' })
 const edit = (page: Page) => page.getByRole('group', { name: 'Edit service' })
 
 async function openCatalog(page: Page) {
   await openPage(page, '/services')
   await expect(page.getByRole('heading', { level: 1, name: 'Service catalog' })).toBeVisible()
-  await expect(table(page)).toBeVisible()
+  await expect(table(page).or(page.getByText('No services yet'))).toBeVisible()   // a fresh database has no services, so no table
 }
 
 /** A service through the API as the signed-in planner; returns its row. */
@@ -63,7 +63,7 @@ test('a planner adds a service, searches for it, edits it and archives it behind
   await expect(add(page)).toContainText('letters, digits')
   await add(page).getByLabel('Key').fill(key)
   await expect(add(page)).toContainText('Enter a name for the service.')
-  await add(page).getByLabel('Name').fill(name)
+  await add(page).getByLabel('Name', { exact: true }).fill(name)
   await add(page).getByLabel('Owner team').selectOption({ label: `${teamName} (@${handle})` })
   await add(page).getByLabel('Repository').fill('git.example/e2e/pay')
   await add(page).getByRole('button', { name: 'Add service' }).click()
@@ -75,7 +75,7 @@ test('a planner adds a service, searches for it, edits it and archives it behind
   // the new service is open for editing; a second service with the same key (any case) is refused in words
   await page.getByRole('button', { name: 'Add service' }).first().click()
   await add(page).getByLabel('Key').fill(key.toUpperCase())
-  await add(page).getByLabel('Name').fill('Duplicate')
+  await add(page).getByLabel('Name', { exact: true }).fill('Duplicate')
   await add(page).getByRole('button', { name: 'Add service' }).click()
   await expect(add(page).getByRole('alert')).toContainText('exists')
 
@@ -92,7 +92,7 @@ test('a planner adds a service, searches for it, edits it and archives it behind
   await row(page, key).click()
   await expect(edit(page).getByRole('button', { name: 'Save service' })).toBeDisabled()
   await expect(edit(page)).toContainText('Change something first.')
-  await edit(page).getByLabel('Name').fill(`${name} v2`)
+  await edit(page).getByLabel('Name', { exact: true }).fill(`${name} v2`)
   await edit(page).getByLabel('Owner team').selectOption({ label: 'No owner team' })
   await edit(page).getByLabel('Repository').fill('')
   await edit(page).getByRole('button', { name: 'Save service' }).click()
@@ -151,7 +151,7 @@ test('a service changed by someone else: Save offers Use theirs and Overwrite, a
   await edit(page).getByRole('button', { name: 'Save service' }).click()
   await expect(notice).toBeVisible()
   await page.getByRole('button', { name: 'Use theirs' }).click()
-  await expect(edit(page).getByLabel('Name')).toHaveValue('Theirs again')
+  await expect(edit(page).getByLabel('Name', { exact: true })).toHaveValue('Theirs again')
   await expect(edit(page).getByLabel('Project code')).toHaveValue('MINE')
   await expect(notice).toHaveCount(0)
 })
@@ -168,7 +168,7 @@ test('a Viewer reads the catalog and cannot change it', async ({ page }) => {
     await first.click()
     await expect(page.getByRole('button', { name: 'Archive', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Save service' })).toHaveCount(0)
-    await expect(page.getByLabel('Name')).toHaveCount(0)
+    await expect(page.getByLabel('Name', { exact: true })).toHaveCount(0)
   }
 })
 
@@ -188,7 +188,7 @@ test('loading, error with Retry, and empty states', async ({ page }) => {
   let failing = true
   await page.route('**/api/v1/services?**', route => (failing ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'The catalog is down.' }) }) : route.continue()))
   await page.goto('/services')
-  const err = page.getByRole('alert').filter({ hasText: 'could not be loaded' })
+  const err = page.locator('.os-notice').filter({ hasText: 'could not be loaded' })
   await expect(err).toContainText('The catalog is down.')
   failing = false
   await err.getByRole('button', { name: 'Retry' }).click()
@@ -217,7 +217,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('searchbox', { name: 'Search services' }).fill(key)
       await row(page, key).click()
       await scan(page, `Service catalog, a service selected (${scheme})`)
-      await edit(page).getByLabel('Name').fill(`${name} edited`)
+      await edit(page).getByLabel('Name', { exact: true }).fill(`${name} edited`)
       await page.evaluate(async ([id, v]) => { await fetch(`/api/v1/services/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'If-Match': String(v) }, body: JSON.stringify({ projectCode: 'X' }) }) }, [made.id, made.version] as const)
       await edit(page).getByRole('button', { name: 'Save service' }).click()
       await expect(page.getByText('Someone else changed this first')).toBeVisible()

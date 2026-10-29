@@ -157,11 +157,16 @@ export function CommLibrary({ me, trainId: current }: { me: Me; trainId?: string
     try { const m = await getTrainMessages(id); setMessages(m); return m } catch (e) { setProblem((e as Error).message); return [] as TrainMessage[] }
   }, [])
 
-  useEffect(() => {
+  // Retry asks again for everything the page read at start (library, tokens, the train's messages), so the error from any of them goes away with it (REOS-142).
+  const retryAll = useCallback(() => {
+    setProblem(null)
     void loadLibrary()
     getCommTokens().then(setTokens).catch(e => setProblem((e as Error).message))
+  }, [loadLibrary])
+  useEffect(() => {
+    retryAll()
     getStream().then(r => { setTrains(r); setTrainId(t => t || (current && r.some(x => x.id === current) ? current : r[0]?.id) || '') }).catch(() => setTrains([]))
-  }, [loadLibrary]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [retryAll]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setMessages([]); if (sel?.kind === 'train') { setSel(null); setSource(null) } void loadMessages(trainId) }, [trainId, loadMessages]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // put the caret back after a token was inserted
@@ -265,7 +270,7 @@ export function CommLibrary({ me, trainId: current }: { me: Me; trainId?: string
       </div>
 
       <Panel title="Library templates" subtitle="Shared source text; each train gets its own editable copy" meta={library ? `${library.length} ${library.length === 1 ? 'template' : 'templates'}` : undefined}>
-        {library === null ? (libraryError ? <ErrorState what="The library" message={libraryError} onRetry={() => void loadLibrary()} /> : <LoadingState what="the library" />) : (
+        {library === null ? (libraryError ? <ErrorState what="The library" message={libraryError} onRetry={() => { retryAll(); void loadMessages(trainId) }} /> : <LoadingState what="the library" />) : (
           <DataTable caption="Library templates" columns={columnsLib} rows={library ?? []} rowKey={l => l.id} selectedKey={sel?.kind === 'library' ? sel.id : null} onSelect={pickLibrary}
             empty={`The library is empty. ${canEdit ? 'Create the first template.' : 'An RTE or Release Manager can add templates.'}`} />
         )}

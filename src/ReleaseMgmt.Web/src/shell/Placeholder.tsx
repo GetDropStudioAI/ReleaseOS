@@ -9,11 +9,6 @@ const PAGES: Partial<Record<View, { description: string; today: string; links: {
     today: 'Products and their versions are recorded on each release today.',
     links: [{ view: 'trains', label: 'Releases' }],
   },
-  environments: {
-    description: 'Production, staging and their regions, with health and the releases in each.',
-    today: 'Environments are not recorded yet.',
-    links: [],
-  },
 }
 
 /** A destination with no screen yet (REOS-94 acceptance): the page heading, a note that it is coming, and where the work is done today. Never a 404. */

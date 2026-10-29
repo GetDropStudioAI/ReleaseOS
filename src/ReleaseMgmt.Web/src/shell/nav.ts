@@ -26,7 +26,7 @@ export const NAV: NavGroup[] = [
   {
     id: 'management', items: [
       { view: 'services', label: 'Service catalog', placeholder: 'B8' },
-      { view: 'environments', label: 'Environments', placeholder: 'B6' },
+      { view: 'environments', label: 'Environments' },
       { view: 'admin', label: 'Teams & settings', need: 'admin' },
       { view: 'templates', label: 'Templates' },
       { view: 'library', label: 'Comm library' },

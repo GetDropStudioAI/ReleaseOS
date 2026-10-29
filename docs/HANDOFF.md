@@ -343,7 +343,7 @@ python3 tools/dr_drill.py                      # disaster-recovery drill
 
 | Gap | Detail |
 |---|---|
-| **Service catalog and Environments screens** | Sidebar entries open placeholder pages. The API for environments and services exists (REOS-109: list, get, create, update, archive, unarchive, and linking a product to a service). A UI story is needed. |
+| **Service catalog screen** | The sidebar entry opens a placeholder page. The API for services exists (REOS-109: list, get, create, update, archive, unarchive, and linking a product to a service). A UI story is needed. The Environments screen is built (REOS-156, QUESTIONS Q-156a). |
 | **The pilot** | A real release run by the pilot RTE without a spreadsheet, with a Governance Officer accepting the evidence pack (REOS-54 acceptance). Guide and checklist are written (`docs/PILOT_GUIDE.md`). Not yet done. |
 | **Real-world integrations** | OIDC, Jira, ServiceNow, reverse proxy, service install: see section 6. |
 | **Release-type work** | RT1 to RT7 are built and on `main`. The owner questions behind them are built to provisional defaults (section 8). Waiting only for your sign-off. |

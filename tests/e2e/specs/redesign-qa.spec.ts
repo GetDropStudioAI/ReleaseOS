@@ -222,7 +222,7 @@ test('5 an API failure shows an error state with Retry on every screen; a slow A
   })
   const link = (s: { link: string }) => primaryNav(page).getByRole('link', { name: new RegExp(`^${s.link.replace(/[&]/g, '\\$&')}`) }).first()
   const report: string[] = []
-  const NOT_BUILT = ['Service catalog', 'Environments']   // placeholders (HANDOFF section 9): no data to load, they say so in words
+  const NOT_BUILT = ['Service catalog']   // placeholders (HANDOFF section 9): no data to load, they say so in words
   for (const s of SCREENS) {
     Object.assign(mode, { fail: false, slow: false })
     await page.goto('/overview'); await expect(page.locator('main h1').first()).toBeVisible()

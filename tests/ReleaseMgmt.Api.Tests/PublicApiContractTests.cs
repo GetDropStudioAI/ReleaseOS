@@ -23,6 +23,8 @@ public class PublicApiContractTests
         return d?.FullName ?? throw new InvalidOperationException("repository root not found");
     }
 
+    public static string Lf(string text) => text.Replace("\r\n", "\n");
+
     public static string DocPath => Path.Combine(RepoRoot(), "docs", "api", "public-v1.openapi.json");
 
     [Fact]
@@ -35,7 +37,7 @@ public class PublicApiContractTests
             File.WriteAllText(DocPath, generated);
         }
         Assert.True(File.Exists(DocPath), "docs/api/public-v1.openapi.json is missing: run `UPDATE_OPENAPI=1 dotnet test --filter PublicApiContractTests`");
-        Assert.True(generated == File.ReadAllText(DocPath),
+        Assert.True(Lf(generated) == Lf(File.ReadAllText(DocPath)),   // a Windows checkout may turn the file's LF into CRLF; the content is what is compared
             "The public API changed and docs/api/public-v1.openapi.json did not. Regenerate with `UPDATE_OPENAPI=1 dotnet test --filter PublicApiContractTests`, review the diff against docs/API_VERSIONING.md (a breaking change needs a new version), and commit it.");
     }
 

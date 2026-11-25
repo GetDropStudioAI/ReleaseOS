@@ -695,7 +695,7 @@ public class PublicApiTests
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var served = await r.Content.ReadAsStringAsync();
         var committed = File.ReadAllText(PublicApiContractTests.DocPath);
-        Assert.True(served == committed, "docs/api/public-v1.openapi.json is out of date: run `UPDATE_OPENAPI=1 dotnet test --filter PublicApiContractTests` and commit it");
+        Assert.True(PublicApiContractTests.Lf(served) == PublicApiContractTests.Lf(committed), "docs/api/public-v1.openapi.json is out of date: run `UPDATE_OPENAPI=1 dotnet test --filter PublicApiContractTests` and commit it");
         var doc = JsonDocument.Parse(served).RootElement;
         Assert.Equal("3.1.0", doc.GetProperty("openapi").GetString());
         Assert.Equal(Pub, doc.GetProperty("servers")[0].GetProperty("url").GetString());

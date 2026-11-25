@@ -266,6 +266,9 @@ public class EndpointRoleMatrixTests
         PATCH /api/v1/workspace                                  Admin
         PATCH /api/v1/workspace/members/{userId}                 Admin
         GET /api/v1/clients                                      Read
+        GET /api/v1/modules                                      Read
+        POST /api/v1/modules/{key}:enable                        Admin
+        POST /api/v1/modules/{key}:disable                       Admin
         GET /api/v1/clients/{id}                                 Read
         POST /api/v1/clients                                     Plan
         PATCH /api/v1/clients/{id}                               Plan

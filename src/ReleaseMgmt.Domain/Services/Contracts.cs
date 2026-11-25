@@ -33,6 +33,10 @@ public interface IRealtimePublisher
     Task SyncAlertRaisedAsync(string? workspaceId, string alertId, CancellationToken ct = default);
     /// <summary>A deployment was created, changed state or got events (REOS-110); clients on that workspace refetch GET /deployments/{id}. The train is the release it belongs to, if any.</summary>
     Task DeploymentChangedAsync(string workspaceId, string deploymentId, int version, string? trainId, CancellationToken ct = default);
+    /// <summary>REOS-174: a module was enabled or disabled in the workspace; every open session refetches GET /modules and redraws its navigation.</summary>
+    Task ModulesChangedAsync(string workspaceId, CancellationToken ct = default) => Task.CompletedTask;
+    /// <summary>REOS-174: an event that belongs to an add-on module. Sent only while the module is enabled in the workspace; otherwise dropped.</summary>
+    Task ModuleEventAsync(string workspaceId, string moduleKey, string eventName, object?[] args, CancellationToken ct = default) => Task.CompletedTask;
 }
 
 /// <summary>Used where no live channel exists (tests, tools).</summary>

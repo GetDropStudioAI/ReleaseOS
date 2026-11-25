@@ -8,7 +8,8 @@ import type { Route } from '../route'
  */
 export type View = Route['view']
 export type IconName = 'layout-dashboard' | 'calendar-days' | 'layers' | 'workflow' | 'shield-check' | 'activity' | 'history'
-export interface NavItem { view: View; label: string; icon?: IconName; placeholder?: string; need?: 'admin' | 'audit' }
+/** `module`: an add-on module's entry (REOS-174, D56): present only while that module is enabled in the workspace. */
+export interface NavItem { view: View; label: string; icon?: IconName; placeholder?: string; need?: 'admin' | 'audit'; module?: string }
 export interface NavGroup { id: 'workspace' | 'management' | 'more'; label?: string; items: NavItem[] }
 
 export const NAV: NavGroup[] = [
@@ -31,6 +32,8 @@ export const NAV: NavGroup[] = [
       { view: 'templates', label: 'Templates' },
       { view: 'library', label: 'Comm library' },
       { view: 'connectors', label: 'Connectors', need: 'admin' },
+      { view: 'cab', label: 'Change advisory board', placeholder: 'cab', module: 'cab' },   // REOS-174: no feature behind it yet (REOS-158); the entry shows the gating works
+      { view: 'ai', label: 'AI assistant', placeholder: 'ai', module: 'ai' },
     ],
   },
   { id: 'more', label: 'More', items: [{ view: 'work', label: 'My work' }, { view: 'analytics', label: 'Analytics' }, { view: 'importexport', label: 'Imports & exports' }] },
@@ -42,10 +45,19 @@ const OTHER: Partial<Record<View, string>> = { sync: 'Sync health', inbox: 'Inbo
 export const canAdmin = (roles: string[]) => roles.includes('RTE') || roles.includes('ReleaseManager')
 export const canAudit = (roles: string[]) => roles.some(r => r === 'RTE' || r === 'ReleaseManager' || r === 'GovernanceOfficer')
 
-/** The groups as this person sees them: items needing a role they do not hold are left out (the pages refuse them anyway). */
-export function navFor(roles: string[]): NavGroup[] {
-  const allowed = (i: NavItem) => i.need === undefined || (i.need === 'admin' ? canAdmin(roles) : canAudit(roles))
+/**
+ * The groups as this person sees them: items needing a role they do not hold are left out (the pages refuse them anyway), and so are an add-on module's items unless the module is
+ * enabled (REOS-174). `modules` is the set of enabled module keys; null while it is not known yet, when no module's entry is shown (the core never waits for it).
+ */
+export function navFor(roles: string[], modules: ReadonlySet<string> | null = null): NavGroup[] {
+  const allowed = (i: NavItem) => (i.need === undefined || (i.need === 'admin' ? canAdmin(roles) : canAudit(roles))) && (i.module === undefined || (modules?.has(i.module) ?? false))
   return NAV.map(g => ({ ...g, items: g.items.filter(allowed) }))
+}
+
+/** The module a page belongs to, if it belongs to one: its page is Page not found while the module is off. */
+export function moduleOfView(view: View): string | undefined {
+  for (const g of NAV) for (const i of g.items) if (i.view === view) return i.module
+  return undefined
 }
 
 export const pathOf = (view: View) => (view === 'trains' ? '/' : `/${view}`)
@@ -57,8 +69,8 @@ export function pageName(view: View): string {
 }
 
 /** Destinations Jump to offers by name (every page this person can open). */
-export function jumpTargets(roles: string[]): { name: string; view: View }[] {
-  const fromNav = navFor(roles).flatMap(g => g.items.filter(i => i.view !== 'trains').map(i => ({ name: i.label, view: i.view })))
+export function jumpTargets(roles: string[], modules: ReadonlySet<string> | null = null): { name: string; view: View }[] {
+  const fromNav = navFor(roles, modules).flatMap(g => g.items.filter(i => i.view !== 'trains').map(i => ({ name: i.label, view: i.view })))
   return [...fromNav, { name: 'Sync health', view: 'sync' }, { name: 'Inbox', view: 'inbox' }]
 }
 

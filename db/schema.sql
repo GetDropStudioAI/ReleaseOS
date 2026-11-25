@@ -56,6 +56,22 @@ CREATE TABLE WorkspaceMembers (                           -- a person's role is 
 );
 CREATE INDEX IX_WorkspaceMembers_User ON WorkspaceMembers(UserId);
 
+-- >>> REOS-174 (D56, D57, D63): per-workspace add-on modules. Own block so a merge with other schema work stays easy. Child of Workspaces like WorkspaceMembers: no trigger, the service writes WorkspaceId.
+CREATE TABLE WorkspaceModules (                           -- a module is OFF until a row says Enabled = 1; no row means off. The module's own data lives in its own tables and is kept when it is switched off
+    WorkspaceId TEXT NOT NULL REFERENCES Workspaces(Id) ON DELETE CASCADE,
+    ModuleKey TEXT NOT NULL CHECK (length(ModuleKey) BETWEEN 1 AND 40 AND ModuleKey NOT GLOB '*[^a-z0-9-]*'),   -- the registry of known keys is in code (ModuleCatalog: 'cab', 'ai'); a new module needs no schema change
+    Enabled INTEGER NOT NULL DEFAULT 0 CHECK (Enabled IN (0, 1)),
+    EnabledByUserId TEXT REFERENCES Users(Id),            -- who last enabled it; kept when it is disabled (the audit row says who disabled it)
+    EnabledAt TEXT,                                       -- UTC, from the service clock; set whenever Enabled = 1
+    PlanSource TEXT NOT NULL DEFAULT 'Default' CHECK (PlanSource IN ('Default','Plan')),   -- who allowed it: Default = no billing connected (IModuleEntitlements allows everything), Plan = the plan's entitlement
+    LastChangedByUserId TEXT REFERENCES Users(Id),
+    LastChangedAt TEXT,
+    Version INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (WorkspaceId, ModuleKey),
+    CHECK (Enabled = 0 OR (EnabledByUserId IS NOT NULL AND EnabledAt IS NOT NULL))
+);
+-- <<< REOS-174
+
 CREATE TABLE Teams (
     Id TEXT PRIMARY KEY,
     Handle TEXT NOT NULL COLLATE NOCASE,                 -- @handle in the bulk parser and CSV; unique within the workspace

@@ -20,6 +20,7 @@ public sealed class TrainsHub(TimeProvider time, HubConnections connections) : H
     public const string ForecastChanged = "ForecastChanged";
     public const string SyncAlertRaised = "SyncAlertRaised";
     public const string DeploymentChanged = "DeploymentChanged";
+    public const string ModulesChanged = "ModulesChanged";
 
     /// <summary>REOS-105: a connection joins its workspace's group (and its own group within it) and hears only that workspace's changes.</summary>
     public static string WorkspaceGroup(string workspaceId) => "ws:" + workspaceId;
@@ -53,7 +54,7 @@ public sealed class UidUserIdProvider : IUserIdProvider
 }
 
 /// <summary>REOS-105: every hint goes to the group of the workspace it belongs to (a notification: to its user's connections in that workspace).</summary>
-public sealed class SignalRPublisher(IHubContext<TrainsHub> hub) : IRealtimePublisher
+public sealed class SignalRPublisher(IHubContext<TrainsHub> hub, IServiceProvider services) : IRealtimePublisher
 {
     public Task TrainChangedAsync(string workspaceId, string trainId, int version, CancellationToken ct = default) =>
         hub.Clients.Group(TrainsHub.WorkspaceGroup(workspaceId)).SendAsync(TrainsHub.TrainChanged, trainId, version, ct);
@@ -69,6 +70,18 @@ public sealed class SignalRPublisher(IHubContext<TrainsHub> hub) : IRealtimePubl
 
     public Task DeploymentChangedAsync(string workspaceId, string deploymentId, int version, string? trainId, CancellationToken ct = default) =>
         hub.Clients.Group(TrainsHub.WorkspaceGroup(workspaceId)).SendAsync(TrainsHub.DeploymentChanged, deploymentId, version, trainId, ct);
+
+    /// <summary>REOS-174: sent whichever way the change went (a module switched off must disappear from the navigation of every open session too).</summary>
+    public Task ModulesChangedAsync(string workspaceId, CancellationToken ct = default) =>
+        hub.Clients.Group(TrainsHub.WorkspaceGroup(workspaceId)).SendAsync(TrainsHub.ModulesChanged, ct);
+
+    /// <summary>REOS-174: an add-on module's own event reaches the workspace only while the module is enabled there; while it is off nothing is sent.</summary>
+    public async Task ModuleEventAsync(string workspaceId, string moduleKey, string eventName, object?[] args, CancellationToken ct = default)
+    {
+        // resolved here, not injected: the gate is ModuleService, which itself takes this publisher
+        if (!await services.GetRequiredService<IModuleGate>().IsEnabledAsync(workspaceId, moduleKey, ct)) return;
+        await hub.Clients.Group(TrainsHub.WorkspaceGroup(workspaceId)).SendCoreAsync(eventName, args, ct);
+    }
 }
 
 /// <summary>

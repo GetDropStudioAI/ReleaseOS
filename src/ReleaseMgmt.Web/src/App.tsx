@@ -37,8 +37,8 @@ import { Deployments } from './deploy/Deployments'
 import { Environments } from './environments/Environments'
 import { Overview } from './shell/Overview.tsx'
 import { Approvals } from './shell/Approvals'
-import { useApprovalCount, useHostHealth, useWorkspace } from './shell/useShell'
-import { canAdmin as adminRole, canAudit, jumpTargets, pageName, placeholderOf } from './shell/nav.ts'
+import { useApprovalCount, useEnabledModules, useHostHealth, useWorkspace } from './shell/useShell'
+import { canAdmin as adminRole, canAudit, jumpTargets, moduleOfView, pageName, placeholderOf } from './shell/nav.ts'
 import { auditPath } from './auditLogic'
 import { controlPlane } from './shell/health.ts'
 import './shell/shell.css'
@@ -79,8 +79,10 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   const bumpShell = () => setShellRev(n => n + 1)
   const workspace = useWorkspace()
   const approvals = useApprovalCount(shellRev)
+  const [modulesRev, setModulesRev] = useState(0)   // REOS-174: a ModulesChanged push, or a reconnect, reads the modules again
+  const modules = useEnabledModules(modulesRev)
   const host = useHostHealth(shellRev)
-  const live = useLive(true, { onTrainChanged: () => { refetch(); bumpShell() }, onResync: () => { refetch(); refreshUnread(); setNotifRev(n => n + 1); notifySyncChanged(); bumpShell() }, onForecastChanged: refetch, onNotification: () => { refreshUnread(); setNotifRev(n => n + 1); bumpShell() }, onSyncAlert: notifySyncChanged })
+  const live = useLive(true, { onTrainChanged: () => { refetch(); bumpShell() }, onResync: () => { refetch(); refreshUnread(); setNotifRev(n => n + 1); notifySyncChanged(); bumpShell(); setModulesRev(n => n + 1) }, onModulesChanged: () => setModulesRev(n => n + 1), onForecastChanged: refetch, onNotification: () => { refreshUnread(); setNotifRev(n => n + 1); bumpShell() }, onSyncAlert: notifySyncChanged })
   const { view, trainId: selected, selection } = route
   const mode = route.mode ?? 'plan'
   const [bulk, setBulk] = useDraft<BulkDraft>(bulkKey(selected ?? ''))
@@ -144,6 +146,10 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
   }, [view, selected, mode])
 
   if (!session.ready || !zoneReady) return <Starting />
+  // REOS-174: a page of an add-on module is Page not found while the module is off in this workspace, as its endpoints answer 404 (nothing to show until the modules are known).
+  const gatedBy = moduleOfView(view)
+  if (gatedBy && !modules) return <Starting />
+  if (gatedBy && modules && !modules.has(gatedBy)) return <NotFound path={window.location.pathname} />
 
   const canAdmin = adminRole(me.roles)
   const to = (r: Partial<Route>) => go({ ...route, ...r })
@@ -157,10 +163,10 @@ function Signed({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: () => voi
     <div className="os-app">
       <a className="skip-link" href="#workspace" onClick={e => { e.preventDefault(); const m = document.getElementById('workspace'); m?.focus() }}>Skip to content</a>
       <Announcer />
-      <Sidebar me={me} view={view} workspace={workspace} approvals={approvals} plane={controlPlane(host, sync.state, live.state)} onGo={toView}
+      <Sidebar me={me} view={view} workspace={workspace} approvals={approvals} modules={modules} plane={controlPlane(host, sync.state, live.state)} onGo={toView}
         onSignedOut={onSignedOut} onStopped={onStopped} />
       <div className="os-main">
-        <UtilityBar workspaceName={workspace?.name ?? 'Workspace'} page={pageName(view)} rows={rows} targets={jumpTargets(me.roles)} unread={unread} live={live.state}
+        <UtilityBar workspaceName={workspace?.name ?? 'Workspace'} page={pageName(view)} rows={rows} targets={jumpTargets(me.roles, modules)} unread={unread} live={live.state}
           onTrain={id => go({ view: 'trains', trainId: id, selection: null, mode: 'plan' })} onGo={toView} />
         <SyncBanner sync={sync} onOpen={() => toView('sync')} />
         <div className={listPage || !releases ? 'shell full' : 'shell with-inspector'}>

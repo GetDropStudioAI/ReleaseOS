@@ -25,6 +25,8 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
     public RecordingControlSender ControlSender { get; } = new();
     /// <summary>A fixed clock for tests whose data carries absolute dates (otherwise the real date turns "not yet due" rows overdue).</summary>
     public TimeProvider? Clock { get; init; }
+    /// <summary>REOS-174: a test replaces a service (the module entitlements) after the host's own registrations.</summary>
+    public Action<IServiceCollection>? ConfigureServices { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -60,6 +62,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         {
             services.AddSingleton<IControlWebhookSender>(ControlSender);
             if (Clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(Clock); }
+            ConfigureServices?.Invoke(services);
         });
     }
 

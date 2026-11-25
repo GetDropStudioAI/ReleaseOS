@@ -10,8 +10,8 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261025034602_Triggers")]
-    partial class Triggers
+    [Migration("20261125184746_Schema")]
+    partial class Schema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -3357,6 +3357,47 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WorkspaceModules", b =>
+                {
+                    b.Property<string>("WorkspaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModuleKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EnabledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EnabledByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PlanSource")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("WorkspaceId", "ModuleKey");
+
+                    b.HasIndex("EnabledByUserId");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.ToTable("WorkspaceModules", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.Workspaces", b =>
                 {
                     b.Property<string>("Id")
@@ -4594,6 +4635,25 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WorkspaceModules", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("EnabledByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
                         .WithMany()

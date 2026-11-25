@@ -19,6 +19,8 @@ interface Handlers {
   /** A run's forecast changed (a step event): refetch the forecast. */
   onForecastChanged?: (trainId: string, runId: string) => void
   onSyncAlert?: (alertId: string) => void
+  /** REOS-174: a module was enabled or disabled in this workspace: refetch GET /modules and redraw the navigation. */
+  onModulesChanged?: () => void
   /** Fired after a reconnect: events may have been missed, so refetch everything on screen. */
   onResync: () => void
 }
@@ -42,6 +44,7 @@ export function useLive(enabled: boolean, handlers: Handlers) {
     hub.on('ServerTime', (t: string) => { setServerTime(t); setServerTimeState(t) })
     hub.on('ForecastChanged', (tid: string, rid: string) => h.current.onForecastChanged?.(tid, rid))
     hub.on('SyncAlertRaised', (id: string) => h.current.onSyncAlert?.(id))
+    hub.on('ModulesChanged', () => h.current.onModulesChanged?.())
     hub.on('DeploymentChanged', (id: string) => deploymentListeners.forEach(fn => fn(id)))
     hub.onreconnecting(() => setState('reconnecting'))
     hub.onreconnected(() => { setState('live'); h.current.onResync() })

@@ -169,7 +169,7 @@ public class WorkspaceIsolationTests
     // Route values that never name a row of A's: the member's own session, catalog names, the SPA's own path.
     private static readonly Dictionary<string, string> Own = new()
     {
-        ["source"] = "Jira", ["metric"] = "m1", ["grid"] = "gates", ["kind"] = "gates", ["clientId"] = "tab-12345678", ["path"] = "some/spa/route", ["token"] = "x-1",
+        ["source"] = "Jira", ["metric"] = "m1", ["grid"] = "gates", ["kind"] = "gates", ["clientId"] = "tab-12345678", ["path"] = "some/spa/route", ["token"] = "x-1", ["key"] = "cab",   // REOS-174: a module key names a module, not a row of another workspace
     };
 
     private static (string Method, string Url, bool NamesAlpha) Request(RouteEndpoint e, Dictionary<string, string> alpha)

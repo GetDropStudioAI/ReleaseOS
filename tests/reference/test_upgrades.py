@@ -296,6 +296,22 @@ for sql, want, label in [
     except sqlite3.IntegrityError as e:
         check(want is not None and want in str(e), label)
 
+# Upgrade 013 (REOS-174): WorkspaceModules is new and EMPTY (every module off), nothing else changes, and its rules are live
+t13 = baseline_db()
+for s in SCRIPTS:
+    t13.executescript(s.read_text())
+check(t13.execute("SELECT COUNT(*) FROM WorkspaceModules").fetchone() == (0,), "013: no module is enabled by the upgrade (the table starts empty)")
+for sql, want, label in [
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled, EnabledByUserId, EnabledAt) VALUES ('default', 'cab', 1, 'u1', '2026-11-25T00:00:00Z')", None, "013: a module can be enabled by a person"),
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled, EnabledByUserId, EnabledAt) VALUES ('default', 'cab', 0, NULL, NULL)", "UNIQUE", "013: one row per module per workspace"),
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled) VALUES ('default', 'ai', 1)", "CHECK", "013: an enabled module records who and when"),
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey) VALUES ('nowhere', 'ai')", "FOREIGN KEY", "013: a module row needs a workspace"),
+]:
+    try:
+        t13.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

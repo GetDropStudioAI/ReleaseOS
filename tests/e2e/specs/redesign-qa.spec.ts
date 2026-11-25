@@ -334,7 +334,7 @@ test('7b countdowns and elapsed times are live: the Orchestration clocks tick, a
   const before = await cards.allInnerTexts()
   await expect.poll(async () => (await cards.allInnerTexts()).join('|'), { timeout: 8000 }).not.toBe(before.join('|'))
   await expect(page.locator('main').getByText(/UTC/).first()).toBeVisible()
-  // "N min ago" / "due in" text (Sync health, Approvals) needs data the demo database does not have: covered by web unit tests of the formatters, listed as such in the report.
+  // "N min ago" (Sync health) and "Due in" (Approvals) are watched moving, with seeded data and a fake clock, in qa-142.spec.ts (REOS-142).
 })
 
 test('3b dialogs: Tab and Shift+Tab never reach the page behind an open confirmation dialog, and Escape gives focus back', async ({ page }) => {

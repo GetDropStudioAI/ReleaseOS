@@ -88,7 +88,7 @@ public sealed class EvidencePackDocument(ExportModel model, ExportOptions option
         }
 
         var rollback = M.Steps.Where(s => s.Section == "Rollback").ToList();
-        var backout = "No rollback steps planned.";
+        var backout = "No rollback steps planned. ";
         if (rollback.Count > 0)
         {
             var span = (rollback.Max(s => s.PlannedEnd) - rollback.Min(s => s.PlannedStart)).TotalMinutes;

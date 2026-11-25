@@ -32,7 +32,7 @@ public class PdfExportTests
     private static async Task<JsonElement> Json(HttpResponseMessage r) => JsonDocument.Parse(await r.Content.ReadAsStringAsync()).RootElement;
     private static string Sha(byte[] b) => Convert.ToHexStringLower(SHA256.HashData(b));
 
-    private sealed record Env(ApiFactory F, HttpClient Rte, HttpClient Rm, HttpClient Gov, HttpClient Viewer)
+    internal sealed record Env(ApiFactory F, HttpClient Rte, HttpClient Rm, HttpClient Gov, HttpClient Viewer)
     {
         public ExportWorker Worker => F.Services.GetRequiredService<ExportWorker>();
         public Task<int> Run() => Worker.RunOnceAsync();
@@ -50,7 +50,7 @@ public class PdfExportTests
     }
 
     /// <summary>Train t1 with a change record, window, products, runbook (with rollback), blocker, a Go-with-conditions decision, a freeze override, a waiver request, two attachments and both gates certified.</summary>
-    private static async Task<Env> Setup(string? licence = "Community")
+    internal static async Task<Env> Setup(string? licence = "Community")
     {
         Environment.SetEnvironmentVariable(Licence, licence);
         var f = new ApiFactory();
@@ -95,14 +95,14 @@ public class PdfExportTests
         return new Env(f, rte, rm, gov, viewer);
     }
 
-    private static async Task<JsonElement> Enqueue(HttpClient c, string kind, string? format = null, string train = "t1")
+    internal static async Task<JsonElement> Enqueue(HttpClient c, string kind, string? format = null, string train = "t1")
     {
         var r = await c.PostAsJsonAsync($"/api/v1/trains/{train}/export-jobs", new { kind, format });
         Assert.True(r.StatusCode == HttpStatusCode.Accepted, await r.Content.ReadAsStringAsync());
         return await Json(r);
     }
 
-    private static async Task<(byte[] Bytes, HttpResponseMessage Res)> Download(HttpClient c, string id)
+    internal static async Task<(byte[] Bytes, HttpResponseMessage Res)> Download(HttpClient c, string id)
     {
         var r = await c.GetAsync($"/api/v1/export-jobs/{id}/file");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);

@@ -285,7 +285,7 @@ function Overview(p: ReleaseDetailProps & {
       <h2 className="rd-group">Planning</h2>
       <Timeline gates={t.gates} todayT={t.daysToTarget} targetDate={t.targetReleaseDate} selectedId={p.checklistGate?.id ?? null} onSelect={p.onPickGate} trainId={t.id} trainStatus={t.status} canPlan={p.canPlan} onChanged={p.onChanged}
         milestones={(p.milestones.rows ?? []).map(m => ({ id: m.id, name: m.name, dueOn: m.dueOn, tMinus: m.tMinus, state: milestoneState(m) }))} />
-      {p.checklistGate && <Checklist gateId={p.checklistGate.id} trainId={t.id} refreshKey={p.refreshKey} selection={p.selection} onSelect={p.onSelect} onChanged={p.onChanged} />}
+      {p.checklistGate && <Checklist gateId={p.checklistGate.id} trainId={t.id} canPlan={p.canPlan} refreshKey={p.refreshKey} selection={p.selection} onSelect={p.onSelect} onChanged={p.onChanged} />}
       <MilestonesSection trainId={t.id} rows={p.milestones.rows} error={p.milestones.error} canPlan={p.canPlan} onChanged={p.onChanged} />
       <Runbook trainId={t.id} canPlan={p.canPlan} refreshKey={p.refreshKey} selection={p.selection} onSelect={p.onSelect} onChanged={p.onChanged} contingency={adv?.contingency ?? null} />
     </div>

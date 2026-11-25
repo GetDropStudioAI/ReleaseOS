@@ -16,6 +16,8 @@
 
 REOS-142 (extend QA), REOS-155 (Service catalog screen), REOS-156 (Environments screen): branches built, merge being regressed locally, then Done after sign-off.
 
+**Status 2026-11-25:** REOS-162, REOS-163 and REOS-161 (the public API foundations of D61) are built on branch `reos-api-v1` (draft PR, not merged): `docs/API_VERSIONING.md`, `docs/api/public-v1.openapi.json`, judgement calls in `docs/QUESTIONS.md` Q-161a.
+
 ## Sprint 8: close v1 and lay foundations (50 pts plus the 5 cross-browser stories REOS-149 to 153)
 
 | Key | Story | Epic | Pts |

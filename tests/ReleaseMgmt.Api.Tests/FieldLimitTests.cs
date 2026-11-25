@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Collections;
 using System.Net;
 using System.Reflection;
@@ -141,10 +142,15 @@ public class FieldLimitTests
         var bodyLimit = 1024 * 1024;   // Limits:MaxRequestBodyBytes default: a limit above it is enforced by the 413 first
 
         var ingestKey = IngestTestKit.Key(f);   // the ingest routes take a workspace API key, not a role
+        var admin = await As(f, Roles.RTE, "rte@limits.test");   // the public routes take an API token (deployments scope; the person is a planner)
+        var tokenReply = await admin.PostAsJsonAsync("/api/v1/api-tokens", new { name = "limits", scopes = new[] { "read", "write", "approvals", "deployments" } });
+        var apiToken = System.Text.Json.JsonDocument.Parse(await tokenReply.Content.ReadAsStringAsync()).RootElement.GetProperty("secret").GetString()!;
+        LifecycleContractTests.Sql(f, "UPDATE ApiTokens SET LastUsedAt='2999-01-01T00:00:00Z'");   // so using it writes nothing (this test compares the whole database)
         HttpRequestMessage Send(HttpMethod m, RouteEndpoint e, string json)
         {
             var req = new HttpRequestMessage(m, Url(e)) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
             if (e.RoutePattern.RawText!.StartsWith("/api/v1/ingest/", StringComparison.Ordinal)) req.Headers.Authorization = new("Bearer", ingestKey);
+            if (e.RoutePattern.RawText!.StartsWith("/api/public/v1/", StringComparison.Ordinal)) req.Headers.Authorization = new("Bearer", apiToken);
             return req;
         }
         var before = Snapshot(f);

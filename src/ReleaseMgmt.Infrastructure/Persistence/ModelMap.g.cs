@@ -70,6 +70,8 @@ public static class ModelMap
         b.Entity<TrainEnvironments>(e => { e.ToTable("TrainEnvironments"); e.HasKey(e => new { e.ReleaseTrainId, e.EnvironmentId });  });
         b.Entity<CatalogServices>(e => { e.ToTable("CatalogServices"); e.HasKey(e => e.Id);  });
         b.Entity<IngestKeys>(e => { e.ToTable("IngestKeys"); e.HasKey(e => e.Id);  });
+        b.Entity<ApiTokens>(e => { e.ToTable("ApiTokens"); e.HasKey(e => e.Id);  });
+        b.Entity<IdempotencyKeys>(e => { e.ToTable("IdempotencyKeys"); e.HasKey(e => e.Id);  });
         b.Entity<Deployments>(e => { e.ToTable("Deployments"); e.HasKey(e => e.Id);  });
         b.Entity<DeploymentEvents>(e => { e.ToTable("DeploymentEvents"); e.HasKey(e => e.Id); e.Property(e => e.Id).ValueGeneratedOnAdd(); });
         b.Entity<MetricSamples>(e => { e.ToTable("MetricSamples"); e.HasKey(e => e.Id); e.Property(e => e.Id).ValueGeneratedOnAdd(); });
@@ -236,6 +238,11 @@ public static class ModelMap
         b.Entity<IngestKeys>().HasOne<Users>().WithMany().HasForeignKey(e => e.CreatedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<IngestKeys>().HasOne<Users>().WithMany().HasForeignKey(e => e.RevokedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<IngestKeys>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ApiTokens>().HasOne<Users>().WithMany().HasForeignKey(e => e.OwnerUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ApiTokens>().HasOne<Users>().WithMany().HasForeignKey(e => e.RevokedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ApiTokens>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<IdempotencyKeys>().HasOne<ApiTokens>().WithMany().HasForeignKey(e => e.ApiTokenId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<IdempotencyKeys>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Deployments>().HasOne<CatalogServices>().WithMany().HasForeignKey(e => e.CatalogServiceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Deployments>().HasOne<Environments>().WithMany().HasForeignKey(e => e.EnvironmentId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Deployments>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);

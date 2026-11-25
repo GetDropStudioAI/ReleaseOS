@@ -26,6 +26,15 @@ test('a Viewer sees neither the audit log nor the admin pages; an RTE sees both'
   assert.ok(views(['GovernanceOfficer']).includes('audit') && !views(['GovernanceOfficer']).includes('admin'))
 })
 
+test('API tokens (REOS-162) sit in the Management group, in the nav and Jump to for an RTE and a Release Manager only, at /api-tokens', () => {
+  assert.ok(NAV[1].items.some(i => i.view === 'api-tokens' && i.label === 'API tokens' && i.need === 'admin'))
+  assert.equal(pathOf('api-tokens'), '/api-tokens')
+  assert.equal(pageName('api-tokens'), 'API tokens')
+  const views = (roles: string[]) => navFor(roles).flatMap(g => g.items.map(i => i.view))
+  for (const r of ['RTE', 'ReleaseManager']) { assert.ok(views([r]).includes('api-tokens'), r); assert.ok(jumpTargets([r]).some(t => t.name === 'API tokens'), r) }
+  for (const r of ['Viewer', 'GovernanceOfficer']) { assert.ok(!views([r]).includes('api-tokens'), r); assert.ok(!jumpTargets([r]).some(t => t.name === 'API tokens'), r) }
+})
+
 test('pages have names for the breadcrumb and title, and Jump to offers what the person can open', () => {
   assert.equal(pageName('trains'), 'Releases')
   assert.equal(pageName('sync'), 'Sync health')

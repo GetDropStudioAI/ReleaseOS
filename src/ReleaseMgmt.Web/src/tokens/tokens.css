@@ -1,0 +1,6 @@
+/* API tokens (REOS-162). Layout comes from mgmt.css (.mg-split, .mg-side, .mg-stack, .mg-form); tokens only (docs/ui/tokens.css). */
+.tk-secret { margin: var(--gap-sm) 0 0; padding: var(--gap-md); border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); font-family: var(--font-mono); font-size: var(--type-mono-small); word-break: break-all; user-select: all; }
+.tk-secret-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md); margin-top: var(--gap-sm); }
+.tk-copied { font-size: var(--type-small); color: var(--color-text-secondary); }
+.tk-rotate-field { margin-top: var(--gap-md); }
+.tk-access { display: flex; flex-direction: column; gap: var(--gap-xs); font-size: var(--type-small); font-weight: 600; color: var(--color-text-primary); }

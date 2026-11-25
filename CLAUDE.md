@@ -34,7 +34,7 @@ tests/reference/   Python oracle tests; must keep passing against db/schema.sql
 ```
 
 ## Non-negotiable rules
-1. **`db/schema.sql` is the contract** (72 tables, 152 triggers, 41 indexes). EF migrations must produce the same tables, CHECKs, indexes and triggers. Triggers go in one hand-written migration (`migrationBuilder.Sql`), verbatim and **in file order** (SQLite fires same-event triggers newest-first, and the error each rule reports depends on that order). If you need to change the schema, change `db/schema.sql` first, rerun `python3 tests/reference/test_schema.py`, then the migration.
+1. **`db/schema.sql` is the contract** (74 tables, 156 triggers, 43 indexes). EF migrations must produce the same tables, CHECKs, indexes and triggers. Triggers go in one hand-written migration (`migrationBuilder.Sql`), verbatim and **in file order** (SQLite fires same-event triggers newest-first, and the error each rule reports depends on that order). If you need to change the schema, change `db/schema.sql` first, rerun `python3 tests/reference/test_schema.py`, then the migration.
    - **Every entity** is configured with `ToTable(t => t.UseSqlReturningClause(false))`. EF Core's default save path (SQLite `RETURNING`) is not supported on tables with AFTER triggers.
    - A trigger `RAISE(ABORT, …)` surfaces as a `SqliteException`. Map it to 422 `{guard:"DbRule", message}`, never a 500. The service normally catches the rule first; the mapping covers races and clock skew.
    - SQLite migrations that rebuild a table silently drop its triggers. A CI test asserts the migrated database has exactly the trigger names in `db/schema.sql`; if a migration rebuilds a table, it must re-apply that table's triggers.
@@ -59,7 +59,7 @@ python3 tests/reference/seed_and_query.py       # seeds history through the trig
 python3 tests/reference/seed_and_query.py --write   # regenerates fixtures/seed.db + expected_metrics.json (only if schema/analytics change)
 python3 tools/gen_entities.py                   # regenerate Domain entities + EF model map after any db/schema.sql change
 # then re-scaffold + patch the two migrations (they execute schema.sql verbatim, see docs/QUESTIONS.md Q-001):
-#   cd src/ReleaseMgmt.Infrastructure && dotnet ef migrations add Schema -o Migrations && dotnet ef migrations add Triggers -o Migrations && python3 ../../tools/patch_migrations.py
+#   cd src/ReleaseMgmt.Infrastructure && dotnet ef migrations add Schema -o Migrations --context ReleaseDbContext && dotnet ef migrations add Triggers -o Migrations --context ReleaseDbContext && python3 ../../tools/patch_migrations.py
 cd src/ReleaseMgmt.Web && npm run dev            # Vite dev server, proxies /api to :6080
 npx playwright test                              # from tests/e2e
 ```

@@ -47,6 +47,8 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<ReleaseClientDates>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-119 (RT4)
         b.Entity<CatalogServices>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<IngestKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<ApiTokens>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-162
+        b.Entity<IdempotencyKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-163
         b.Entity<Deployments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<MetricSamples>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-111 to 114
         b.Entity<MetricRollups>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
@@ -124,7 +126,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         ["PirId"] = typeof(PostImplementationReviews), ["CommTemplateId"] = typeof(CommTemplates), ["DispatchId"] = typeof(CommDispatches),
         ["WebhookDestinationId"] = typeof(WebhookDestinations), ["FreezeWindowId"] = typeof(FreezeWindows), ["ExportJobId"] = typeof(ExportJobs),
         ["OnCallTeamId"] = typeof(Teams), ["ReleaseTypeId"] = typeof(ReleaseTypes), ["ReleaseVersionId"] = typeof(ReleaseVersions), ["CertEnvironmentId"] = typeof(Environments), ["EnvironmentId"] = typeof(Environments), ["CatalogServiceId"] = typeof(CatalogServices),
-        ["DefaultTemplateId"] = typeof(TrainTemplates), ["ControlWebhookDestinationId"] = typeof(WebhookDestinations), ["DeploymentId"] = typeof(Deployments), ["IngestKeyId"] = typeof(IngestKeys),
+        ["DefaultTemplateId"] = typeof(TrainTemplates), ["ControlWebhookDestinationId"] = typeof(WebhookDestinations), ["DeploymentId"] = typeof(Deployments), ["IngestKeyId"] = typeof(IngestKeys), ["ApiTokenId"] = typeof(ApiTokens),
         ["PolicyId"] = typeof(ApprovalPolicies), ["ApprovalId"] = typeof(Approvals), ["BreachId"] = typeof(ThresholdBreaches),
         ["SupersedesTemplateId"] = typeof(TrainTemplates), ["TemplateGateId"] = typeof(TemplateGates),   // REOS-122 (RT7)
     };
@@ -199,6 +201,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
             nameof(CatalogServices) => Set<CatalogServices>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(Deployments) => Set<Deployments>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(IngestKeys) => Set<IngestKeys>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
+            nameof(ApiTokens) => Set<ApiTokens>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(ApprovalPolicies) => Set<ApprovalPolicies>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(Approvals) => Set<Approvals>().Where(x => list.Contains(x.Id)).Select(x => x.Id),
             nameof(ThresholdBreaches) => Set<ThresholdBreaches>().Where(x => list.Contains(x.Id)).Select(x => x.Id),

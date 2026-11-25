@@ -31,6 +31,7 @@ export const NAV: NavGroup[] = [
       { view: 'templates', label: 'Templates' },
       { view: 'library', label: 'Comm library' },
       { view: 'connectors', label: 'Connectors', need: 'admin' },
+      { view: 'api-tokens', label: 'API tokens', need: 'admin' },
     ],
   },
   { id: 'more', label: 'More', items: [{ view: 'work', label: 'My work' }, { view: 'analytics', label: 'Analytics' }, { view: 'importexport', label: 'Imports & exports' }] },

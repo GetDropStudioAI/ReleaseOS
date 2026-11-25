@@ -258,7 +258,7 @@ roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='t
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
             'ReleaseTypes','ReleaseVersions','Environments','CatalogServices','Clients','ReleaseClientDates','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
-            'ApprovalPolicies','Approvals']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
+            'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
 check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','Payments-EU',?)", False, "workspace slug with capitals", (NOW,), expect="CHECK")
@@ -425,6 +425,39 @@ check(db7, "INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt) VALUES
 check(db7, "UPDATE IngestKeys SET RevokedAt=? WHERE Id='ik1'", False, "revoked without saying by whom", (NOW,), expect="CHECK")
 check(db7, "UPDATE IngestKeys SET RevokedAt=?, RevokedByUserId='rte' WHERE Id='ik1'", True, "a key revoked by a person", (NOW,))
 check(db7, "UPDATE IngestKeys SET WorkspaceId='w2' WHERE Id='ik1'", False, "a key moved to another workspace", expect="cannot move to another workspace")
+
+# REOS-162 / REOS-163: API tokens and idempotency keys
+TK = "INSERT INTO ApiTokens(Id,Name,TokenPrefix,TokenSha256,Scopes,OwnerUserId,CreatedAt{x}) VALUES('{i}','CI','rt_ab12',printf('%064d',{h}),'{sc}','{o}',?{v})"
+def tk(i, h, sc="read", o="rte", x="", v=""): return TK.format(i=i, h=h, sc=sc, o=o, x=x, v=v)
+check(db7, tk('at1', 1, 'read,write'), True, "an API token for a member of the workspace", (NOW,))
+check(db7, tk('at2', 1), False, "one token hash twice", (NOW,), expect="UNIQUE")
+check(db7, "INSERT INTO ApiTokens(Id,Name,TokenPrefix,TokenSha256,Scopes,OwnerUserId,CreatedAt) VALUES('at2','x','rt_zz99','NOTHEX','read','rte',?)", False, "a token hash that is not 64 hex characters", (NOW,), expect="CHECK")
+check(db7, tk('at2', 2, ''), False, "a token with no scope", (NOW,), expect="CHECK")
+check(db7, tk('at2', 2, 'read,'), False, "a scope list with a trailing comma", (NOW,), expect="CHECK")
+check(db7, tk('at2', 2, 'read,,write'), False, "a scope list with an empty item", (NOW,), expect="CHECK")
+check(db7, tk('at2', 2, 'Read'), False, "a scope in capitals", (NOW,), expect="CHECK")
+check(db7, tk('at2', 2, 'read', 'nobody'), False, "a token owned by a person who does not exist", (NOW,), expect="not a member of this workspace")
+check(db7, "INSERT INTO ApiTokens(Id,Name,TokenPrefix,TokenSha256,Scopes,OwnerUserId,CreatedAt,WorkspaceId) VALUES('at2','x','rt_zz99',printf('%064d',2),'read','rm',?,'w2')", True, "a token in a workspace its owner belongs to (rm is a member of w2)", (NOW,))
+check(db7, "INSERT INTO ApiTokens(Id,Name,TokenPrefix,TokenSha256,Scopes,OwnerUserId,CreatedAt,WorkspaceId) VALUES('at3','x','rt_zz98',printf('%064d',3),'read','dev',?,'w2')", False, "a token whose owner is not a member of its workspace", (NOW,), expect="not a member of this workspace")
+check(db7, tk('at3', 3, 'read', 'rte', ",ExpiresAt", ",'2026-01-01T00:00:00Z'"), False, "a token that expires before it was made", (NOW,), expect="CHECK")
+check(db7, "UPDATE ApiTokens SET RevokedAt=? WHERE Id='at1'", False, "a token revoked without saying by whom", (NOW,), expect="CHECK")
+check(db7, "UPDATE ApiTokens SET OwnerUserId='dev' WHERE Id='at2'", False, "a token handed to someone who is not a member of its workspace", expect="not a member of this workspace")
+check(db7, "INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','gov2','RTE',?)", True, "(setup) a second member of w2", (NOW,))
+check(db7, "UPDATE ApiTokens SET OwnerUserId='gov2' WHERE Id='at2'", True, "a token handed to another member (rotation by someone else)")
+check(db7, "UPDATE ApiTokens SET WorkspaceId='default' WHERE Id='at2'", False, "a token moved to another workspace", expect="cannot move to another workspace")
+check(db7, "UPDATE ApiTokens SET RevokedAt=?, RevokedByUserId='rte' WHERE Id='at1'", True, "a token revoked by a person", (NOW,))
+IK = "INSERT INTO IdempotencyKeys(Id,ApiTokenId,KeyValue,RequestSha256,CreatedAt,ExpiresAt{x}) VALUES('{i}','{t}','{k}',printf('%064d',{h}),?,'2026-10-21T14:00:00Z'{v})"
+check(db7, IK.format(i='ik9', t='at1', k='abc', h=1, x='', v=''), True, "an idempotency key, still running (no result yet)", (NOW,))
+check(db7, IK.format(i='ik8', t='at1', k='abc', h=2, x='', v=''), False, "the same key twice for one token", (NOW,), expect="UNIQUE")
+check(db7, IK.format(i='ik8', t='at2', k='abc', h=2, x='', v=''), False, "a key whose token is in another workspace", (NOW,), expect="belongs to another workspace")
+check(db7, IK.format(i='ik8', t='at2', k='abc', h=2, x=',WorkspaceId', v=",'w2'"), True, "the same key text for another token", (NOW,))
+check(db7, IK.format(i='ik7', t='at1', k='', h=3, x='', v=''), False, "an empty idempotency key", (NOW,), expect="CHECK")
+check(db7, IK.format(i='ik7', t='at1', k='x', h=3, x=',StatusCode', v=',200'), False, "a status without a stored body", (NOW,), expect="CHECK")
+check(db7, "UPDATE IdempotencyKeys SET StatusCode=201, ResponseBody='{}' WHERE Id='ik9'", True, "the first request's result is stored")
+check(db7, "UPDATE IdempotencyKeys SET StatusCode=99, ResponseBody='{}' WHERE Id='ik9'", False, "a status that is not an HTTP status", expect="CHECK")
+check(db7, "UPDATE IdempotencyKeys SET WorkspaceId='w2' WHERE Id='ik9'", False, "an idempotency key moved to another workspace", expect="cannot move to another workspace")
+check(db7, "DELETE FROM ApiTokens WHERE Id='at1'", True, "deleting a token removes its idempotency keys")
+assert_true(db7.execute("SELECT COUNT(*) FROM IdempotencyKeys WHERE ApiTokenId='at1'").fetchone() == (0,), "no idempotency key outlives its token")
 DEP = "INSERT INTO Deployments(Id,ExternalId,CatalogServiceId,EnvironmentId,ReleaseTrainId,RunId,ReleaseVersion,Strategy,CanarySteps,State,StartedAt,FinishedAt,CreatedAt,UpdatedAt,WorkspaceId) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 def dep(id, ext='ci-1', svc='sv1', env='e1', train='t1', run=None, ver='4.5.0', strat='Rolling', steps=None, state='Queued', started=None, finished=None, ws='default'):
     return (id, ext, svc, env, train, run, ver, strat, steps, state, started, finished, NOW, NOW, ws)

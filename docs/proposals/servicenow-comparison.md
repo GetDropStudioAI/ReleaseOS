@@ -99,3 +99,35 @@ These are the places the evidence points to a real, defensible advantage. Each a
 ## 9. Still to verify
 
 Open ServiceNow's marketing and pricing pages in a browser (blocked here); read G2, Capterra, TrustRadius and Gartner reviews directly; confirm Now Assist licence tiers in writing from ServiceNow; check ITOM Orchestration (not researched); confirm which ServiceNow release is current; test DPR in a free developer instance if possible.
+
+## 10. Verification pass results (25 Nov 2026, second agent)
+
+A second agent tried to confirm the open points from other sources. Status: VERIFIED = text seen on a page; SECONDARY = community or snippet; UNVERIFIED = not found. The agent read pages through a summariser, so quotes are as reported.
+
+| Question | Result |
+|---|---|
+| SAFe / release trains in Digital Product Release (DPR) | **Not mentioned** in the DPR docs, release notes or FAQ (VERIFIED absence). SAFe exists in a different product (portfolio management, with ARTs and PI planning). The only agile link in DPR is "auto-create releases from Agile 2.0" (Feb 2025). |
+| Environments in DPR | **No environment entity** on any DPR page read (VERIFIED absence). The FAQ says DPR does not cover development, testing or deployment itself. |
+| Dependencies | Release bundles "identify dependencies and potential conflicts" across concurrent releases (VERIFIED), but no dependency type or table is described. Task ordering in DPR is a community question answered with predecessor/successor fields plus Flow Designer (SECONDARY). |
+| Release to change request | **VERIFIED.** Linked at the **phase** level: a change is associated to a phase (once per phase, possibly several phases); its Software model field takes the release version. Not a parent field on the release. |
+| CAB tooling | **VERIFIED: CAB Workbench** has a meeting calendar, an agenda (pause, skip, promote, demote), attendee list with invitation responses and who is connected, and decisions logged in the CAB meeting notes. Approve/reject with comments and conflict checks are SECONDARY. |
+| Separation of duties | **No native rule found.** Community posts: requesters can approve their own change unless a business rule is added; auditors commonly require the exclusion. Approval Policies reportedly break the workflow-based workaround. |
+| ITOM Orchestration | Infrastructure automation through a MID server and activities; **no link to DPR or DevOps Change Velocity found.** Not release orchestration. |
+| Licence tier | Community posts (not official): Change in Advanced, DevOps Change Velocity and Predictive Intelligence per the April 2026 repackaging (Foundation / Advanced / Prime) with DevOps Change Velocity in Prime; DPR in Prime per a pricing-page snippet. Older model: DPR entitled with ITSM Pro and Enterprise (community FAQ). CAB Workbench tier unknown. No single official mapping found (KB3160245 not opened). |
+| Free developer instance | Community posts say DPR is free in a Personal Developer Instance (plugin install), but a user hit an install error on the latest family and another reports the Change module missing. Change in a PDI is **unverified**. |
+
+**What this changes in the comparison**
+
+- The claims that DPR lacks release trains, environments and release dependencies are now supported by *absence on several official pages*, not by an explicit ServiceNow statement. Still confirm with a hands-on test before using them in sales material.
+- ServiceNow's CAB Workbench is a good model for the smallest useful CAB set: **meeting calendar, agenda of changes, attendee list, per-item approve or reject with a required comment, conflict and blackout visibility, decisions saved to the meeting record, and a completed state with an end time.** That is the scope proposed for the ReleaseOS CAB module (section 11).
+- ServiceNow links change to release by phase; ReleaseOS would link change to release and to gate, which is easy to explain.
+- The separation-of-duties difference stands as a real advantage, still per the docs read.
+
+**For a human tester:** request a free ServiceNow Personal Developer Instance, install the Digital Product Release plugin, confirm the Change and CAB Workbench plugins are present, and check whether DPR installs on the current release family.
+
+## 11. Owner direction recorded (25 Nov 2026) and the CAB module
+
+1. **Target customer: both.** ReleaseOS should work alongside a customer's ServiceNow (read and, later, write back) and also for customers who do not have one. For those, a **CAB module ("ServiceNow lite")** can be switched on per client instance as an add-on.
+2. **Enablement.** `CLAUDE.md` rule 9 bans toggle switches in the UI. The module is therefore enabled with an **"Enable CAB module" button and a confirmation dialog**, controlled by the customer's plan entitlement and recorded in the audit chain. (Say if you want the toggle rule changed.)
+3. **Scope.** The CAB module's fixed core is the smallest set above plus a small change-request record (type Standard, Normal or Emergency; risk from visible rules; links to a release, a Go/No-Go decision and freeze windows). **Out of scope:** CMDB, custom forms, a workflow designer, ITIL ceremony, scripting.
+4. **Build rules.** Its own tables and services; off by default; the core product must work without it; status changes only through domain services; every action audited. These follow the complexity budget (recommended, not yet adopted).

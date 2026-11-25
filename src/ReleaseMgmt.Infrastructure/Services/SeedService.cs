@@ -68,8 +68,10 @@ public sealed class SeedService(IDbContextFactory<ReleaseDbContext> dbf, TimePro
         var trainDefs = new[] { ("R26.11 Payments platform", nextFriday.AddDays(21), "High"), ("R26.12 Card portal", nextFriday.AddDays(14), "Moderate"), ("R26.13 Reporting", nextFriday.AddDays(35), "Low") };
         var ids = new List<string>();
         var production = await db.Set<ReleaseTypes>().AsNoTracking().Where(x => x.WorkspaceId == WorkspaceIds.Default && x.Name == "Production").Select(x => x.Id).FirstOrDefaultAsync(ct);   // REOS-116: every release has a type
-        foreach (var (title, target, risk) in trainDefs)
+        foreach (var (title, plannedTarget, risk) in trainDefs)
         {
+            var target = plannedTarget;
+            while (!BusinessDays.IsBusinessDay(target, holidays)) target = target.AddDays(-1);   // a demo target on a holiday (1 January) makes gate offsets read one day off; keep demo data on business days
             var t = new ReleaseTrains { Id = Ids.New(), Title = title, TargetReleaseDate = target, RiskTier = risk, CreatedAt = stamp, UpdatedAt = stamp, LastChangedByUserId = rte.Id, LastChangedAt = stamp, ReleaseTypeId = production };
             db.Set<ReleaseTrains>().Add(t);
             ids.Add(t.Id);

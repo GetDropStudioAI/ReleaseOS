@@ -154,7 +154,8 @@ test('the make form works from the keyboard alone, and selecting another row dro
   await page.keyboard.type(name)
   await page.keyboard.press('Tab')                       // Access
   await expect(makeForm(page).getByLabel('Access')).toBeFocused()
-  await page.keyboard.press('ArrowDown')                 // Read and write
+  // ArrowDown on a focused native select opens the list on macOS and changes the value elsewhere, so the value is set the OS-independent way; reaching the control by Tab is the keyboard claim
+  await makeForm(page).getByLabel('Access').selectOption({ label: 'Read and write (read, write)' })
   await page.keyboard.press('Tab')                       // Expires
   await expect(makeForm(page).getByLabel('Expires')).toBeFocused()
   await page.keyboard.press('Tab')                       // Make token

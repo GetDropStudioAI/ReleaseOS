@@ -296,16 +296,40 @@ for sql, want, label in [
     except sqlite3.IntegrityError as e:
         check(want is not None and want in str(e), label)
 
-# Upgrade 013 (REOS-174): WorkspaceModules is new and EMPTY (every module off), nothing else changes, and its rules are live
+# Upgrade 013 (REOS-162, REOS-163): the two new tables start empty and their rules are live; nothing else changes
 t13 = baseline_db()
 for s in SCRIPTS:
+    if s.name.startswith("013_"):
+        before13 = {k: v for k, v in shape(t13).items()}
+        rows13 = {t: t13.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("Users", "ReleaseTrains", "AuditEvents", "TrainTemplates")}
     t13.executescript(s.read_text())
-check(t13.execute("SELECT COUNT(*) FROM WorkspaceModules").fetchone() == (0,), "013: no module is enabled by the upgrade (the table starts empty)")
+check(t13.execute("SELECT COUNT(*) FROM ApiTokens").fetchone() == (0,) and t13.execute("SELECT COUNT(*) FROM IdempotencyKeys").fetchone() == (0,), "013: no token and no idempotency key is made by the script")
+check({t: t13.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in rows13} == rows13, "013: existing rows are untouched")
+after13 = shape(t13)
+check({k: v for k, v in after13.items() if k in before13} == before13, "013: no existing table, index or trigger changes")
+check(t13.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND (name LIKE 'trg_Ws_ApiTokens_%' OR name LIKE 'trg_Ws_IdempotencyKeys_%')").fetchone() == (4,), "013: the four workspace rules are in place")
+t13.execute("INSERT INTO Users (Id, Email, DisplayName, Role) VALUES ('u3', 'out@corp.example', 'Outsider', 'Viewer')")   # a person in no workspace
 for sql, want, label in [
-    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled, EnabledByUserId, EnabledAt) VALUES ('default', 'cab', 1, 'u1', '2026-11-25T00:00:00Z')", None, "013: a module can be enabled by a person"),
-    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled, EnabledByUserId, EnabledAt) VALUES ('default', 'cab', 0, NULL, NULL)", "UNIQUE", "013: one row per module per workspace"),
-    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled) VALUES ('default', 'ai', 1)", "CHECK", "013: an enabled module records who and when"),
-    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey) VALUES ('nowhere', 'ai')", "FOREIGN KEY", "013: a module row needs a workspace"),
+    ("INSERT INTO ApiTokens (Id, Name, TokenPrefix, TokenSha256, Scopes, OwnerUserId, CreatedAt) VALUES ('a1', 'CI', 'rt_ab12', printf('%064d', 1), 'read,write', 'u1', '2026-09-01T00:00:00Z')", None, "013: a token for a member"),
+    ("INSERT INTO ApiTokens (Id, Name, TokenPrefix, TokenSha256, Scopes, OwnerUserId, CreatedAt) VALUES ('a2', 'CI', 'rt_ab13', printf('%064d', 2), 'read', 'u3', '2026-09-01T00:00:00Z')", "not a member of this workspace", "013: a token owned by someone outside the workspace is refused"),
+    ("INSERT INTO IdempotencyKeys (Id, ApiTokenId, KeyValue, RequestSha256, CreatedAt, ExpiresAt) VALUES ('i1', 'a1', 'k', printf('%064d', 1), '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z')", None, "013: an idempotency key"),
+    ("INSERT INTO IdempotencyKeys (Id, ApiTokenId, KeyValue, RequestSha256, CreatedAt, ExpiresAt) VALUES ('i2', 'a1', 'k', printf('%064d', 2), '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z')", "UNIQUE", "013: the same key twice for one token is refused"),
+]:
+    try:
+        t13.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+
+# Upgrade 014 (REOS-174): WorkspaceModules is new and EMPTY (every module off), nothing else changes, and its rules are live
+t14 = baseline_db()
+for s in SCRIPTS:
+    t14.executescript(s.read_text())
+check(t14.execute("SELECT COUNT(*) FROM WorkspaceModules").fetchone() == (0,), "014: no module is enabled by the upgrade (the table starts empty)")
+for sql, want, label in [
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled, EnabledByUserId, EnabledAt) VALUES ('default', 'cab', 1, 'u1', '2026-11-25T00:00:00Z')", None, "014: a module can be enabled by a person"),
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled, EnabledByUserId, EnabledAt) VALUES ('default', 'cab', 0, NULL, NULL)", "UNIQUE", "014: one row per module per workspace"),
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey, Enabled) VALUES ('default', 'ai', 1)", "CHECK", "014: an enabled module records who and when"),
+    ("INSERT INTO WorkspaceModules (WorkspaceId, ModuleKey) VALUES ('nowhere', 'ai')", "FOREIGN KEY", "014: a module row needs a workspace"),
 ]:
     try:
         t13.execute(sql); check(want is None, label)

@@ -1,7 +1,7 @@
--- Upgrade 013 (REOS-174; D56, D57, D63): per-workspace add-on modules.
--- From: migrations 20261025034543_Schema + 20261025034602_Triggers (after 012).
--- To:   migrations 20261125184746_Schema + 20261125184754_Triggers.
--- Run with the app stopped and after a backup (docs/RUNBOOK_OPERATIONS.md section 8):  sqlite3 releaseos.db < db/upgrades/013_workspace_modules.sql
+-- Upgrade 014 (REOS-174; D56, D57, D63): per-workspace add-on modules.
+-- From: migrations 20261125184717_Schema + 20261125184729_Triggers (after 013).
+-- To:   migrations 20261126010001_Schema + 20261126010017_Triggers.
+-- Run with the app stopped and after a backup (docs/RUNBOOK_OPERATIONS.md section 8):  sqlite3 releaseos.db < db/upgrades/014_workspace_modules.sql
 -- One transaction. Text below is verbatim from db/schema.sql:
 --  * New table: WorkspaceModules (which add-on modules a workspace has switched on). It starts EMPTY: no row means a module is off, so every module is off after the upgrade.
 --  * No trigger is new and no existing table changes, so nothing else is rebuilt.
@@ -9,10 +9,10 @@
 PRAGMA foreign_keys=OFF;
 BEGIN IMMEDIATE;
 
--- Refuses to run twice or against the wrong database: the INSERT fails on the CHECK unless exactly 012's migrations are recorded.
+-- Refuses to run twice or against the wrong database: the INSERT fails on the CHECK unless exactly 013's migrations are recorded.
 CREATE TEMP TABLE _upgrade_guard (ok INTEGER CHECK (ok = 1));
 INSERT INTO _upgrade_guard SELECT (SELECT group_concat(MigrationId, ',') FROM (SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId))
-    = '20261025034543_Schema,20261025034602_Triggers';
+    = '20261125184717_Schema,20261125184729_Triggers';
 DROP TABLE _upgrade_guard;
 
 CREATE TABLE WorkspaceModules (                           -- a module is OFF until a row says Enabled = 1; no row means off. The module's own data lives in its own tables and is kept when it is switched off
@@ -30,10 +30,10 @@ CREATE TABLE WorkspaceModules (                           -- a module is OFF unt
 );
 
 -- The app's startup migration must see the new migrations as applied.
-DELETE FROM __EFMigrationsHistory WHERE MigrationId IN ('20261025034543_Schema', '20261025034602_Triggers');
+DELETE FROM __EFMigrationsHistory WHERE MigrationId IN ('20261125184717_Schema', '20261125184729_Triggers');
 INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES
-    ('20261125184746_Schema', '10.0.12'),
-    ('20261125184754_Triggers', '10.0.12');
+    ('20261126010001_Schema', '10.0.12'),
+    ('20261126010017_Triggers', '10.0.12');
 
 COMMIT;
 PRAGMA foreign_keys=ON;

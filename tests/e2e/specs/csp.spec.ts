@@ -15,6 +15,7 @@ const SCREENS: { link: RegExp; heading: RegExp; where?: 'bell' | 'card' }[] = [
   { link: /^Templates$/, heading: /^Train templates$/ },
   { link: /^Comm library$/, heading: /^Comm library$/ },
   { link: /^Connectors$/, heading: /^Connectors$/ },
+  { link: /^API tokens$/, heading: /^API tokens$/ },
   { link: /^My work$/, heading: /^My work$/ },
   { link: /^Analytics$/, heading: /^Analytics$/ },
   { link: /^Imports & exports$/, heading: /^Imports & exports$/ },

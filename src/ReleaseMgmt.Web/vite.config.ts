@@ -18,6 +18,7 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 6273,
     fs: { allow: [path.resolve(__dirname, '../..')] }, // docs/ui/tokens.css lives outside this project
-    proxy: { '/api': backend, '/hub': { target: api, ws: true }, '/auth': backend, '/healthz': backend, '/control': control },
+    // '^/api/' not '/api': a string key matches by prefix, so '/api' would also send the page /api-tokens (REOS-162) to the backend instead of the dev server.
+    proxy: { '^/api/': backend, '/hub': { target: api, ws: true }, '/auth': backend, '/healthz': backend, '/control': control },
   },
 })

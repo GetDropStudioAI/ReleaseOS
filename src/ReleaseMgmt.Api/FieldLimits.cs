@@ -168,12 +168,14 @@ public static class FieldLimits
         [typeof(ProductServiceLink)] = new() { ["ServiceId"] = Id, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey },
         // REOS-110: API keys and the push ingest API (an event message is 2,000 characters, the schema's CHECK)
         [typeof(DeploymentEndpoints.IngestKeyBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName },
+        [typeof(ApiTokenEndpoints.CreateBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName, ["Scopes"] = 20 },   // REOS-162
         [typeof(IngestDeployment)] = new()
         {
             ["ExternalId"] = ReleaseModelLimits.MaxExternalId, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey, ["Environment"] = ReleaseModelLimits.MaxEnvironmentName,
             ["ReleaseVersion"] = ReleaseModelLimits.MaxReleaseVersion, ["Strategy"] = Code, ["State"] = Code, ["ReleaseKey"] = 20,
         },
         [typeof(DeploymentEndpoints.IngestEventsBody)] = new() { ["DeploymentExternalId"] = ReleaseModelLimits.MaxExternalId },
+        [typeof(ReleaseMgmt.Api.PublicApi.DeploymentsNative.EventsBody)] = new() { ["DeploymentExternalId"] = ReleaseModelLimits.MaxExternalId },   // REOS-161
         [typeof(IngestEvent)] = new() { ["Level"] = Code, ["Message"] = ReleaseModelLimits.MaxEventMessage, ["ExternalId"] = ReleaseModelLimits.MaxExternalId },
         // REOS-111/112: metric samples, control calls and run pause (a reason is 500 characters, the schema's CHECK)
         [typeof(DeploymentOpsEndpoints.IngestMetricsBody)] = new() { ["DeploymentExternalId"] = ReleaseModelLimits.MaxExternalId },

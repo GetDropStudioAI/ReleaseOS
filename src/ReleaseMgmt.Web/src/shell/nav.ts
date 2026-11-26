@@ -34,6 +34,7 @@ export const NAV: NavGroup[] = [
       { view: 'connectors', label: 'Connectors', need: 'admin' },
       { view: 'cab', label: 'Change advisory board', placeholder: 'cab', module: 'cab' },   // REOS-174: no feature behind it yet (REOS-158); the entry shows the gating works
       { view: 'ai', label: 'AI assistant', placeholder: 'ai', module: 'ai' },
+      { view: 'api-tokens', label: 'API tokens', need: 'admin' },
     ],
   },
   { id: 'more', label: 'More', items: [{ view: 'work', label: 'My work' }, { view: 'analytics', label: 'Analytics' }, { view: 'importexport', label: 'Imports & exports' }] },

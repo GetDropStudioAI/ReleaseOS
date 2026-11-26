@@ -1,0 +1,5059 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ReleaseOS public API",
+    "version": "1.0.0",
+    "summary": "Releases, gates, approvals, calendar, deployments and analytics.",
+    "description": "Workspace-scoped and role-checked exactly like the application: a token acts as the person who made it (or last rotated it), in the token\u0027s workspace, and its scopes narrow what that person\u0027s role allows. Status changes are service actions (\u0060:advance\u0060, \u0060:complete\u0060, \u0060:certify\u0060, \u2026); nothing sets a status column. Writes that change a record need \u0060If-Match\u0060 carrying the record\u0027s \u0060version\u0060. A POST may carry an \u0060Idempotency-Key\u0060; a repeat of a successful request returns the stored result. Versioning and deprecation: docs/API_VERSIONING.md."
+  },
+  "servers": [
+    {
+      "url": "/api/public/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearerToken": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Analytics"
+    },
+    {
+      "name": "Approvals"
+    },
+    {
+      "name": "Calendar"
+    },
+    {
+      "name": "Deployments"
+    },
+    {
+      "name": "Gates"
+    },
+    {
+      "name": "Identity"
+    },
+    {
+      "name": "Releases"
+    }
+  ],
+  "paths": {
+    "/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Who the token acts as: the person, their role in the workspace and the workspace",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases": {
+      "get": {
+        "operationId": "listReleases",
+        "summary": "List releases (those open, and those closed in the last 30 days)",
+        "tags": [
+          "Releases"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "releaseTypeId",
+            "in": "query",
+            "required": false,
+            "description": "Only releases of this type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 200; default 50.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "The \u0060page.nextCursor\u0060 of the previous page, with the same filters.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases/{id}": {
+      "get": {
+        "operationId": "getRelease",
+        "summary": "One release with its gates, products and status",
+        "tags": [
+          "Releases"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases/{id}/readiness": {
+      "get": {
+        "operationId": "getReleaseReadiness",
+        "summary": "What stands between the release and a status",
+        "tags": [
+          "Releases"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "description": "The status to reach; default Executing.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases/{id}/deployments": {
+      "get": {
+        "operationId": "listReleaseDeployments",
+        "summary": "Deployments of one release",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases/{id}/approval-requests": {
+      "get": {
+        "operationId": "listReleaseApprovalRequests",
+        "summary": "Approval requests of one release",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gates/{id}": {
+      "get": {
+        "operationId": "getGate",
+        "summary": "One gate with its checklist, evidence and who may certify it",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approval-requests": {
+      "get": {
+        "operationId": "listApprovalRequests",
+        "summary": "List approval requests",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "trainId",
+            "in": "query",
+            "required": false,
+            "description": "Only requests for this release.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environmentId",
+            "in": "query",
+            "required": false,
+            "description": "Only requests for this environment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Pending, ChangesRequested, Approved, Declined or Cancelled.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mine",
+            "in": "query",
+            "required": false,
+            "description": "Only requests waiting for the person the token acts as.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 200; default 50.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "The \u0060page.nextCursor\u0060 of the previous page, with the same filters.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createApprovalRequest",
+        "summary": "Ask for an approval to take a release to an environment",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewApproval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approval-requests/{id}": {
+      "get": {
+        "operationId": "getApprovalRequest",
+        "summary": "One approval request with its seats and decisions",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/calendar": {
+      "get": {
+        "operationId": "getCalendar",
+        "summary": "Releases, gate dates, milestones, client dates and freeze windows between two dates",
+        "tags": [
+          "Calendar"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Start, a UTC instant (2026-10-01T10:00:00Z) or a day (2026-10-01).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "End, a UTC instant or a day.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "releaseTypeId",
+            "in": "query",
+            "required": false,
+            "description": "Only releases of this type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "required": false,
+            "description": "Client segment: Standard or OnDemand.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments": {
+      "get": {
+        "operationId": "listDeployments",
+        "summary": "List deployments, newest first",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "environmentId",
+            "in": "query",
+            "required": false,
+            "description": "Only this environment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "serviceId",
+            "in": "query",
+            "required": false,
+            "description": "Only this service.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trainId",
+            "in": "query",
+            "required": false,
+            "description": "Only this release.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "Only this state.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 200; default 50.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "The \u0060page.nextCursor\u0060 of the previous page, with the same filters.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "recordDeployment",
+        "summary": "Record a deployment, or its new state, by the tool\u0027s own id (a replay of the same id changes nothing)",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope. 201 when the deployment is new, 200 when it already existed.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestDeployment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{id}": {
+      "get": {
+        "operationId": "getDeployment",
+        "summary": "One deployment with its events",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "events",
+            "in": "query",
+            "required": false,
+            "description": "How many events to return (newest first); default 200.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics": {
+      "get": {
+        "operationId": "listAnalyticsMetrics",
+        "summary": "The analytics metrics (M1 to M24) and their columns",
+        "tags": [
+          "Analytics"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/{metric}": {
+      "get": {
+        "operationId": "getAnalyticsMetric",
+        "summary": "One metric\u0027s rows over a period",
+        "tags": [
+          "Analytics"
+        ],
+        "x-required-scope": "read",
+        "description": "Needs the \u0060read\u0060 scope.",
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Start, a UTC instant (2026-10-01T10:00:00Z) or a day (2026-10-01).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "End, a UTC instant or a day.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "releaseTypeId",
+            "in": "query",
+            "required": false,
+            "description": "Only releases of this type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaces",
+            "in": "query",
+            "required": false,
+            "description": "Workspaces to read across, comma separated; only those the token\u0027s person belongs to.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "description": "Grouping, for M16 to M24.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060read\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases/{id}:advance": {
+      "post": {
+        "operationId": "advanceRelease",
+        "summary": "Move a release to its next status (the service checks every rule and the database enforces them)",
+        "tags": [
+          "Releases"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases/{id}:complete": {
+      "post": {
+        "operationId": "completeRelease",
+        "summary": "Complete a release with a close code",
+        "tags": [
+          "Releases"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases/{id}:abort": {
+      "post": {
+        "operationId": "abortRelease",
+        "summary": "Abort a release",
+        "tags": [
+          "Releases"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbortRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gates/{id}:start": {
+      "post": {
+        "operationId": "startGate",
+        "summary": "Start a gate",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gates/{id}:fail": {
+      "post": {
+        "operationId": "failGate",
+        "summary": "Mark a gate failed",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gates/{id}:reopen": {
+      "post": {
+        "operationId": "reopenGate",
+        "summary": "Reopen a gate",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}:complete": {
+      "post": {
+        "operationId": "completeTask",
+        "summary": "Complete a checklist task",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}:reopen": {
+      "post": {
+        "operationId": "reopenTask",
+        "summary": "Reopen a checklist task",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "write",
+        "description": "Needs the \u0060write\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060write\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gates/{id}:certify": {
+      "post": {
+        "operationId": "certifyGate",
+        "summary": "Certify a gate (the person the token acts as must be eligible, and not the one who did the work)",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gates/{id}:waive": {
+      "post": {
+        "operationId": "waiveGate",
+        "summary": "Waive a gate on an approved waiver",
+        "tags": [
+          "Gates"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gates/{id}/waivers": {
+      "post": {
+        "operationId": "requestWaiver",
+        "summary": "Ask for a waiver of a gate",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaiverRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/waivers/{id}:approve": {
+      "post": {
+        "operationId": "approveWaiver",
+        "summary": "Approve a waiver",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/waivers/{id}:decline": {
+      "post": {
+        "operationId": "declineWaiver",
+        "summary": "Decline a waiver",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approval-requests/{id}:decide": {
+      "post": {
+        "operationId": "decideApprovalRequest",
+        "summary": "Approve, decline or ask for changes on a seat of an approval request",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approval-requests/{id}:resubmit": {
+      "post": {
+        "operationId": "resubmitApprovalRequest",
+        "summary": "Resubmit an approval request after changes",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approval-requests/{id}:cancel": {
+      "post": {
+        "operationId": "cancelApprovalRequest",
+        "summary": "Cancel an approval request",
+        "tags": [
+          "Approvals"
+        ],
+        "x-required-scope": "approvals",
+        "description": "Needs the \u0060approvals\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060approvals\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/events": {
+      "post": {
+        "operationId": "recordDeploymentEvents",
+        "summary": "Append events to a deployment (an event with an externalId is recorded once)",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{id}:pause": {
+      "post": {
+        "operationId": "pauseDeployment",
+        "summary": "Ask the environment\u0027s deployment tool to pause a deployment",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{id}:resume": {
+      "post": {
+        "operationId": "resumeDeployment",
+        "summary": "Ask the deployment tool to resume a deployment",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{id}:promote": {
+      "post": {
+        "operationId": "promoteDeployment",
+        "summary": "Ask the deployment tool to promote a canary",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{id}:rollback": {
+      "post": {
+        "operationId": "rollbackDeployment",
+        "summary": "Ask the deployment tool to roll a deployment back",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{id}:arm-rollback": {
+      "post": {
+        "operationId": "armDeploymentRollback",
+        "summary": "Arm automatic rollback on a confirmed threshold breach",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{id}:disarm-rollback": {
+      "post": {
+        "operationId": "disarmDeploymentRollback",
+        "summary": "Disarm automatic rollback",
+        "tags": [
+          "Deployments"
+        ],
+        "x-required-scope": "deployments",
+        "description": "Needs the \u0060deployments\u0060 scope.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The \u0060version\u0060 of the record, as you read it. A newer version is a 409 with the record as it is now; none is a 428.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "1 to 255 printable characters. A repeat of a successful request with the same key returns its stored result (header \u0060Idempotent-Replayed: true\u0060) and runs nothing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": [
+                    "object",
+                    "array"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read (a bad cursor, limit or Idempotency-Key, or a malformed body).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, unknown, revoked or expired.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token lacks the \u0060deployments\u0060 scope (\u0060ScopeDenied\u0060, \u0060requiredScope\u0060 names it), or the person it acts as lacks the role the operation needs (\u0060RoleDenied\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The record does not exist in the token\u0027s workspace.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record changed since you read it (\u0060VersionConflict\u0060, with \u0060current\u0060), or the first request with this Idempotency-Key is still running.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A rule refused the request (\u0060guard\u0060 names it; \u0060DbRule\u0060 is a database rule), or the Idempotency-Key was used for another request.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "\u0060If-Match\u0060 is missing (\u0060PreconditionRequired\u0060).",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests for the token or its workspace; wait \u0060Retry-After\u0060 seconds. \u0060X-RateLimit-Limit\u0060, \u0060X-RateLimit-Remaining\u0060 and \u0060X-RateLimit-Reset\u0060 are on every response.",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API token (\u0060rt_\u2026\u0060) from Admin, API tokens. Shown once when it is made or rotated."
+      }
+    },
+    "schemas": {
+      "AbortRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "AdvanceRequest": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ]
+      },
+      "CompleteRequest": {
+        "type": "object",
+        "properties": {
+          "closeCode": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "closeCode"
+        ]
+      },
+      "ControlRequest": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "DecideRequest": {
+        "type": "object",
+        "properties": {
+          "seat": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "DeclineBody": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "EventsBody": {
+        "type": "object",
+        "properties": {
+          "deploymentExternalId": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestEvent"
+            }
+          }
+        }
+      },
+      "IngestDeployment": {
+        "type": "object",
+        "properties": {
+          "externalId": {
+            "type": "string"
+          },
+          "serviceKey": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "releaseVersion": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "canarySteps": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "state": {
+            "type": "string"
+          },
+          "trafficPercent": {
+            "type": "number"
+          },
+          "readyPods": {
+            "type": "integer"
+          },
+          "desiredPods": {
+            "type": "integer"
+          },
+          "releaseKey": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "IngestEvent": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "externalId": {
+            "type": "string"
+          }
+        }
+      },
+      "NewApproval": {
+        "type": "object",
+        "properties": {
+          "trainId": {
+            "type": "string"
+          },
+          "environmentId": {
+            "type": "string"
+          }
+        }
+      },
+      "Page": {
+        "type": "object",
+        "required": [
+          "data",
+          "page"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "page": {
+            "type": "object",
+            "required": [
+              "limit",
+              "hasMore",
+              "nextCursor"
+            ],
+            "properties": {
+              "limit": {
+                "type": "integer"
+              },
+              "hasMore": {
+                "type": "boolean"
+              },
+              "nextCursor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Pass as \u0060cursor\u0060 with the same filters to get the next page; null on the last page."
+              }
+            }
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457 problem details. \u0060guard\u0060 names the rule that refused the request (it is the same name the internal API uses, \u0060DbRule\u0060 for a database rule, \u0060ScopeDenied\u0060, \u0060RateLimited\u0060 and so on) and \u0060message\u0060 repeats \u0060detail\u0060; members such as \u0060items\u0060, \u0060failures\u0060 and, on a 409, \u0060current\u0060 (the row as it is now) are kept as the internal API returns them.",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "guard"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "urn:releaseos:problem:{guard}"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string",
+            "description": "The request path."
+          },
+          "guard": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "requiredScope": {
+            "type": "string",
+            "description": "On a 403 ScopeDenied: the scope the operation needs."
+          },
+          "current": {
+            "description": "On a 409 VersionConflict: the row as it is now."
+          }
+        },
+        "additionalProperties": true
+      },
+      "WaiverRequestBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      }
+    }
+  }
+}

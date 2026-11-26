@@ -40,6 +40,9 @@ public class EndpointRoleMatrixTests
         // Ingest (REOS-110): the push ingest API takes a workspace API key and nothing else. No role passes, a session cookie included: all of them get 401, not 403
         // (the key is checked in IngestApiTests: missing, wrong, revoked and rate-limited keys, and a valid one).
         ["Ingest"] = [],
+        // PublicToken (REOS-161): /api/public/v1 takes an API token and nothing else; a session cookie, whatever the role, is 401, like the ingest keys. What a token may do is PublicApiTests and
+        // PublicApiContractTests (every operation is an internal endpoint in this matrix, or one of the two native ones).
+        ["PublicToken"] = [],
         // Approval policies (REOS-113): the roles that govern releases. Approval requests are decided by whoever holds a seat, in any role ("Owned": the service says who may).
         ["PolicyManage"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],
     };
@@ -308,6 +311,13 @@ public class EndpointRoleMatrixTests
         GET /api/v1/deployments/{id}                             Read
         GET /api/v1/trains/{id}/deployments                      Read
         GET /api/v1/trains/{id}/environments                     Read
+        GET /api/public/v1/openapi.json                          Anonymous
+        POST /api/public/v1/deployments                          PublicToken
+        POST /api/public/v1/deployments/events                   PublicToken
+        GET /api/v1/api-tokens                                   Admin
+        POST /api/v1/api-tokens                                  Admin
+        POST /api/v1/api-tokens/{id}:rotate                      Admin
+        POST /api/v1/api-tokens/{id}:revoke                      Admin
         GET /api/v1/ingest-keys                                  Admin
         POST /api/v1/ingest-keys                                 Admin
         POST /api/v1/ingest-keys/{id}:revoke                     Admin
@@ -439,8 +449,8 @@ public class EndpointRoleMatrixTests
                 checks++;
                 var denied = status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
                 if (allow && (denied || (int)status >= 500)) wrong.Add($"{key} [{cls}] as {who}: expected allowed, got {(int)status} {(status >= HttpStatusCode.InternalServerError ? (await res.Content.ReadAsStringAsync())[..Math.Min(300, (await res.Content.ReadAsStringAsync()).Length)] : "")}");
-                else if (!allow && (who == "anonymous" || cls == "Ingest") && status != HttpStatusCode.Unauthorized) wrong.Add($"{key} [{cls}] as {who}: expected 401, got {(int)status}");
-                else if (!allow && who != "anonymous" && cls != "Ingest" && status != HttpStatusCode.Forbidden) wrong.Add($"{key} [{cls}] as {who}: expected 403, got {(int)status}");
+                else if (!allow && (who == "anonymous" || cls is "Ingest" or "PublicToken") && status != HttpStatusCode.Unauthorized) wrong.Add($"{key} [{cls}] as {who}: expected 401, got {(int)status}");
+                else if (!allow && who != "anonymous" && cls is not ("Ingest" or "PublicToken") && status != HttpStatusCode.Forbidden) wrong.Add($"{key} [{cls}] as {who}: expected 403, got {(int)status}");
             }
         }
         Assert.True(wrong.Count == 0, $"{wrong.Count} of {checks} role checks failed:\n  " + string.Join("\n  ", wrong));

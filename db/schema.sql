@@ -875,6 +875,43 @@ CREATE TABLE IngestKeys (                                 -- REOS-110: per-works
     CHECK ((RevokedAt IS NULL) = (RevokedByUserId IS NULL))
 );
 
+
+CREATE TABLE ApiTokens (                                  -- REOS-162: scoped service tokens for the public API (/api/public/v1). Only the SHA-256 is kept (like IngestKeys): the token is shown once, at creation or rotation
+    Id TEXT PRIMARY KEY,
+    Name TEXT NOT NULL CHECK (length(trim(Name)) BETWEEN 1 AND 100),
+    TokenPrefix TEXT NOT NULL CHECK (length(TokenPrefix) BETWEEN 4 AND 12),   -- the first characters, so a person can tell tokens apart; not enough to use
+    TokenSha256 TEXT NOT NULL UNIQUE CHECK (length(TokenSha256) = 64 AND TokenSha256 NOT GLOB '*[^0-9a-f]*'),
+    Scopes TEXT NOT NULL CHECK (length(Scopes) BETWEEN 1 AND 100 AND Scopes NOT GLOB '*[^a-z,]*' AND Scopes NOT GLOB ',*' AND Scopes NOT GLOB '*,' AND Scopes NOT GLOB '*,,*'),   -- comma list from read, write, approvals, deployments (the service checks the words)
+    ExpiresAt TEXT,                                       -- NULL = does not expire
+    OwnerUserId TEXT NOT NULL REFERENCES Users(Id),       -- the person the token acts as: their role in this workspace, as it is now, limits it; the audit actor
+    CreatedAt TEXT NOT NULL,
+    RotatedAt TEXT,
+    LastUsedAt TEXT,                                      -- written at most once a minute, without a Version bump: last write wins
+    RevokedAt TEXT,
+    RevokedByUserId TEXT REFERENCES Users(Id),
+    Version INTEGER NOT NULL DEFAULT 1,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    CHECK ((RevokedAt IS NULL) = (RevokedByUserId IS NULL)),
+    CHECK (ExpiresAt IS NULL OR ExpiresAt > CreatedAt)
+);
+CREATE INDEX IX_ApiTokens_Workspace ON ApiTokens(WorkspaceId, RevokedAt);
+
+CREATE TABLE IdempotencyKeys (                            -- REOS-163: a POST to the public API with an Idempotency-Key; a replay of the same key and request returns the stored result and runs nothing
+    Id TEXT PRIMARY KEY,
+    ApiTokenId TEXT NOT NULL REFERENCES ApiTokens(Id) ON DELETE CASCADE,
+    KeyValue TEXT NOT NULL CHECK (length(KeyValue) BETWEEN 1 AND 255),
+    RequestSha256 TEXT NOT NULL CHECK (length(RequestSha256) = 64 AND RequestSha256 NOT GLOB '*[^0-9a-f]*'),   -- method, path, query and body: the same key with another request is refused
+    StatusCode INTEGER CHECK (StatusCode IS NULL OR StatusCode BETWEEN 100 AND 599),   -- NULL while the first request is still running
+    ContentType TEXT,
+    ResponseBody TEXT CHECK (ResponseBody IS NULL OR length(ResponseBody) <= 4194304),
+    CreatedAt TEXT NOT NULL,
+    ExpiresAt TEXT NOT NULL,
+    WorkspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES Workspaces(Id),
+    UNIQUE (ApiTokenId, KeyValue),
+    CHECK ((StatusCode IS NULL) = (ResponseBody IS NULL))
+);
+CREATE INDEX IX_IdempotencyKeys_Expires ON IdempotencyKeys(ExpiresAt);
+
 CREATE TABLE Deployments (                                -- B7/D42: service x environment x version x strategy, pushed by the deployment tool
     Id TEXT PRIMARY KEY,
     ExternalId TEXT NOT NULL CHECK (length(ExternalId) BETWEEN 1 AND 200),   -- the tool's own id: a replay of the same id is the same deployment
@@ -1889,6 +1926,24 @@ BEGIN
      WHERE EXISTS (SELECT 1 FROM Teams x WHERE x.Id = NEW.OwnerTeamId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
 END;
 CREATE TRIGGER trg_Ws_IngestKeys_Update BEFORE UPDATE OF WorkspaceId ON IngestKeys WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId
+BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
+CREATE TRIGGER trg_Ws_ApiTokens_Insert BEFORE INSERT ON ApiTokens
+BEGIN
+    SELECT RAISE(ABORT, 'The token owner is not a member of this workspace')
+     WHERE NOT EXISTS (SELECT 1 FROM WorkspaceMembers m WHERE m.UserId = NEW.OwnerUserId AND m.WorkspaceId = NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_ApiTokens_Update BEFORE UPDATE OF WorkspaceId, OwnerUserId ON ApiTokens
+BEGIN
+    SELECT RAISE(ABORT, 'A row cannot move to another workspace') WHERE NEW.WorkspaceId IS NOT OLD.WorkspaceId;
+    SELECT RAISE(ABORT, 'The token owner is not a member of this workspace')
+     WHERE NEW.OwnerUserId IS NOT OLD.OwnerUserId AND NOT EXISTS (SELECT 1 FROM WorkspaceMembers m WHERE m.UserId = NEW.OwnerUserId AND m.WorkspaceId = NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_IdempotencyKeys_Insert BEFORE INSERT ON IdempotencyKeys
+BEGIN
+    SELECT RAISE(ABORT, 'The token belongs to another workspace')
+     WHERE EXISTS (SELECT 1 FROM ApiTokens x WHERE x.Id = NEW.ApiTokenId AND x.WorkspaceId IS NOT NEW.WorkspaceId);
+END;
+CREATE TRIGGER trg_Ws_IdempotencyKeys_Update BEFORE UPDATE OF WorkspaceId, ApiTokenId ON IdempotencyKeys WHEN NEW.WorkspaceId IS NOT OLD.WorkspaceId OR NEW.ApiTokenId IS NOT OLD.ApiTokenId
 BEGIN SELECT RAISE(ABORT, 'A row cannot move to another workspace'); END;
 CREATE TRIGGER trg_Ws_TrainEnvironments_Insert BEFORE INSERT ON TrainEnvironments
 BEGIN

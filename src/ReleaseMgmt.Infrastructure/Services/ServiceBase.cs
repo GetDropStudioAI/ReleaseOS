@@ -75,9 +75,9 @@ public abstract class ServiceBase(IDbContextFactory<ReleaseDbContext> dbf, TimeP
         if (trainId is not null) Touched.Value?.Add(trainId);
         return db.Set<AuditEvents>().Add(new AuditEvents
         {
-            OccurredAt = Now, ActorUserId = actor?.UserId, ReleaseTrainId = trainId, EntityType = entityType, EntityId = entityId, Action = action,
+            OccurredAt = Now, ActorUserId = actor?.UserId ?? ApiCallContext.Current?.OwnerUserId, ReleaseTrainId = trainId, EntityType = entityType, EntityId = entityId, Action = action,
             BeforeJson = before is null ? null : JsonSerializer.Serialize(before, Json),
-            AfterJson = after is null ? null : JsonSerializer.Serialize(after, Json),
+            AfterJson = ApiCallContext.WithVia(after is null ? null : JsonSerializer.Serialize(after, Json)),   // REOS-162: names the API token when the call came in with one
         }).Entity;
     }
 

@@ -11,7 +11,8 @@ namespace ReleaseMgmt.Infrastructure.Services;
 public sealed record IngestKeyView(string Id, string Name, string KeyPrefix, string CreatedAt, string? LastUsedAt, string? RevokedAt, string? CreatedBy, string? RevokedBy, int Version);
 /// <summary>The only time the key itself exists outside the deployment tool: it is shown once, and only its SHA-256 is kept.</summary>
 public sealed record CreatedIngestKey(IngestKeyView Key, string Secret);
-public sealed record IngestPrincipal(string KeyId, string KeyName, string WorkspaceId);
+/// <summary>Who pushed: an ingest key, or (REOS-161, a deployments-scope API token) a token, which has no ingest key id.</summary>
+public sealed record IngestPrincipal(string? KeyId, string KeyName, string WorkspaceId);
 
 /// <summary>
 /// Per-workspace API keys for the push ingest API (REOS-110, D42). A key is <c>rk_</c> and 43 random base64url characters (256 bits); only its SHA-256 is stored

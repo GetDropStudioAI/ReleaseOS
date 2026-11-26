@@ -102,6 +102,9 @@ public class CsrfTests
         var unsafeEndpoints = f.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
             .Select(e => (Method: e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.FirstOrDefault() ?? "ANY", Path: e.RoutePattern.RawText!))
             .Where(e => e.Method is "POST" or "PUT" or "PATCH" or "DELETE" || e.Path.StartsWith("/hub/trains/negotiate"))
+            // The public API (REOS-161) authenticates by a bearer token a script sends, never by the cookie: a browser cannot attach it to a cross-site form post
+            // (a custom header needs a CORS preflight, and none is allowed), and a request with the session cookie alone is 401 (PublicApiTests.Nothing_outside_the_subset_...).
+            .Where(e => !e.Path.StartsWith(ReleaseMgmt.Api.PublicApi.PublicApiCatalog.Prefix + "/", StringComparison.Ordinal))
             .ToList();
         Assert.True(unsafeEndpoints.Count > 90, $"only {unsafeEndpoints.Count} state-changing endpoints found");
 

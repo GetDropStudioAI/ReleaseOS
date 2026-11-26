@@ -49,20 +49,35 @@ public sealed class IngestLimiter(TimeProvider time, IConfiguration config)
             if (time.GetElapsedTime(b.Touched, Now) > TimeSpan.FromMinutes(5)) _buckets.TryRemove(k, out _);
     }
 
+    /// <summary>What a take from a bucket left: whether it was allowed, the bucket's size, requests left, seconds until it is full again, and seconds to wait when it was empty.</summary>
+    public readonly record struct RateState(bool Allowed, int Limit, int Remaining, int ResetSeconds, int RetryAfterSeconds);
+
     /// <summary>Takes one request from the key's bucket; false with the seconds to wait when it is empty.</summary>
     public bool TryTake(string keyId, out int retryAfterSeconds)
     {
+        var s = Take("k:" + keyId, Rate, Burst);
+        retryAfterSeconds = s.RetryAfterSeconds;
+        return s.Allowed;
+    }
+
+    /// <summary>
+    /// A token bucket of <paramref name="burst"/> requests refilled at <paramref name="rate"/> a second, under any name (REOS-163 uses one per API token and one per workspace).
+    /// Time comes from the injected <see cref="TimeProvider"/>, so a frozen clock refills nothing.
+    /// </summary>
+    public RateState Take(string bucket, double rate, double burst)
+    {
         Prune();
-        var b = _buckets.GetOrAdd("k:" + keyId, _ => new Bucket { Tokens = Burst, Last = Now, Touched = Now });
+        var b = _buckets.GetOrAdd(bucket, _ => new Bucket { Tokens = burst, Last = Now, Touched = Now });
         lock (b)
         {
             var now = Now;
             b.Touched = now;
-            b.Tokens = Math.Min(Burst, b.Tokens + time.GetElapsedTime(b.Last, now).TotalSeconds * Rate);
+            b.Tokens = Math.Min(burst, b.Tokens + time.GetElapsedTime(b.Last, now).TotalSeconds * rate);
             b.Last = now;
-            if (b.Tokens >= 1) { b.Tokens -= 1; retryAfterSeconds = 0; return true; }
-            retryAfterSeconds = Math.Max(1, (int)Math.Ceiling((1 - b.Tokens) / Rate));
-            return false;
+            var allowed = b.Tokens >= 1;
+            if (allowed) b.Tokens -= 1;
+            var retry = allowed ? 0 : Math.Max(1, (int)Math.Ceiling((1 - b.Tokens) / rate));
+            return new(allowed, (int)burst, (int)Math.Floor(b.Tokens), (int)Math.Ceiling((burst - b.Tokens) / rate), retry);
         }
     }
 
@@ -115,13 +130,13 @@ public sealed class IngestKeyAuthenticationHandler(IOptionsMonitor<Authenticatio
             if (limiter.NoteFailure(address)) await keys.RecordRejectedAsync(address, "malformed, unknown or revoked key", Context.RequestAborted);
             return AuthenticateResult.Fail("invalid ingest key");
         }
-        if (!limiter.TryTake(who.KeyId, out var retry))
+        if (!limiter.TryTake(who.KeyId ?? who.KeyName, out var retry))
         {
             Context.Items[IngestKeyAuthentication.ThrottledItem] = true;
             Context.Items[IngestKeyAuthentication.RetryAfterItem] = retry;
             return AuthenticateResult.Fail("rate limit");
         }
-        var identity = new ClaimsIdentity([new Claim(IngestKeyAuthentication.KeyClaim, who.KeyId), new Claim(IngestKeyAuthentication.NameClaim, who.KeyName), new Claim(WorkspaceResolution.Claim, who.WorkspaceId)], IngestKeyAuthentication.Scheme);
+        var identity = new ClaimsIdentity([new Claim(IngestKeyAuthentication.KeyClaim, who.KeyId ?? ""), new Claim(IngestKeyAuthentication.NameClaim, who.KeyName), new Claim(WorkspaceResolution.Claim, who.WorkspaceId)], IngestKeyAuthentication.Scheme);
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), IngestKeyAuthentication.Scheme));
     }
 

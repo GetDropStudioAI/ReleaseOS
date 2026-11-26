@@ -16,7 +16,9 @@ test('every status word in the design gets its tone, and an unknown word is neut
     neutral: ['Planned', 'Queued', 'Something new'],
   }
   for (const [tone, words] of Object.entries(expected)) for (const w of words) assert.equal(chipTone(w), tone, w)
-  assert.equal(chipTone('  running '), 'info')   // trimmed, any case
+  assert.equal(chipTone('  running '), 'info')
+  // REOS-162: API token states
+  assert.deepEqual(['Active', 'Expired', 'Revoked'].map(chipTone), ['success', 'warning', 'neutral'])   // trimmed, any case
 })
 
 test('the shortcut hint names the key the platform uses', () => {

@@ -825,6 +825,38 @@ public class IngestKeys
     public string WorkspaceId { get; set; } = "default";
 }
 
+public class ApiTokens
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public string TokenPrefix { get; set; } = "";
+    public string TokenSha256 { get; set; } = "";
+    public string Scopes { get; set; } = "";
+    public DateTime? ExpiresAt { get; set; }
+    public string OwnerUserId { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime? RotatedAt { get; set; }
+    public DateTime? LastUsedAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? RevokedByUserId { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class IdempotencyKeys
+{
+    public string Id { get; set; } = Ids.New();
+    public string ApiTokenId { get; set; } = "";
+    public string KeyValue { get; set; } = "";
+    public string RequestSha256 { get; set; } = "";
+    public int? StatusCode { get; set; }
+    public string? ContentType { get; set; }
+    public string? ResponseBody { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public string WorkspaceId { get; set; } = "default";
+}
+
 public class Deployments
 {
     public string Id { get; set; } = Ids.New();

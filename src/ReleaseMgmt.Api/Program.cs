@@ -113,6 +113,14 @@ builder.Services.AddSingleton<EnvironmentService>();    // REOS-109 environments
 builder.Services.AddSingleton<ServiceCatalogService>(); // REOS-109 service catalog
 builder.Services.AddSingleton<IngestKeyService>();      // REOS-110 per-workspace API keys (hash only)
 builder.Services.AddSingleton<IngestLimiter>();         // REOS-110 per-key rate limit, per-address failure budget
+builder.Services.AddSingleton(new ReleaseMgmt.Infrastructure.Services.PublicApiOptions   // REOS-161 to 163: PublicApi:* (every key has a default that works untouched)
+{
+    TokenRequestsPerSecond = config.GetValue("PublicApi:TokenRequestsPerSecond", 20d), TokenBurst = config.GetValue("PublicApi:TokenBurst", 40d),
+    WorkspaceRequestsPerSecond = config.GetValue("PublicApi:WorkspaceRequestsPerSecond", 100d), WorkspaceBurst = config.GetValue("PublicApi:WorkspaceBurst", 200d),
+    IdempotencyHours = config.GetValue("PublicApi:IdempotencyHours", 24), DefaultPageSize = config.GetValue("PublicApi:DefaultPageSize", 50), MaxPageSize = config.GetValue("PublicApi:MaxPageSize", 200),
+});
+builder.Services.AddSingleton<ApiTokenService>();       // REOS-162 scoped, hashed, rotatable tokens for /api/public/v1
+builder.Services.AddSingleton<IdempotencyService>();    // REOS-163 Idempotency-Key on public POSTs
 builder.Services.AddSingleton<DeploymentService>();     // REOS-110 deployments, events, ingest
 builder.Services.AddSingleton<ApprovalQueueService>();  // REOS-94 the approval queue behind the shell's Approvals badge
 builder.Services.AddSingleton<MilestoneService>();   // train milestones (Q-0840..)
@@ -218,6 +226,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 // Static files first: the fallback policy (authenticated user) applies to any request with no endpoint, so the SPA
 // assets must be served before the authorization middleware or the sign-in page itself would 401.
 app.UseForwardedHeaders();                    // SEC-E5: first, so every later check sees the real client and scheme
+app.UseMiddleware<ReleaseMgmt.Api.PublicApi.PublicApiGateway>();   // REOS-161 to 163: /api/public/v1 (token, scope, rate limit, idempotency, problem details); outside the exception handler, so errors reach it as responses
 app.UseExceptionHandler();
 if (!app.Environment.IsDevelopment()) app.UseHsts();   // SEC-E5: browsers keep to https once they have reached the app over it
 app.UseMiddleware<WorkspaceRoutePrefix>();     // REOS-105: /api/v1/w/{workspace}/... is /api/v1/... in that workspace; before routing, so the endpoints match
@@ -285,6 +294,8 @@ api.MapEnvironmentsAndServices();   // REOS-109
 api.MapDeployments();   // REOS-110
 api.MapDeploymentOps();   // REOS-111/112 telemetry, control, run pause
 api.MapApprovals();   // REOS-113
+api.MapApiTokens();   // REOS-162
+ReleaseMgmt.Api.PublicApi.DeploymentsNative.MapPublicApi(app);   // REOS-161 native operations and the OpenAPI document
 
 // Dev-only fake login: POST /auth/dev-login {email, name, role}. Never mapped outside Development; see DevSignIn for when it exists and who may call it.
 if (devTools)

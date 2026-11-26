@@ -10,28 +10,40 @@ namespace ReleaseMgmt.Infrastructure.Sync;
 /// so fullwidth or enclosed digits cannot dress an address up as a name (SEC-C2).
 /// A host name is vetted again when the socket connects (see AddSyncEngine), so a DNS change cannot slip past.
 /// </summary>
+/// <summary>The words and configuration keys a validation message uses, so one rule serves every caller.</summary>
+public sealed record UrlLabels(string Subject, string Example, string AllowedHostsKey, string AllowPrivateKey, bool AllowQuery = false)
+{
+    public static readonly UrlLabels Connector = new("The base URL", "https://example.atlassian.net", "Sync:AllowedHosts", "Sync:AllowPrivateTargets");
+}
+
 public static class ConnectorUrlPolicy
 {
     public const int MaxUrlLength = 2048;
 
     /// <summary>Null when the URL is acceptable, else a readable reason.</summary>
-    public static string? Validate(string? url, bool isDevelopment, SyncOptions o, Func<IPAddress, bool>? isBlockedAddress = null)
+    public static string? Validate(string? url, bool isDevelopment, SyncOptions o, Func<IPAddress, bool>? isBlockedAddress = null) =>
+        Validate(url, isDevelopment, o.AllowPrivateTargets, o.AllowedHosts, isBlockedAddress, UrlLabels.Connector);
+
+    /// <summary>The same rules for any caller that keeps its own allow-list (REOS-164: the outbound webhooks), with the words of its own message and configuration keys.</summary>
+    public static string? Validate(string? url, bool isDevelopment, bool allowPrivateTargets, string[] allowedHosts, Func<IPAddress, bool>? isBlockedAddress, UrlLabels labels)
     {
         url = url?.Trim();
-        if (string.IsNullOrEmpty(url)) return "The base URL must be an absolute URL such as https://example.atlassian.net";
-        if (url.Length > MaxUrlLength) return $"The base URL is longer than {MaxUrlLength} characters";
-        if (url.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))) return "The base URL contains spaces or control characters";
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return "The base URL must be an absolute URL such as https://example.atlassian.net";
-        if (uri.Scheme != Uri.UriSchemeHttps && !(isDevelopment && uri.Scheme == Uri.UriSchemeHttp)) return "The base URL must use https";
-        if (!string.IsNullOrEmpty(uri.UserInfo)) return "The base URL must not contain credentials";
-        if (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment)) return "The base URL must not contain a query or fragment";
+        var subject = labels.Subject;
+        if (string.IsNullOrEmpty(url)) return $"{subject} must be an absolute URL such as {labels.Example}";
+        if (url.Length > MaxUrlLength) return $"{subject} is longer than {MaxUrlLength} characters";
+        if (url.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))) return $"{subject} contains spaces or control characters";
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return $"{subject} must be an absolute URL such as {labels.Example}";
+        if (uri.Scheme != Uri.UriSchemeHttps && !(isDevelopment && uri.Scheme == Uri.UriSchemeHttp)) return $"{subject} must use https";
+        if (!string.IsNullOrEmpty(uri.UserInfo)) return $"{subject} must not contain credentials";
+        if (!labels.AllowQuery && (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))) return $"{subject} must not contain a query or fragment";
+        if (labels.AllowQuery && !string.IsNullOrEmpty(uri.Fragment)) return $"{subject} must not contain a fragment";
         // A private literal says so first (the more specific reason); then the host list.
-        if (!o.AllowPrivateTargets && isBlockedAddress is not null && LiteralAddress(uri) is { } ip && isBlockedAddress(ip))
-            return "The base URL is a private or local address (set Sync:AllowPrivateTargets to allow it)";
-        if (o.AllowedHosts.Length > 0 && !o.AllowedHosts.Any(p => EntryMatches(uri, p)))
-            return o.AllowedHosts.Any(p => HostMatches(uri.IdnHost, SplitEntry(p).Host))
-                ? $"Port {uri.Port} of {uri.IdnHost} is not on the allowed list (Sync:AllowedHosts: {string.Join(", ", o.AllowedHosts)}). Add \"{uri.IdnHost}:{uri.Port}\" to Sync:AllowedHosts to allow it"
-                : $"The host {uri.IdnHost} is not on the allowed list (Sync:AllowedHosts: {string.Join(", ", o.AllowedHosts)}). Ask the administrator to add it to Sync:AllowedHosts";
+        if (!allowPrivateTargets && isBlockedAddress is not null && LiteralAddress(uri) is { } ip && isBlockedAddress(ip))
+            return $"{subject} is a private or local address (set {labels.AllowPrivateKey} to allow it)";
+        if (allowedHosts.Length > 0 && !allowedHosts.Any(p => EntryMatches(uri, p)))
+            return allowedHosts.Any(p => HostMatches(uri.IdnHost, SplitEntry(p).Host))
+                ? $"Port {uri.Port} of {uri.IdnHost} is not on the allowed list ({labels.AllowedHostsKey}: {string.Join(", ", allowedHosts)}). Add \"{uri.IdnHost}:{uri.Port}\" to {labels.AllowedHostsKey} to allow it"
+                : $"The host {uri.IdnHost} is not on the allowed list ({labels.AllowedHostsKey}: {string.Join(", ", allowedHosts)}). Ask the administrator to add it to {labels.AllowedHostsKey}";
         return null;
     }
 

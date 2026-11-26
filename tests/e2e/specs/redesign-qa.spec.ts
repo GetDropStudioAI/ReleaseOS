@@ -32,6 +32,7 @@ const SCREENS: { link: string; path: string; heading: string }[] = [
   { link: 'Comm library', path: '/library', heading: 'Comm library' },
   { link: 'Connectors', path: '/connectors', heading: 'Connectors' },
   { link: 'API tokens', path: '/api-tokens', heading: 'API tokens' },
+  { link: 'Webhooks', path: '/webhooks', heading: 'Webhooks' },
   { link: 'My work', path: '/work', heading: 'My work' },
   { link: 'Analytics', path: '/analytics', heading: 'Analytics' },
   { link: 'Imports & exports', path: '/importexport', heading: 'Imports & exports' },

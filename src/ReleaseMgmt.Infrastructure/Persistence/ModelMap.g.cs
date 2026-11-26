@@ -84,6 +84,9 @@ public static class ModelMap
         b.Entity<Approvals>(e => { e.ToTable("Approvals"); e.HasKey(e => e.Id);  });
         b.Entity<ApprovalDecisions>(e => { e.ToTable("ApprovalDecisions"); e.HasKey(e => e.Id);  });
         b.Entity<AuditChainHeads>(e => { e.ToTable("AuditChainHeads"); e.HasKey(e => e.ChainId);  });
+        b.Entity<WebhookSubscriptions>(e => { e.ToTable("WebhookSubscriptions"); e.HasKey(e => e.Id);  });
+        b.Entity<WebhookDeliveries>(e => { e.ToTable("WebhookDeliveries"); e.HasKey(e => e.Id);  });
+        b.Entity<WebhookDeliveryAttempts>(e => { e.ToTable("WebhookDeliveryAttempts"); e.HasKey(e => e.Id);  });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -274,5 +277,13 @@ public static class ModelMap
         b.Entity<Approvals>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ApprovalDecisions>().HasOne<Approvals>().WithMany().HasForeignKey(e => e.ApprovalId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<ApprovalDecisions>().HasOne<Users>().WithMany().HasForeignKey(e => e.DecidedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookSubscriptions>().HasOne<Users>().WithMany().HasForeignKey(e => e.CreatedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookSubscriptions>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookSubscriptions>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookDeliveries>().HasOne<WebhookSubscriptions>().WithMany().HasForeignKey(e => e.SubscriptionId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookDeliveries>().HasOne<WebhookDeliveries>().WithMany().HasForeignKey(e => e.ReplayOfDeliveryId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookDeliveries>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookDeliveryAttempts>().HasOne<WebhookDeliveries>().WithMany().HasForeignKey(e => e.DeliveryId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WebhookDeliveryAttempts>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
     }
 }

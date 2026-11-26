@@ -258,7 +258,7 @@ roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='t
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
             'ReleaseTypes','ReleaseVersions','Environments','CatalogServices','Clients','ReleaseClientDates','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
-            'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
+            'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys','WebhookSubscriptions','WebhookDeliveries','WebhookDeliveryAttempts']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
 check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','Payments-EU',?)", False, "workspace slug with capitals", (NOW,), expect="CHECK")
@@ -891,6 +891,51 @@ assert_true(db13.execute("SELECT Enabled, PlanSource, Version FROM WorkspaceModu
 check(db13, "UPDATE WorkspaceModules SET Enabled=0 WHERE WorkspaceId='default' AND ModuleKey='cab'", True, "disable keeps the row (the module's data is kept)")
 db13.execute("DELETE FROM Workspaces WHERE Id='w2'")
 assert_true(db13.execute("SELECT COUNT(*) FROM WorkspaceModules WHERE WorkspaceId='w2'").fetchone()[0] == 0, "deleting a workspace removes its module rows")
+
+print("Outbound webhooks (REOS-164, D61): subscriptions, the outbox/delivery log, attempts")
+db15 = db_fresh()
+db15.execute("INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','Payments EU','payments-eu',?)", (NOW,))
+H15 = lambda c: c * 64
+WS = "INSERT INTO WebhookSubscriptions(Id,Name,ProtectedUrl,UrlHmac,Host,EventTypes,CreatedByUserId,CreatedAt{x}) VALUES('{i}','CI','CfDJ8x','{h}','hooks.example.com','{ev}','rte',?{v})"
+check(db15, WS.format(i='ws1', h=H15('a'), ev='release.created,gate.failed', x='', v=''), True, "a subscription to two events", (NOW,))
+check(db15, WS.format(i='ws2', h=H15('a'), ev='*', x='', v=''), False, "the same address twice in one workspace", (NOW,), expect="UNIQUE")
+check(db15, WS.format(i='ws2', h=H15('a'), ev='*', x=',WorkspaceId', v=",'w2'"), True, "the same address in another workspace, for every event", (NOW,))
+check(db15, WS.format(i='ws3', h='nothex', ev='*', x='', v=''), False, "an address hash that is not 64 hex characters", (NOW,), expect="CHECK")
+check(db15, WS.format(i='ws3', h=H15('b'), ev='Release.Created', x='', v=''), False, "an event name with capitals", (NOW,), expect="CHECK")
+check(db15, WS.format(i='ws3', h=H15('b'), ev='release.created,', x='', v=''), False, "an event list with a trailing comma", (NOW,), expect="CHECK")
+check(db15, WS.format(i='ws3', h=H15('b'), ev='', x='', v=''), False, "an empty event list", (NOW,), expect="CHECK")
+check(db15, "UPDATE WebhookSubscriptions SET Status='Gone' WHERE Id='ws1'", False, "a subscription status outside Active and Paused", expect="CHECK")
+check(db15, "UPDATE WebhookSubscriptions SET Status='Paused' WHERE Id='ws1'", True, "a subscription can be paused")
+check(db15, "UPDATE WebhookSubscriptions SET WorkspaceId='w2' WHERE Id='ws1'", False, "a subscription moved to another workspace", expect="cannot move to another workspace")
+check(db15, "INSERT INTO WebhookSubscriptions(Id,Name,ProtectedUrl,UrlHmac,Host,EventTypes,CreatedByUserId,CreatedAt,SecretVersion) VALUES('ws4','x','CfDJ8x',?,'h.example.com','*','rte',?,0)", False, "a secret version below 1", (H15('c'), NOW), expect="CHECK")
+WD = "INSERT INTO WebhookDeliveries(Id,SubscriptionId,EventId,EventType,PayloadJson,Status,NextAttemptAt,DeliveredAt,FinishedAt,CreatedAt{x}) VALUES('{i}','{s}','ev1','release.created','{{}}','{st}',{na},{da},{fa},?{v})"
+def wd(i, s='ws1', st='Pending', na="'2026-10-21T14:00:00Z'", da='NULL', fa='NULL', x='', v=''): return WD.format(i=i, s=s, st=st, na=na, da=da, fa=fa, x=x, v=v)
+check(db15, wd('d1'), True, "a pending delivery with its next attempt time", (NOW,))
+check(db15, wd('d2', na='NULL'), False, "a pending delivery without a next attempt time", (NOW,), expect="CHECK")
+check(db15, wd('d2', st='Delivered', na='NULL', da="'2026-10-21T14:00:00Z'", fa="'2026-10-21T14:00:00Z'"), True, "a delivered delivery with its time", (NOW,))
+check(db15, wd('d3', st='Delivered', na='NULL', fa="'2026-10-21T14:00:00Z'"), False, "a delivered delivery without DeliveredAt", (NOW,), expect="CHECK")
+check(db15, wd('d3', st='DeadLetter', na="'2026-10-21T14:00:00Z'", fa="'2026-10-21T14:00:00Z'"), False, "a dead letter that still has a next attempt", (NOW,), expect="CHECK")
+check(db15, wd('d3', st='DeadLetter', na='NULL', fa="'2026-10-21T14:00:00Z'"), True, "a dead letter with its finish time", (NOW,))
+check(db15, wd('d4', st='Lost', na='NULL', fa="'2026-10-21T14:00:00Z'"), False, "a delivery status outside the three", (NOW,), expect="CHECK")
+check(db15, wd('d4', s='ws2', x=',WorkspaceId', v=",'default'"), False, "a delivery for another workspace's subscription", (NOW,), expect="belongs to another workspace")
+check(db15, "UPDATE WebhookDeliveries SET Status='Pending', NextAttemptAt='2026-10-21T15:00:00Z', FinishedAt=NULL WHERE Id='d3'", False, "a dead letter put back to pending", expect="replay it")
+check(db15, "UPDATE WebhookDeliveries SET Status='Pending', NextAttemptAt='2026-10-21T15:00:00Z', FinishedAt=NULL, DeliveredAt=NULL WHERE Id='d2'", False, "a delivered delivery put back to pending", expect="replay it")
+check(db15, "UPDATE WebhookDeliveries SET LastStatusCode=99 WHERE Id='d1'", False, "a status code that is not an HTTP status", expect="CHECK")
+check(db15, "UPDATE WebhookDeliveries SET Status='Delivered', NextAttemptAt=NULL, DeliveredAt='2026-10-21T14:05:00Z', FinishedAt='2026-10-21T14:05:00Z' WHERE Id='d1'", True, "a pending delivery becomes delivered")
+check(db15, "UPDATE WebhookDeliveries SET SubscriptionId='ws2' WHERE Id='d1'", False, "a delivery moved to another subscription", expect="cannot move to another workspace")
+check(db15, "INSERT INTO WebhookDeliveries(Id,SubscriptionId,EventId,EventType,PayloadJson,Status,NextAttemptAt,CreatedAt,ReplayOfDeliveryId) VALUES('d5','ws1','ev1','release.created','{}','Pending','2026-10-21T14:00:00Z',?,'d3')", True, "a replay is a new delivery that points at the one it repeats", (NOW,))
+check(db15, "INSERT INTO WebhookDeliveries(Id,SubscriptionId,EventId,EventType,PayloadJson,Status,NextAttemptAt,CreatedAt) VALUES('d6','ws1','ev1','Release.Created','{}','Pending','2026-10-21T14:00:00Z',?)", False, "an event type with capitals", (NOW,), expect="CHECK")
+check(db15, "INSERT INTO WebhookDeliveries(Id,SubscriptionId,EventId,EventType,PayloadJson,Status,NextAttemptAt,CreatedAt) VALUES('d6','ws1','ev1','release.created','','Pending','2026-10-21T14:00:00Z',?)", False, "an empty payload", (NOW,), expect="CHECK")
+WA = "INSERT INTO WebhookDeliveryAttempts(Id,DeliveryId,AttemptNo,AttemptedAt,StatusCode,DurationMs,Error{x}) VALUES('{i}','{d}',{n},?,{sc},12,NULL{v})"
+check(db15, WA.format(i='a1', d='d1', n=1, sc=500, x='', v=''), True, "an attempt that got a 500", (NOW,))
+check(db15, WA.format(i='a2', d='d1', n=1, sc='NULL', x='', v=''), False, "attempt 1 twice for one delivery", (NOW,), expect="UNIQUE")
+check(db15, WA.format(i='a2', d='d1', n=0, sc='NULL', x='', v=''), False, "attempt number 0", (NOW,), expect="CHECK")
+check(db15, WA.format(i='a2', d='d1', n=2, sc='NULL', x='', v=''), True, "an attempt that got no answer (no status code)", (NOW,))
+check(db15, WA.format(i='a3', d='d1', n=3, sc=200, x=',WorkspaceId', v=",'w2'"), False, "an attempt filed under another workspace than its delivery", (NOW,), expect="belongs to another workspace")
+check(db15, "UPDATE WebhookDeliveryAttempts SET WorkspaceId='w2' WHERE Id='a1'", False, "an attempt moved to another workspace", expect="cannot move to another workspace")
+check(db15, "DELETE FROM WebhookSubscriptions WHERE Id='ws1'", True, "deleting a subscription removes its deliveries and their attempts")
+assert_true(db15.execute("SELECT (SELECT COUNT(*) FROM WebhookDeliveries WHERE SubscriptionId='ws1'), (SELECT COUNT(*) FROM WebhookDeliveryAttempts)").fetchone() == (0, 0), "no delivery or attempt outlives its subscription")
+check(db15, "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt) VALUES('al1','Webhook','DeliveryFailed','fp1','3 deliveries dead-lettered',?,?)", True, "a webhook delivery failure can be raised as a sync alert", (NOW, NOW))
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

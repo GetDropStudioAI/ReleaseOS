@@ -354,7 +354,7 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         string[] expectedRoots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
             "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents",
             "ReleaseTypes", "ReleaseVersions", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments", "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions",
-            "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys"];
+            "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "WebhookDeliveryAttempts"];
         AssertTrue(roots.SequenceEqual(expectedRoots.Order()), "WorkspaceId on every root table, and only there", string.Join(",", roots));
         var moving = roots.Where(t => t != "AuditEvents" && Count(db6, "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name=?", $"trg_Ws_{t}_Update") == 0).ToList();
         AssertTrue(moving.Count == 0, "every root table but the append-only audit log refuses a change of workspace", string.Join(",", moving));
@@ -864,5 +864,40 @@ INSERT INTO TemplateTasks(Id,TemplateId,TemplateGateId,TaskDescription,SequenceO
         Check(db12, "DELETE FROM StageGates WHERE Id='lg4'", true, "an unlocked gate removed");
         Exec(db12, "DELETE FROM ReleaseTrains WHERE Id='t1'");
         AssertTrue((long)Rows(db12, "SELECT COUNT(*) FROM StageGates WHERE ReleaseTrainId='t1'").Single()[0]! == 0, "deleting a release removes its locked gates too");
+    }
+
+    // REOS-164 (D61): the outbound webhook tables, ported from tests/reference/test_schema.py.
+    [Fact]
+    public void Outbound_webhooks_subscriptions_deliveries_attempts_and_their_rules()
+    {
+        using var db = fx.Fresh();
+        Exec(db, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','Payments EU','payments-eu',?)", Now);
+        var h = (char c) => new string(c, 64);
+        const string WS = "INSERT INTO WebhookSubscriptions(Id,Name,ProtectedUrl,UrlHmac,Host,EventTypes,CreatedByUserId,CreatedAt,WorkspaceId) VALUES(?,'CI','CfDJ8x',?,'hooks.example.com',?,'rte',?,?)";
+        Check(db, WS, true, "a subscription to two events", ["ws1", h('a'), "release.created,gate.failed", Now, "default"]);
+        Check(db, WS, false, "the same address twice in one workspace", ["ws2", h('a'), "*", Now, "default"], "UNIQUE");
+        Check(db, WS, true, "the same address in another workspace, for every event", ["ws2", h('a'), "*", Now, "w2"]);
+        Check(db, WS, false, "an address hash that is not 64 hex characters", ["ws3", "nothex", "*", Now, "default"], "CHECK");
+        Check(db, WS, false, "an event name with capitals", ["ws3", h('b'), "Release.Created", Now, "default"], "CHECK");
+        Check(db, WS, false, "an event list with a trailing comma", ["ws3", h('b'), "release.created,", Now, "default"], "CHECK");
+        Check(db, "UPDATE WebhookSubscriptions SET Status='Gone' WHERE Id='ws1'", false, "a status outside Active and Paused", expect: "CHECK");
+        Check(db, "UPDATE WebhookSubscriptions SET WorkspaceId='w2' WHERE Id='ws1'", false, "a subscription moved to another workspace", expect: "cannot move to another workspace");
+        const string WD = "INSERT INTO WebhookDeliveries(Id,SubscriptionId,EventId,EventType,PayloadJson,Status,NextAttemptAt,DeliveredAt,FinishedAt,CreatedAt,WorkspaceId) VALUES(?,?,'ev1','release.created','{}',?,?,?,?,?,?)";
+        Check(db, WD, true, "a pending delivery with its next attempt time", ["d1", "ws1", "Pending", "2026-10-21T14:00:00Z", null, null, Now, "default"]);
+        Check(db, WD, false, "a pending delivery without a next attempt time", ["d2", "ws1", "Pending", null, null, null, Now, "default"], "CHECK");
+        Check(db, WD, true, "a delivered delivery with its time", ["d2", "ws1", "Delivered", null, "2026-10-21T14:00:00Z", "2026-10-21T14:00:00Z", Now, "default"]);
+        Check(db, WD, false, "a delivered delivery without DeliveredAt", ["d3", "ws1", "Delivered", null, null, "2026-10-21T14:00:00Z", Now, "default"], "CHECK");
+        Check(db, WD, true, "a dead letter with its finish time", ["d3", "ws1", "DeadLetter", null, null, "2026-10-21T14:00:00Z", Now, "default"]);
+        Check(db, WD, false, "a delivery for another workspace's subscription", ["d4", "ws2", "Pending", "2026-10-21T14:00:00Z", null, null, Now, "default"], "belongs to another workspace");
+        Check(db, "UPDATE WebhookDeliveries SET Status='Pending', NextAttemptAt='2026-10-21T15:00:00Z', FinishedAt=NULL WHERE Id='d3'", false, "a dead letter put back to pending", expect: "replay it");
+        Check(db, "UPDATE WebhookDeliveries SET Status='Delivered', NextAttemptAt=NULL, DeliveredAt='2026-10-21T14:05:00Z', FinishedAt='2026-10-21T14:05:00Z' WHERE Id='d1'", true, "a pending delivery becomes delivered");
+        const string WA = "INSERT INTO WebhookDeliveryAttempts(Id,DeliveryId,AttemptNo,AttemptedAt,StatusCode,DurationMs,WorkspaceId) VALUES(?,?,?,?,?,12,?)";
+        Check(db, WA, true, "an attempt that got a 500", ["a1", "d1", 1, Now, 500, "default"]);
+        Check(db, WA, false, "attempt 1 twice for one delivery", ["a2", "d1", 1, Now, null, "default"], "UNIQUE");
+        Check(db, WA, false, "attempt number 0", ["a2", "d1", 0, Now, null, "default"], "CHECK");
+        Check(db, WA, false, "an attempt filed under another workspace than its delivery", ["a3", "d1", 3, Now, 200, "w2"], "belongs to another workspace");
+        Check(db, "UPDATE WebhookDeliveryAttempts SET WorkspaceId='w2' WHERE Id='a1'", false, "an attempt moved to another workspace", expect: "cannot move to another workspace");
+        Check(db, "DELETE FROM WebhookSubscriptions WHERE Id='ws1'", true, "deleting a subscription removes its deliveries and their attempts");
+        AssertTrue((long)Rows(db, "SELECT (SELECT COUNT(*) FROM WebhookDeliveries WHERE SubscriptionId='ws1') + (SELECT COUNT(*) FROM WebhookDeliveryAttempts)").Single()[0]! == 0, "no delivery or attempt outlives its subscription");
     }
 }

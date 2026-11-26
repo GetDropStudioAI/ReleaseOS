@@ -169,6 +169,8 @@ public static class FieldLimits
         // REOS-110: API keys and the push ingest API (an event message is 2,000 characters, the schema's CHECK)
         [typeof(DeploymentEndpoints.IngestKeyBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName },
         [typeof(ApiTokenEndpoints.CreateBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName, ["Scopes"] = 20 },   // REOS-162
+        [typeof(WebhookEndpoints.CreateBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName, ["Url"] = Url, ["EventTypes"] = Code },   // REOS-164: the longest event key is under 30
+        [typeof(WebhookEndpoints.UpdateBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName, ["Url"] = Url, ["EventTypes"] = Code },
         [typeof(IngestDeployment)] = new()
         {
             ["ExternalId"] = ReleaseModelLimits.MaxExternalId, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey, ["Environment"] = ReleaseModelLimits.MaxEnvironmentName,

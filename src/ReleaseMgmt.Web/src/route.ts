@@ -4,7 +4,7 @@ import type { Selection } from './Planning'
 /** The URL carries the train and the selected node, so a deep link or a refresh reopens the same Inspector (PROJECT_SCOPE 5.4). */
 export type Mode = 'plan' | 'rehearsal' | 'live'
 export type View = 'trains' | 'admin' | 'work' | 'inbox' | 'audit' | 'templates' | 'sync' | 'connectors' | 'library' | 'analytics' | 'calendar' | 'importexport' | 'gallery'
-  | 'overview' | 'orchestration' | 'approvals' | 'deployments' | 'services' | 'environments' | 'api-tokens'   // REOS-94: the redesign's destinations (shell/nav.ts)
+  | 'overview' | 'orchestration' | 'approvals' | 'deployments' | 'services' | 'environments' | 'api-tokens' | 'webhooks'   // REOS-94: the redesign's destinations (shell/nav.ts)
   | 'cab' | 'ai'   // REOS-174: add-on modules; a page of a module that is off is Page not found
 export interface Route { view: View; trainId: string | null; selection: Selection; mode: Mode }
 
@@ -12,7 +12,7 @@ export const ROOT: Route = { view: 'trains', trainId: null, selection: null, mod
 
 /** Every view but the train workspace is one path segment: /calendar, /approvals, ... */
 const PAGES = new Set<View>(['admin', 'work', 'inbox', 'audit', 'templates', 'sync', 'connectors', 'library', 'analytics', 'calendar', 'importexport', 'gallery',
-  'overview', 'approvals', 'deployments', 'services', 'environments', 'api-tokens', 'cab', 'ai'])
+  'overview', 'approvals', 'deployments', 'services', 'environments', 'api-tokens', 'webhooks', 'cab', 'ai'])
 
 /**
  * Rehearsal and Live runs belong to Orchestration (REOS-128): `/orchestration/{trainId}/{live|rehearsal}[/steps/{stepId}]`. A route that asks for a run mode of a

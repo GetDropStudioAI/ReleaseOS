@@ -1034,3 +1034,56 @@ public class AuditChainHeads
     public long? FirstBadId { get; set; }
     public string? FirstBadReason { get; set; }
 }
+
+public class WebhookSubscriptions
+{
+    public string Id { get; set; } = Ids.New();
+    public string Name { get; set; } = "";
+    public string ProtectedUrl { get; set; } = "";
+    public string UrlHmac { get; set; } = "";
+    public string Host { get; set; } = "";
+    public string EventTypes { get; set; } = "";
+    public string Status { get; set; } = "Active";
+    public int SecretVersion { get; set; } = 1;
+    public DateTime? SecretRotatedAt { get; set; }
+    public string CreatedByUserId { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class WebhookDeliveries
+{
+    public string Id { get; set; } = Ids.New();
+    public string SubscriptionId { get; set; } = "";
+    public string EventId { get; set; } = "";
+    public string EventType { get; set; } = "";
+    public long? AuditEventId { get; set; }
+    public string PayloadJson { get; set; } = "";
+    public string Status { get; set; } = "Pending";
+    public int AttemptCount { get; set; } = 0;
+    public DateTime? NextAttemptAt { get; set; }
+    public DateTime? LastAttemptAt { get; set; }
+    public int? LastStatusCode { get; set; }
+    public string? LastError { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+    public string? ReplayOfDeliveryId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+    public string WorkspaceId { get; set; } = "default";
+}
+
+public class WebhookDeliveryAttempts
+{
+    public string Id { get; set; } = Ids.New();
+    public string DeliveryId { get; set; } = "";
+    public int AttemptNo { get; set; }
+    public DateTime AttemptedAt { get; set; }
+    public int? StatusCode { get; set; }
+    public int DurationMs { get; set; } = 0;
+    public string? Error { get; set; }
+    public string WorkspaceId { get; set; } = "default";
+}

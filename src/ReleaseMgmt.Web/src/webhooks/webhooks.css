@@ -1,0 +1,6 @@
+/* Webhooks (REOS-164). Layout comes from mgmt.css (.mg-split, .mg-side, .mg-stack, .mg-form) and the one-time secret reuses tokens.css (.tk-secret); tokens only (docs/ui/tokens.css). */
+.wh-events { min-height: calc(var(--sidebar-width) * 0.9); }
+.wh-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md); margin-bottom: var(--gap-md); }
+.wh-payload { margin: 0; padding: var(--gap-md); max-height: calc(var(--sidebar-width) * 1.6); overflow: auto; border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); font-family: var(--font-mono); font-size: var(--type-mono-small); white-space: pre-wrap; word-break: break-word; }
+.wh-help { margin: 0; font-size: var(--type-small); color: var(--color-text-secondary); }
+.wh-help code { font-family: var(--font-mono); font-size: var(--type-mono-small); color: var(--color-text-primary); }

@@ -318,6 +318,17 @@ public class EndpointRoleMatrixTests
         POST /api/v1/api-tokens                                  Admin
         POST /api/v1/api-tokens/{id}:rotate                      Admin
         POST /api/v1/api-tokens/{id}:revoke                      Admin
+        GET /api/v1/webhooks                                     Admin
+        POST /api/v1/webhooks                                    Admin
+        PUT /api/v1/webhooks/{id}                                Admin
+        POST /api/v1/webhooks/{id}:pause                         Admin
+        POST /api/v1/webhooks/{id}:resume                        Admin
+        POST /api/v1/webhooks/{id}:rotate-secret                 Admin
+        POST /api/v1/webhooks/{id}:test                          Admin
+        DELETE /api/v1/webhooks/{id}                             Admin
+        GET /api/v1/webhooks/deliveries                          Admin
+        GET /api/v1/webhooks/deliveries/{id}                     Admin
+        POST /api/v1/webhooks/deliveries/{id}:replay             Admin
         GET /api/v1/ingest-keys                                  Admin
         POST /api/v1/ingest-keys                                 Admin
         POST /api/v1/ingest-keys/{id}:revoke                     Admin

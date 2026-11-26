@@ -13,7 +13,7 @@ One process: `ReleaseMgmt.Api`. It serves the API, the SignalR hub (`/hub/trains
 | SQLite database (WAL mode) | `data/releasemgmt.db` | `Db:Path` | Yes (every 15 minutes) |
 | Backups | `data/backups/` | `Backup:Directory` | (they are the backups: copy them off the machine) |
 | **Data Protection key ring** | `keys/` beside the database | `DataProtection:KeysDirectory` | **No** |
-| **Connector credentials** and the webhook address key `webhook-url.hmackey` (encrypted with the key ring) | `secrets/` beside the database | `Sync:Credentials:Directory` | **No** |
+| **Connector credentials**, the webhook address key `webhook-url.hmackey` and the outbound webhooks' signing secrets `outbound-webhooks/` (all encrypted with the key ring) | `secrets/` beside the database | `Sync:Credentials:Directory` | **No** |
 | **Key-ring certificate** (PKCS#12), if you use one (section 4) | your choice, outside the app and data directories | `DataProtection:Certificate:Path` | **No** |
 | **Evidence attachments** | `data/attachments/` | `Attachments:Directory` | **No** |
 | **Generated exports** (evidence packs, reports; each file deleted 365 days after it was made, D35) | `data/exports/` | `Exports:Directory` | **No** |
@@ -325,6 +325,7 @@ The drill times only the part a script can do: from an empty host with the files
 | `013_api_tokens.sql` | migrations `20261025034543_Schema` + `20261025034602_Triggers` (after 012), to `20261125184717_Schema` + `20261125184729_Triggers` | REOS-162 and REOS-163: adds `ApiTokens` (scoped public-API tokens; only the SHA-256 is kept) and `IdempotencyKeys` (stored results of public-API POSTs), both empty to start, with two indexes and four workspace triggers. No existing table, row or trigger changes. Nothing in the app needs a start-up step for it |
 
 | `014_workspace_modules.sql` | migrations `20261125184717_Schema` + `20261125184729_Triggers` (after 013), to `20261126010001_Schema` + `20261126010017_Triggers` | REOS-174 (D56, D57, D63): adds `WorkspaceModules` (empty to start: no row means a module is off, so every add-on module is off after the upgrade). No trigger is new and no table is rebuilt. |
+| `015_outbound_webhooks.sql` | migrations `20261126010001_Schema` + `20261126010017_Triggers` (after 014), to `20261126134858_Schema` + `20261126134908_Triggers` | REOS-164 (D61): adds `WebhookSubscriptions`, `WebhookDeliveries` and `WebhookDeliveryAttempts` (empty: nothing is posted anywhere until an administrator adds a webhook), six rules and four indexes. No existing table changes. |
 
 Rollback: stop, put the previous `publish` directory back, restore the pre-upgrade database backup (section 7 step 3, because a newer schema may not run on an older build), start.
 
@@ -414,3 +415,14 @@ The deployment tool pushes deployments and events to `POST /api/v1/ingest/deploy
 - **Offline check** of a database file or a backup copy, with no app running: `python3 tools/verify_audit_chain.py <file>` or `ReleaseMgmt.Api verify-audit <file>`. Exit 0: every chain verifies; 1: a chain is broken (the first bad row is printed); 2: the file could not be read.
 - A tail deletion is detected because the chain head (last id and hash) is remembered in `AuditChainHeads`. The chain is not signed: someone with write access to the file who recomputes every later hash and the head is not detected by this check. Keep an off-box copy of the head hash from `GET /audit/integrity` (or a backup) if that matters to your audit.
 - If sealing is failing, the alert says so; the log keeps being written and sealed later (`pendingRows` in the integrity answer says how far behind it is).
+
+## 16. Outbound webhooks (REOS-164, D61)
+
+What the receivers are told is in `docs/WEBHOOKS.md`; this is what an operator does.
+
+- **Nothing is posted until a host is allowed.** Outside Development `Webhooks:Out:AllowedHosts` is empty by default and every address is refused (the screen says so and turns Add off). Name the receivers' hosts (`hooks.example.com`, `*.example.com`, optionally `:port`). Removing a host stops posting to it at the next attempt; its deliveries fail with that reason and are retried, then dead-lettered.
+- **Secrets.** Each webhook's signing secret is a Data Protection file under `secrets/outbound-webhooks/{workspace}/`. Back it up with `secrets/` (section 6) and restore it with the key ring (section 7). After a restore without it, or with another key ring, deliveries fail with "the signing secret cannot be read"; rotate the secret on the screen and give the receiver the new one.
+- **Alerts.** Persistent failure raises one `Webhook / DeliveryFailed` alert per webhook in Sync health (its count and text say how many deliveries were dead-lettered since the last good one); it resolves when a delivery succeeds. A failed pass of the sender itself raises the same alert keyed `worker`.
+- **Size.** Finished deliveries (and their attempts) are deleted after `Webhooks:Out:RetentionDays` (30). Pending ones are never deleted. `Webhooks:Out:Worker:Enabled=false` stops the sender; events keep queueing and are sent when it is turned on.
+- **Replay** after an outage: Management → Webhooks → Delivery log → filter Dead letter → open a delivery → Replay. Each replay is audited with the person who did it.
+

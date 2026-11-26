@@ -11,7 +11,7 @@ Scoping is complete. This folder is the seed of the repository: drop it in as th
 | `docs/MILESTONES.md` | M0–M8: a ready-to-paste prompt and a "Done when" acceptance test for each |
 | `docs/UI.md`, `docs/ui/tokens.css` | UI rules and design tokens (macOS look, works on Windows, light + dark) |
 | `docs/ui/mockups/` | 9 reference screens as standalone HTML + PNG |
-| `db/schema.sql` | The schema contract: 75 tables, 156 triggers, 43 indexes |
+| `db/schema.sql` | The schema contract: 80 tables, 177 triggers, 48 indexes |
 | `db/analytics.sql` | The 24 metric queries (M1–M15 per workspace; M16–M24 executive, across a set of workspaces) |
 | `tests/reference/test_schema.py` | 449 enforcement tests against `schema.sql` (`python3 tests/reference/test_schema.py`) |
 | `tests/reference/seed_and_query.py` | Seeds 6 months of history through the triggers and runs every metric (deterministic) |

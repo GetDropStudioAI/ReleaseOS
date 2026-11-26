@@ -258,7 +258,8 @@ roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='t
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
             'ReleaseTypes','ReleaseVersions','Environments','CatalogServices','Clients','ReleaseClientDates','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
-            'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
+            'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys',
+            'ChangeRequests','CabMeetings']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
 check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','Payments-EU',?)", False, "workspace slug with capitals", (NOW,), expect="CHECK")
@@ -891,6 +892,154 @@ assert_true(db13.execute("SELECT Enabled, PlanSource, Version FROM WorkspaceModu
 check(db13, "UPDATE WorkspaceModules SET Enabled=0 WHERE WorkspaceId='default' AND ModuleKey='cab'", True, "disable keeps the row (the module's data is kept)")
 db13.execute("DELETE FROM Workspaces WHERE Id='w2'")
 assert_true(db13.execute("SELECT COUNT(*) FROM WorkspaceModules WHERE WorkspaceId='w2'").fetchone()[0] == 0, "deleting a workspace removes its module rows")
+
+print("\nCAB module: change requests, meetings, decisions and separation of duties (D56, D63, REOS-175, REOS-177)")
+db14 = db_fresh()
+db14.executescript(f"""
+INSERT INTO Users(Id,Email,DisplayName,Role) VALUES('chair','chair@x.com','Chair','ReleaseManager'),('out','out@x.com','Outsider','Viewer');
+INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('default','chair','ReleaseManager','{NOW}');
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','{NOW}');
+INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','out','Viewer','{NOW}'),('w2','rte','RTE','{NOW}');
+INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,WorkspaceId) VALUES('t2','EU R1','2026-11-30','{NOW}','{NOW}','w2');
+INSERT INTO GoNoGoDecisions(Id,ReleaseTrainId,Decision,DecidedByUserId,DecidedAt,GateSnapshotJson) VALUES('gn1','t1','Go','rte','{NOW}','[]'),('gn2','t2','Go','rte','{NOW}','[]');
+""")
+CR = ("INSERT INTO ChangeRequests(Id,WorkspaceId,ChangeKey,Title,ChangeType,Status,RiskLevel,RequestedByUserId,CreatedByUserId,ReleaseTrainId,GoNoGoDecisionId,PlannedStartAt,PlannedEndAt,CreatedAt) "
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+def cr(i, key=None, ws='default', typ='Normal', status='Draft', risk='Medium', req='dev', by=None, train=None, gn=None, start=None, end=None):
+    return (i, ws, key or 'CHG-' + i, 'Change ' + i, typ, status, risk, req, by or req, train, gn, start, end, NOW)
+check(db14, CR, True, "a change request with the defaults", cr('c0'))
+assert_true(db14.execute("SELECT Status, RiskLevel, Version FROM ChangeRequests WHERE Id='c0'").fetchone() == ('Draft', 'Medium', 1), "a new change is a Draft of Medium risk, version 1")
+check(db14, CR, True, "a change linked to a release and its Go/No-Go decision, with a window", cr('c1', train='t1', gn='gn1', start='2026-10-30T02:00:00Z', end='2026-10-30T04:00:00Z'))
+check(db14, CR, False, "the same change key twice in a workspace", cr('cx', key='CHG-c0'), expect="UNIQUE")
+check(db14, CR, True, "the same change key in another workspace", cr('cy', key='CHG-c0', ws='w2', req='out'))
+check(db14, CR, False, "a type outside Standard, Normal, Emergency", cr('cz', typ='Major'), expect="CHECK")
+check(db14, CR, False, "a status outside the seven", cr('cz', status='Scheduled'), expect="CHECK")
+check(db14, CR, False, "a risk level outside the four", cr('cz', risk='Extreme'), expect="CHECK")
+check(db14, CR, False, "a window with a start and no end", cr('cz', start='2026-10-30T02:00:00Z'), expect="CHECK")
+check(db14, CR, False, "a window that ends before it starts", cr('cz', start='2026-10-30T04:00:00Z', end='2026-10-30T02:00:00Z'), expect="CHECK")
+check(db14, "INSERT INTO ChangeRequests(Id,ChangeKey,Title,ChangeType,RequestedByUserId,CreatedByUserId,CreatedAt) VALUES('cz','K','   ','Normal','dev','dev','" + NOW + "')", False, "a blank title", expect="CHECK")
+check(db14, CR, False, "a change with a release of another workspace", cr('cz', train='t2'), expect="release belongs to another workspace")
+check(db14, CR, False, "a change with a Go/No-Go decision of another workspace", cr('cz', gn='gn2'), expect="Go/No-Go decision belongs to another workspace")
+check(db14, CR, False, "a Go/No-Go decision of a different release than the linked one", cr('cz', train='t2', gn='gn1', ws='w2', req='out'), expect="belongs to another")
+check(db14, CR, False, "a requester who is not a member of the workspace", cr('cz', req='out'), expect="requester is not a member")
+check(db14, CR, False, "a creator who is not a member of the workspace", cr('cz', by='out'), expect="created the change is not a member")
+check(db14, "UPDATE ChangeRequests SET WorkspaceId='w2' WHERE Id='c0'", False, "a change moved to another workspace", expect="cannot move to another workspace")
+check(db14, "UPDATE ChangeRequests SET ReleaseTrainId='t2' WHERE Id='c0'", False, "a change re-linked to a release of another workspace", expect="release belongs to another workspace")
+check(db14, "DELETE FROM ChangeRequests WHERE Id='c0'", False, "a change request deleted", expect="kept for the record")
+
+# Status moves
+def mv(i, to, who='rte'):
+    return f"UPDATE ChangeRequests SET Status='{to}', LastChangedByUserId='{who}' WHERE Id='{i}'"
+check(db14, mv('c0', 'Approved'), False, "Draft straight to Approved", expect="Illegal change request status move: Draft to Approved")
+check(db14, mv('c0', 'Implemented'), False, "Draft straight to Implemented", expect="Illegal change request status move")
+check(db14, mv('c0', 'Closed'), False, "Draft straight to Closed", expect="Illegal change request status move")
+check(db14, mv('c0', 'Submitted'), True, "Draft to Submitted")
+check(db14, mv('c0', 'Draft'), False, "Submitted back to Draft", expect="Illegal change request status move")
+check(db14, mv('c0', 'Implemented'), False, "a Normal change implemented before it is approved", expect="Only an Emergency change")
+check(db14, "UPDATE ChangeRequests SET Status='Approved', DecidedByUserId='gov1', DecidedAt='" + NOW + "', LastChangedByUserId='gov1' WHERE Id='c0'", False, "approved with no recorded decision", expect="recorded CAB decision")
+check(db14, mv('c0', 'Cancelled'), True, "Submitted to Cancelled")
+check(db14, mv('c0', 'Submitted'), False, "Cancelled is final", expect="Illegal change request status move")
+
+# Meetings, agenda, attendees
+M = "INSERT INTO CabMeetings(Id,WorkspaceId,Title,StartsAt,EndsAt,ChairUserId,CreatedByUserId,CreatedAt) VALUES(?,?,?,?,?,?,?,?)"
+check(db14, M, True, "a CAB meeting with a chair and a window", ('m1', 'default', 'Weekly CAB', '2026-10-27T15:00:00Z', '2026-10-27T16:00:00Z', 'chair', 'rm', NOW))
+check(db14, M, False, "a meeting that ends before it starts", ('m9', 'default', 'x', '2026-10-27T16:00:00Z', '2026-10-27T15:00:00Z', 'chair', 'rm', NOW), expect="CHECK")
+check(db14, M, False, "a chair who is not a member of the workspace", ('m9', 'w2', 'x', '2026-10-27T15:00:00Z', '2026-10-27T16:00:00Z', 'chair', 'rm', NOW), expect="chair is not a member")
+check(db14, "UPDATE CabMeetings SET WorkspaceId='w2' WHERE Id='m1'", False, "a meeting moved to another workspace", expect="cannot move to another workspace")
+check(db14, "UPDATE CabMeetings SET ChairUserId='out' WHERE Id='m1'", False, "a meeting given a chair from outside the workspace", expect="chair is not a member")
+check(db14, "UPDATE CabMeetings SET Status='Completed' WHERE Id='m1'", False, "a meeting completed without being held", expect="Illegal CAB meeting status move: Planned to Completed")
+check(db14, "UPDATE CabMeetings SET Status='InProgress' WHERE Id='m1'", True, "a meeting started")
+check(db14, "UPDATE CabMeetings SET Status='Planned' WHERE Id='m1'", False, "a meeting that cannot go back to Planned", expect="Illegal CAB meeting status move")
+check(db14, "UPDATE CabMeetings SET Status='Completed' WHERE Id='m1'", True, "a meeting completed")
+check(db14, "UPDATE CabMeetings SET Status='Cancelled' WHERE Id='m1'", False, "a completed meeting cancelled", expect="Illegal CAB meeting status move")
+db14.execute(M, ('m2', 'default', 'Next CAB', '2026-11-03T15:00:00Z', '2026-11-03T16:00:00Z', 'chair', 'rm', NOW))
+db14.execute(M, ('mw', 'w2', 'EU CAB', '2026-11-03T15:00:00Z', '2026-11-03T16:00:00Z', 'out', 'out', NOW))
+A = "INSERT INTO CabAgendaItems(Id,MeetingId,ChangeRequestId,SequenceOrder) VALUES(?,?,?,?)"
+check(db14, A, True, "a change on a meeting's agenda", ('a1', 'm2', 'c1', 1))
+check(db14, A, False, "the same change twice on one agenda", ('a2', 'm2', 'c1', 2), expect="UNIQUE")
+check(db14, A, False, "an agenda position below 1", ('a2', 'm2', 'c0', 0), expect="CHECK")
+check(db14, A, False, "a change on the agenda of another workspace's meeting", ('a3', 'mw', 'c1', 1), expect="another workspace than the meeting")
+check(db14, "UPDATE CabAgendaItems SET MeetingId='m1' WHERE Id='a1'", False, "an agenda item moved to another meeting", expect="keeps its meeting and its change")
+check(db14, "UPDATE CabAgendaItems SET Notes='Discuss rollback', SequenceOrder=2, Version=2 WHERE Id='a1'", True, "agenda notes and order edited")
+T = "INSERT INTO CabAttendees(MeetingId,UserId,AttendeeRole,Attendance) VALUES(?,?,?,?)"
+check(db14, T, True, "the chair invited", ('m2', 'chair', 'Member', 'Invited'))
+check(db14, T, False, "the same person twice at one meeting", ('m2', 'chair', 'Guest', 'Invited'), expect="UNIQUE")
+check(db14, T, False, "an attendee from outside the workspace", ('m2', 'out', 'Guest', 'Invited'), expect="attendee is not a member")
+check(db14, T, False, "an attendee role outside Member and Guest", ('m2', 'gov1', 'Chair', 'Invited'), expect="CHECK")
+check(db14, T, False, "an attendance outside the three", ('m2', 'gov1', 'Member', 'Maybe'), expect="CHECK")
+check(db14, "UPDATE CabAttendees SET Attendance='Attended', Version=2 WHERE MeetingId='m2' AND UserId='chair'", True, "attendance recorded")
+check(db14, "UPDATE CabAttendees SET UserId='gov1' WHERE MeetingId='m2' AND UserId='chair'", False, "an attendee row given to someone else", expect="keeps its meeting and its person")
+
+# Decisions and separation of duties (REOS-177)
+D = "INSERT INTO CabDecisions(Id,ChangeRequestId,MeetingId,Decision,Retroactive,DecidedByUserId,DecidedAt) VALUES(?,?,?,?,?,?,?)"
+db14.execute("UPDATE ChangeRequests SET Status='Submitted' WHERE Id='c1'")
+def approve(i, by, status='Approved'):
+    return f"UPDATE ChangeRequests SET Status='{status}', DecidedByUserId='{by}', DecidedAt='{NOW}', LastChangedByUserId='{by}' WHERE Id='{i}'"
+check(db14, D, False, "the requester approves their own change", ('d1', 'c1', None, 'Approved', 0, 'dev', NOW), expect="you cannot approve or reject a change you requested")
+check(db14, D, False, "the requester rejects their own change", ('d1', 'c1', None, 'Rejected', 0, 'dev', NOW), expect="you cannot approve or reject a change you requested")
+check(db14, D, True, "the requester defers their own change (not a verdict)", ('d0', 'c1', None, 'Deferred', 0, 'dev', NOW))
+check(db14, D, False, "a decision by someone outside the workspace", ('d1', 'c1', None, 'Approved', 0, 'out', NOW), expect="decider is not a member")
+check(db14, D, False, "a decision under another workspace's meeting", ('d1', 'c1', 'mw', 'Approved', 0, 'gov1', NOW), expect="meeting belongs to another workspace")
+check(db14, D, False, "a decision outside the three", ('d1', 'c1', None, 'Maybe', 0, 'gov1', NOW), expect="CHECK")
+check(db14, D, False, "a retroactive review of a change that is not Emergency", ('d1', 'c1', None, 'Approved', 1, 'gov1', NOW), expect="retroactive review is only for an Emergency")
+check(db14, approve('c1', 'dev'), False, "the requester moves their own change to Approved (direct write)", expect="you cannot approve or reject a change you requested")
+check(db14, f"UPDATE ChangeRequests SET Status='Approved', DecidedByUserId='gov1', DecidedAt='{NOW}', LastChangedByUserId='dev' WHERE Id='c1'", False, "the requester as last editor of the move to Approved", expect="you cannot approve or reject a change you requested")
+check(db14, approve('c1', 'dev', 'Rejected'), False, "the requester moves their own change to Rejected", expect="you cannot approve or reject a change you requested")
+check(db14, approve('c1', 'gov1'), False, "Approved by a decider with no decision on record", expect="recorded CAB decision")
+check(db14, D, True, "a second person approves the change", ('d2', 'c1', None, 'Approved', 0, 'gov1', NOW))
+check(db14, approve('c1', 'gov1', 'Rejected'), False, "Rejected when the decision on record is an approval", expect="recorded CAB decision")
+check(db14, approve('c1', 'gov1') + "", True, "the change moves to Approved after a second person's recorded approval")
+check(db14, D, False, "a decision on a change that is no longer waiting", ('d3', 'c1', None, 'Approved', 0, 'rm', NOW), expect="waiting for the CAB")
+check(db14, "UPDATE CabDecisions SET Decision='Rejected' WHERE Id='d2'", False, "a decision edited", expect="CAB decisions are immutable")
+check(db14, "DELETE FROM CabDecisions WHERE Id='d2'", False, "a decision deleted", expect="CAB decisions are immutable")
+check(db14, mv('c1', 'Implemented'), True, "an approved change implemented")
+check(db14, mv('c1', 'Closed'), True, "an implemented Normal change closed")
+
+# Rule 2: the chair who raised the change is not its only approver. The chair keys in a change for dev (CreatedBy = chair, requester = dev).
+db14.execute(CR, cr('c2', req='dev', by='chair'))
+db14.execute("UPDATE ChangeRequests SET Status='Submitted' WHERE Id='c2'")
+db14.execute(A, ('a4', 'm2', 'c2', 3))
+check(db14, D, True, "the chair records an approval of a change they keyed in for someone else", ('d4', 'c2', 'm2', 'Approved', 0, 'chair', NOW))
+check(db14, approve('c2', 'chair'), False, "the chair as the only approver of a change they raised", expect="CAB chair cannot be the only approver")
+check(db14, D, True, "a second approver is recorded", ('d5', 'c2', None, 'Approved', 0, 'gov1', NOW))
+check(db14, approve('c2', 'chair'), True, "the chair's approval counts once a second approver is on record")
+db14.execute(CR, cr('c3', req='dev', by='chair'))
+db14.execute("UPDATE ChangeRequests SET Status='Submitted' WHERE Id='c3'")
+db14.execute(A, ('a5', 'm2', 'c3', 4))
+db14.execute(D, ('d6', 'c3', None, 'Approved', 0, 'chair', NOW))
+check(db14, approve('c3', 'chair'), False, "the chair recording outside the meeting is still the chair (the change is on their agenda)", expect="CAB chair cannot be the only approver")
+db14.execute(CR, cr('c4', req='dev'))
+db14.execute("UPDATE ChangeRequests SET Status='Submitted' WHERE Id='c4'")
+db14.execute(A, ('a6', 'm2', 'c4', 5))
+db14.execute(D, ('d7', 'c4', 'm2', 'Approved', 0, 'chair', NOW))
+check(db14, approve('c4', 'chair'), True, "a chair who did not raise the change may be its only approver")
+db14.execute(CR, cr('c5', req='dev', by='chair'))
+db14.execute("UPDATE ChangeRequests SET Status='Submitted' WHERE Id='c5'")
+db14.execute(A, ('a7', 'm2', 'c5', 6))
+db14.execute(D, ('d8', 'c5', 'm2', 'Rejected', 0, 'chair', NOW))
+check(db14, approve('c5', 'chair', 'Rejected'), True, "a rejection by the chair alone is allowed (the rule guards approvals)")
+check(db14, mv('c5', 'Draft'), False, "Rejected is final", expect="Illegal change request status move")
+
+# Rule 3: Emergency changes still need a second person; the review may come after the change is implemented
+db14.execute(CR, cr('e1', typ='Emergency', req='dev'))
+check(db14, mv('e1', 'Implemented'), False, "an Emergency change implemented straight from Draft", expect="Illegal change request status move")
+db14.execute("UPDATE ChangeRequests SET Status='Submitted' WHERE Id='e1'")
+check(db14, D, False, "a retroactive review before the change is implemented", ('r0', 'e1', None, 'Approved', 1, 'gov1', NOW), expect="retroactive review is only for an Emergency change that has been implemented")
+check(db14, mv('e1', 'Implemented'), True, "an Emergency change implemented before approval")
+check(db14, mv('e1', 'Closed'), False, "an Emergency change closed with no review", expect="needs a review by a second person")
+check(db14, D, False, "the requester reviews their own Emergency change", ('r1', 'e1', None, 'Approved', 1, 'dev', NOW), expect="you cannot approve or reject a change you requested")
+check(db14, mv('e1', 'Closed', 'dev'), False, "closed by the requester with no review", expect="needs a review by a second person")
+check(db14, D, False, "a normal decision on an implemented change", ('r2', 'e1', None, 'Approved', 0, 'gov1', NOW), expect="waiting for the CAB")
+check(db14, D, True, "a second person records the retroactive review", ('r3', 'e1', None, 'Approved', 1, 'gov1', NOW))
+check(db14, mv('e1', 'Closed'), True, "the Emergency change closes after the second person's review")
+db14.execute(CR, cr('e2', typ='Emergency', req='dev', status='Submitted'))
+db14.execute("UPDATE ChangeRequests SET Status='Implemented' WHERE Id='e2'")
+db14.execute(D, ('r4', 'e2', None, 'Rejected', 1, 'gov2', NOW))
+check(db14, mv('e2', 'Closed'), True, "a retroactive rejection is recorded and the change can then be closed (the record shows it)")
+db14.execute(CR, cr('e3', typ='Emergency', req='dev', status='Submitted'))
+db14.execute("UPDATE ChangeRequests SET Status='Implemented' WHERE Id='e3'")
+check(db14, D, False, "a deferred retroactive review (a review is a verdict)", ('r5', 'e3', None, 'Deferred', 1, 'gov1', NOW), expect="CHECK")
+assert_true(db14.execute("SELECT Decision, Retroactive FROM CabDecisions WHERE ChangeRequestId='e2'").fetchone() == ('Rejected', 1), "the retroactive review is on record")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

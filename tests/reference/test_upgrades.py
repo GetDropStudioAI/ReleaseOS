@@ -336,6 +336,27 @@ for sql, want, label in [
     except sqlite3.IntegrityError as e:
         check(want is not None and want in str(e), label)
 
+# Upgrade 016 (REOS-175/177): the five CAB tables are new and EMPTY, the 21 CAB triggers are live (workspace boundary, append-only, separation of duties)
+t16 = baseline_db()
+for s in SCRIPTS:
+    t16.executescript(s.read_text())
+check(all(t16.execute(f"SELECT COUNT(*) FROM {t}").fetchone() == (0,) for t in ("ChangeRequests", "CabMeetings", "CabAgendaItems", "CabAttendees", "CabDecisions")), "016: the CAB tables start empty")
+check(t16.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND (name LIKE 'trg_Change_%' OR name LIKE 'trg_CabDecision_%' OR name LIKE 'trg_CabMeeting_%' OR name LIKE 'trg_Ws_Cab%' OR name LIKE 'trg_Ws_ChangeRequests_%')").fetchone() == (21,), "016: the 21 CAB triggers exist")
+t16.executescript("""
+INSERT OR IGNORE INTO WorkspaceMembers (WorkspaceId, UserId, Role, AddedAt) VALUES ('default', 'u1', 'GovernanceOfficer', '2026-11-26T00:00:00Z'), ('default', 'u2', 'Viewer', '2026-11-26T00:00:00Z');
+INSERT INTO ChangeRequests (Id, ChangeKey, Title, ChangeType, Status, RequestedByUserId, CreatedByUserId, CreatedAt) VALUES ('c1', 'CHG-1', 'Patch', 'Normal', 'Submitted', 'u2', 'u2', '2026-11-26T00:00:00Z');
+""")
+for sql, want, label in [
+    ("INSERT INTO CabDecisions (Id, ChangeRequestId, Decision, DecidedByUserId, DecidedAt) VALUES ('d1', 'c1', 'Approved', 'u2', '2026-11-26T01:00:00Z')", "you cannot approve or reject a change you requested", "016: the requester cannot approve their own change"),
+    ("INSERT INTO CabDecisions (Id, ChangeRequestId, Decision, DecidedByUserId, DecidedAt) VALUES ('d1', 'c1', 'Approved', 'u1', '2026-11-26T01:00:00Z')", None, "016: a second person can"),
+    ("UPDATE CabDecisions SET Decision = 'Rejected' WHERE Id = 'd1'", "immutable", "016: a decision cannot be edited"),
+    ("DELETE FROM ChangeRequests WHERE Id = 'c1'", "kept for the record", "016: a change request cannot be deleted"),
+]:
+    try:
+        t16.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

@@ -57,7 +57,7 @@ public sealed class SchemaContractTests : IDisposable
     {
         var expected = Regex.Matches(_schemaText, @"^CREATE TRIGGER (\w+)", RegexOptions.Multiline).Select(m => m.Groups[1].Value).Order().ToList();
         var actual = Master(Migrated()).Where(r => r.Type == "trigger").Select(r => r.Name).Order().ToList();
-        Assert.Equal(156, expected.Count);   // 4 for API tokens and idempotency keys (REOS-162/163) + 42 + 49 workspace-boundary triggers (REOS-104) + 16 release-model, deployment and boundary triggers (REOS-107/109/110) + 23 for telemetry, control, approvals and the audit chain (REOS-111 to 114) + 3 for release types (REOS-116) + 4 for clients (REOS-118) + 1 for versions (REOS-117) + 4 for client dates (REOS-119) + 10 for template governance (REOS-122)
+        Assert.Equal(177, expected.Count);   // 21 for the CAB module (REOS-175/177: workspace boundary, append-only, status moves, separation of duties) + 4 for API tokens and idempotency keys (REOS-162/163) + 42 + 49 workspace-boundary triggers (REOS-104) + 16 release-model, deployment and boundary triggers (REOS-107/109/110) + 23 for telemetry, control, approvals and the audit chain (REOS-111 to 114) + 3 for release types (REOS-116) + 4 for clients (REOS-118) + 1 for versions (REOS-117) + 4 for client dates (REOS-119) + 10 for template governance (REOS-122)
         Assert.Equal(expected, actual);
     }
 
@@ -66,8 +66,8 @@ public sealed class SchemaContractTests : IDisposable
     {
         var migrated = Master(Migrated());
         var reference = Master(FromSchemaSql());
-        Assert.Equal(75, reference.Count(r => r.Type == "table"));   // WorkspaceModules (REOS-174) + ApiTokens + IdempotencyKeys (REOS-162/163) + 49 + Workspaces, WorkspaceMembers (REOS-104) + 7 (REOS-107/109/110) + 9 (REOS-111 to 114) + Clients (REOS-118) + ReleaseVersions (REOS-117) + ReleaseClientDates (REOS-119) + TemplateTasks, TemplateMilestones (REOS-122)
-        Assert.Equal(43, reference.Count(r => r.Type == "index"));   // IX_ApiTokens_Workspace + IX_IdempotencyKeys_Expires (REOS-162/163) + 23 + IX_WorkspaceMembers_User, IX_Trains_Workspace, IX_Audit_Workspace + 5 (UX_Trains_Key, IX_Deployments_*, IX_DeploymentEvents_Deployment) + 9 (REOS-111 to 114) + UX_Trains_VersionSlot (REOS-117)
+        Assert.Equal(80, reference.Count(r => r.Type == "table"));   // 5 CAB tables (REOS-175: ChangeRequests, CabMeetings, CabAgendaItems, CabAttendees, CabDecisions) + WorkspaceModules (REOS-174) + ApiTokens + IdempotencyKeys (REOS-162/163) + 49 + Workspaces, WorkspaceMembers (REOS-104) + 7 (REOS-107/109/110) + 9 (REOS-111 to 114) + Clients (REOS-118) + ReleaseVersions (REOS-117) + ReleaseClientDates (REOS-119) + TemplateTasks, TemplateMilestones (REOS-122)
+        Assert.Equal(48, reference.Count(r => r.Type == "index"));   // 5 CAB indexes (REOS-175) + IX_ApiTokens_Workspace + IX_IdempotencyKeys_Expires (REOS-162/163) + 23 + IX_WorkspaceMembers_User, IX_Trains_Workspace, IX_Audit_Workspace + 5 (UX_Trains_Key, IX_Deployments_*, IX_DeploymentEvents_Deployment) + 9 (REOS-111 to 114) + UX_Trains_VersionSlot (REOS-117)
         Assert.Equal(reference.Select(r => (r.Type, r.Name)), migrated.Select(r => (r.Type, r.Name)));
         foreach (var (a, b) in reference.Zip(migrated)) Assert.Equal(a.Sql, b.Sql); // DDL text identical, incl. CHECKs
     }

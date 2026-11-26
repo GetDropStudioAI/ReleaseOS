@@ -1034,3 +1034,85 @@ public class AuditChainHeads
     public long? FirstBadId { get; set; }
     public string? FirstBadReason { get; set; }
 }
+
+public class ChangeRequests
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string ChangeKey { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string? Description { get; set; }
+    public string ChangeType { get; set; } = "";
+    public string Status { get; set; } = "Draft";
+    public string RiskLevel { get; set; } = "Medium";
+    public string? RiskFactors { get; set; }
+    public string RequestedByUserId { get; set; } = "";
+    public string CreatedByUserId { get; set; } = "";
+    public string? ReleaseTrainId { get; set; }
+    public string? GoNoGoDecisionId { get; set; }
+    public DateTime? PlannedStartAt { get; set; }
+    public DateTime? PlannedEndAt { get; set; }
+    public string? RollbackNote { get; set; }
+    public DateTime? SubmittedAt { get; set; }
+    public string? DecidedByUserId { get; set; }
+    public DateTime? DecidedAt { get; set; }
+    public DateTime? ImplementedAt { get; set; }
+    public DateTime? ClosedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class CabMeetings
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string Title { get; set; } = "";
+    public DateTime StartsAt { get; set; }
+    public DateTime EndsAt { get; set; }
+    public string ChairUserId { get; set; } = "";
+    public string Status { get; set; } = "Planned";
+    public string? Location { get; set; }
+    public string? Minutes { get; set; }
+    public string CreatedByUserId { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class CabAgendaItems
+{
+    public string Id { get; set; } = Ids.New();
+    public string MeetingId { get; set; } = "";
+    public string ChangeRequestId { get; set; } = "";
+    public int SequenceOrder { get; set; }
+    public string? Notes { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class CabAttendees
+{
+    public string MeetingId { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string AttendeeRole { get; set; } = "Member";
+    public string Attendance { get; set; } = "Invited";
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class CabDecisions
+{
+    public string Id { get; set; } = Ids.New();
+    public string ChangeRequestId { get; set; } = "";
+    public string? MeetingId { get; set; }
+    public string Decision { get; set; } = "";
+    public bool Retroactive { get; set; } = false;
+    public string? Rationale { get; set; }
+    public string DecidedByUserId { get; set; } = "";
+    public DateTime DecidedAt { get; set; }
+}

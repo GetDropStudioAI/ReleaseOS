@@ -35,6 +35,7 @@ public class EndpointRoleMatrixTests
         ["Closeout"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],
         ["FreezeApprove"] = [Roles.ReleaseManager, Roles.GovernanceOfficer],
         ["Approvers"] = [Roles.ReleaseManager, Roles.GovernanceOfficer],
+        ["CabDecide"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],   // REOS-177: record a CAB decision (never the requester: the service and the database refuse that)
         // Milestone done/undone (Q-0842): planners, or the owner; Viewers are refused even when they own it. Ownership is asserted in MilestoneTests.
         ["OwnedNotViewer"] = [Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer],
         // Ingest (REOS-110): the push ingest API takes a workspace API key and nothing else. No role passes, a session cookie included: all of them get 401, not 403
@@ -272,6 +273,28 @@ public class EndpointRoleMatrixTests
         GET /api/v1/modules                                      Read
         POST /api/v1/modules/{key}:enable                        Admin
         POST /api/v1/modules/{key}:disable                       Admin
+        GET /api/v1/cab/changes                                  Read
+        GET /api/v1/cab/changes/{id}                             Read
+        POST /api/v1/cab/changes                                 Plan
+        PATCH /api/v1/cab/changes/{id}                           Plan
+        POST /api/v1/cab/changes/{id}:submit                     Plan
+        POST /api/v1/cab/changes/{id}:cancel                     Plan
+        POST /api/v1/cab/changes/{id}:implement                  Plan
+        POST /api/v1/cab/changes/{id}:close                      Plan
+        POST /api/v1/cab/changes/{id}/decisions                  CabDecide
+        GET /api/v1/cab/meetings                                 Read
+        GET /api/v1/cab/meetings/{id}                            Read
+        POST /api/v1/cab/meetings                                Plan
+        PATCH /api/v1/cab/meetings/{id}                          Plan
+        POST /api/v1/cab/meetings/{id}:start                     Plan
+        POST /api/v1/cab/meetings/{id}:complete                  Plan
+        POST /api/v1/cab/meetings/{id}:cancel                    Plan
+        POST /api/v1/cab/meetings/{id}/agenda                    Plan
+        PATCH /api/v1/cab/meetings/{id}/agenda/{itemId}          Plan
+        DELETE /api/v1/cab/meetings/{id}/agenda/{itemId}         Plan
+        POST /api/v1/cab/meetings/{id}/attendees                 Plan
+        PATCH /api/v1/cab/meetings/{id}/attendees/{userId}       Plan
+        DELETE /api/v1/cab/meetings/{id}/attendees/{userId}      Plan
         GET /api/v1/clients/{id}                                 Read
         POST /api/v1/clients                                     Plan
         PATCH /api/v1/clients/{id}                               Plan

@@ -67,5 +67,10 @@ npx playwright test                              # from tests/e2e
 ## Working method
 - One milestone at a time from `docs/MILESTONES.md`. A milestone is done only when its **Done when** test passes in CI.
 - After M2 merges, M3, M4 and M5 may run as parallel subagent streams: all tables exist from M1, and the streams build disjoint services, endpoints and screens. Cross-stream calls go through interfaces defined in M2 (`INotifier`, `IReadinessService`). M6 and M7 wait for all three.
+- **Open multiple machines (rule, 2026-11-26).** Whenever a sprint has independent stories, open one remote session per story or stream (`create_session`, its own branch `reos-<topic>`, a draft PR, never merge) instead of building one after another. Give every session a self-contained prompt: goal, scope, acceptance criteria, the files and docs to read, the verification commands, and "never push failing tests". Rules that keep parallel work safe:
+  - At most **two schema-changing sessions at a time**. Give each its upgrade number up front (the next free number in `db/upgrades/`) and tell it to keep its `db/schema.sql` edits in one delimited block. Stories that need another story's tables wait for it to merge.
+  - Stories that do not touch the schema (documents, tests, tooling, front-end only, pure services) can all run at once.
+  - The coordinating session reviews each diff, merges them one at a time into `main`, regenerates the EF migrations **once** after any schema merge (delete the scaffolds and the snapshot, then run the migration commands below), renumbers colliding upgrade scripts, runs the full regression, and pushes `main` and `Team` together only when it is green.
+  - Worker sessions verify locally and do not poll CI. Move each story through its Jira statuses as work starts and finishes.
 - Open items in `docs/DECISIONS.md` list a **provisional default**. Build to the default behind the named config key, and do not treat it as settled.
 - Mockups in `docs/ui/mockups/` are the visual reference. Match layout, density and copy; the data in them is illustrative.

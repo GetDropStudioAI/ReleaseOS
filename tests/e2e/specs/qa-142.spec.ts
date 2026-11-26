@@ -80,11 +80,12 @@ test.describe('A. geometry', () => {
         const root = main.firstElementChild!
         const kids = [...root.children].filter(c => c.getBoundingClientRect().height > 0 && c.tagName !== 'DIALOG')
         const box = (e: Element) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height } }
-        return { main: box(main), kids: kids.map(k => ({ ...box(k), cls: (k.className as string).split(' ')[0] })) }
+        const util = document.querySelector('.os-utility')!.getBoundingClientRect()
+        return { main: box(main), utilH: util.height, kids: kids.map(k => ({ ...box(k), cls: (k.className as string).split(' ')[0] })) }
       })
       const [head, ...rest] = m.kids
       expect(m.main.x, `${f.name}: rail width (frame ${f.frame}: 216)`).toBe(216)
-      expect(m.main.y, `${f.name}: utility bar height (frame: 64)`).toBe(64)
+      expect(m.utilH, `${f.name}: utility bar height (frame: 64)`).toBe(64)
       expect(head.x, `${f.name}: page gutter (frame: 32 from the rail edge)`).toBe(248)
       expect(head.y, `${f.name}: heading top (frame: 28 below the bar)`).toBe(92)
       if (f.name !== 'Release detail') expect(head.w, `${f.name}: content width (frame: 1320)`).toBe(1320)

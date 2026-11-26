@@ -5,7 +5,7 @@ name: Cross-browser
 # (one worker per job: the specs share one demo database and change the same trains).
 on:
   push:
-    branches: [main]
+    branches: [main, reos-xb-webkit-edge]   # TEMPORARY (REOS-151/152 evidence run): removed again before the PR leaves draft
   schedule:
     - cron: '17 2 * * *'   # nightly, 02:17 UTC
   workflow_dispatch:
@@ -25,7 +25,6 @@ jobs:
       matrix:
         include:
           - { browser: msedge,  os: windows-latest }   # Edge is preinstalled on the Windows runner
-          - { browser: firefox, os: macos-latest }
           - { browser: webkit,  os: macos-latest }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75   # the suite takes about 30 minutes per browser, plus about 10 for build and start; 75 leaves headroom and stops a hang

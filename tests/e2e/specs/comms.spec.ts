@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { signIn, trainByTitle } from './support'
+import { captureClipboard, copiedText, signIn, trainByTitle } from './support'
 
 // REOS-45: the Communicate drawer (mockups/Comms.html). The demo data has no communication templates and the hydrator is REOS-44's, so the
 // drawer's three data calls are answered here; what is under test is the drawer itself: layout, token highlighting, guarded actions, the
@@ -74,9 +74,7 @@ test('the Communicate button opens the drawer with the template, a hydrated prev
 })
 
 test('sending asks for the previewed train version, stores through the API and reports it; the webhook is chosen from approved destinations', async ({ page, context, browserName }) => {
-  test.skip(browserName === 'firefox', 'REOS-150: Firefox has no clipboard-read permission')
-  test.skip(browserName === 'webkit', 'REOS-152: WebKit has no clipboard-write permission')
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await captureClipboard(context, browserName)
   const sent: { headers: Record<string, string>; body: unknown }[] = []
   await mock(page, { version: 7, dispatched: sent })
   const drawer = await open(page, 'comms2@example.com')
@@ -89,7 +87,7 @@ test('sending asks for the previewed train version, stores through the API and r
   await expect(page.getByTestId('announcer')).toContainText('Markdown copied and recorded')                                  // spoken through the app's one live region
   expect(sent[0].headers['if-match']).toBe('7')                                                            // the version the preview showed
   expect(sent[0].body).toMatchObject({ channel: 'Copy', format: 'Markdown', templateId: 'c1', scheduleItemId: 's1' })
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('**R26.24** is Go')              // the stored text is what was copied
+  expect(await copiedText(page, browserName)).toBe('**R26.24** is Go')              // the stored text is what was copied
 
   await drawer.locator('button:text-is("Copy rich text")').click()
   await expect(drawer.getByTestId('comms-result')).toContainText('Rich text copied and recorded')

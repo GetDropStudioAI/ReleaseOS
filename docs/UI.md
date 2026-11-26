@@ -121,3 +121,5 @@ Build these from the same patterns (table + Inspector, text actions, underlined 
 
 ## Accessibility
 Real `<button>`/`<a>`/`<input>`+`<label>`; icon-only controls get `aria-label`; glyph status always has a word beside it; tokens meet WCAG AA (light status colours are darkened from Apple's system colours for 4.5:1 on white); keyboard: `j/k` moves rows in grids, `Enter` opens in Inspector, `Esc` closes the drawer (no global handlers that swallow typing in inputs).
+
+**Tab order across browsers (REOS-150).** A scroll container that holds focusable children takes `tabIndex={-1}` (the sidebar's `os-sidebar-top`): Firefox otherwise makes every scrollable box a Tab stop of its own, a stop with no name and no focus ring; `-1` keeps it scrollable by mouse and wheel and out of the Tab order. A disclosure's panel (the account panel under the user card) follows its trigger in the DOM and is placed with CSS: Tab goes from the trigger into the panel, never round the whole page first. Do not rely on Tab wrapping from the last control to the first: Firefox does not wrap, and the e2e walks (`a11y-screens.spec.ts`) start each walk from the top of the page for that reason.

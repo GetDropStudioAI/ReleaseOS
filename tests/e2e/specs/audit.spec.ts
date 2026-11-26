@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { primaryNav, signIn } from './support'
+import { captureClipboard, copiedText, primaryNav, signIn } from './support'
 
 // REOS-38 / REOS-101: Audit history. Read-only screen; the events it shows are made here through a real service write (a holiday added and removed).
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']
@@ -28,9 +28,7 @@ for (const scheme of ['light', 'dark'] as const) {
     test.use({ colorScheme: scheme })
 
     test('an RTE filters the log, reads the change in the details panel, uses the keyboard, copies the record and exports the same filter', async ({ page, context, browserName }) => {
-      test.skip(browserName === 'firefox', 'REOS-150: Firefox has no clipboard-read permission')
-      test.skip(browserName === 'webkit', 'REOS-152: WebKit has no clipboard-write permission')
-      await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+      await captureClipboard(context, browserName)
       await signIn(page, `audit-${scheme}@example.com`, 'RTE')
       const name = `Audit e2e ${scheme} ${Date.now()}`
       await makeEvents(page, name)
@@ -80,7 +78,7 @@ for (const scheme of ['light', 'dark'] as const) {
       // Copy event record: complete, machine-readable, confirmed
       await detail.getByRole('button', { name: 'Copy event record' }).click()
       await expect(detail.getByRole('status')).toContainText('Copied')
-      const record = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()))
+      const record = JSON.parse(await copiedText(page, browserName))
       expect(record).toMatchObject({ id: Number(eventNo), entity: { type: 'Holiday' }, action: 'Add', outcome: 'Recorded', before: null })
       expect(JSON.stringify(record.after)).toContain(name)
 

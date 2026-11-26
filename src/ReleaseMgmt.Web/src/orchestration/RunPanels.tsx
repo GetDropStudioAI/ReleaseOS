@@ -4,7 +4,7 @@ import { localClock } from '../shell/clock.ts'
 import { fmtCountdown, fmtMinSec, serverNow } from '../time.ts'
 import { stampOf, stampText } from '../deploy/deployLogic.ts'
 import { Button, ConfirmDialog, DataTable, EmptyState, MetricCard, Notice, Panel, PropertyList, SidePanel, StatusChip, TwoLine, type Column } from '../ui'
-import { axisX, bars, clockOf, hm, hms, runKey, runWord, sectionTitle, SECTION_ORDER, stepState, doneCodesOf } from './orchLogic.ts'
+import { axisX, bars, clockOf, hm, hms, rollbackDetail, runKey, runWord, sectionTitle, SECTION_ORDER, stepState, doneCodesOf } from './orchLogic.ts'
 import type { RunStages } from './orchApi.ts'
 
 /** The run clock (REOS-128): now in UTC with the person's time, the window countdown, forecast finish, time to the rollback deadline and steps done. */
@@ -20,7 +20,7 @@ export function ClockCards({ run, fc, zone, nowMs }: { run: RunDetail; fc: RunFo
       <MetricCard label="Forecast finish" value={fc?.forecastFinish ? hm(Date.parse(fc.forecastFinish)) : '—'} unit={fc?.forecastFinish ? 'UTC' : undefined}
         detail={fc ? `Plan ${hm(Date.parse(fc.plannedFinish))} UTC${fc.alertRaised ? ' · past the rollback deadline' : ''}` : undefined} tone={fc?.alertRaised ? 'danger' : undefined} />
       <MetricCard label="To rollback deadline" value={c.toDeadlineSec === null ? '—' : fmtCountdown(c.toDeadlineSec)}
-        detail={c.deadlinePassed ? 'Passed' : c.deadlineClose ? 'Under 30 minutes' : fc?.rollbackDeadline ? `Deadline ${hm(Date.parse(fc.rollbackDeadline))} UTC` : 'No deadline'} tone={c.deadlineClose ? 'warning' : undefined} />
+        detail={rollbackDetail(c, fc)} tone={c.deadlineClose ? 'warning' : undefined} />
       <MetricCard label="Steps done" value={`${done} / ${main.length}`} detail={run.endedAt ? 'Run ended' : undefined} />
     </section>
   )

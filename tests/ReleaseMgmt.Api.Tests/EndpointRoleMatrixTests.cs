@@ -272,6 +272,14 @@ public class EndpointRoleMatrixTests
         GET /api/v1/modules                                      Read
         POST /api/v1/modules/{key}:enable                        Admin
         POST /api/v1/modules/{key}:disable                       Admin
+        GET /api/v1/ai/status                                    Admin
+        POST /api/v1/ai/workspace:pause                          Admin
+        POST /api/v1/ai/workspace:resume                         Admin
+        POST /api/v1/ai/workspace:opt-out                        Admin
+        POST /api/v1/ai/workspace:opt-in                         Admin
+        PUT /api/v1/ai/key                                       Admin
+        DELETE /api/v1/ai/key                                    Admin
+        GET /api/v1/ai/preflight                                 Read
         GET /api/v1/clients/{id}                                 Read
         POST /api/v1/clients                                     Plan
         PATCH /api/v1/clients/{id}                               Plan

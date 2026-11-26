@@ -38,6 +38,15 @@ test('API tokens (REOS-162) sit in the Management group, in the nav and Jump to 
   for (const r of ['Viewer', 'GovernanceOfficer']) { assert.ok(!views([r]).includes('api-tokens'), r); assert.ok(!jumpTargets([r]).some(t => t.name === 'API tokens'), r) }
 })
 
+test('Webhooks (REOS-164) sit in the Management group, in the nav and Jump to for an RTE and a Release Manager only, at /webhooks', () => {
+  assert.ok(NAV[1].items.some(i => i.view === 'webhooks' && i.label === 'Webhooks' && i.need === 'admin' && i.module === undefined))   // core, not an add-on module (Q-164a)
+  assert.equal(pathOf('webhooks'), '/webhooks')
+  assert.equal(pageName('webhooks'), 'Webhooks')
+  const views = (roles: string[]) => navFor(roles).flatMap(g => g.items.map(i => i.view))
+  for (const r of ['RTE', 'ReleaseManager']) { assert.ok(views([r]).includes('webhooks'), r); assert.ok(jumpTargets([r]).some(t => t.name === 'Webhooks'), r) }
+  for (const r of ['Viewer', 'GovernanceOfficer']) { assert.ok(!views([r]).includes('webhooks'), r); assert.ok(!jumpTargets([r]).some(t => t.name === 'Webhooks'), r) }
+})
+
 test('pages have names for the breadcrumb and title, and Jump to offers what the person can open', () => {
   assert.equal(pageName('trains'), 'Releases')
   assert.equal(pageName('sync'), 'Sync health')

@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261126010017_Triggers")]
+    [Migration("20261126134908_Triggers")]
     partial class Triggers
     {
         /// <inheritdoc />
@@ -3401,6 +3401,122 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookDeliveries", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("AuditEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeliveredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FinishedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastAttemptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LastStatusCode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NextAttemptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReplayOfDeliveryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SubscriptionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReplayOfDeliveryId");
+
+                    b.HasIndex("SubscriptionId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("WebhookDeliveries", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookDeliveryAttempts", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AttemptNo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AttemptedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeliveryId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("StatusCode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeliveryId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("WebhookDeliveryAttempts", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookDestinations", b =>
                 {
                     b.Property<string>("Id")
@@ -3438,6 +3554,75 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("WorkspaceId");
 
                     b.ToTable("WebhookDestinations", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookSubscriptions", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EventTypes")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProtectedUrl")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SecretRotatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SecretVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UrlHmac")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("WebhookSubscriptions", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -4767,8 +4952,63 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookDeliveries", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.WebhookDeliveries", null)
+                        .WithMany()
+                        .HasForeignKey("ReplayOfDeliveryId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.WebhookSubscriptions", null)
+                        .WithMany()
+                        .HasForeignKey("SubscriptionId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookDeliveryAttempts", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.WebhookDeliveries", null)
+                        .WithMany()
+                        .HasForeignKey("DeliveryId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookDestinations", b =>
                 {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.WebhookSubscriptions", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
                         .WithMany()
                         .HasForeignKey("WorkspaceId")

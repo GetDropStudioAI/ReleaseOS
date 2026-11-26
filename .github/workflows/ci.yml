@@ -53,6 +53,8 @@ jobs:
         run: python tests/reference/test_upgrades.py
       - name: "Tooling tests (start.py: reset, control channel, database upgrade)"
         run: python tests/tools/test_start.py
+      - name: "Webhook receiver samples (C#, JavaScript, Python) verify the documented signature vector (REOS-164)"
+        run: python tests/tools/test_webhook_samples.py
       - name: Install e2e dependencies
         working-directory: tests/e2e
         run: |

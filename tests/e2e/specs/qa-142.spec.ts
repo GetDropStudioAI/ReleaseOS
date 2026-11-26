@@ -29,6 +29,7 @@ const SCREENS: Screen[] = [
   { name: 'Comm library', path: '/library', heading: 'Comm library', open: viaNav('Comm library') },
   { name: 'Connectors', path: '/connectors', heading: 'Connectors', open: viaNav('Connectors') },
   { name: 'API tokens', path: '/api-tokens', heading: 'API tokens', open: viaNav('API tokens') },
+  { name: 'Webhooks', path: '/webhooks', heading: 'Webhooks', open: viaNav('Webhooks') },
   { name: 'My work', path: '/work', heading: 'My work', open: viaNav('My work') },
   { name: 'Analytics', path: '/analytics', heading: 'Analytics', open: viaNav('Analytics') },
   { name: 'Imports & exports', path: '/importexport', heading: 'Imports & exports', open: viaNav('Imports & exports') },

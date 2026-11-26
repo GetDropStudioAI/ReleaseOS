@@ -336,6 +336,31 @@ for sql, want, label in [
     except sqlite3.IntegrityError as e:
         check(want is not None and want in str(e), label)
 
+# Upgrade 015 (REOS-164): the three webhook tables are new and EMPTY (nothing is posted anywhere), nothing else changes, and their rules are live
+t15 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("015_"):
+        before15 = shape(t15)
+        rows15 = {t: t15.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("Users", "ReleaseTrains", "AuditEvents", "SyncAlerts")}
+    t15.executescript(s.read_text())
+check(all(t15.execute(f"SELECT COUNT(*) FROM {t}").fetchone() == (0,) for t in ("WebhookSubscriptions", "WebhookDeliveries", "WebhookDeliveryAttempts")), "015: no subscription, delivery or attempt is made by the script")
+check({t: t15.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in rows15} == rows15, "015: existing rows are untouched")
+check(t15.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND (name LIKE 'trg_Ws_WebhookSubscriptions_%' OR name LIKE 'trg_Ws_WebhookDeliver%' OR name = 'trg_Webhook_FinishedDeliveryIsFinal')").fetchone() == (6,), "015: the six webhook rules are in place")
+for sql, want, label in [
+    ("INSERT INTO WebhookSubscriptions (Id, Name, ProtectedUrl, UrlHmac, Host, EventTypes, CreatedByUserId, CreatedAt) VALUES ('s1', 'CI', 'CfDJ8x', printf('%064d', 1), 'hooks.example.com', 'release.created', 'u1', '2026-11-26T00:00:00Z')", None, "015: a subscription"),
+    ("INSERT INTO WebhookSubscriptions (Id, Name, ProtectedUrl, UrlHmac, Host, EventTypes, CreatedByUserId, CreatedAt) VALUES ('s2', 'CI', 'CfDJ8x', printf('%064d', 1), 'hooks.example.com', '*', 'u1', '2026-11-26T00:00:00Z')", "UNIQUE", "015: the same address twice in a workspace is refused"),
+    ("INSERT INTO WebhookDeliveries (Id, SubscriptionId, EventId, EventType, PayloadJson, NextAttemptAt, CreatedAt) VALUES ('d1', 's1', 'e1', 'release.created', '{}', '2026-11-26T00:00:00Z', '2026-11-26T00:00:00Z')", None, "015: a pending delivery"),
+    ("UPDATE WebhookDeliveries SET Status = 'DeadLetter', NextAttemptAt = NULL, FinishedAt = '2026-11-26T01:00:00Z' WHERE Id = 'd1'", None, "015: a delivery is dead-lettered"),
+    ("UPDATE WebhookDeliveries SET Status = 'Pending', NextAttemptAt = '2026-11-26T02:00:00Z', FinishedAt = NULL WHERE Id = 'd1'", "replay it", "015: a dead letter cannot go back to pending"),
+    ("INSERT INTO SyncAlerts (Id, SourceSystem, Kind, Fingerprint, ErrorMessage, FirstOccurredAt, LastOccurredAt) VALUES ('sa9', 'Webhook', 'DeliveryFailed', 'fp9', 'x', '2026-11-26T00:00:00Z', '2026-11-26T00:00:00Z')", None, "015: a webhook delivery failure can be raised as an alert"),
+]:
+    try:
+        t15.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+after15 = shape(t15)
+check({k: v for k, v in after15.items() if k in before15} == before15, "015: no existing table, index or trigger changes")
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

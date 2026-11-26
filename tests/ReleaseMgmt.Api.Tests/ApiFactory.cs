@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ReleaseMgmt.Infrastructure.Comms;
+using ReleaseMgmt.Infrastructure.Webhooks;
 
 namespace ReleaseMgmt.Api.Tests;
 
@@ -16,6 +17,14 @@ public sealed class RecordingControlSender : IControlWebhookSender
     public Task<ControlSendResult> SendAsync(CommWebhookTarget target, ControlDelivery delivery, CancellationToken ct) { Sent.Enqueue((target, delivery)); return Task.FromResult(Answer(delivery)); }
 }
 
+/// <summary>Stands in for the outbound webhook sender in every test host (REOS-164): records each signed request and answers as told. The real sender has its own tests.</summary>
+public sealed class RecordingWebhookSender : IWebhookSender
+{
+    public ConcurrentQueue<(WebhookTarget Target, WebhookRequest Request)> Sent { get; } = new();
+    public Func<WebhookRequest, WebhookSendResult> Answer { get; set; } = _ => new(true, 200, null);
+    public Task<WebhookSendResult> SendAsync(WebhookTarget target, WebhookRequest request, CancellationToken ct) { Sent.Enqueue((target, request)); return Task.FromResult(Answer(request)); }
+}
+
 public sealed class ApiFactory(string environment = "Development", bool demoData = false, string? passwordResetUrl = null, bool requireIfMatch = false, long? attachmentMaxBytes = null, IReadOnlyDictionary<string, string>? settings = null) : WebApplicationFactory<Program>
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("reos-api-").FullName;
@@ -23,6 +32,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
     public string AttachmentsDir => Path.Combine(_dir, "attachments");
     public const string TestHosts = "localhost;releases.example.com";
     public RecordingControlSender ControlSender { get; } = new();
+    public RecordingWebhookSender WebhookSender { get; } = new();
     /// <summary>A fixed clock for tests whose data carries absolute dates (otherwise the real date turns "not yet due" rows overdue).</summary>
     public TimeProvider? Clock { get; init; }
     /// <summary>REOS-174: a test replaces a service (the module entitlements) after the host's own registrations.</summary>
@@ -47,6 +57,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         // REOS-111 to 114: the background workers (audit sealing and verification, telemetry housekeeping) are driven by their own tests; running them in every host would change rows under tests that compare databases.
         builder.UseSetting("Audit:Seal:Enabled", "false");
         builder.UseSetting("Telemetry:Maintenance:Enabled", "false");
+        builder.UseSetting("Webhooks:Out:Worker:Enabled", "false");   // REOS-164: the sender is driven by its own tests (processor + frozen clock)
         // REOS-116: with release types seeded, a release inserted by SQL without one is refused (trg_Train_TypeRules_Insert), as it should be; the many contract tests that build rows by SQL start without types, and the tests of the type rule opt in.
         builder.UseSetting("ReleaseTypes:SeedAtStart", "false");
         foreach (var (k, v) in settings ?? new Dictionary<string, string>()) builder.UseSetting(k, v);
@@ -61,6 +72,7 @@ public sealed class ApiFactory(string environment = "Development", bool demoData
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<IControlWebhookSender>(ControlSender);
+            services.AddSingleton<IWebhookSender>(WebhookSender);
             if (Clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(Clock); }
             ConfigureServices?.Invoke(services);
         });

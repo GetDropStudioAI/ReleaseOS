@@ -17,7 +17,7 @@ DATE_EXACT = {"Day", "TargetReleaseDate", "CabDate", "ReviewDueOn", "DueOn", "Pl
 # Columns that are timestamps although they do not end in "At".
 TIMESTAMP_EXACT = set()
 # INTEGER columns that need 64 bits: request counts of a sample, and the audit chain's row ids and counters.
-LONG_EXACT = {"RequestCount", "LastId", "FirstBadId", "VerifiedRows", "SealedCount"}
+LONG_EXACT = {"AuditEventId", "RequestCount", "LastId", "FirstBadId", "VerifiedRows", "SealedCount"}
 
 def strip_comments(s):
     return re.sub(r"--[^\n]*", "", s)

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ReleaseMgmt.Infrastructure.Webhooks;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Entities;
@@ -49,6 +50,9 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<CatalogServices>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<IngestKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<ApiTokens>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-162
+        b.Entity<WebhookSubscriptions>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-164
+        b.Entity<WebhookDeliveries>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<WebhookDeliveryAttempts>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<IdempotencyKeys>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-163
         b.Entity<Deployments>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<MetricSamples>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-111 to 114
@@ -105,17 +109,29 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<CommDispatches>().HasQueryFilter(e => WorkspaceId == null || Set<CommTemplates>().Any(c => c.Id == e.CommTemplateId && Set<ReleaseTrains>().Any(t => t.Id == c.ReleaseTrainId && t.WorkspaceId == WorkspaceId)));
     }
 
-    public override int SaveChanges(bool acceptAllChangesOnSuccess)
-    {
-        EnforceWorkspaceAsync(CancellationToken.None).GetAwaiter().GetResult();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
-    }
+    // One path for both: the workspace checks and the webhook outbox (REOS-164) live in the async save, so a synchronous caller cannot skip either.
+    public override int SaveChanges(bool acceptAllChangesOnSuccess) => SaveChangesAsync(acceptAllChangesOnSuccess, CancellationToken.None).GetAwaiter().GetResult();
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         await EnforceWorkspaceAsync(cancellationToken);
-        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        if (_queueingWebhooks || !ChangeTracker.HasChanges()) return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        // REOS-164: the outbox row is written in the transaction of the audit row. Inside a service's transaction this one is used; a save made on its own gets one for the two steps.
+        await using var own = Database.CurrentTransaction is null ? await Database.BeginTransactionAsync(cancellationToken) : null;
+        var from = await WebhookOutbox.AuditHighWaterAsync(this, cancellationToken);
+        var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        var queued = await WebhookOutbox.FanOutAsync(this, from, cancellationToken);
+        if (queued.Count > 0)
+        {
+            _queueingWebhooks = true;
+            try { Set<WebhookDeliveries>().AddRange(queued); saved += await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken); }
+            finally { _queueingWebhooks = false; }
+        }
+        if (own is not null) await own.CommitAsync(cancellationToken);
+        return saved;
     }
+
+    private bool _queueingWebhooks;
 
     // Columns that point at a row of a workspace-scoped table, and the table. A new or changed value must name a row this context can see.
     private static readonly Dictionary<string, Type> References = new()

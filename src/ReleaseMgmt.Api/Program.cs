@@ -139,7 +139,8 @@ builder.Services.AddSingleton<IAnalyticsConnectionFactory>(new SqliteAnalyticsCo
 builder.Services.AddSingleton<ReleaseMgmt.Api.Sync.SyncHealthService>();   // REOS-42 sync health, connector-wide banner state, webhook allowlist
 builder.Services.AddCommunications();   // REOS-43/44 comm library, T-minus schedule, token hydration
 builder.Services.AddSyncEngine(config, builder.Environment.IsDevelopment());   // REOS-39/40/41: ITSM connectors, poller, watchdog, credentials (Data Protection)
-builder.Services.AddDeploymentControl(config);   // REOS-111 to 114: telemetry, control webhooks, approvals, the audit hash chain
+builder.Services.AddDeploymentControl(config);
+ReleaseMgmt.Api.Webhooks.WebhookRegistration.AddOutboundWebhooks(builder.Services, config, builder.Environment.IsDevelopment());   // REOS-164 (D61): signed outbound webhooks, outbox, retries, delivery log   // REOS-111 to 114: telemetry, control webhooks, approvals, the audit hash chain
 // REOS-74 (Q-052e): the key ring is encrypted at rest (certificate, or DPAPI on Windows); outside Development an unprotected ring refuses to start unless opted in.
 var keyRing = KeyRingEncryption.Configure(builder.Services.AddDataProtection(), config, builder.Environment);
 builder.Services.AddSingleton<AdvisoryService>(); builder.Services.AddSingleton<CalendarService>(); builder.Services.AddSingleton<IcsFeedService>(); builder.Services.AddSingleton<IcsTokenService>();   // REOS-51 calendar + ICS feeds
@@ -298,6 +299,7 @@ api.MapDeployments();   // REOS-110
 api.MapDeploymentOps();   // REOS-111/112 telemetry, control, run pause
 api.MapApprovals();   // REOS-113
 api.MapApiTokens();   // REOS-162
+api.MapWebhooks();   // REOS-164
 ReleaseMgmt.Api.PublicApi.DeploymentsNative.MapPublicApi(app);   // REOS-161 native operations and the OpenAPI document
 
 // Dev-only fake login: POST /auth/dev-login {email, name, role}. Never mapped outside Development; see DevSignIn for when it exists and who may call it.

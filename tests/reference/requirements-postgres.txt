@@ -1,0 +1,2 @@
+# Only for the opt-in Postgres run of the schema oracle (python3 tests/reference/test_schema.py --dialect postgres). The SQLite run needs nothing.
+psycopg2-binary>=2.9

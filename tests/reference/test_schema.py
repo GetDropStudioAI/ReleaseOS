@@ -1,15 +1,24 @@
 """Enforcement tests for db/schema.sql. Run from the repo root: python3 tests/reference/test_schema.py
-Port every case to xUnit in M1 (same cases, same expected messages)."""
+Port every case to xUnit in M1 (same cases, same expected messages).
+Opt-in second dialect (REOS-195): python3 tests/reference/test_schema.py --dialect postgres [--report]   (see tests/reference/dialect.py)"""
 import sqlite3, json, sys, os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dialect
+OPTS = dialect.parse_args(sys.argv[1:])
+if __name__ == "__main__" and (OPTS.dialect != "sqlite" or OPTS.report):
+    import pg_oracle                       # per-statement runner: a failing case or statement is recorded, the run goes on
+    sys.exit(pg_oracle.run(os.path.abspath(__file__), OPTS))
+DIALECT = dialect.backend(OPTS.dialect)
 
 SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "db", "schema.sql")
 NOW = '2026-10-20T14:00:00Z'
 passed = failed = 0
+RESULTS = []        # (section, label, ok, message, expect, should_pass), read by the --report runner
+SECTION = ""
 
 def db_fresh():
-    db = sqlite3.connect(":memory:")
-    db.execute("PRAGMA foreign_keys=ON")
-    db.executescript(open(SCHEMA).read())
+    db = DIALECT.connect(SCHEMA)
     db.executescript(f"""
     INSERT INTO Users(Id,Email,DisplayName,Role) VALUES
       ('rte','rte@x.com','Rae T.','RTE'),
@@ -40,14 +49,18 @@ def check(db, sql, should_pass, label, params=(), expect=None):
     try:
         db.execute(sql, params)
         ok, msg = should_pass, "allowed"
-    except sqlite3.IntegrityError as e:
+    except DIALECT.blocked_errors as e:
         ok, msg = (not should_pass) and (expect is None or expect in str(e)), f"blocked: {e}"
+    except DIALECT.other_errors as e:
+        ok, msg = False, f"error: {e}"
     passed += ok; failed += (not ok)
+    RESULTS.append((SECTION, label, bool(ok), msg, expect, should_pass))
     print(f"  {'PASS' if ok else 'FAIL'}  {label:<64} {msg}")
 
 def assert_true(cond, label, detail=""):
     global passed, failed
     passed += bool(cond); failed += (not cond)
+    RESULTS.append((SECTION, label, bool(cond), str(detail), None, None))
     print(f"  {'PASS' if cond else 'FAIL'}  {label:<64} {detail}")
 
 def done_task(db, tid, who):
@@ -358,7 +371,7 @@ db6.execute("UPDATE WorkspaceMembers SET Role='Viewer' WHERE WorkspaceId='defaul
 db6.execute("UPDATE StageGates SET Status='InProgress', LastChangedByUserId='gov1' WHERE Id='g2'") if db6.execute("SELECT Status FROM StageGates WHERE Id='g2'").fetchone()[0] != 'InProgress' else None
 db6.execute("UPDATE ChecklistTasks SET IsCompleted=1,CompletedAt=?,CompletedByUserId='gov1',LastChangedByUserId='gov1' WHERE Id='k2'", (NOW,))
 check(db6, certify('g2', 'gov2'), False, "a Governance Officer by Users.Role whose membership is now Viewer", expect="Governance Officers only")
-assert_true(db.execute("SELECT count(*), sum(WorkspaceId IS NOT 'default') FROM AuditEvents").fetchone()[1] == 0,
+assert_true(db.execute("SELECT count(*), sum(CASE WHEN WorkspaceId IS NOT 'default' THEN 1 ELSE 0 END) FROM AuditEvents").fetchone()[1] == 0,
             "every audit row of the default workspace's release (service and trigger rows) is filed under it")
 
 # ---- Release model, environments, service catalog, deployments (REOS-107, 109, 110) ----

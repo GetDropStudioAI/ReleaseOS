@@ -114,6 +114,11 @@ public class WorkspaceIsolationTests
         INSERT INTO ExportJobs(Id,Kind,ReleaseTrainId,FileName,RequestedByUserId,CreatedAt) VALUES('xa','ReleaseReportPdf','ta','{Marker}.pdf','{rteId}','{t}');
         INSERT INTO IcsTokens(Id,UserId,TokenSha256,CreatedAt) VALUES('ica','ua',printf('%064d',2),'{t}');
         INSERT INTO ConnectorState(SourceSystem,BaseUrl,IsEnabled) VALUES('Jira','https://zqalpha.atlassian.net',0);   -- disabled: A's own poller must not change A's rows during the comparison
+        INSERT INTO ChangeRequests(Id,ChangeKey,Title,ChangeType,Status,RequestedByUserId,CreatedByUserId,CreatedAt) VALUES('cha','CHG-0001','{Marker} Change','Normal','Submitted','{rteId}','{rteId}','{t}');
+        INSERT INTO CabMeetings(Id,Title,StartsAt,EndsAt,ChairUserId,CreatedByUserId,CreatedAt) VALUES('mta','{Marker} CAB','2026-12-01T10:00:00Z','2026-12-01T11:00:00Z','{govId}','{govId}','{t}');
+        INSERT INTO CabAgendaItems(Id,MeetingId,ChangeRequestId,SequenceOrder,Notes) VALUES('aia','mta','cha',1,'{Marker} agenda');
+        INSERT INTO CabAttendees(MeetingId,UserId) VALUES('mta','{govId}');
+        INSERT INTO CabDecisions(Id,ChangeRequestId,MeetingId,Decision,DecidedByUserId,DecidedAt,Rationale) VALUES('dca','cha','mta','Deferred','{govId}','{t}','{Marker} rationale');
         INSERT INTO AuditEvents(OccurredAt,ActorUserId,ReleaseTrainId,EntityType,EntityId,Action,AfterJson) VALUES('{t}','{rteId}','ta','Train','ta','Create','{{""title"":""{Marker} Train""}}');");
         // Route segment -> the id of A's row of that kind
         return new()
@@ -123,6 +128,7 @@ public class WorkspaceIsolationTests
             ["dispatches"] = "dsa", ["export-jobs"] = "xa", ["freezes"] = "fa", ["links"] = "lka", ["notifications"] = "na", ["alerts"] = "sya", ["webhook-allowlist"] = "wha",
             ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["userId"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
             ["release-types"] = "rta", ["versions"] = "vera", ["clients"] = "cla", ["client"] = "cla", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika", ["api-tokens"] = "ata", ["webhooks"] = "wsa", ["deliveries"] = "wda", ["approval-requests"] = "apa", ["approval-policies"] = "pola",
+            ["changes"] = "cha", ["meetings"] = "mta", ["itemId"] = "aia",   // REOS-175 CAB module
             ["ciId"] = "cia", ["issueId"] = "kia", ["stepId"] = "sa", ["jobId"] = "ija", ["trainId"] = "ta", ["day"] = "2026-12-24",
             ["audit"] = Scalar(f, "SELECT Id FROM AuditEvents WHERE ReleaseTrainId='ta' AND EntityType='Train'"),   // GET /audit/{id}: one of A's events
         };
@@ -148,11 +154,14 @@ public class WorkspaceIsolationTests
         }.ToList();
         foreach (var root in new[] { "Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
                      "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "ReleaseVersions", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments",
-                     "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions", "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "WebhookDeliveryAttempts" })
+                     "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions", "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "ChangeRequests", "CabMeetings", "WebhookDeliveryAttempts" })
             queries.Add($"SELECT * FROM {root} WHERE WorkspaceId='default'");
         foreach (var child in new[] { "ChangeRecords", "AffectedCIs", "DeploymentWindows", "BundledProducts", "StageGates", "Attachments", "RunbookSteps", "RunbookRuns", "Blockers",
                      "KnownIssues", "GoNoGoDecisions", "PostImplementationReviews", "FreezeOverrides", "Baselines", "ExternalLinks", "CommTemplates", "CommSchedule", "TrainMilestones", "TrainEnvironments" })
             queries.Add($"SELECT * FROM {child} WHERE ReleaseTrainId IN {trains}");
+        queries.Add("SELECT * FROM CabAgendaItems WHERE MeetingId IN (SELECT Id FROM CabMeetings WHERE WorkspaceId='default')");
+        queries.Add("SELECT * FROM CabAttendees WHERE MeetingId IN (SELECT Id FROM CabMeetings WHERE WorkspaceId='default')");
+        queries.Add("SELECT * FROM CabDecisions WHERE ChangeRequestId IN (SELECT Id FROM ChangeRequests WHERE WorkspaceId='default')");
         queries.Add("SELECT * FROM DeploymentEvents WHERE DeploymentId IN (SELECT Id FROM Deployments WHERE WorkspaceId='default')");
         queries.Add("SELECT * FROM ApprovalPolicyRequirements WHERE PolicyId IN (SELECT Id FROM ApprovalPolicies WHERE WorkspaceId='default')");
         queries.Add("SELECT * FROM ApprovalDecisions WHERE ApprovalId IN (SELECT Id FROM Approvals WHERE WorkspaceId='default')");
@@ -223,6 +232,7 @@ public class WorkspaceIsolationTests
         var members = new Dictionary<string, HttpClient>();
         foreach (var r in new[] { Roles.Viewer, Roles.RTE, Roles.ReleaseManager, Roles.GovernanceOfficer }) members[r] = await InB(f, r, $"{r.ToLowerInvariant()}@beta.test");
         Sql(f, $"INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,WorkspaceId) VALUES('tb','ZQBETA Train','2026-11-30','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z','{B}')");
+        Sql(f, $"INSERT INTO WorkspaceModules(WorkspaceId,ModuleKey,Enabled,EnabledByUserId,EnabledAt) VALUES('{B}','cab',1,'{UserId(f, "rte@alpha.test")}','2026-10-01T00:00:00Z')");   // the CAB module is on in B too, so its guard does not hide what the filters must
         var before = AlphaRows(f);
 
         var wrong = new List<string>();

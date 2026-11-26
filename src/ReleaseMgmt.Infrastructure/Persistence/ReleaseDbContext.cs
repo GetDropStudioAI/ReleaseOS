@@ -61,6 +61,12 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<DeploymentControlActions>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<ApprovalPolicies>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<Approvals>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        // REOS-175/177 (CAB module): two roots; the agenda, attendees and decisions follow their parent
+        b.Entity<ChangeRequests>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<CabMeetings>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<CabAgendaItems>().HasQueryFilter(e => WorkspaceId == null || Set<CabMeetings>().Any(p => p.Id == e.MeetingId && p.WorkspaceId == WorkspaceId));
+        b.Entity<CabAttendees>().HasQueryFilter(e => WorkspaceId == null || Set<CabMeetings>().Any(p => p.Id == e.MeetingId && p.WorkspaceId == WorkspaceId));
+        b.Entity<CabDecisions>().HasQueryFilter(e => WorkspaceId == null || Set<ChangeRequests>().Any(p => p.Id == e.ChangeRequestId && p.WorkspaceId == WorkspaceId));
         // A chain is the workspace's id; the host-wide rows' chain ('*') is read from the default workspace only, like the host-wide audit rows themselves (Q-105c).
         b.Entity<AuditChainHeads>().HasQueryFilter(e => WorkspaceId == null || e.ChainId == WorkspaceId || (e.ChainId == "*" && WorkspaceId == WorkspaceIds.Default));
         // Host-wide alerts (backups) concern every workspace; host-wide audit rows (user accounts) are read from the default workspace only (Q-105c).

@@ -354,7 +354,7 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         string[] expectedRoots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
             "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents",
             "ReleaseTypes", "ReleaseVersions", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments", "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions",
-            "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "WebhookDeliveryAttempts"];
+            "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "WebhookDeliveryAttempts", "ChangeRequests", "CabMeetings"];
         AssertTrue(roots.SequenceEqual(expectedRoots.Order()), "WorkspaceId on every root table, and only there", string.Join(",", roots));
         var moving = roots.Where(t => t != "AuditEvents" && Count(db6, "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name=?", $"trg_Ws_{t}_Update") == 0).ToList();
         AssertTrue(moving.Count == 0, "every root table but the append-only audit log refuses a change of workspace", string.Join(",", moving));

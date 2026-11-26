@@ -87,6 +87,11 @@ public static class ModelMap
         b.Entity<WebhookSubscriptions>(e => { e.ToTable("WebhookSubscriptions"); e.HasKey(e => e.Id);  });
         b.Entity<WebhookDeliveries>(e => { e.ToTable("WebhookDeliveries"); e.HasKey(e => e.Id);  });
         b.Entity<WebhookDeliveryAttempts>(e => { e.ToTable("WebhookDeliveryAttempts"); e.HasKey(e => e.Id);  });
+        b.Entity<ChangeRequests>(e => { e.ToTable("ChangeRequests"); e.HasKey(e => e.Id);  });
+        b.Entity<CabMeetings>(e => { e.ToTable("CabMeetings"); e.HasKey(e => e.Id);  });
+        b.Entity<CabAgendaItems>(e => { e.ToTable("CabAgendaItems"); e.HasKey(e => e.Id);  });
+        b.Entity<CabAttendees>(e => { e.ToTable("CabAttendees"); e.HasKey(e => new { e.MeetingId, e.UserId });  });
+        b.Entity<CabDecisions>(e => { e.ToTable("CabDecisions"); e.HasKey(e => e.Id);  });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -285,5 +290,25 @@ public static class ModelMap
         b.Entity<WebhookDeliveries>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<WebhookDeliveryAttempts>().HasOne<WebhookDeliveries>().WithMany().HasForeignKey(e => e.DeliveryId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<WebhookDeliveryAttempts>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ChangeRequests>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ChangeRequests>().HasOne<Users>().WithMany().HasForeignKey(e => e.RequestedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ChangeRequests>().HasOne<Users>().WithMany().HasForeignKey(e => e.CreatedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ChangeRequests>().HasOne<ReleaseTrains>().WithMany().HasForeignKey(e => e.ReleaseTrainId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ChangeRequests>().HasOne<GoNoGoDecisions>().WithMany().HasForeignKey(e => e.GoNoGoDecisionId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ChangeRequests>().HasOne<Users>().WithMany().HasForeignKey(e => e.DecidedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<ChangeRequests>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabMeetings>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabMeetings>().HasOne<Users>().WithMany().HasForeignKey(e => e.ChairUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabMeetings>().HasOne<Users>().WithMany().HasForeignKey(e => e.CreatedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabMeetings>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabAgendaItems>().HasOne<CabMeetings>().WithMany().HasForeignKey(e => e.MeetingId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabAgendaItems>().HasOne<ChangeRequests>().WithMany().HasForeignKey(e => e.ChangeRequestId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabAgendaItems>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabAttendees>().HasOne<CabMeetings>().WithMany().HasForeignKey(e => e.MeetingId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabAttendees>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabAttendees>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabDecisions>().HasOne<ChangeRequests>().WithMany().HasForeignKey(e => e.ChangeRequestId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabDecisions>().HasOne<CabMeetings>().WithMany().HasForeignKey(e => e.MeetingId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<CabDecisions>().HasOne<Users>().WithMany().HasForeignKey(e => e.DecidedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
     }
 }

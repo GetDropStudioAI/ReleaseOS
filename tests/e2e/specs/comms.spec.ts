@@ -73,7 +73,9 @@ test('the Communicate button opens the drawer with the template, a hydrated prev
   await expect(page.locator('button:text-is("Communicate")')).toBeFocused()
 })
 
-test('sending asks for the previewed train version, stores through the API and reports it; the webhook is chosen from approved destinations', async ({ page, context }) => {
+test('sending asks for the previewed train version, stores through the API and reports it; the webhook is chosen from approved destinations', async ({ page, context, browserName }) => {
+  test.skip(browserName === 'firefox', 'REOS-150: Firefox has no clipboard-read permission')
+  test.skip(browserName === 'webkit', 'REOS-152: WebKit has no clipboard-write permission')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   const sent: { headers: Record<string, string>; body: unknown }[] = []
   await mock(page, { version: 7, dispatched: sent })

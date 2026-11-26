@@ -209,8 +209,7 @@ test('4 charts, pipeline graph and live regions have text alternatives and no no
   else await expect(page.getByText(/no (live|rehearsal) run/i).first()).toBeVisible()   // no graph: the page says why, in words
 })
 
-test('5 an API failure shows an error state with Retry on every screen; a slow API shows a loading state', async ({ page, browserName }) => {
-  test.skip(browserName === 'webkit', 'REOS-152: Analytics error state shows no Retry in WebKit; see findings')
+test('5 an API failure shows an error state with Retry on every screen; a slow API shows a loading state', async ({ page }) => {
   await signIn(page, who())
   const mode = { fail: false, slow: false }
   // The session, the workspace list, the connection and the shell's own feeds keep working: the page under test is what fails.

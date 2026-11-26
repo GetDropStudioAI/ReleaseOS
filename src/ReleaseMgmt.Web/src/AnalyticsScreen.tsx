@@ -81,7 +81,9 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   const [applied, setApplied] = useState({ from: '', to: '' })
   const [pdfErr, setPdfErr] = useState<string | null>(null)
   const [asOfExec, setAsOfExec] = useState('')
-  useEffect(() => { get<Scope>('/api/v1/analytics/scope').then(setScope).catch(e => setScopeErr((e as Error).message)) }, [])
+  // REOS-152: a failed scope load offers Retry like every other error state (it had none, so the person had to reload the page).
+  const loadScope = useCallback(() => { setScopeErr(null); get<Scope>('/api/v1/analytics/scope').then(setScope).catch(e => setScopeErr((e as Error).message)) }, [])
+  useEffect(() => { loadScope() }, [loadScope])
   const changeView = (v: AnalyticsView) => {
     setView(v); setChoice(defaultChoice(v)); choiceRef.current = defaultChoice(v); setGroupBy(defaultGroup(v))
     const u = new URL(window.location.href); if (v === 'ops') u.searchParams.delete('view'); else u.searchParams.set('view', v)
@@ -174,7 +176,7 @@ export default function AnalyticsScreen(_props: { me: Me }) {
   const controls = <div className="an-scope">
     <Tabs tabs={VIEWS} value={view} onChange={v => changeView(v as AnalyticsView)} label="Analytics view" group="an-view" />
     <div className="an-scope-row">
-      {scopeErr ? <Notice tone="danger" title="Your workspaces could not be loaded">{scopeErr}</Notice>
+      {scopeErr ? <Notice tone="danger" title="Your workspaces could not be loaded" live action={<Button onClick={loadScope}>Retry</Button>}>{scopeErr}</Notice>
         : !scope ? <span className="an-note">Loading your workspaces…</span>
         : mine.length <= 1 ? <span className="an-note" data-testid="an-scope-single">Workspace: {mine[0]?.name ?? 'none'}. You belong to one workspace, so there is nothing to combine.</span>
         : <span className="an-period-field"><span aria-hidden="true">Workspaces</span><FilterSelect label="Workspaces" value={choice} options={wsOptions} onChange={pickWorkspaces} /></span>}

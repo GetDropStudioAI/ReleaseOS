@@ -66,7 +66,7 @@ public sealed class SchemaContractTests : IDisposable
     {
         var migrated = Master(Migrated());
         var reference = Master(FromSchemaSql());
-        Assert.Equal(72, reference.Count(r => r.Type == "table"));   // 49 + Workspaces, WorkspaceMembers (REOS-104) + 7 (REOS-107/109/110) + 9 (REOS-111 to 114) + Clients (REOS-118) + ReleaseVersions (REOS-117) + ReleaseClientDates (REOS-119) + TemplateTasks, TemplateMilestones (REOS-122)
+        Assert.Equal(73, reference.Count(r => r.Type == "table"));   // WorkspaceModules (REOS-174) + 49 + Workspaces, WorkspaceMembers (REOS-104) + 7 (REOS-107/109/110) + 9 (REOS-111 to 114) + Clients (REOS-118) + ReleaseVersions (REOS-117) + ReleaseClientDates (REOS-119) + TemplateTasks, TemplateMilestones (REOS-122)
         Assert.Equal(41, reference.Count(r => r.Type == "index"));   // 23 + IX_WorkspaceMembers_User, IX_Trains_Workspace, IX_Audit_Workspace + 5 (UX_Trains_Key, IX_Deployments_*, IX_DeploymentEvents_Deployment) + 9 (REOS-111 to 114) + UX_Trains_VersionSlot (REOS-117)
         Assert.Equal(reference.Select(r => (r.Type, r.Name)), migrated.Select(r => (r.Type, r.Name)));
         foreach (var (a, b) in reference.Zip(migrated)) Assert.Equal(a.Sql, b.Sql); // DDL text identical, incl. CHECKs

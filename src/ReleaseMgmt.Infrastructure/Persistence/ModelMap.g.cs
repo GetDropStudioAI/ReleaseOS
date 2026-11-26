@@ -12,6 +12,7 @@ public static class ModelMap
         b.Entity<Users>(e => { e.ToTable("Users"); e.HasKey(e => e.Id);  });
         b.Entity<Workspaces>(e => { e.ToTable("Workspaces"); e.HasKey(e => e.Id);  });
         b.Entity<WorkspaceMembers>(e => { e.ToTable("WorkspaceMembers"); e.HasKey(e => new { e.WorkspaceId, e.UserId });  });
+        b.Entity<WorkspaceModules>(e => { e.ToTable("WorkspaceModules"); e.HasKey(e => new { e.WorkspaceId, e.ModuleKey });  });
         b.Entity<Teams>(e => { e.ToTable("Teams"); e.HasKey(e => e.Id);  });
         b.Entity<TeamMembers>(e => { e.ToTable("TeamMembers"); e.HasKey(e => new { e.TeamId, e.UserId });  });
         b.Entity<Holidays>(e => { e.ToTable("Holidays"); e.HasKey(e => new { e.WorkspaceId, e.Day });  });
@@ -85,6 +86,9 @@ public static class ModelMap
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<WorkspaceMembers>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WorkspaceModules>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WorkspaceModules>().HasOne<Users>().WithMany().HasForeignKey(e => e.EnabledByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<WorkspaceModules>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Teams>().HasOne<WebhookDestinations>().WithMany().HasForeignKey(e => e.WebhookDestinationId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<Teams>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<TeamMembers>().HasOne<Teams>().WithMany().HasForeignKey(e => e.TeamId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);

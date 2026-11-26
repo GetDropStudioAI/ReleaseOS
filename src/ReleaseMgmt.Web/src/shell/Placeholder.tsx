@@ -9,6 +9,16 @@ const PAGES: Partial<Record<View, { description: string; today: string; links: {
     today: 'Products and their versions are recorded on each release today.',
     links: [{ view: 'trains', label: 'Releases' }],
   },
+  cab: {
+    description: 'A lightweight change advisory board: change requests linked to releases, Go/No-Go decisions and freeze windows.',
+    today: 'The CAB module is enabled for this workspace, but its screens are not built yet. Go/No-Go decisions and freeze windows work as before.',
+    links: [{ view: 'trains', label: 'Releases' }],
+  },
+  ai: {
+    description: 'Advisory AI assistance. It only suggests; it never approves or changes a status.',
+    today: 'The AI module is enabled for this workspace, but nothing is built behind it yet. Everything in ReleaseOS works as before.',
+    links: [{ view: 'trains', label: 'Releases' }],
+  },
 }
 
 /** A destination with no screen yet (REOS-94 acceptance): the page heading, a note that it is coming, and where the work is done today. Never a 404. */

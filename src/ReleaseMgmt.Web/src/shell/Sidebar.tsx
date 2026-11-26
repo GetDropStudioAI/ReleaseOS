@@ -18,8 +18,8 @@ export interface WorkspaceInfo { id: string; name: string; slug: string; region:
  * (hidden at zero), and the footer with the control-plane card (a link to Sync health) and the user card. Every destination is a real link, so it opens
  * in a new tab and the browser's history works.
  */
-export function Sidebar({ me, view, workspace, approvals, plane, onGo, onSignedOut, onStopped }: {
-  me: Me; view: View; workspace: WorkspaceInfo | null; approvals: number; plane: ControlPlane
+export function Sidebar({ me, view, workspace, approvals, modules, plane, onGo, onSignedOut, onStopped }: {
+  me: Me; view: View; workspace: WorkspaceInfo | null; approvals: number; modules: ReadonlySet<string> | null; plane: ControlPlane
   onGo: (v: View) => void; onSignedOut: () => void; onStopped: () => void
 }) {
   const go = (v: View) => (e: MouseEvent<HTMLAnchorElement>) => {
@@ -36,7 +36,7 @@ export function Sidebar({ me, view, workspace, approvals, plane, onGo, onSignedO
         </div>
         <WorkspaceSwitcher me={me} workspace={workspace} />
         <nav className="os-nav" aria-label="Primary">
-          {navFor(me.roles).map(g => (
+          {navFor(me.roles, modules).map(g => (
             <div key={g.id} className={`os-nav-group os-nav-group-${g.id}`}>
               {g.label && <p className="os-nav-label" id={`nav-${g.id}`}>{g.label}</p>}
               <ul aria-labelledby={g.label ? `nav-${g.id}` : undefined}>

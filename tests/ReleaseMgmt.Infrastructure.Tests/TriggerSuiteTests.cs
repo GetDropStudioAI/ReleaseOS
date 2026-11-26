@@ -349,7 +349,7 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         var dw = Rows(db6, "SELECT Name, Slug FROM Workspaces WHERE Id='default'").Single();
         AssertTrue((string)dw[0]! == "Default" && (string)dw[1]! == "default", "the default workspace exists in a new database");
         AssertTrue((string)Rows(db6, "SELECT WorkspaceId FROM ReleaseTrains WHERE Id='t1'").Single()[0]! == "default", "a root row written without a workspace lands in the default one");
-        var roots = Rows(db6, "SELECT m.name FROM sqlite_master m WHERE m.type='table' AND m.name NOT IN ('Workspaces','WorkspaceMembers') AND m.name NOT LIKE '__EF%' AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name='WorkspaceId')")
+        var roots = Rows(db6, "SELECT m.name FROM sqlite_master m WHERE m.type='table' AND m.name NOT IN ('Workspaces','WorkspaceMembers','WorkspaceModules') AND m.name NOT LIKE '__EF%' AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name='WorkspaceId')")
             .Select(r => (string)r[0]!).Order().ToList();
         string[] expectedRoots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
             "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents",

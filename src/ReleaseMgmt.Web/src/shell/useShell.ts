@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { get } from '../api'
 import { onSyncChanged } from '../SyncBanner'
+import { enabledKeys } from '../mgmt/modulesLogic.ts'
+import { listModules, onModulesChanged } from '../mgmt/modulesApi.ts'
 import { getApprovals } from './approvalsApi.ts'
 import type { HostHealth } from './health.ts'
 import type { WorkspaceInfo } from './Sidebar'
@@ -30,4 +32,16 @@ export function useHostHealth(refreshKey: number) {
   useEffect(() => { load() }, [load, refreshKey])
   useEffect(() => { const t = window.setInterval(load, 60_000); const off = onSyncChanged(load); return () => { window.clearInterval(t); off() } }, [load])
   return h
+}
+
+/**
+ * The add-on modules that are on in this workspace (REOS-174), for the navigation and the pages of a module. Null until read (the navigation shows no module entry meanwhile). Read again whenever
+ * `refreshKey` changes (a live ModulesChanged push, a reconnect) and when this session's own Modules tab changes one.
+ */
+export function useEnabledModules(refreshKey: number) {
+  const [keys, setKeys] = useState<ReadonlySet<string> | null>(null)
+  const load = useCallback(() => { listModules().then(r => setKeys(enabledKeys(r))).catch((e: Error) => console.error('The modules could not be read', e)) }, [])
+  useEffect(() => { load() }, [load, refreshKey])
+  useEffect(() => onModulesChanged(load), [load])
+  return keys
 }

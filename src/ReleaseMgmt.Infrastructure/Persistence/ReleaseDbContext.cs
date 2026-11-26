@@ -28,6 +28,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
     private void ApplyWorkspaceFilters(ModelBuilder b)
     {
         b.Entity<WorkspaceMembers>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<WorkspaceModules>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-174
         b.Entity<Teams>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<Holidays>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<TrainTemplates>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
@@ -143,7 +144,7 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         var wanted = new Dictionary<Type, HashSet<string>>();
         foreach (var e in entries)
         {
-            if (e.Entity is AuditEvents or WorkspaceMembers or Workspaces) { StampAudit(e); continue; }
+            if (e.Entity is AuditEvents or WorkspaceMembers or WorkspaceModules or Workspaces) { StampAudit(e); continue; }
             if (e.State == EntityState.Added && e.Metadata.FindProperty("WorkspaceId") is not null)
             {
                 var p = e.Property("WorkspaceId");

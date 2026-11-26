@@ -253,7 +253,7 @@ INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId,WorkspaceId) V
 """)
 assert_true(db6.execute("SELECT Name, Slug FROM Workspaces WHERE Id='default'").fetchone() == ('Default', 'default'), "the default workspace exists in a new database")
 assert_true(db6.execute("SELECT WorkspaceId FROM ReleaseTrains WHERE Id='t1'").fetchone() == ('default',), "a root row written without a workspace lands in the default one")
-roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('Workspaces','WorkspaceMembers')")
+roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('Workspaces','WorkspaceMembers','WorkspaceModules')")
          if 'WorkspaceId' in [c[1] for c in db6.execute(f"PRAGMA table_info({t})")]]
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
@@ -834,6 +834,30 @@ check(db12, "UPDATE StageGates SET GateClass='Standard' WHERE Id='lg4'", True, "
 check(db12, "DELETE FROM StageGates WHERE Id='lg4'", True, "an unlocked gate removed")
 db12.execute("DELETE FROM ReleaseTrains WHERE Id='t1'")
 assert_true(db12.execute("SELECT COUNT(*) FROM StageGates WHERE ReleaseTrainId='t1'").fetchone()[0] == 0, "deleting a release removes its locked gates too")
+
+print("\nAdd-on modules per workspace (D56, D57, D63, REOS-174)")
+db13 = db_fresh()
+db13.execute(f"INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','{NOW}')")
+assert_true(db13.execute("SELECT COUNT(*) FROM WorkspaceModules").fetchone()[0] == 0, "a new database has no module enabled (off by default)")
+WM = "INSERT INTO WorkspaceModules(WorkspaceId,ModuleKey,Enabled,EnabledByUserId,EnabledAt) VALUES(?,?,?,?,?)"
+check(db13, WM, True, "enable a module with who and when", ('default', 'cab', 1, 'rte', NOW))
+check(db13, WM, True, "the same module in another workspace", ('w2', 'cab', 1, 'rte', NOW))
+check(db13, WM, True, "a row that says off needs neither", ('default', 'ai', 0, None, None))
+check(db13, WM, False, "a module twice in one workspace", ('default', 'cab', 0, None, None), expect="UNIQUE")
+check(db13, WM, False, "enabled without who", ('w2', 'ai', 1, None, NOW), expect="CHECK")
+check(db13, WM, False, "enabled without when", ('w2', 'ai', 1, 'rte', None), expect="CHECK")
+check(db13, WM, False, "enabled by a person who does not exist", ('w2', 'ai', 1, 'nobody', NOW), expect="FOREIGN KEY")
+check(db13, WM, False, "a module of a workspace that does not exist", ('nowhere', 'ai', 0, None, None), expect="FOREIGN KEY")
+check(db13, WM, False, "a key with capitals", ('w2', 'CAB', 0, None, None), expect="CHECK")
+check(db13, WM, False, "a key with a space", ('w2', 'a b', 0, None, None), expect="CHECK")
+check(db13, WM, False, "an empty key", ('w2', '', 0, None, None), expect="CHECK")
+check(db13, WM, False, "Enabled outside 0 and 1", ('w2', 'ai', 2, 'rte', NOW), expect="CHECK")
+check(db13, "INSERT INTO WorkspaceModules(WorkspaceId,ModuleKey,PlanSource) VALUES('w2','ai','Gift')", False, "a plan source outside Default and Plan", expect="CHECK")
+check(db13, "INSERT INTO WorkspaceModules(WorkspaceId,ModuleKey) VALUES('w2','ai')", True, "defaults: off, Default plan source, version 1")
+assert_true(db13.execute("SELECT Enabled, PlanSource, Version FROM WorkspaceModules WHERE WorkspaceId='w2' AND ModuleKey='ai'").fetchone() == (0, 'Default', 1), "the defaults are off, Default, version 1")
+check(db13, "UPDATE WorkspaceModules SET Enabled=0 WHERE WorkspaceId='default' AND ModuleKey='cab'", True, "disable keeps the row (the module's data is kept)")
+db13.execute("DELETE FROM Workspaces WHERE Id='w2'")
+assert_true(db13.execute("SELECT COUNT(*) FROM WorkspaceModules WHERE WorkspaceId='w2'").fetchone()[0] == 0, "deleting a workspace removes its module rows")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

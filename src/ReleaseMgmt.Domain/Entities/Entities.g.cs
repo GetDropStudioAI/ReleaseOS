@@ -39,6 +39,19 @@ public class WorkspaceMembers
     public int Version { get; set; } = 1;
 }
 
+public class WorkspaceModules
+{
+    public string WorkspaceId { get; set; } = "";
+    public string ModuleKey { get; set; } = "";
+    public bool Enabled { get; set; } = false;
+    public string? EnabledByUserId { get; set; }
+    public DateTime? EnabledAt { get; set; }
+    public string PlanSource { get; set; } = "Default";
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
 public class Teams
 {
     public string Id { get; set; } = Ids.New();

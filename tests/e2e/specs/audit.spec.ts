@@ -27,7 +27,9 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(`${scheme} theme`, () => {
     test.use({ colorScheme: scheme })
 
-    test('an RTE filters the log, reads the change in the details panel, uses the keyboard, copies the record and exports the same filter', async ({ page, context }) => {
+    test('an RTE filters the log, reads the change in the details panel, uses the keyboard, copies the record and exports the same filter', async ({ page, context, browserName }) => {
+      test.skip(browserName === 'firefox', 'REOS-150: Firefox has no clipboard-read permission')
+      test.skip(browserName === 'webkit', 'REOS-152: WebKit has no clipboard-write permission')
       await context.grantPermissions(['clipboard-read', 'clipboard-write'])
       await signIn(page, `audit-${scheme}@example.com`, 'RTE')
       const name = `Audit e2e ${scheme} ${Date.now()}`

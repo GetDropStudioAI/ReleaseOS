@@ -45,6 +45,8 @@ const allLink = (page: Page) => page.getByLabel('All trains link')
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`${scheme} theme`, () => {
     test.use({ colorScheme: scheme, permissions: ['clipboard-read', 'clipboard-write'] })
+    test.skip(({ browserName }) => browserName === 'firefox', 'REOS-150: Firefox has no clipboard-read permission, so the context cannot be created')
+    test.skip(({ browserName }) => browserName === 'webkit', 'REOS-152: WebKit has no clipboard-write permission, so the context cannot be created')
 
     test('week calendar: UTC range, today marked in words, a window card with its status, a click opens the release', async ({ page }) => {
       await signIn(page, `cal-${scheme}@example.com`)

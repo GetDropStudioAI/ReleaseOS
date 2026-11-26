@@ -11,6 +11,7 @@ using ReleaseMgmt.Api.Endpoints;
 using ReleaseMgmt.Api.Exports;
 using ReleaseMgmt.Api.Reminders;
 using ReleaseMgmt.Infrastructure.Services;
+using ReleaseMgmt.Infrastructure.Ai;
 using ReleaseMgmt.Infrastructure.Analytics;
 using ReleaseMgmt.Infrastructure.Exports;
 using ReleaseMgmt.Infrastructure.Reminders;
@@ -107,6 +108,7 @@ builder.Services.AddSingleton<ClientService>();    // REOS-118 (RT3) clients per
 builder.Services.AddSingleton<IModuleEntitlements, AllowAllModuleEntitlements>();   // REOS-174: billing replaces this; until then the plan allows every module
 builder.Services.AddSingleton<ModuleService>();    // REOS-174 (D56, D57, D63) add-on modules per workspace
 builder.Services.AddSingleton<IModuleGate>(sp => sp.GetRequiredService<ModuleService>());
+builder.Services.AddAiPlatform(builder.Configuration);   // REOS-183 (D58): the one governed place every AI call goes through
 ClientScheduleKinds.OffsetFrom(builder.Configuration[ClientScheduleKinds.OffsetKey]);   // REOS-119 (RT4): a bad Release:OnDemandOffsetDays stops the start
 builder.Services.AddSingleton<ClientScheduleService>();   // REOS-119 (RT4) client dates on CERT and Production releases
 builder.Services.AddSingleton<EnvironmentService>();    // REOS-109 environments
@@ -275,6 +277,7 @@ api.MapNotifications();
 api.MapShell();   // REOS-94
 api.MapWorkspaceAdmin();   // REOS-106
 api.MapModules();   // REOS-174
+api.MapAi();   // REOS-183
 api.MapTemplates();   // REOS-38
 api.MapTrainCreation();   // REOS-80
 api.MapAudit();

@@ -5,6 +5,7 @@ import { useAction } from '../useAction.ts'
 import { errMsg } from '../format.ts'
 import { Button, ConfirmDialog, DataTable, DisabledAction, EmptyState, ErrorState, LoadingState, Panel, PropertyList, StatusChip, TwoLine, type Column } from '../ui'
 import { Problem, When } from './forms.tsx'
+import { AiSettingsPanel } from './AiSettings.tsx'
 import { disableModule, enableModule, listModules, notifyModulesChanged } from './modulesApi.ts'
 import { DATA_KEPT, disableIntro, disableLabel, enableBlocker, enableIntro, enableLabel, planLabel, sortModules, stateLabel, summary, type ModuleRow } from './modulesLogic.ts'
 
@@ -78,6 +79,7 @@ export function ModulesTab() {
             </div>
           )}
         </Panel>
+        {sel?.key === 'ai' && <AiSettingsPanel reloadKey={sel.version} />}
       </div>
       <ConfirmDialog open={!!confirm} title={confirm ? (confirm.enable ? `${enableLabel(confirm.row)}?` : `${disableLabel(confirm.row)}?`) : ''}
         confirmLabel={confirm ? (confirm.enable ? enableLabel(confirm.row) : disableLabel(confirm.row)) : ''} pendingLabel={confirm?.enable ? 'Enabling…' : 'Disabling…'}

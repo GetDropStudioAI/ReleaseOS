@@ -149,7 +149,12 @@ test('the Modules tab and its confirmation dialog have no serious axe violation,
     await expect(page.getByRole('dialog')).toHaveCount(0)
   }
   // a module that is on: the detail, the Disable dialog and the module's own page
-  await page.evaluate(async () => { await fetch('/api/v1/modules/ai:enable', { method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': '"0"' }, body: '{}' }) })
+  // (the version is read, not assumed to be 0: another spec may already have enabled and disabled the module on this shared server)
+  await page.evaluate(async () => {
+    const ai = (await (await fetch('/api/v1/modules')).json() as { key: string; version: number }[]).find(m => m.key === 'ai')!
+    const r = await fetch('/api/v1/modules/ai:enable', { method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': `"${ai.version}"` }, body: '{}' })
+    if (!r.ok) throw new Error(`enable ai failed: ${r.status}`)
+  })
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme })
     await openModules(page)

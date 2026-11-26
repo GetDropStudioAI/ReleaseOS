@@ -52,6 +52,7 @@ public static class FieldLimits
     private static readonly Dictionary<Type, Dictionary<string, int>> Table = new()
     {
         // Admin (REOS-36)
+        [typeof(AiEndpoints.KeyBody)] = new() { ["Key"] = 512 },   // REOS-183: a provider key; write-only
         [typeof(AdminEndpoints.PatchUser)] = new() { ["Handle"] = Handle },
         [typeof(AdminEndpoints.TeamBody)] = new() { ["Handle"] = Handle, ["Name"] = Name, ["MemberIds"] = Id },
         [typeof(AdminEndpoints.TeamPatch)] = new() { ["Name"] = Name, ["MemberIds"] = Id },

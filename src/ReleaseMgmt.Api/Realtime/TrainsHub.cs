@@ -56,7 +56,7 @@ public sealed class TrainsHub(TimeProvider time, HubConnections connections) : H
     {
         if (Context.User?.FindFirst(WorkspaceResolution.Claim)?.Value is not { } ws || ws == WorkspaceResolution.Nowhere) return;
         // not Context.ConnectionAborted: on a disconnect it is already cancelled, and the leaving is exactly what the others need to hear
-        var gate = Context.GetHttpContext()?.RequestServices.GetService<IModuleGate>() ?? Context.Items[GateKey] as IModuleGate;
+        var gate = Context.Items[GateKey] as IModuleGate;   // kept from the connect: the request (and its services) may already be disposed when a connection closes
         if (gate is null || !await gate.IsEnabledAsync(ws, ModuleKeys.Cab, CancellationToken.None)) return;
         await Clients.Group(WorkspaceGroup(ws)).SendAsync(CabPresence);
     }

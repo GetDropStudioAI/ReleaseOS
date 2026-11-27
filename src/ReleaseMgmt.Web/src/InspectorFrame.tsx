@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { SidePanel } from './ui'
+import { focusOpener } from './focus.ts'
 
 // Like App's page focus, only a selection the user made moves focus: a deep link or a restored session opening the panel must not.
 let interacted = false
@@ -17,7 +18,7 @@ export function InspectorFrame({ focusKey, title, subtitle, loading, onClose, ch
     if (loading || done.current === focusKey) return
     done.current = focusKey
     if (!interacted) return
-    if (!opener.current || !opener.current.isConnected) opener.current = document.activeElement as HTMLElement | null
+    if (!opener.current || !opener.current.isConnected) opener.current = focusOpener()
     head.current?.focus()
   })
   useEffect(() => () => {

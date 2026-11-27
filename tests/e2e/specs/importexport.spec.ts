@@ -126,7 +126,8 @@ for (const scheme of ['light', 'dark'] as const) {
       await scan(page, `imports with diff markers (${scheme})`)
     })
 
-    test('the import can be driven from the keyboard', async ({ page }) => {
+    test('the import can be driven from the keyboard', async ({ page, browserName }) => {
+      test.skip(browserName === 'webkit' && process.platform === 'darwin', 'REOS-152: Safari on macOS does not Tab to buttons and links unless "Press Tab to highlight each item" is on (Option+Tab otherwise); this spec walks by Tab. Not a product defect; see findings')
       await signIn(page, `importexport-keys-${scheme}@example.com`, 'RTE')
       await page.locator('nav[aria-label=Primary] a', { hasText: 'Imports & exports' }).click()
       const holidays = page.locator('[role=group][aria-label="Import kind"] button', { hasText: /^Holidays$/ })

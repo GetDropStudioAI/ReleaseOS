@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ComponentProps, type ReactNode, type Ref } from 'react'
 import { ChevronDown, Search, type LucideIcon } from 'lucide-react'
 import { shortcutHint } from './keys.ts'
+import { focusOpener } from '../focus.ts'
 
 /**
  * Button (D41, REOS-93): `primary` is filled accent, `secondary` is outlined, `destructive` is danger-coloured text for actions like Rollback.
@@ -58,7 +59,7 @@ export function ConfirmDialog({ open, title, children, confirmLabel, pendingLabe
   useEffect(() => {
     const d = ref.current
     if (!d) return
-    if (open && !d.open) { opener.current = document.activeElement; d.showModal(); cancel.current?.focus() }
+    if (open && !d.open) { opener.current = focusOpener(); d.showModal(); cancel.current?.focus() }
     if (!open && d.open) { d.close(); (opener.current as HTMLElement | null)?.focus?.() }
   }, [open])
   return (

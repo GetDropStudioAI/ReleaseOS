@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- REOS-196 (D59): the EF Core Postgres spike. A separate test project on purpose: the shipped projects keep UseSqlite and db/schema.sql is untouched.
+       Every test needs a Postgres server (REOS_PG_DSN) and skips itself when there is none; see docs/proposals/postgres-ef-spike-findings.md. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.4" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReleaseMgmt.Infrastructure\ReleaseMgmt.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\ReleaseMgmt.Domain\ReleaseMgmt.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

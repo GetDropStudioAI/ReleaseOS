@@ -42,7 +42,7 @@ export const NAV: NavGroup[] = [
 ]
 
 /** Pages reached outside the sidebar lists, with the names the breadcrumb, the document title and Jump to use. */
-const OTHER: Partial<Record<View, string>> = { 'api-tokens': 'API tokens', webhooks: 'Webhooks', sync: 'Sync health', inbox: 'Inbox', gallery: 'Component gallery' }
+const OTHER: Partial<Record<View, string>> = { 'api-tokens': 'API tokens', webhooks: 'Webhooks', sync: 'Sync health', inbox: 'Inbox', 'notification-settings': 'Notification settings', gallery: 'Component gallery' }
 
 export const canAdmin = (roles: string[]) => roles.includes('RTE') || roles.includes('ReleaseManager')
 export const canAudit = (roles: string[]) => roles.some(r => r === 'RTE' || r === 'ReleaseManager' || r === 'GovernanceOfficer')
@@ -73,7 +73,7 @@ export function pageName(view: View): string {
 /** Destinations Jump to offers by name (every page this person can open). */
 export function jumpTargets(roles: string[], modules: ReadonlySet<string> | null = null): { name: string; view: View }[] {
   const fromNav = navFor(roles, modules).flatMap(g => g.items.filter(i => i.view !== 'trains').map(i => ({ name: i.label, view: i.view })))
-  return [...fromNav, { name: 'Sync health', view: 'sync' }, { name: 'Inbox', view: 'inbox' }]
+  return [...fromNav, { name: 'Sync health', view: 'sync' }, { name: 'Inbox', view: 'inbox' }, { name: 'Notification settings', view: 'notification-settings' }]
 }
 
 export function placeholderOf(view: View): string | undefined {

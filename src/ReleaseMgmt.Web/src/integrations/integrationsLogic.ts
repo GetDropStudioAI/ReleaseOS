@@ -6,9 +6,9 @@ import type { Subscription } from '../webhooks/webhooksLogic.ts'
  * The pure parts of the Integrations page (REOS-165): the health summary of API tokens and webhooks, the word and tone of each webhook's delivery health, and the quickstart text.
  * The page adds no endpoint; everything here is computed from what GET /api-tokens and GET /webhooks already return. Tested without a browser.
  */
-export type TabId = 'overview' | 'tokens' | 'webhooks' | 'docs'
+export type TabId = 'overview' | 'tokens' | 'webhooks' | 'email' | 'docs'
 export const TABS: { id: TabId; label: string }[] = [
-  { id: 'overview', label: 'Overview' }, { id: 'tokens', label: 'API tokens' }, { id: 'webhooks', label: 'Webhooks' }, { id: 'docs', label: 'Developer docs' },
+  { id: 'overview', label: 'Overview' }, { id: 'tokens', label: 'API tokens' }, { id: 'webhooks', label: 'Webhooks' }, { id: 'email', label: 'Email' }, { id: 'docs', label: 'Developer docs' },
 ]
 
 /** A token that expires within this many days is called out on the overview. */

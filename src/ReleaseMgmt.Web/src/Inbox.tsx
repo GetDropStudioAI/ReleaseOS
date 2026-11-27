@@ -36,7 +36,7 @@ export function targetOf(n: InboxItem): Partial<Route> | null {
   }
 }
 
-export function Inbox({ onOpen, onChanged, refreshKey = 0 }: { me: Me; onOpen?: (r: Partial<Route>) => void; onChanged?: () => void; refreshKey?: number }) {
+export function Inbox({ onOpen, onChanged, onOpenSettings, refreshKey = 0 }: { me: Me; onOpen?: (r: Partial<Route>) => void; onChanged?: () => void; onOpenSettings?: () => void; refreshKey?: number }) {
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [items, setItems] = useState<InboxItem[] | null>(null)
   const [total, setTotal] = useState(0)
@@ -115,7 +115,8 @@ export function Inbox({ onOpen, onChanged, refreshKey = 0 }: { me: Me; onOpen?: 
   }
 
   const heading = (
-    <PageHeading trail={['Workspace', 'Inbox']} title="Inbox" description="Reminders and escalations for your gates, steps and conditions, newest first." />
+    <PageHeading trail={['Workspace', 'Inbox']} title="Inbox" description="Reminders and escalations for your gates, steps and conditions, newest first."
+      actions={onOpenSettings ? <Button onClick={onOpenSettings}>Notification settings</Button> : undefined} />
   )
   if (error && items === null) return <div className="os-page">{heading}<ErrorState what="Your inbox" message={error} onRetry={() => setTick(n => n + 1)} /></div>
 

@@ -8,6 +8,7 @@ import type { ApiToken } from '../tokens/tokensLogic.ts'
 import type { Subscription } from '../webhooks/webhooksLogic.ts'
 import { ApiTokens } from '../tokens/ApiTokens.tsx'
 import { Webhooks } from '../webhooks/Webhooks.tsx'
+import { EmailDelivery } from '../email/EmailDelivery.tsx'
 import { Button, DataTable, EmptyState, ErrorState, LoadingState, MetricCard, NoPermissionState, Notice, PageHeading, Panel, StatusChip, TabPanel, Tabs, Time, TwoLine, type Column } from '../ui'
 import '../mgmt/mgmt.css'
 import '../tokens/tokens.css'
@@ -30,12 +31,13 @@ export function Integrations({ me }: { me: Me }) {
   return (
     <div className="os-page">
       <PageHeading trail={TRAIL} title="Integrations"
-        description="API tokens and signed webhooks for the systems that call ReleaseOS or listen to it, with the health of every delivery." />
+        description="API tokens, signed webhooks and email delivery for the systems that call ReleaseOS or listen to it, with the health of every delivery." />
       <div className="int-page">
         <Tabs label="Integrations sections" group="integrations" value={tab} onChange={t => setTab(t as TabId)} tabs={TABS} />
         <TabPanel id="overview" group="integrations">{tab === 'overview' && <Overview onGo={setTab} />}</TabPanel>
         <TabPanel id="tokens" group="integrations">{tab === 'tokens' && <ApiTokens me={me} embedded />}</TabPanel>
         <TabPanel id="webhooks" group="integrations">{tab === 'webhooks' && <Webhooks me={me} embedded />}</TabPanel>
+        <TabPanel id="email" group="integrations">{tab === 'email' && <EmailDelivery />}</TabPanel>
         <TabPanel id="docs" group="integrations">{tab === 'docs' && <DeveloperDocs />}</TabPanel>
       </div>
     </div>

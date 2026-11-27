@@ -97,12 +97,12 @@ test('the scripted walkthrough of the developer guide: make a token, call the AP
   expect((await request.get('/api/public/v1/me', { headers: { Authorization: `Bearer ${secret}` } })).status()).toBe(401)
 })
 
-test('the overview says what it counts, in words and numbers, with the page heading, the four tabs and the breadcrumb', async ({ page }) => {
+test('the overview says what it counts, in words and numbers, with the page heading, the five tabs and the breadcrumb', async ({ page }) => {
   await signIn(page, 'int-overview-rm@example.com', 'ReleaseManager')
   await openIntegrations(page)
   await expect(page).toHaveTitle('Integrations · ReleaseOS')
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Integrations')
-  await expect(page.getByRole('tablist', { name: 'Integrations sections' }).getByRole('tab')).toHaveText(['Overview', 'API tokens', 'Webhooks', 'Developer docs'])
+  await expect(page.getByRole('tablist', { name: 'Integrations sections' }).getByRole('tab')).toHaveText(['Overview', 'API tokens', 'Webhooks', 'Email', 'Developer docs'])
   for (const label of ['Active API tokens', 'Active webhooks', 'Delivery health', 'Next token expiry']) await expect(page.getByRole('group', { name: label })).toBeVisible()
   await expect(page.getByRole('table', { name: 'Webhook delivery health' }).or(page.locator('.os-state-title', { hasText: 'No webhooks yet' }))).toBeVisible()
 })
@@ -154,7 +154,7 @@ test('the tabs work from the keyboard (arrows, Home, End) and there is no checkb
   await expect(tab(page, 'Developer docs')).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('Home')
   await expect(tab(page, 'Overview')).toHaveAttribute('aria-selected', 'true')
-  for (const t of ['Overview', 'API tokens', 'Webhooks', 'Developer docs']) {
+  for (const t of ['Overview', 'API tokens', 'Webhooks', 'Email', 'Developer docs']) {
     await tab(page, t).click()
     await expect(page.locator('input[type=checkbox], input[type=radio], [role=switch]'), t).toHaveCount(0)
   }

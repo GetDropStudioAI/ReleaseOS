@@ -366,6 +366,19 @@ public class EndpointRoleMatrixTests
         GET /api/v1/webhooks/deliveries                          Admin
         GET /api/v1/webhooks/deliveries/{id}                     Admin
         POST /api/v1/webhooks/deliveries/{id}:replay             Admin
+        DELETE /api/v1/email/credential                          Admin
+        DELETE /api/v1/email/suppressions/{id}                   Admin
+        GET /api/v1/email/messages                               Admin
+        GET /api/v1/email/messages/{id}                          Admin
+        GET /api/v1/email/status                                 Admin
+        GET /api/v1/email/suppressions                           Admin
+        GET /api/v1/me/notification-preferences                  Read
+        POST /api/v1/email/events                                Anonymous
+        POST /api/v1/email/events-secret:rotate                  Admin
+        POST /api/v1/email/suppressions                          Admin
+        POST /api/v1/email/test                                  Admin
+        PUT /api/v1/email/credential                             Admin
+        PUT /api/v1/me/notification-preferences                  Read
         GET /api/v1/ingest-keys                                  Admin
         POST /api/v1/ingest-keys                                 Admin
         POST /api/v1/ingest-keys/{id}:revoke                     Admin

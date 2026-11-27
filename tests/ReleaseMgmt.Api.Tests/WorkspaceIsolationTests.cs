@@ -65,6 +65,9 @@ public class WorkspaceIsolationTests
         INSERT INTO WebhookSubscriptions(Id,Name,ProtectedUrl,UrlHmac,Host,EventTypes,CreatedByUserId,CreatedAt) VALUES('wsa','{Marker} Hook','CfDJ8alphahook',printf('%064d',5),'zqalpha-hooks.example.com','*','{rteId}','{t}');
         INSERT INTO WebhookDeliveries(Id,SubscriptionId,EventId,EventType,PayloadJson,NextAttemptAt,CreatedAt) VALUES('wda','wsa','evt_900','release.created','{{""marker"":""{Marker}""}}','2999-01-01T00:00:00Z','{t}');
         INSERT INTO WebhookDeliveryAttempts(Id,DeliveryId,AttemptNo,AttemptedAt,StatusCode,DurationMs,Error) VALUES('waa','wda',1,'{t}',500,10,'{Marker} attempt');
+        INSERT INTO EmailOutbox(Id,UserId,ToAddress,Category,Subject,BodyText,BodyHtml,Status,NextAttemptAt,CreatedAt) VALUES('ema','ua','zqalpha-owner@x.com','ApprovalRequested','[{Marker}] Approval requested','{Marker} body','<p>{Marker}</p>','Pending','2999-01-01T00:00:00Z','{t}');
+        INSERT INTO EmailSuppressions(Id,Address,Reason,Detail,CreatedAt) VALUES('esa','zqalpha-bounced@example.com','Bounce','{Marker} bounce','{t}');
+        INSERT INTO NotificationPreferences(Id,UserId,Category,Channel,Mode,UpdatedAt) VALUES('npa','ua','DecisionMade','Email','Off','{t}');
         INSERT INTO IngestKeys(Id,Name,KeyPrefix,KeySha256,CreatedAt,LastUsedAt) VALUES('ika','{Marker} Key','rk_zqalp',printf('%064d',3),'{t}','2999-01-01T00:00:00Z');
         UPDATE ReleaseTrains SET OwnerUserId='ua', OwnerTeamId='tma', ReleaseBranch='{Marker}-branch', ReleaseTypeId='rta', ReleaseVersionId='vera' WHERE Id='ta';
         INSERT INTO TrainEnvironments(ReleaseTrainId,EnvironmentId) VALUES('ta','enva');
@@ -128,7 +131,7 @@ public class WorkspaceIsolationTests
             ["dispatches"] = "dsa", ["export-jobs"] = "xa", ["freezes"] = "fa", ["links"] = "lka", ["notifications"] = "na", ["alerts"] = "sya", ["webhook-allowlist"] = "wha",
             ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["userId"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
             ["release-types"] = "rta", ["versions"] = "vera", ["clients"] = "cla", ["client"] = "cla", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika", ["api-tokens"] = "ata", ["webhooks"] = "wsa", ["deliveries"] = "wda", ["approval-requests"] = "apa", ["approval-policies"] = "pola",
-            ["changes"] = "cha", ["meetings"] = "mta", ["itemId"] = "aia", ["actions"] = "aca",   // REOS-184: AI actions
+            ["messages"] = "ema", ["suppressions"] = "esa", ["changes"] = "cha", ["meetings"] = "mta", ["itemId"] = "aia", ["actions"] = "aca",   // REOS-184: AI actions
               // REOS-175 CAB module
             ["ciId"] = "cia", ["issueId"] = "kia", ["stepId"] = "sa", ["jobId"] = "ija", ["trainId"] = "ta", ["day"] = "2026-12-24",
             ["audit"] = Scalar(f, "SELECT Id FROM AuditEvents WHERE ReleaseTrainId='ta' AND EntityType='Train'"),   // GET /audit/{id}: one of A's events
@@ -155,7 +158,7 @@ public class WorkspaceIsolationTests
         }.ToList();
         foreach (var root in new[] { "Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
                      "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents", "ReleaseTypes", "ReleaseVersions", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments",
-                     "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions", "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "ChangeRequests", "CabMeetings", "WebhookDeliveryAttempts" })
+                     "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions", "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "ChangeRequests", "CabMeetings", "WebhookDeliveryAttempts", "EmailOutbox", "EmailSuppressions", "NotificationPreferences" })
             queries.Add($"SELECT * FROM {root} WHERE WorkspaceId='default'");
         foreach (var child in new[] { "ChangeRecords", "AffectedCIs", "DeploymentWindows", "BundledProducts", "StageGates", "Attachments", "RunbookSteps", "RunbookRuns", "Blockers",
                      "KnownIssues", "GoNoGoDecisions", "PostImplementationReviews", "FreezeOverrides", "Baselines", "ExternalLinks", "CommTemplates", "CommSchedule", "TrainMilestones", "TrainEnvironments" })

@@ -183,6 +183,9 @@ public static class FieldLimits
         [typeof(ApiTokenEndpoints.CreateBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName, ["Scopes"] = 20 },   // REOS-162
         [typeof(WebhookEndpoints.CreateBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName, ["Url"] = Url, ["EventTypes"] = Code },   // REOS-164: the longest event key is under 30
         [typeof(WebhookEndpoints.UpdateBody)] = new() { ["Name"] = ReleaseModelLimits.MaxKeyName, ["Url"] = Url, ["EventTypes"] = Code },
+        [typeof(EmailEndpoints.PreferenceBody)] = new() { ["Category"] = Code, ["Channel"] = Code, ["Mode"] = Code },   // REOS-167
+        [typeof(EmailEndpoints.CredentialBody)] = new() { ["Value"] = 512 },   // a password or API key; write-only
+        [typeof(EmailEndpoints.SuppressionBody)] = new() { ["Address"] = 320, ["Detail"] = 500 },
         [typeof(IngestDeployment)] = new()
         {
             ["ExternalId"] = ReleaseModelLimits.MaxExternalId, ["ServiceKey"] = ReleaseModelLimits.MaxServiceKey, ["Environment"] = ReleaseModelLimits.MaxEnvironmentName,

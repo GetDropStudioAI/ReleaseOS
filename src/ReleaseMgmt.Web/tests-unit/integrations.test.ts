@@ -61,8 +61,8 @@ test('the quickstart reads the token from the environment and never has a secret
   assert.doesNotMatch(q, /rt_[A-Za-z0-9_-]{20,}/)
 })
 
-test('the tabs are the four sections in order, and every document the page points at exists in the repository', () => {
-  assert.deepEqual(TABS.map(t => t.id), ['overview', 'tokens', 'webhooks', 'docs'])
+test('the tabs are the five sections in order, and every document the page points at exists in the repository', () => {
+  assert.deepEqual(TABS.map(t => t.id), ['overview', 'tokens', 'webhooks', 'email', 'docs'])
   for (const d of DOCS) {
     const url = new URL(`../../../${d.path}`, import.meta.url)
     assert.doesNotThrow(() => readFileSync(d.path.endsWith('/') ? new URL(`${url.href}Verify.cs`) : url), d.path)

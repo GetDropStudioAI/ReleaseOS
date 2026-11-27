@@ -364,6 +364,7 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
                 var m = await db.Set<CabMeetings>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == meetingId, ct);
                 if (m is null) return ServiceResult<ChangeView>.Fail(new GuardFailure(CabGuards.CabMeetingInvalid, "The meeting does not exist in this workspace"));
                 if (m.Status == CabMeetingStatuses.Cancelled) return ServiceResult<ChangeView>.Fail(new GuardFailure(CabGuards.CabMeetingClosed, "A cancelled meeting records no decisions"));
+                if (m.Status == CabMeetingStatuses.Completed) return ServiceResult<ChangeView>.Fail(new GuardFailure(CabGuards.CabMeetingClosed, "A completed meeting is the final record; its decisions cannot be added to"));
             }
 
             // rule 2: the chair who raised the change is not its only approver. Chair of the named meeting, or of any meeting with the change on its agenda (so recording outside a meeting does not dodge it).

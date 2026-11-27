@@ -9,7 +9,7 @@ namespace ReleaseMgmt.Infrastructure.Services;
 public sealed record CabAgendaItemView(string Id, string ChangeRequestId, string ChangeKey, string ChangeTitle, string ChangeStatus, int SequenceOrder, string? Notes, int Version);
 public sealed record CabAttendeeView(NamedRef Person, string AttendeeRole, string Attendance, bool IsChair, int Version);
 public sealed record CabMeetingView(string Id, string Title, string StartsAt, string EndsAt, NamedRef Chair, string Status, string? Location, string? Minutes, string CreatedAt, string? LastChangedAt, int Version,
-    IReadOnlyList<CabAgendaItemView> Agenda, IReadOnlyList<CabAttendeeView> Attendees, IReadOnlyList<ChangeDecisionView> Decisions);
+    IReadOnlyList<CabAgendaItemView> Agenda, IReadOnlyList<CabAttendeeView> Attendees, IReadOnlyList<ChangeDecisionView> Decisions, string? CompletedAt = null);
 
 public sealed record NewMeeting(string? Title, DateTime StartsAt, DateTime EndsAt, string? ChairUserId = null, string? Location = null);
 /// <summary>Null leaves a field as it is. <see cref="ClearLocation"/> and <see cref="ClearMinutes"/> empty those two, since null cannot say "empty".</summary>
@@ -57,11 +57,16 @@ public sealed class CabService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
         var userIds = rows.Select(r => r.ChairUserId).Concat(attendees.SelectMany(g => g.Select(a => a.UserId))).Concat(decisions.SelectMany(g => g.Select(d => d.DecidedByUserId))).Distinct().ToList();
         var names = await db.Set<Users>().AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
         NamedRef Who(string id) => new(id, names.GetValueOrDefault(id, id));
+        // REOS-179: the end time of a held meeting is when it was completed (the audit row of the move; EndsAt is only the scheduled end)
+        var doneIds = rows.Where(r => r.Status == CabMeetingStatuses.Completed).Select(r => r.Id).ToList();
+        var completed = doneIds.Count == 0 ? [] : (await db.Set<AuditEvents>().AsNoTracking().Where(a => a.EntityType == "CabMeeting" && a.Action == "Complete" && doneIds.Contains(a.EntityId)).ToListAsync(ct))
+            .GroupBy(a => a.EntityId).ToDictionary(g => g.Key, g => g.Max(a => a.OccurredAt));
         return [.. rows.Select(m => new CabMeetingView(m.Id, m.Title, Iso(m.StartsAt), Iso(m.EndsAt), Who(m.ChairUserId), m.Status, m.Location, m.Minutes, Iso(m.CreatedAt),
             m.LastChangedAt is { } lc ? Iso(lc) : null, m.Version,
             [.. agenda[m.Id].Select(a => new CabAgendaItemView(a.Id, a.ChangeRequestId, changes[a.ChangeRequestId].ChangeKey, changes[a.ChangeRequestId].Title, changes[a.ChangeRequestId].Status, a.SequenceOrder, a.Notes, a.Version))],
             [.. attendees[m.Id].OrderByDescending(a => a.UserId == m.ChairUserId).ThenBy(a => names.GetValueOrDefault(a.UserId, a.UserId)).Select(a => new CabAttendeeView(Who(a.UserId), a.AttendeeRole, a.Attendance, a.UserId == m.ChairUserId, a.Version))],
-            [.. decisions[m.Id].Select(d => new ChangeDecisionView(d.Id, d.Decision, d.Retroactive, d.MeetingId, d.Rationale, Who(d.DecidedByUserId), Iso(d.DecidedAt)))]))];
+            [.. decisions[m.Id].Select(d => new ChangeDecisionView(d.Id, d.Decision, d.Retroactive, d.MeetingId, d.Rationale, Who(d.DecidedByUserId), Iso(d.DecidedAt)))],
+            completed.TryGetValue(m.Id, out var doneAt) ? Iso(doneAt) : null))];
     }
 
     private static object Snapshot(CabMeetings m) => new { m.Title, startsAt = Iso(m.StartsAt), endsAt = Iso(m.EndsAt), m.ChairUserId, m.Status, m.Location, m.Version };
@@ -181,6 +186,7 @@ public sealed class CabService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
         {
             var item = await db.Set<CabAgendaItems>().SingleOrDefaultAsync(a => a.Id == itemId && a.MeetingId == meetingId, ct);
             if (item is null) return ServiceResult<CabAgendaItemView>.NotFound("agenda item");
+            if (await ClosedAsync(db, meetingId, "agenda", ct) is { } closed) return ServiceResult<CabAgendaItemView>.Fail(closed);
             if (VersionMismatch(expectedVersion, item.Version)) return ServiceResult<CabAgendaItemView>.Conflict(await ItemViewAsync(db, item, ct));
             if (notes is { Length: > 2000 }) return ServiceResult<CabAgendaItemView>.Fail(Bad("Agenda notes are at most 2000 characters"));
             if (sequenceOrder is < 1) return ServiceResult<CabAgendaItemView>.Fail(Bad("An agenda position starts at 1"));
@@ -192,6 +198,37 @@ public sealed class CabService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
             await db.SaveChangesAsync(ct);
             return ServiceResult<CabAgendaItemView>.Ok(await ItemViewAsync(db, item, ct));
         }, ct);
+
+    /// <summary>REOS-179: a Completed or Cancelled meeting is the record of what happened; its agenda and roll no longer change (minutes can still be written).</summary>
+    private static async Task<GuardFailure?> ClosedAsync(ReleaseDbContext db, string meetingId, string what, CancellationToken ct)
+    {
+        var status = await db.Set<CabMeetings>().AsNoTracking().Where(m => m.Id == meetingId).Select(m => m.Status).SingleOrDefaultAsync(ct);
+        return status is CabMeetingStatuses.Completed or CabMeetingStatuses.Cancelled ? new GuardFailure(CabGuards.CabMeetingClosed, $"The {what} of a {status} meeting is closed") : null;
+    }
+
+    /// <summary>
+    /// REOS-179: puts one agenda item at <paramref name="position"/> (1 is first; past the end means last) and renumbers the others 1..n in the same transaction, so two chairs reordering at once
+    /// cannot leave duplicate positions. <paramref name="expectedVersion"/> is the meeting's. Returns the meeting.
+    /// </summary>
+    public Task<ServiceResult<CabMeetingView>> MoveAgendaItemAsync(string meetingId, string itemId, int position, Actor actor, int? expectedVersion, CancellationToken ct = default) =>
+        Mutate(meetingId, actor, expectedVersion, "ReorderAgenda", ct, async (db, m, now) =>
+        {
+            if (m.Status is not (CabMeetingStatuses.Planned or CabMeetingStatuses.InProgress)) return new GuardFailure(CabGuards.CabMeetingClosed, $"The agenda of a {m.Status} meeting is closed");
+            if (position < 1) return Bad("An agenda position starts at 1");
+            var items = await db.Set<CabAgendaItems>().Where(a => a.MeetingId == m.Id).OrderBy(a => a.SequenceOrder).ThenBy(a => a.Id).ToListAsync(ct);
+            var item = items.SingleOrDefault(a => a.Id == itemId);
+            if (item is null) return new GuardFailure(CabGuards.CabMeetingInvalid, "That change is not on this agenda");
+            var before = items.Select(a => a.ChangeRequestId).ToList();
+            items.Remove(item);
+            items.Insert(Math.Min(position, items.Count + 1) - 1, item);
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (items[i].SequenceOrder == i + 1) continue;
+                items[i].SequenceOrder = i + 1; items[i].Version++; items[i].LastChangedByUserId = actor.UserId; items[i].LastChangedAt = now;
+            }
+            Audit(db, actor, null, "CabAgendaItem", item.Id, "Reorder", new { meetingId = m.Id, order = before }, new { meetingId = m.Id, order = items.Select(a => a.ChangeRequestId).ToList() });
+            return null;
+        });
 
     private static async Task<CabAgendaItemView> ItemViewAsync(ReleaseDbContext db, CabAgendaItems a, CancellationToken ct)
     {
@@ -232,6 +269,7 @@ public sealed class CabService(IDbContextFactory<ReleaseDbContext> dbf, TimeProv
         {
             var a = await db.Set<CabAttendees>().SingleOrDefaultAsync(x => x.MeetingId == meetingId && x.UserId == userId, ct);
             if (a is null) return ServiceResult<CabAttendeeView>.NotFound("attendee");
+            if (await ClosedAsync(db, meetingId, "roll", ct) is { } closed) return ServiceResult<CabAttendeeView>.Fail(closed);
             var chair = await db.Set<CabMeetings>().AsNoTracking().Where(m => m.Id == meetingId).Select(m => m.ChairUserId).SingleAsync(ct);
             if (VersionMismatch(expectedVersion, a.Version)) return ServiceResult<CabAttendeeView>.Conflict(await AttendeeViewAsync(db, a, chair, ct));
             if (!CabAttendance.All.Contains(attendance)) return ServiceResult<CabAttendeeView>.Fail(Bad("Attendance must be Invited, Attended or Absent"));

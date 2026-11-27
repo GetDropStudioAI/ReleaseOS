@@ -10,21 +10,25 @@ import { canPlan, emptyForm, newBody, type ChangeForm } from './cabLogic.ts'
 import { ChangeDetail } from './ChangeDetail.tsx'
 import { ChangeEditor, type Choice } from './ChangeEditor.tsx'
 import { ChangeList } from './ChangeList.tsx'
+import { MeetingList } from './MeetingList.tsx'
+import { Workbench } from './Workbench.tsx'
 import { RiskRulesPanel } from './RiskPanels.tsx'
 import { getRiskRules, type RiskRules } from './cabApi.ts'
 
 /**
  * The Change advisory board page (REOS-176, D56, D63). It exists only while the CAB module is enabled in the workspace: the shell leaves the navigation entry and the route out otherwise, and
- * the API answers 404. Addresses: /cab (the list), /cab/new (raise a change), /cab/{id} (one change). The page reads the address itself and moves with the browser's history.
+ * the API answers 404. Addresses: /cab (the list), /cab/new (raise a change), /cab/meetings (the meetings), /cab/meetings/{id} (the workbench, REOS-179), /cab/{id} (one change). The page reads the address itself and moves with the browser's history.
  */
 export function Cab({ me }: { me: Me }) {
   const [, bump] = useState(0)
   useEffect(() => { const f = () => bump(n => n + 1); window.addEventListener('popstate', f); return () => window.removeEventListener('popstate', f) }, [])
   const go = (path: string) => { if (path !== window.location.pathname) window.history.pushState(null, '', path); bump(n => n + 1); window.scrollTo?.(0, 0) }
   const seg = window.location.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  if (seg[1] === 'meetings' && seg[2]) return <Workbench key={seg[2]} me={me} id={seg[2]} onBack={() => go('/cab/meetings')} onOpenChange={id => go(`/cab/${encodeURIComponent(id)}`)} />
+  if (seg[1] === 'meetings') return <MeetingList onOpen={id => go(`/cab/meetings/${encodeURIComponent(id)}`)} onBack={() => go('/cab')} />
   if (seg[1] === 'new') return <NewChange me={me} onDone={id => go(`/cab/${encodeURIComponent(id)}`)} onCancel={() => go('/cab')} />
   if (seg[1]) return <ChangeDetail key={seg[1]} me={me} id={seg[1]} onBack={() => go('/cab')} />
-  return <ChangeList me={me} onOpen={id => go(`/cab/${encodeURIComponent(id)}`)} onNew={() => go('/cab/new')} />
+  return <ChangeList me={me} onOpen={id => go(`/cab/${encodeURIComponent(id)}`)} onNew={() => go('/cab/new')} onMeetings={() => go('/cab/meetings')} />
 }
 
 function NewChange({ me, onDone, onCancel }: { me: Me; onDone: (id: string) => void; onCancel: () => void }) {

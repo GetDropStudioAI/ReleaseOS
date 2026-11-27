@@ -19,6 +19,13 @@ export function onCabChanged(fn: (changeId: string) => void): () => void {
   return () => { cabListeners.delete(fn) }
 }
 
+/** REOS-179: the CAB workbench redraws who is connected when someone connects or leaves (sent only while the module is on; a hint, the screen asks the API). */
+const cabPresenceListeners = new Set<() => void>()
+export function onCabPresence(fn: () => void): () => void {
+  cabPresenceListeners.add(fn)
+  return () => { cabPresenceListeners.delete(fn) }
+}
+
 interface Handlers {
   /** A train changed somewhere: refetch (payloads are hints, never trusted). */
   onTrainChanged: (trainId: string, version: number) => void
@@ -53,9 +60,10 @@ export function useLive(enabled: boolean, handlers: Handlers) {
     hub.on('SyncAlertRaised', (id: string) => h.current.onSyncAlert?.(id))
     hub.on('ModulesChanged', () => h.current.onModulesChanged?.())
     hub.on('CabChanged', (id: string) => cabListeners.forEach(fn => fn(id)))
+    hub.on('CabPresence', () => cabPresenceListeners.forEach(fn => fn()))
     hub.on('DeploymentChanged', (id: string) => deploymentListeners.forEach(fn => fn(id)))
     hub.onreconnecting(() => setState('reconnecting'))
-    hub.onreconnected(() => { setState('live'); h.current.onResync(); cabListeners.forEach(fn => fn('')) })
+    hub.onreconnected(() => { setState('live'); h.current.onResync(); cabListeners.forEach(fn => fn('')); cabPresenceListeners.forEach(fn => fn()) })
     hub.onclose(() => setState('offline'))
     let stopped = false
     hub.start().then(() => { if (!stopped) setState('live') }).catch(() => { if (!stopped) setState('offline') })

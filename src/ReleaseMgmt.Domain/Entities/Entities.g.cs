@@ -1218,3 +1218,55 @@ public class AiWorkspaceSettings
     public DateTime? LastChangedAt { get; set; }
     public int Version { get; set; } = 1;
 }
+
+public class EmailOutbox
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string? UserId { get; set; }
+    public string ToAddress { get; set; } = "";
+    public string Category { get; set; } = "";
+    public string Subject { get; set; } = "";
+    public string BodyText { get; set; } = "";
+    public string BodyHtml { get; set; } = "";
+    public string? EntityType { get; set; }
+    public string? EntityId { get; set; }
+    public string? DedupKey { get; set; }
+    public string Status { get; set; } = "Pending";
+    public int AttemptCount { get; set; } = 0;
+    public DateTime? NextAttemptAt { get; set; }
+    public DateTime? LastAttemptAt { get; set; }
+    public string? LastError { get; set; }
+    public string? Provider { get; set; }
+    public string? ProviderMessageId { get; set; }
+    public DateTime? SentAt { get; set; }
+    public DateTime? BouncedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class EmailSuppressions
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string Address { get; set; } = "";
+    public string Reason { get; set; } = "";
+    public string? Detail { get; set; }
+    public string? SourceMessageId { get; set; }
+    public string? CreatedByUserId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class NotificationPreferences
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string UserId { get; set; } = "";
+    public string Category { get; set; } = "";
+    public string Channel { get; set; } = "";
+    public string Mode { get; set; } = "";
+    public DateTime UpdatedAt { get; set; }
+    public int Version { get; set; } = 1;
+}

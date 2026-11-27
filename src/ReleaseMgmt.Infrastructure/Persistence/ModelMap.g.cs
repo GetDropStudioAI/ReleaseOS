@@ -94,6 +94,9 @@ public static class ModelMap
         b.Entity<CabDecisions>(e => { e.ToTable("CabDecisions"); e.HasKey(e => e.Id);  });
         b.Entity<AiActions>(e => { e.ToTable("AiActions"); e.HasKey(e => e.Id);  });
         b.Entity<AiWorkspaceSettings>(e => { e.ToTable("AiWorkspaceSettings"); e.HasKey(e => e.WorkspaceId);  });
+        b.Entity<EmailOutbox>(e => { e.ToTable("EmailOutbox"); e.HasKey(e => e.Id);  });
+        b.Entity<EmailSuppressions>(e => { e.ToTable("EmailSuppressions"); e.HasKey(e => e.Id);  });
+        b.Entity<NotificationPreferences>(e => { e.ToTable("NotificationPreferences"); e.HasKey(e => e.Id);  });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -318,5 +321,11 @@ public static class ModelMap
         b.Entity<AiActions>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<AiWorkspaceSettings>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<AiWorkspaceSettings>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<EmailOutbox>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<EmailOutbox>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<EmailSuppressions>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<EmailSuppressions>().HasOne<Users>().WithMany().HasForeignKey(e => e.CreatedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<NotificationPreferences>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<NotificationPreferences>().HasOne<Users>().WithMany().HasForeignKey(e => e.UserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
     }
 }

@@ -412,6 +412,36 @@ for sql, want, label in [
 after17 = shape(t17)
 check({k: v for k, v in after17.items() if k in before17} == before17, "017: no existing table, index or trigger changes")
 
+# Upgrade 019 (REOS-167): EmailOutbox, EmailSuppressions and NotificationPreferences are new and EMPTY, the 7 email triggers are live, nothing else changes
+t19 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("019_"):
+        before19 = shape(t19)
+        rows19 = {t: t19.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("Users", "ReleaseTrains", "AuditEvents", "SyncAlerts", "Notifications")}
+    t19.executescript(s.read_text())
+check(all(t19.execute(f"SELECT COUNT(*) FROM {t}").fetchone() == (0,) for t in ("EmailOutbox", "EmailSuppressions", "NotificationPreferences")), "019: the email tables start empty (nothing is queued, suppressed or preferred by the script)")
+check({t: t19.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in rows19} == rows19, "019: existing rows are untouched")
+check(t19.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND (name LIKE 'trg_Ws_Email%' OR name LIKE 'trg_Email_%' OR name LIKE 'trg_Ws_NotificationPreferences_%')").fetchone() == (7,), "019: the seven email triggers exist")
+t19.executescript("""
+INSERT OR IGNORE INTO WorkspaceMembers (WorkspaceId, UserId, Role, AddedAt) VALUES ('default', 'u1', 'GovernanceOfficer', '2026-11-27T00:00:00Z');
+INSERT INTO EmailOutbox (Id, UserId, ToAddress, Category, Subject, BodyText, BodyHtml, Status, NextAttemptAt, CreatedAt)
+    VALUES ('e1', 'u1', 'u1@example.com', 'ApprovalRequested', 'Approval requested', 'Open it', '<p>Open it</p>', 'Pending', '2026-11-27T00:00:00Z', '2026-11-27T00:00:00Z');
+""")
+for sql, want, label in [
+    ("UPDATE EmailOutbox SET Subject = 'Other' WHERE Id = 'e1'", "queued email does not change", "019: a queued message cannot be rewritten"),
+    ("UPDATE EmailOutbox SET Status = 'Suppressed', NextAttemptAt = NULL, FinishedAt = '2026-11-27T00:01:00Z' WHERE Id = 'e1'", None, "019: a pending message can be suppressed"),
+    ("UPDATE EmailOutbox SET Status = 'Pending', NextAttemptAt = '2026-11-27T00:02:00Z', FinishedAt = NULL WHERE Id = 'e1'", "does not change state again", "019: a finished message is final"),
+    ("INSERT INTO EmailSuppressions (Id, Address, Reason, CreatedAt) VALUES ('s1', 'u1@example.com', 'Bounce', '2026-11-27T00:00:00Z')", None, "019: an address is suppressed"),
+    ("INSERT INTO EmailSuppressions (Id, Address, Reason, CreatedAt) VALUES ('s2', 'U1@example.com', 'Bounce', '2026-11-27T00:00:00Z')", "UNIQUE", "019: once per address, whatever its capitals"),
+    ("INSERT INTO NotificationPreferences (Id, UserId, Category, Channel, Mode, UpdatedAt) VALUES ('p1', 'u1', 'DecisionMade', 'Email', 'Daily', '2026-11-27T00:00:00Z')", None, "019: a preference is stored"),
+]:
+    try:
+        t19.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+after19 = shape(t19)
+check({k: v for k, v in after19.items() if k in before19} == before19, "019: no existing table, index or trigger changes")
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

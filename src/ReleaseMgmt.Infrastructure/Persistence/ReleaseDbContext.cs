@@ -63,6 +63,9 @@ public class ReleaseDbContext(DbContextOptions options) : AppDbContext(options)
         b.Entity<Approvals>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<AiActions>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-184
         b.Entity<AiWorkspaceSettings>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<EmailOutbox>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);   // REOS-167
+        b.Entity<EmailSuppressions>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
+        b.Entity<NotificationPreferences>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         // REOS-175/177 (CAB module): two roots; the agenda, attendees and decisions follow their parent
         b.Entity<ChangeRequests>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);
         b.Entity<CabMeetings>().HasQueryFilter(e => WorkspaceId == null || e.WorkspaceId == WorkspaceId);

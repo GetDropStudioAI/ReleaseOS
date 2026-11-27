@@ -272,7 +272,7 @@ assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTe
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
             'ReleaseTypes','ReleaseVersions','Environments','CatalogServices','Clients','ReleaseClientDates','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
             'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys','WebhookSubscriptions','WebhookDeliveries','WebhookDeliveryAttempts','ChangeRequests','CabMeetings',
-            'AiActions']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
+            'AiActions','EmailOutbox','EmailSuppressions','NotificationPreferences']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
 check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','Payments-EU',?)", False, "workspace slug with capitals", (NOW,), expect="CHECK")
@@ -1162,6 +1162,76 @@ check(db17, "INSERT INTO AiWorkspaceSettings(WorkspaceId,Paused) VALUES('nope',0
 check(db17, "INSERT INTO AiWorkspaceSettings(WorkspaceId,OptedOut) VALUES('w2',2)", False, "an opt-out that is not 0 or 1", expect="CHECK")
 check(db17, "UPDATE AiWorkspaceSettings SET Paused=0, OptedOut=1, Version=2 WHERE WorkspaceId='default'", True, "the controls change (they are mutable, audited by the service)")
 check(db17, "DELETE FROM Workspaces WHERE Id='w2'", False, "a workspace with AI actions deleted", expect="FOREIGN KEY")
+
+# >>> UPGRADE 019 (REOS-167, D61): email delivery. Own block so a merge with another session's tests is a paste. >>>
+print("\nEmail delivery: the outbox and send log, the suppression list and per-person channel preferences (D61, REOS-167)")
+db19 = db_fresh()
+db19.executescript(f"""
+INSERT INTO Users(Id,Email,DisplayName,Role) VALUES('out','out@x.com','Outsider','Viewer');
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','{NOW}');
+INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','out','Viewer','{NOW}');
+""")
+EM = ("INSERT INTO EmailOutbox(Id,WorkspaceId,UserId,ToAddress,Category,Subject,BodyText,BodyHtml,Status,NextAttemptAt,SentAt,BouncedAt,FinishedAt,CreatedAt,DedupKey) "
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+def em(i, ws='default', user='rte', to='rte@x.com', cat='ApprovalRequested', subj='Approval requested', st='Pending', na='2026-10-21T14:00:00Z', sent=None, bounced=None, fin=None, dedup=None, text='Open it'):
+    return (i, ws, user, to, cat, subj, text, '<p>Open it</p>', st, na, sent, bounced, fin, NOW, dedup)
+check(db19, EM, True, "a pending email with its next attempt time", em('m1'))
+check(db19, EM, True, "a test email to an address typed by an administrator (no person)", em('m2', user=None, to='ops@example.com', cat='Test'))
+check(db19, EM, False, "a pending email without a next attempt time", em('mx', na=None), expect="CHECK")
+check(db19, EM, False, "a pending email that is already finished", em('mx', fin=NOW), expect="CHECK")
+check(db19, EM, False, "a sent email without SentAt", em('mx', st='Sent', na=None, fin=NOW), expect="CHECK")
+check(db19, EM, True, "a sent email with its time", em('m3', st='Sent', na=None, sent=NOW, fin=NOW))
+check(db19, EM, False, "a bounced email without BouncedAt", em('mx', st='Bounced', na=None, fin=NOW), expect="CHECK")
+check(db19, EM, False, "a status outside the five", em('mx', st='Lost', na=None, fin=NOW), expect="CHECK")
+check(db19, EM, False, "a category outside the six", em('mx', cat='Marketing'), expect="CHECK")
+check(db19, EM, False, "an address without an @", em('mx', to='nobody'), expect="CHECK")
+check(db19, EM, False, "an address with a space", em('mx', to='a b@x.com'), expect="CHECK")
+check(db19, EM, False, "two addresses in one", em('mx', to='a@x.com,b@x.com'), expect="CHECK")
+check(db19, EM, False, "a subject with a line break (header injection)", em('mx', subj='Hi\nBcc: x@y.com'), expect="CHECK")
+check(db19, EM, False, "an empty body", em('mx', text=''), expect="CHECK")
+check(db19, EM, False, "an email to a person who is not in the workspace", em('mx', ws='default', user='out'), expect="recipient is not a member")
+check(db19, EM, True, "the same person in the workspace they belong to", em('m4', ws='w2', user='out', to='out@x.com'))
+check(db19, EM, True, "a digest with its dedup key", em('d1', cat='DailyDigest', dedup='digest:rte:20261127'))
+check(db19, EM, False, "the same digest twice for one day", em('d2', cat='DailyDigest', dedup='digest:rte:20261127'), expect="UNIQUE")
+check(db19, EM, True, "the same key in another workspace is a different message", em('d3', ws='w2', user='out', to='out@x.com', cat='DailyDigest', dedup='digest:rte:20261127'))
+# a queued message never changes; its delivery state does
+check(db19, "UPDATE EmailOutbox SET Subject='Other' WHERE Id='m1'", False, "a queued subject rewritten", expect="queued email does not change")
+check(db19, "UPDATE EmailOutbox SET ToAddress='evil@example.com' WHERE Id='m1'", False, "a queued recipient address rewritten", expect="queued email does not change")
+check(db19, "UPDATE EmailOutbox SET BodyText='Other' WHERE Id='m1'", False, "a queued body rewritten", expect="queued email does not change")
+check(db19, "UPDATE EmailOutbox SET UserId='rm' WHERE Id='m1'", False, "a message moved to another person", expect="cannot move to another workspace")
+check(db19, "UPDATE EmailOutbox SET WorkspaceId='w2' WHERE Id='m1'", False, "a message moved to another workspace", expect="cannot move to another workspace")
+check(db19, "UPDATE EmailOutbox SET AttemptCount=1, LastAttemptAt=?, LastError='421 try later', NextAttemptAt='2026-10-21T14:05:00Z' WHERE Id='m1'", True, "a failed attempt schedules the next", (NOW,))
+check(db19, "UPDATE EmailOutbox SET Status='Sent', NextAttemptAt=NULL, SentAt=?, FinishedAt=?, Provider='fake', ProviderMessageId='pm-1' WHERE Id='m1'", True, "a pending email becomes sent", (NOW, NOW))
+check(db19, "UPDATE EmailOutbox SET Status='Bounced', BouncedAt=?, LastError='550 no such user' WHERE Id='m1'", True, "a sent email is later marked bounced (the bounce arrives after the provider accepted it)", (NOW,))
+check(db19, "UPDATE EmailOutbox SET Status='Sent' WHERE Id='m1'", False, "a bounced email put back to sent", expect="finished email does not change state again")
+check(db19, "UPDATE EmailOutbox SET Status='Pending', NextAttemptAt='2026-10-21T15:00:00Z', FinishedAt=NULL WHERE Id='m3'", False, "a sent email put back to pending", expect="finished email does not change state again")
+check(db19, "UPDATE EmailOutbox SET Status='Suppressed', NextAttemptAt=NULL, FinishedAt=? WHERE Id='m2'", True, "a pending email is suppressed", (NOW,))
+check(db19, "UPDATE EmailOutbox SET Status='Pending', NextAttemptAt='2026-10-21T15:00:00Z', FinishedAt=NULL WHERE Id='m2'", False, "a suppressed email put back to pending", expect="finished email does not change state again")
+check(db19, "UPDATE EmailOutbox SET Status='DeadLetter', NextAttemptAt=NULL, FinishedAt=? WHERE Id='m4'", True, "an email is dead-lettered after its attempts", (NOW,))
+check(db19, "UPDATE EmailOutbox SET Status='Sent', SentAt=? WHERE Id='m4'", False, "a dead letter marked sent", (NOW,), expect="finished email does not change state again")
+# the suppression list
+SU = "INSERT INTO EmailSuppressions(Id,WorkspaceId,Address,Reason,Detail,CreatedAt) VALUES(?,?,?,?,?,?)"
+check(db19, SU, True, "a hard bounce is suppressed", ('s1', 'default', 'Gone@Example.com', 'Bounce', '550 no such user', NOW))
+check(db19, SU, False, "the same address again, in other capitals", ('s2', 'default', 'gone@example.com', 'Complaint', None, NOW), expect="UNIQUE")
+check(db19, SU, True, "the same address in another workspace", ('s3', 'w2', 'gone@example.com', 'Complaint', None, NOW))
+check(db19, SU, False, "a reason outside the three", ('s4', 'default', 'x@example.com', 'Dislike', None, NOW), expect="CHECK")
+check(db19, SU, False, "an address that is not an address", ('s4', 'default', 'x example', 'Manual', None, NOW), expect="CHECK")
+check(db19, "UPDATE EmailSuppressions SET WorkspaceId='w2' WHERE Id='s1'", False, "a suppression moved to another workspace", expect="cannot move to another workspace")
+check(db19, "DELETE FROM EmailSuppressions WHERE Id='s3'", True, "an administrator lifts a suppression")
+# preferences
+NP = "INSERT INTO NotificationPreferences(Id,WorkspaceId,UserId,Category,Channel,Mode,UpdatedAt) VALUES(?,?,?,?,?,?,?)"
+check(db19, NP, True, "email for escalations in the daily digest", ('p1', 'default', 'rte', 'EscalationLevel1', 'Email', 'Daily', NOW))
+check(db19, NP, False, "the same person, kind and channel twice", ('p2', 'default', 'rte', 'EscalationLevel1', 'Email', 'Off', NOW), expect="UNIQUE")
+check(db19, NP, False, "a team webhook in a daily digest (digest is email only)", ('p2', 'default', 'rte', 'DecisionMade', 'Webhook', 'Daily', NOW), expect="CHECK")
+check(db19, NP, True, "the team webhook off", ('p3', 'default', 'rte', 'DecisionMade', 'Webhook', 'Off', NOW))
+check(db19, NP, False, "the inbox as a channel (it is always on, so it has no preference)", ('p4', 'default', 'rte', 'DecisionMade', 'Inbox', 'Off', NOW), expect="CHECK")
+check(db19, NP, False, "a kind outside the four", ('p4', 'default', 'rte', 'StepLate', 'Email', 'Off', NOW), expect="CHECK")
+check(db19, NP, False, "a mode outside the three", ('p4', 'default', 'rte', 'DecisionMade', 'Email', 'Sometimes', NOW), expect="CHECK")
+check(db19, NP, False, "a preference for a person who is not in the workspace", ('p4', 'default', 'out', 'DecisionMade', 'Email', 'Off', NOW), expect="person is not a member")
+check(db19, "UPDATE NotificationPreferences SET WorkspaceId='w2' WHERE Id='p1'", False, "a preference moved to another workspace", expect="cannot move to another workspace")
+check(db19, "UPDATE NotificationPreferences SET Mode='Immediate', Version=2 WHERE Id='p1'", True, "a preference changed")
+check(db19, "INSERT INTO SyncAlerts(Id,SourceSystem,Kind,Fingerprint,ErrorMessage,FirstOccurredAt,LastOccurredAt) VALUES('al19','Notifications','DeliveryFailed','fp19','gone@example.com is undeliverable',?,?)", True, "an undeliverable address can be raised as a sync alert", (NOW, NOW))
+# <<< UPGRADE 019 <<<
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

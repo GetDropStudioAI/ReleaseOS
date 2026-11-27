@@ -1,0 +1,8 @@
+/* Email delivery and notification settings (REOS-167). Layout from mgmt.css and ui.css; tokens only (docs/ui/tokens.css). */
+.em-page { display: flex; flex-direction: column; gap: var(--gap-lg); }
+.em-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--gap-md); }
+.em-select { min-width: 12rem; }
+.em-saved { margin: 0; color: var(--color-text-secondary); font-size: var(--type-small); }
+.em-inline { display: flex; flex-wrap: wrap; align-items: end; gap: var(--gap-md); }
+.em-inline .mg-field { flex: 1 1 14rem; }
+.em-cell-note { display: block; color: var(--color-text-secondary); font-size: var(--type-small); }

@@ -275,6 +275,8 @@ public class EndpointRoleMatrixTests
         POST /api/v1/modules/{key}:enable                        Admin
         POST /api/v1/modules/{key}:disable                       Admin
         GET /api/v1/ai/status                                    Admin
+        GET /api/v1/ai/usage                                     Admin
+        GET /api/v1/ai/usage/ledger                              Admin
         POST /api/v1/ai/workspace:pause                          Admin
         POST /api/v1/ai/workspace:resume                         Admin
         POST /api/v1/ai/workspace:opt-out                        Admin

@@ -412,6 +412,35 @@ for sql, want, label in [
 after17 = shape(t17)
 check({k: v for k, v in after17.items() if k in before17} == before17, "017: no existing table, index or trigger changes")
 
+# Upgrade 018 (REOS-185): AiAllowancePeriods, AiUsageLedger and AiCreditPacks are new and EMPTY, the 15 allowance triggers are live, nothing else changes
+t18 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("018_"):
+        before18 = shape(t18)
+        rows18 = {t: t18.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("Users", "ReleaseTrains", "AuditEvents", "AiActions", "AiWorkspaceSettings")}
+    t18.executescript(s.read_text())
+check(all(t18.execute(f"SELECT COUNT(*) FROM {t}").fetchone() == (0,) for t in ("AiAllowancePeriods", "AiUsageLedger", "AiCreditPacks")), "018: the allowance tables start empty (no period, usage or pack is invented by the script)")
+check({t: t18.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in rows18} == rows18, "018: existing rows are untouched")
+check(t18.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND (name LIKE 'trg_Ws_AiAllowancePeriods_%' OR name LIKE 'trg_AiPeriod_%' OR name LIKE 'trg_Ws_AiUsageLedger_%' OR name LIKE 'trg_AiLedger_%' OR name LIKE 'trg_Ws_AiCreditPacks_%' OR name LIKE 'trg_AiPack_%')").fetchone() == (15,), "018: the fifteen allowance triggers exist")
+t18.executescript("""
+INSERT INTO AiAllowancePeriods (Id, PeriodStart, PeriodEnd, IncludedMicroUsd, SoftCapPercent, ChatSharePercent, OpenedAt) VALUES ('p1', '2026-11-01', '2026-12-01', 3000000, 80, 50, '2026-11-26T00:00:00Z');
+""")
+for sql, want, label in [
+    ("UPDATE AiAllowancePeriods SET ReservedMicroUsd = 3000001 WHERE Id = 'p1'", "allowance for this period is used up", "018: a reservation cannot take a month over its allowance"),
+    ("UPDATE AiAllowancePeriods SET IncludedMicroUsd = 9 WHERE Id = 'p1'", "fixed when the period opens", "018: the allowance of an open month is fixed"),
+    ("UPDATE AiAllowancePeriods SET ReservedMicroUsd = 100, ChatReservedMicroUsd = 100 WHERE Id = 'p1'", None, "018: chat reserves inside its share"),
+    ("INSERT INTO AiAllowancePeriods (Id, PeriodStart, PeriodEnd, IncludedMicroUsd, SoftCapPercent, ChatSharePercent, OpenedAt) VALUES ('p9', '2026-11-01', '2026-12-01', 1, 80, 50, '2026-11-26T00:00:00Z')", "UNIQUE", "018: one period per workspace per month"),
+    ("INSERT INTO AiCreditPacks (Id, PeriodId, MicroUsd, Source, GrantedAt) VALUES ('k1', 'p1', 5000000, 'Billing', '2026-11-26T00:00:00Z')", None, "018: a credit pack is granted"),
+    ("UPDATE AiCreditPacks SET MicroUsd = 1 WHERE Id = 'k1'", "never changes once granted", "018: a credit pack is never edited"),
+    ("DELETE FROM AiAllowancePeriods WHERE Id = 'p1'", "kept for the record", "018: an allowance period cannot be deleted"),
+]:
+    try:
+        t18.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+after18 = shape(t18)
+check({k: v for k, v in after18.items() if k in before18} == before18, "018: no existing table, index or trigger changes")
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

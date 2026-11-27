@@ -9,8 +9,9 @@ namespace ReleaseMgmt.Domain.Ai;
 /// </summary>
 public enum AiModelTier { Small, Drafting }
 
-/// <summary>An AI feature the platform routes. Small models are the default; only drafting features use the (optional, larger) drafting model.</summary>
-public sealed record AiFeatureDefinition(string Key, string Name, AiModelTier Tier);
+/// <summary>An AI feature the platform routes. Small models are the default; only drafting features use the (optional, larger) drafting model.
+/// <paramref name="CappedFirst"/> (REOS-185): chat and query features are the unbounded cost (85 to 90% of AI spend), so they stop at the soft cap and at their share of the allowance, before everything else.</summary>
+public sealed record AiFeatureDefinition(string Key, string Name, AiModelTier Tier, bool CappedFirst = false);
 
 public static class AiFeatures
 {
@@ -27,7 +28,7 @@ public static class AiFeatures
     [
         new(RiskScore, "Release risk score", AiModelTier.Small),
         new(GateSummary, "Gate evidence summary", AiModelTier.Small),
-        new(Chat, "Question about release data", AiModelTier.Small),
+        new(Chat, "Question about release data", AiModelTier.Small, CappedFirst: true),
         new(ReleaseNotes, "Release notes draft", AiModelTier.Drafting),
         new(CommsDraft, "Stakeholder message draft", AiModelTier.Drafting),
         new(RunbookDraft, "Runbook and rollback draft", AiModelTier.Drafting),
@@ -60,8 +61,11 @@ public sealed record AiCallMeta(string? RequestedByUserId = null, string? Subjec
 /// <summary>One piece of context as the trail records it: its label, class, hash and size. Never its text.</summary>
 public sealed record AiInputRef(string Label, string Class, string Sha256, int Chars);
 
-/// <remarks><c>AuditFailed</c> (REOS-184): the call was made but the action could not be recorded, so its output is withheld: an AI answer that is not in the trail must not be used.</remarks>
-public enum AiOutcome { Completed, ModuleOff, KillSwitch, WorkspacePaused, OptedOut, NotConfigured, NoKey, Blocked, TimedOut, ProviderError, AuditFailed }
+/// <remarks><c>AuditFailed</c> (REOS-184): the call was made but the action could not be recorded, so its output is withheld: an AI answer that is not in the trail must not be used.
+/// REOS-185: <c>AllowanceReached</c> (a cap stopped the call: the month's allowance is used up, or chat's share or the soft cap is reached) and <c>RateLimited</c> (this person asked too often) are refusals:
+/// no model was called. In the audit trail they are recorded as <c>Blocked</c> with the message as the detail (the table's outcome list is unchanged); the usage ledger records the exact reason (Q-185a).
+/// An unmeterable call (the allowance could not be reserved) is <c>AuditFailed</c> too: a call that is not on the books is not made.</remarks>
+public enum AiOutcome { Completed, ModuleOff, KillSwitch, WorkspacePaused, OptedOut, NotConfigured, NoKey, Blocked, TimedOut, ProviderError, AuditFailed, AllowanceReached, RateLimited }
 
 /// <summary>The cost inputs of one call (pricing-and-infrastructure section 5), recorded for the metering story. Cached tokens are counted apart because they price differently.</summary>
 public sealed record AiUsage(string Feature, string Model, long InputTokens, long OutputTokens, long CacheReadTokens, long CacheWriteTokens, bool Batch);
@@ -70,7 +74,8 @@ public sealed record AiUsage(string Feature, string Model, long InputTokens, lon
 /// <param name="ActionId">The AiActions row that records this call (REOS-184); a feature keeps it to record the human's decision on the draft.</param>
 public sealed record AiResult(AiOutcome Outcome, string Feature, string WorkspaceId, DateTime At, string? Text = null, string? Detail = null, string? Model = null,
     AiUsage? Usage = null, int Attempts = 0, bool ProviderCalled = false, int Redactions = 0, bool Batch = false,
-    string? ActionId = null, string? Provider = null, string? ServedModel = null, IReadOnlyList<AiInputRef>? Inputs = null, string? InputHash = null, string? PromptHash = null)
+    string? ActionId = null, string? Provider = null, string? ServedModel = null, IReadOnlyList<AiInputRef>? Inputs = null, string? InputHash = null, string? PromptHash = null,
+    AiMetering? Metering = null)
 {
     public bool IsCompleted => Outcome == AiOutcome.Completed;
 }

@@ -174,6 +174,207 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiAllowancePeriods", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ChatReservedMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ChatSharePercent")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ChatUsedMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("HardCapNotifiedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("IncludedMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OpenedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("PackMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PeriodEnd")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PeriodStart")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ReservedMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SoftCapNotifiedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SoftCapPercent")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UsedMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("AiAllowancePeriods", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiCreditPacks", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GrantedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GrantedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("MicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PeriodId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reference")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GrantedByUserId");
+
+                    b.HasIndex("PeriodId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("AiCreditPacks", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiUsageLedger", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AiActionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Batch")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CacheReadTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CacheWriteTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Class")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CostMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Feature")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Model")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PeriodId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RefusalReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReservedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ReservedMicroUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SettledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AiActionId");
+
+                    b.HasIndex("PeriodId");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("AiUsageLedger", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
             modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiWorkspaceSettings", b =>
                 {
                     b.Property<string>("WorkspaceId")
@@ -4206,6 +4407,60 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("LastChangedByUserId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiAllowancePeriods", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiCreditPacks", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("GrantedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.AiAllowancePeriods", null)
+                        .WithMany()
+                        .HasForeignKey("PeriodId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiUsageLedger", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.AiActions", null)
+                        .WithMany()
+                        .HasForeignKey("AiActionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.AiAllowancePeriods", null)
+                        .WithMany()
+                        .HasForeignKey("PeriodId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
 
                     b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
                         .WithMany()

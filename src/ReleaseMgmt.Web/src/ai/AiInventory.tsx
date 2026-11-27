@@ -130,7 +130,7 @@ const modelColumns: Column<AiInventoryModel>[] = [
 const actionColumns: Column<AiActionSummary>[] = [
   { key: 'at', header: 'When', cell: a => <Time at={a.requestedAt} date /> },
   { key: 'feature', header: 'Feature', cell: a => a.featureName },
-  { key: 'outcome', header: 'Result', cell: a => <StatusChip tone={outcomeTone(a.outcome)}>{outcomeWord(a.outcome)}</StatusChip> },
+  { key: 'outcome', header: 'Result', cell: a => <StatusChip tone={outcomeTone(a.outcome)}>{outcomeWord(a.outcome, a.capReason)}</StatusChip> },
   { key: 'decision', header: 'Human decision', cell: a => <StatusChip tone={decisionTone(a.decision)}>{decisionWord(a.decision)}</StatusChip> },
   { key: 'who', header: 'Asked by', cell: a => a.requestedBy?.name ?? 'The system' },
   { key: 'model', header: 'Model', cell: a => a.model ?? 'None', mono: true },
@@ -173,7 +173,7 @@ function ActionPanel({ id, me, onClose, onChanged }: { id: string; me: Me; onClo
         <div className="mg-stack">
           {!a.integrity.ok && <Notice tone="danger" title="This record does not match its audit rows" live>The stored text or its hash differs from what the audit chain holds. Treat the draft as untrusted and tell the audit owner.</Notice>}
           {a.outputText === null
-            ? <Notice tone="neutral" title={outcomeWord(a.outcome)}>{a.detail ?? 'No draft was produced.'}</Notice>
+            ? <Notice tone="neutral" title={outcomeWord(a.outcome, a.capReason)}>{a.detail ?? 'No draft was produced.'}</Notice>
             : <Field label="The draft, as the model returned it"><textarea className="mg-input" readOnly rows={7} value={a.outputText} aria-label="Draft" /></Field>}
           {a.finalText !== null && <Field label="The human edit, as it was used"><textarea className="mg-input" readOnly rows={7} value={a.finalText} aria-label="Human edit" /></Field>}
           {a.decisionNote && <p className="mg-note">Note: {a.decisionNote}</p>}
@@ -198,7 +198,7 @@ function ActionPanel({ id, me, onClose, onChanged }: { id: string; me: Me; onClo
           )}
           {!decidable && a.decision === 'Pending' && <p className="mg-note">Only the person who asked for this draft, or an RTE or Release Manager, can record the decision.</p>}
           <PropertyList items={[
-            { label: 'Result', value: outcomeWord(a.outcome) },
+            { label: 'Result', value: outcomeWord(a.outcome, a.capReason) },
             { label: 'Model', value: a.model ?? 'None', mono: true },
             { label: 'Version reported', value: a.servedModel ?? 'Same as the model', mono: true },
             { label: 'Provider', value: a.provider },

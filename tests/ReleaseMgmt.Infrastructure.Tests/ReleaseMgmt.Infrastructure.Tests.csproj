@@ -20,6 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Ai\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\ReleaseMgmt.Infrastructure\ReleaseMgmt.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\ReleaseMgmt.Domain\ReleaseMgmt.Domain.csproj" />
   </ItemGroup>

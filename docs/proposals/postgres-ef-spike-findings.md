@@ -20,7 +20,7 @@ If the owner rejects condition 1 or 2, the answer becomes **NO-GO for Postgres a
 
 | Piece | What it is |
 |---|---|
-| `tests/ReleaseMgmt.PostgresSpike.Tests` | xUnit, `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.4 next to EF Core 10.0.12. 35 tests, each `[PgFact]`: it skips itself when `REOS_PG_DSN` is unset (the variable the REOS-195 workflow already sets), so ordinary `dotnet build` and `dotnet test` on Windows and macOS are unaffected. |
+| `tests/ReleaseMgmt.PostgresSpike.Tests` | xUnit, `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.4 next to EF Core 10.0.12. 37 tests, each `[PgFact]`: it skips itself when `REOS_PG_DSN` is unset (the variable the REOS-195 workflow already sets), so ordinary `dotnet build` and `dotnet test` on Windows and macOS are unaffected. |
 | Schema | Generated from `db/schema.sql` at test time by `tools/gen_pg_schema.py` (never committed), loaded once into a template database; every test gets `CREATE DATABASE … TEMPLATE` (milliseconds). |
 | Context | `PgReleaseDbContext : ReleaseDbContext`, the shipped model and query filters unchanged, plus **one** convention (booleans as 0/1). |
 | Slice | The real `TrainLifecycleService`, `GateService`, `WaiverService` and `TaskService`, with the scenarios of `Infrastructure.Tests/ServiceTests.cs` (same seed, same assertions). |

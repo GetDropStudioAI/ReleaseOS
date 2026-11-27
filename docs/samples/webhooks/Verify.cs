@@ -1,8 +1,19 @@
 // Verifies a ReleaseOS webhook delivery (docs/WEBHOOKS.md). .NET 10 single-file app:  dotnet run docs/samples/webhooks/Verify.cs -- --selftest
 // In a real receiver, call ReleaseOsWebhook.Verify(...) with the RAW request body (the exact bytes, not a re-serialised object) and the three headers.
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text;
 
+if (args.Contains("--check"))
+{
+    // --check <file.json>: a captured delivery {secret, timestamp, deliveryId, signature, body, now}; exit 0 and print ok when it verifies (docs/DEVELOPERS.md).
+    using var doc = JsonDocument.Parse(File.ReadAllText(args[Array.IndexOf(args, "--check") + 1]));
+    var c = doc.RootElement;
+    var good = ReleaseOsWebhook.Verify(c.GetProperty("secret").GetString()!, c.GetProperty("timestamp").GetString()!, c.GetProperty("deliveryId").GetString()!,
+        c.GetProperty("body").GetString()!, c.GetProperty("signature").GetString(), c.GetProperty("now").GetInt64());
+    Console.WriteLine(good ? "ok" : "FAILED");
+    return good ? 0 : 1;
+}
 if (args.Contains("--selftest"))
 {
     const string secret = "whsec_test_secret", delivery = "7d1c0a52-8d3e-4f5e-9d3b-0c1b6f6e2a11", body = "{\"id\":\"evt_1\",\"type\":\"gate.failed\"}";

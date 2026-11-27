@@ -1,6 +1,6 @@
 # Outbound webhooks (REOS-164, D61)
 
-ReleaseOS posts signed events to addresses an administrator adds. This page is for the people who build the receiver; the settings an operator needs are at the end. The screen is **Management → Webhooks** (Release Train Engineers and Release Managers; a Viewer or Governance Officer does not see it and the API answers 403).
+ReleaseOS posts signed events to addresses an administrator adds. This page is for the people who build the receiver (the whole path from a token to a verified webhook is in [`DEVELOPERS.md`](DEVELOPERS.md)); the settings an operator needs are at the end. The screen is **Management → Integrations → Webhooks** (Release Train Engineers and Release Managers; a Viewer or Governance Officer does not see it and the API answers 403).
 
 ## What is sent
 

@@ -34,15 +34,14 @@ export const NAV: NavGroup[] = [
       { view: 'connectors', label: 'Connectors', need: 'admin' },
       { view: 'cab', label: 'Change advisory board', placeholder: 'cab', module: 'cab' },   // REOS-174: no feature behind it yet (REOS-158); the entry shows the gating works
       { view: 'ai', label: 'AI assistant', placeholder: 'ai', module: 'ai' },
-      { view: 'api-tokens', label: 'API tokens', need: 'admin' },
-      { view: 'webhooks', label: 'Webhooks', need: 'admin' },   // REOS-164 (D61)
+      { view: 'integrations', label: 'Integrations', need: 'admin' },   // REOS-165: API tokens (REOS-162) and webhooks (REOS-164) in one page; /api-tokens and /webhooks still open on their own
     ],
   },
   { id: 'more', label: 'More', items: [{ view: 'work', label: 'My work' }, { view: 'analytics', label: 'Analytics' }, { view: 'importexport', label: 'Imports & exports' }] },
 ]
 
 /** Pages reached outside the sidebar lists, with the names the breadcrumb, the document title and Jump to use. */
-const OTHER: Partial<Record<View, string>> = { sync: 'Sync health', inbox: 'Inbox', gallery: 'Component gallery' }
+const OTHER: Partial<Record<View, string>> = { 'api-tokens': 'API tokens', webhooks: 'Webhooks', sync: 'Sync health', inbox: 'Inbox', gallery: 'Component gallery' }
 
 export const canAdmin = (roles: string[]) => roles.includes('RTE') || roles.includes('ReleaseManager')
 export const canAudit = (roles: string[]) => roles.some(r => r === 'RTE' || r === 'ReleaseManager' || r === 'GovernanceOfficer')

@@ -47,18 +47,21 @@ async function makeThroughForm(page: Page, name: string, access = 'Read and writ
   await expect(page.getByText('Copy this token now')).toBeVisible()
 }
 
-test('the sidebar has API tokens in the Management group for an RTE and opens the real screen', async ({ page }) => {
+test('the sidebar has Integrations in the Management group for an RTE; API tokens are its tab and the page /api-tokens still opens', async ({ page }) => {
   await signIn(page, 'tk-nav-rte@example.com', 'RTE')
-  await primaryNav(page).getByRole('link', { name: 'API tokens' }).click()
-  await expect(page).toHaveURL(/\/api-tokens$/)
+  await primaryNav(page).getByRole('link', { name: 'Integrations' }).click()
+  await expect(page).toHaveURL(/\/integrations$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Integrations' })).toBeVisible()
+  await expect(page).toHaveTitle('Integrations · ReleaseOS')
+  await page.getByRole('tab', { name: 'API tokens' }).click()
+  await expect(page.getByRole('button', { name: 'Make token' }).first()).toBeVisible()
+  const names = await primaryNav(page).locator('.os-nav-group-management a').allInnerTexts()
+  expect(names.map(n => n.trim())).toContain('Service catalog')
+  expect(names.map(n => n.trim())).toContain('Integrations')
+  await page.goto('/api-tokens')
   await expect(page.getByRole('heading', { level: 1, name: 'API tokens' })).toBeVisible()
   await expect(page).toHaveTitle('API tokens · ReleaseOS')
   await expect(page.getByText('/api/public/v1')).toBeVisible()
-  await expect(page.getByText('This screen is not built yet')).toHaveCount(0)
-  // Management group: the item sits with Service catalog and Connectors
-  const names = await primaryNav(page).locator('.os-nav-group-management a').allInnerTexts()
-  expect(names.map(n => n.trim())).toContain('Service catalog')
-  expect(names.map(n => n.trim())).toContain('API tokens')
 })
 
 test('a Release Manager makes a token: the secret is shown once, copied, and gone when the panel closes, after a reload and from every store', async ({ page, context }) => {
@@ -274,11 +277,11 @@ test('a token changed by someone else: Revoke shows the conflict notice and the 
 })
 
 for (const [role, email] of [['Viewer', 'tk-viewer@example.com'], ['GovernanceOfficer', 'tk-gov@example.com']] as const) {
-  test(`a ${role} has no API tokens item, and /api-tokens says they cannot, without calling the API`, async ({ page }) => {
+  test(`a ${role} has no Integrations item, and /api-tokens says they cannot, without calling the API`, async ({ page }) => {
     const calls: string[] = []
     page.on('request', r => { if (new URL(r.url()).pathname.startsWith('/api/v1/api-tokens')) calls.push(`${r.method()} ${r.url()}`) })
     await signIn(page, email, role)
-    await expect(primaryNav(page).getByRole('link', { name: 'API tokens' })).toHaveCount(0)
+    await expect(primaryNav(page).getByRole('link', { name: 'Integrations' })).toHaveCount(0)
     await expect(primaryNav(page).getByRole('link', { name: 'Service catalog' })).toBeVisible()   // the rest of the group is there
     await page.goto('/api-tokens')
     await expect(page.getByRole('heading', { level: 1, name: 'API tokens' })).toBeVisible()

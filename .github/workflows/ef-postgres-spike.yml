@@ -1,0 +1,53 @@
+name: EF Core on Postgres spike
+
+# REOS-196 (D59): runs tests/ReleaseMgmt.PostgresSpike.Tests against a real Postgres 16 and keeps the measurement report.
+# NON-GATING, like the REOS-195 oracle job: pushes to main and nightly only (never pull requests), and SQLite stays the shipped database.
+# The spike tests skip themselves when REOS_PG_DSN is not set, so the ordinary build and `dotnet test` on windows/macos are unaffected.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '41 3 * * *'   # nightly, UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ef-postgres-spike:
+    name: ef-postgres-spike
+    runs-on: ubuntu-latest
+    continue-on-error: true   # non-gating (REOS-196); revisit when the port plan (REOS-194) is approved
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      REOS_PG_DSN: postgresql://postgres:postgres@localhost:5432/postgres
+      REOS_SPIKE_REPORT: ${{ github.workspace }}/ef-postgres-spike-measurements.txt
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9   # v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5
+        with:
+          python-version: '3.12'   # the tests build their schema with tools/gen_pg_schema.py (standard library only)
+      - name: The spike tests on Postgres
+        run: dotnet test tests/ReleaseMgmt.PostgresSpike.Tests -c Release --logger "console;verbosity=normal"
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        with:
+          name: ef-postgres-spike-measurements
+          path: ef-postgres-spike-measurements.txt
+          if-no-files-found: ignore

@@ -17,6 +17,7 @@ public static class AiGuards
     public const string AiActionDecision = "AiActionDecision";          // a decision that is not Accepted, Edited or Rejected, or an Edited decision with no changed text
     public const string AiActionDecided = "AiActionDecided";            // the action already has its human decision (it is final)
     public const string AiActionNotDecidable = "AiActionNotDecidable";  // a refused or failed call has no draft to decide on
+    public const string AiCreditPack = "AiCreditPack";                  // REOS-185: a credit pack with no credits, from an unknown source, or with no reference or granter where one is needed
     public const string AiActionRole = "AiActionRole";                  // only the person who asked, or an administrator, records the decision
 }
 
@@ -24,16 +25,17 @@ public static class AiGuards
 public sealed record AiActionView(string Id, string Feature, string FeatureName, string Provider, string? Model, string? ServedModel, string PromptTemplateVersion, string? PromptHash,
     IReadOnlyList<AiInputRef> Inputs, string? InputHash, string Outcome, string? Detail, string? OutputText, string? OutputHash, long InputTokens, long OutputTokens, long CacheReadTokens, long CacheWriteTokens,
     int Attempts, int Redactions, bool Batch, string? SubjectType, string? SubjectId, string? ReleaseTrainId, AiPersonRef? RequestedBy, DateTime RequestedAt,
-    string Decision, string? FinalText, string? FinalHash, string? DecisionNote, AiPersonRef? DecidedBy, DateTime? DecidedAt, int Version, AiActionIntegrity Integrity);
+    string Decision, string? FinalText, string? FinalHash, string? DecisionNote, AiPersonRef? DecidedBy, DateTime? DecidedAt, int Version, AiActionIntegrity Integrity, string? CapReason = null);
 
 public sealed record AiPersonRef(string Id, string Name);
 
 /// <summary>Whether the stored texts still match their hashes and the audit rows that carry those hashes in the chain (REOS-184: "audit chain verification still passes").</summary>
 public sealed record AiActionIntegrity(bool OutputMatchesHash, bool FinalMatchesHash, bool GeneratedAuditRow, bool DecisionAuditRow, bool Ok);
 
-/// <summary>A line of the list on the AI inventory screen: no texts, only what a reviewer scans.</summary>
+/// <summary>A line of the list on the AI inventory screen: no texts, only what a reviewer scans. <c>CapReason</c> (REOS-185): HardCap, ChatCap or RateLimit when the call was refused by the allowance (the outcome column says only Blocked), else null.</summary>
 public sealed record AiActionSummary(string Id, string Feature, string FeatureName, string? Model, string Outcome, string Decision, long InputTokens, long OutputTokens, bool Edited,
-    string? SubjectType, string? SubjectId, AiPersonRef? RequestedBy, DateTime RequestedAt, AiPersonRef? DecidedBy, DateTime? DecidedAt);
+    string? SubjectType, string? SubjectId, AiPersonRef? RequestedBy, DateTime RequestedAt, AiPersonRef? DecidedBy, DateTime? DecidedAt, string? CapReason = null);
+
 
 public sealed record AiActionFilter(string? Feature = null, string? Decision = null, string? Outcome = null, string? RequestedByUserId = null, string? SubjectType = null, string? SubjectId = null, int Limit = 100);
 

@@ -94,6 +94,9 @@ public static class ModelMap
         b.Entity<CabDecisions>(e => { e.ToTable("CabDecisions"); e.HasKey(e => e.Id);  });
         b.Entity<AiActions>(e => { e.ToTable("AiActions"); e.HasKey(e => e.Id);  });
         b.Entity<AiWorkspaceSettings>(e => { e.ToTable("AiWorkspaceSettings"); e.HasKey(e => e.WorkspaceId);  });
+        b.Entity<AiAllowancePeriods>(e => { e.ToTable("AiAllowancePeriods"); e.HasKey(e => e.Id);  });
+        b.Entity<AiUsageLedger>(e => { e.ToTable("AiUsageLedger"); e.HasKey(e => e.Id);  });
+        b.Entity<AiCreditPacks>(e => { e.ToTable("AiCreditPacks"); e.HasKey(e => e.Id);  });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -318,5 +321,13 @@ public static class ModelMap
         b.Entity<AiActions>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<AiWorkspaceSettings>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<AiWorkspaceSettings>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiAllowancePeriods>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiUsageLedger>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiUsageLedger>().HasOne<AiAllowancePeriods>().WithMany().HasForeignKey(e => e.PeriodId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiUsageLedger>().HasOne<Users>().WithMany().HasForeignKey(e => e.RequestedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiUsageLedger>().HasOne<AiActions>().WithMany().HasForeignKey(e => e.AiActionId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiCreditPacks>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiCreditPacks>().HasOne<AiAllowancePeriods>().WithMany().HasForeignKey(e => e.PeriodId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiCreditPacks>().HasOne<Users>().WithMany().HasForeignKey(e => e.GrantedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
     }
 }

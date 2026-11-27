@@ -21,6 +21,8 @@ export interface AiInventory {
 export interface AiActionSummary {
   id: string; feature: string; featureName: string; model: string | null; outcome: string; decision: string; inputTokens: number; outputTokens: number; edited: boolean
   subjectType: string | null; subjectId: string | null; requestedBy: AiPerson | null; requestedAt: string; decidedBy: AiPerson | null; decidedAt: string | null
+  /** REOS-185: HardCap, ChatCap or RateLimit when the allowance refused the call (the outcome says only Blocked). */
+  capReason?: string | null
 }
 export interface AiActionView {
   id: string; feature: string; featureName: string; provider: string; model: string | null; servedModel: string | null; promptTemplateVersion: string; promptHash: string | null
@@ -29,6 +31,7 @@ export interface AiActionView {
   subjectType: string | null; subjectId: string | null; releaseTrainId: string | null; requestedBy: AiPerson | null; requestedAt: string
   decision: string; finalText: string | null; finalHash: string | null; decisionNote: string | null; decidedBy: AiPerson | null; decidedAt: string | null; version: number
   integrity: { outputMatchesHash: boolean; finalMatchesHash: boolean; generatedAuditRow: boolean; decisionAuditRow: boolean; ok: boolean }
+  capReason?: string | null
 }
 
 /** Status is never colour alone: every chip has these words. */
@@ -40,7 +43,9 @@ const OUTCOMES: Record<string, string> = {
   Completed: 'Draft produced', ModuleOff: 'Refused: module off', KillSwitch: 'Refused: global kill switch', WorkspacePaused: 'Refused: workspace paused', OptedOut: 'Refused: workspace opted out',
   NotConfigured: 'Refused: no model configured', NoKey: 'Refused: no provider key', Blocked: 'Refused: data rule', TimedOut: 'Failed: timed out', ProviderError: 'Failed: provider error',
 }
-export const outcomeWord = (o: string): string => OUTCOMES[o] ?? o
+/** A Blocked call is a data rule, or (REOS-185) the allowance: the ledger's reason says which. */
+const CAP_WORDS: Record<string, string> = { HardCap: 'Refused: allowance used up', ChatCap: 'Refused: chat is capped first', RateLimit: 'Refused: asked too often' }
+export const outcomeWord = (o: string, capReason?: string | null): string => (capReason && CAP_WORDS[capReason]) || (OUTCOMES[o] ?? o)
 export const outcomeTone = (o: string): Tone => (o === 'Completed' ? 'success' : o === 'TimedOut' || o === 'ProviderError' ? 'danger' : 'neutral')
 
 export const featureState = (f: AiInventoryFeature): string => (f.enabled ? 'Available' : 'Not available')

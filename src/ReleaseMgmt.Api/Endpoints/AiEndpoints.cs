@@ -37,6 +37,13 @@ public static class AiEndpoints
         api.MapPost("/ai/workspace:opt-in", async (ClaimsPrincipal u, IAiControls c, AiStatusService s, ILoggerFactory lf, CancellationToken ct) =>
             await Change(u, s, lf, "opted in", (ws, a) => c.SetOptedOutAsync(ws, false, a, ct), ct)).RequireAuthorization(Policies.Admin);
 
+        // ---- REOS-185: the allowance. Administrators see what is included, used and left, the caps, where it went, and every ledger entry. They answer while the module is off (what was spent stays readable).
+        // There is deliberately NO endpoint that adds credits: a workspace administrator must not be able to give their own workspace credits. Credit packs are granted through IAiAllowance by billing (Q-185a).
+        // GET /ai/usage -> AiAllowanceView { periodStart, periodEnd, resetsOn, included/pack/total/used/reserved/remainingMicroUsd, percentUsed, softCapPercent, chatSharePercent, level (Ok|Soft|Hard), message, features[], users[], packs[] }
+        api.MapGet("/ai/usage", async (ClaimsPrincipal u, IAiAllowance a, CancellationToken ct) => Results.Ok(await a.GetAsync(Ws(u), ct))).RequireAuthorization(Policies.Admin);
+        // GET /ai/usage/ledger?limit= -> [AiLedgerEntry], newest first: one row per call that asked for allowance (refusals by a cap included)
+        api.MapGet("/ai/usage/ledger", async (int? limit, ClaimsPrincipal u, IAiAllowance a, CancellationToken ct) => Results.Ok(await a.LedgerAsync(Ws(u), limit ?? 100, ct))).RequireAuthorization(Policies.Admin);
+
         // PUT /ai/key {key} -> 204; DELETE /ai/key -> 204. Write-only.
         api.MapPut("/ai/key", async (KeyBody body, ClaimsPrincipal u, IAiKeyStore keys, IAiControls controls, ILoggerFactory lf, CancellationToken ct) =>
         {

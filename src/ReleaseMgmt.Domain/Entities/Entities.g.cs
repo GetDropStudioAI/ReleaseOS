@@ -1218,3 +1218,63 @@ public class AiWorkspaceSettings
     public DateTime? LastChangedAt { get; set; }
     public int Version { get; set; } = 1;
 }
+
+public class AiAllowancePeriods
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public DateOnly PeriodStart { get; set; }
+    public DateOnly PeriodEnd { get; set; }
+    public long IncludedMicroUsd { get; set; }
+    public long PackMicroUsd { get; set; } = 0;
+    public int SoftCapPercent { get; set; }
+    public int ChatSharePercent { get; set; }
+    public long UsedMicroUsd { get; set; } = 0;
+    public long ReservedMicroUsd { get; set; } = 0;
+    public long ChatUsedMicroUsd { get; set; } = 0;
+    public long ChatReservedMicroUsd { get; set; } = 0;
+    public DateTime? SoftCapNotifiedAt { get; set; }
+    public DateTime? HardCapNotifiedAt { get; set; }
+    public DateTime OpenedAt { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class AiUsageLedger
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string PeriodId { get; set; } = "";
+    public string Feature { get; set; } = "";
+    public string Class { get; set; } = "";
+    public string? Model { get; set; }
+    public bool Batch { get; set; } = false;
+    public string? RequestedByUserId { get; set; }
+    public string State { get; set; } = "";
+    public string? RefusalReason { get; set; }
+    public long ReservedMicroUsd { get; set; } = 0;
+    public long CostMicroUsd { get; set; } = 0;
+    public int InputTokens { get; set; } = 0;
+    public int OutputTokens { get; set; } = 0;
+    public int CacheReadTokens { get; set; } = 0;
+    public int CacheWriteTokens { get; set; } = 0;
+    public string? AiActionId { get; set; }
+    public DateTime ReservedAt { get; set; }
+    public DateTime? SettledAt { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class AiCreditPacks
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string PeriodId { get; set; } = "";
+    public long MicroUsd { get; set; }
+    public string Source { get; set; } = "";
+    public string? Reference { get; set; }
+    public string? Note { get; set; }
+    public string? GrantedByUserId { get; set; }
+    public DateTime GrantedAt { get; set; }
+    public int Version { get; set; } = 1;
+}

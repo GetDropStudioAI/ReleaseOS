@@ -87,8 +87,11 @@ public class AiArchitectureTests
 
     // ---- D58: advisory only ----
 
-    /// <summary>The tables AI code may read or write (REOS-184): its own, the audit log it writes to, and the people it names.</summary>
-    private static readonly string[] AllowedEntities = [nameof(AiActions), nameof(AiWorkspaceSettings), nameof(AuditEvents), nameof(Users)];
+    /// <summary>The tables AI code may read or write (REOS-184): its own, the audit log it writes to, and the people it names. REOS-185 adds the allowance tables: periods, the usage ledger and credit packs are AI cost records, not status data.</summary>
+    private static readonly string[] AllowedEntities = [nameof(AiActions), nameof(AiWorkspaceSettings), nameof(AiAllowancePeriods), nameof(AiUsageLedger), nameof(AiCreditPacks), nameof(AuditEvents), nameof(Users)];
+
+    /// <summary>The AI-owned tables. A foreign key between two of them stays inside AI cost and audit data (the ledger entry points at the action it paid for); one to anything else would let AI data reach status data.</summary>
+    private static readonly string[] AiTables = ["AiActions", "AiWorkspaceSettings", "AiAllowancePeriods", "AiUsageLedger", "AiCreditPacks"];
 
     private static readonly string[] StatusChangingServices = ["TrainLifecycleService", "GateService", "RunService"];
 
@@ -140,24 +143,24 @@ public class AiArchitectureTests
             foreach (Match m in Regex.Matches(text, @"Set<(\w+)>")) if (!AllowedEntities.Contains(m.Groups[1].Value)) offenders.Add($"{Rel(f)}: Set<{m.Groups[1].Value}>");
             foreach (Match m in Regex.Matches(text, @"\b(Current)?Status\s*=[^=>]")) offenders.Add($"{Rel(f)}: assigns {m.Value.Trim()}");
         }
-        Assert.True(offenders.Count == 0, "AI code may open only AiActions, AiWorkspaceSettings, AuditEvents and Users, and never assign a Status (D58):\n" + string.Join('\n', offenders));
+        Assert.True(offenders.Count == 0, "AI code may open only the AI tables (AiActions, AiWorkspaceSettings, AiAllowancePeriods, AiUsageLedger, AiCreditPacks), AuditEvents and Users, and never assign a Status (D58):\n" + string.Join('\n', offenders));
     }
 
     [Fact]
-    public void AI_output_is_stored_apart_from_status_data_no_foreign_key_leads_in_or_out_of_AiActions_except_to_workspaces_and_people()
+    public void AI_output_is_stored_apart_from_status_data_no_foreign_key_leads_in_or_out_of_the_AI_tables_except_to_workspaces_people_and_each_other()
     {
         using var f = new ApiFactory();
         using var _ = f.CreateClient();   // starts the host, which creates and migrates the database
         using var c = new SqliteConnection($"Data Source={f.DbPath};Pooling=False");
         c.Open();
         List<(string Table, string To)> Fks(string sql) { using var cmd = c.CreateCommand(); cmd.CommandText = sql; using var r = cmd.ExecuteReader(); var l = new List<(string, string)>(); while (r.Read()) l.Add((r.GetString(0), r.GetString(1))); return l; }
-        var outOf = Fks("SELECT 'AiActions', \"table\" FROM pragma_foreign_key_list('AiActions') UNION SELECT 'AiWorkspaceSettings', \"table\" FROM pragma_foreign_key_list('AiWorkspaceSettings')");
-        Assert.All(outOf, x => Assert.Contains(x.To, new[] { "Workspaces", "Users" }));
+        var outOf = Fks(string.Join(" UNION ", AiTables.Select(t => $"SELECT '{t}', \"table\" FROM pragma_foreign_key_list('{t}')")));
+        Assert.All(outOf, x => Assert.Contains(x.To, new[] { "Workspaces", "Users" }.Concat(AiTables)));   // out of AI data: only to workspaces, people and other AI cost and audit tables
         var tables = Fks("SELECT name, '' FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").Select(t => t.Table).ToList();
-        var into = tables.SelectMany(t => Fks($"SELECT '{t}', \"table\" FROM pragma_foreign_key_list('{t}')")).Where(x => x.To is "AiActions" or "AiWorkspaceSettings").ToList();
+        var into = tables.Where(t => !AiTables.Contains(t)).SelectMany(t => Fks($"SELECT '{t}', \"table\" FROM pragma_foreign_key_list('{t}')")).Where(x => AiTables.Contains(x.To)).ToList();
         Assert.Empty(into);   // nothing that holds a status points at AI output
         // and AiActions has no column named like a status of anything else
-        var columns = Fks("SELECT 'AiActions', name FROM pragma_table_info('AiActions')").Select(x => x.To).ToList();
+        var columns = Fks(string.Join(" UNION ", AiTables.Select(t => $"SELECT '{t}', name FROM pragma_table_info('{t}')"))).Select(x => x.To).ToList();
         Assert.DoesNotContain(columns, n => n is "Status" or "CurrentStatus");
     }
 

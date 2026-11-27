@@ -40,6 +40,7 @@ const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[]
   { name: 'connectors', link: /^Connectors$/, ready: h1('Connectors') },
   { name: 'api-tokens', link: /^API tokens$/, ready: h1('API tokens') },
   { name: 'webhooks', link: /^Webhooks$/, ready: h1('Webhooks') },
+  { name: 'ai-inventory', link: /^AI inventory$/, ready: h1('AI inventory') },
   { name: 'work', link: /^My work$/, ready: h1('My work') },
   { name: 'analytics', link: /^Analytics$/, ready: h1('Analytics') },
   { name: 'importexport', link: /^Imports & exports$/, ready: h1('Imports & exports') },

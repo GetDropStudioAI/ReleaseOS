@@ -1169,3 +1169,52 @@ public class CabDecisions
     public string DecidedByUserId { get; set; } = "";
     public DateTime DecidedAt { get; set; }
 }
+
+public class AiActions
+{
+    public string Id { get; set; } = Ids.New();
+    public string WorkspaceId { get; set; } = "default";
+    public string Feature { get; set; } = "";
+    public string Provider { get; set; } = "";
+    public string? Model { get; set; }
+    public string? ServedModel { get; set; }
+    public string PromptTemplateVersion { get; set; } = "";
+    public string? PromptHash { get; set; }
+    public string InputRefsJson { get; set; } = "[]";
+    public string? InputHash { get; set; }
+    public string Outcome { get; set; } = "";
+    public string? Detail { get; set; }
+    public string? OutputText { get; set; }
+    public string? OutputHash { get; set; }
+    public int InputTokens { get; set; } = 0;
+    public int OutputTokens { get; set; } = 0;
+    public int CacheReadTokens { get; set; } = 0;
+    public int CacheWriteTokens { get; set; } = 0;
+    public int Attempts { get; set; } = 0;
+    public int Redactions { get; set; } = 0;
+    public bool Batch { get; set; } = false;
+    public string? SubjectType { get; set; }
+    public string? SubjectId { get; set; }
+    public string? ReleaseTrainId { get; set; }
+    public string? RequestedByUserId { get; set; }
+    public DateTime RequestedAt { get; set; }
+    public string Decision { get; set; } = "Pending";
+    public string? FinalText { get; set; }
+    public string? FinalHash { get; set; }
+    public string? DecisionNote { get; set; }
+    public string? DecidedByUserId { get; set; }
+    public DateTime? DecidedAt { get; set; }
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class AiWorkspaceSettings
+{
+    public string WorkspaceId { get; set; } = "";
+    public bool Paused { get; set; } = false;
+    public bool OptedOut { get; set; } = false;
+    public string? LastChangedByUserId { get; set; }
+    public DateTime? LastChangedAt { get; set; }
+    public int Version { get; set; } = 1;
+}

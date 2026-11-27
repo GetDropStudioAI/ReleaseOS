@@ -10,7 +10,7 @@ using ReleaseMgmt.Infrastructure.Persistence;
 namespace ReleaseMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(ReleaseDbContext))]
-    [Migration("20261126225422_Schema")]
+    [Migration("20261126235833_Schema")]
     partial class Schema
     {
         /// <inheritdoc />
@@ -43,6 +43,165 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasIndex("ReleaseTrainId");
 
                     b.ToTable("AffectedCIs", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiActions", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Batch")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CacheReadTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CacheWriteTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DecidedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DecidedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DecisionNote")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Detail")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Feature")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FinalHash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FinalText")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InputHash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InputRefsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Model")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OutputHash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OutputText")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PromptHash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PromptTemplateVersion")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Redactions")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ReleaseTrainId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServedModel")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SubjectId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SubjectType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecidedByUserId");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("AiActions", (string)null);
+
+                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiWorkspaceSettings", b =>
+                {
+                    b.Property<string>("WorkspaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastChangedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("OptedOut")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Paused")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("WorkspaceId");
+
+                    b.HasIndex("LastChangedByUserId");
+
+                    b.ToTable("AiWorkspaceSettings", (string)null);
 
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
@@ -4035,6 +4194,44 @@ namespace ReleaseMgmt.Infrastructure.Migrations
                     b.HasOne("ReleaseMgmt.Domain.Entities.ReleaseTrains", null)
                         .WithMany()
                         .HasForeignKey("ReleaseTrainId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiActions", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReleaseMgmt.Domain.Entities.AiWorkspaceSettings", b =>
+                {
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("LastChangedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ReleaseMgmt.Domain.Entities.Workspaces", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });

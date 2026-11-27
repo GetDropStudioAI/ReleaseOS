@@ -4,8 +4,8 @@ namespace ReleaseMgmt.Domain.Ai;
 
 /// <summary>
 /// REOS-183 (D58, D12): the AI platform's contracts. Every AI call goes through <see cref="IAiClient"/>; nothing else may reach a model provider (an architecture test fails if it does).
-/// AI is advisory only: nothing here, and no AI code path, calls a status-changing domain service (a second architecture test). State (kill switch, opt-out) is configuration and memory for now;
-/// REOS-184 adds the audit tables and replaces the in-memory seams (<see cref="IAiWorkspaceSettings"/>, <see cref="IAiUsageSink"/>).
+/// AI is advisory only: nothing here, and no AI code path, calls a status-changing domain service (a second architecture test). REOS-184 (D58) records every call as an AiActions row with its audit row
+/// (<see cref="IAiActionLog"/>), keeps the per-workspace controls in the database (<see cref="IAiWorkspaceSettings"/>, <see cref="IAiControls"/>) and stores AI output apart from every status row.
 /// </summary>
 public enum AiModelTier { Small, Drafting }
 
@@ -44,17 +44,33 @@ public sealed record AiContextItem(string Label, string Text, AiDataClass Class 
 
 /// <param name="CacheSystemPrompt">Ask the provider to cache the (large, stable) system prompt: a repeat costs about 5% of the fresh input price.</param>
 /// <param name="MaxOutputTokens">Clamped to the platform's cap.</param>
+/// <param name="Meta">Who asked, what the answer is about and which prompt version was used: what the audit trail records (REOS-184). Optional for a caller with nothing to say; the call is recorded either way.</param>
 public sealed record AiRequest(string WorkspaceId, string Feature, string SystemPrompt, string Instruction, IReadOnlyList<AiContextItem>? Context = null,
-    int MaxOutputTokens = 1024, bool CacheSystemPrompt = false);
+    int MaxOutputTokens = 1024, bool CacheSystemPrompt = false, AiCallMeta? Meta = null);
 
-public enum AiOutcome { Completed, ModuleOff, KillSwitch, WorkspacePaused, OptedOut, NotConfigured, NoKey, Blocked, TimedOut, ProviderError }
+/// <summary>What the audit trail needs to know about a call that the request text does not say (REOS-184). Nothing here is sent to a model.</summary>
+/// <param name="RequestedByUserId">The person who asked; null for a scheduled or batch run (the system).</param>
+/// <param name="SubjectType">What the answer is about ('Train', 'Gate', ...) together with <paramref name="SubjectId"/>: a plain reference, never a link that could carry a status.</param>
+/// <param name="PromptTemplateVersion">The version of the prompt text the feature used, e.g. 'release-notes/1'. Bump it whenever the template changes.</param>
+public sealed record AiCallMeta(string? RequestedByUserId = null, string? SubjectType = null, string? SubjectId = null, string? ReleaseTrainId = null, string PromptTemplateVersion = AiCallMeta.Untracked)
+{
+    public const string Untracked = "untracked";
+}
+
+/// <summary>One piece of context as the trail records it: its label, class, hash and size. Never its text.</summary>
+public sealed record AiInputRef(string Label, string Class, string Sha256, int Chars);
+
+/// <remarks><c>AuditFailed</c> (REOS-184): the call was made but the action could not be recorded, so its output is withheld: an AI answer that is not in the trail must not be used.</remarks>
+public enum AiOutcome { Completed, ModuleOff, KillSwitch, WorkspacePaused, OptedOut, NotConfigured, NoKey, Blocked, TimedOut, ProviderError, AuditFailed }
 
 /// <summary>The cost inputs of one call (pricing-and-infrastructure section 5), recorded for the metering story. Cached tokens are counted apart because they price differently.</summary>
 public sealed record AiUsage(string Feature, string Model, long InputTokens, long OutputTokens, long CacheReadTokens, long CacheWriteTokens, bool Batch);
 
 /// <summary>The answer to a call. <c>ProviderCalled</c> is false for every outcome except Completed, TimedOut and ProviderError: a refusal never reaches the network.</summary>
+/// <param name="ActionId">The AiActions row that records this call (REOS-184); a feature keeps it to record the human's decision on the draft.</param>
 public sealed record AiResult(AiOutcome Outcome, string Feature, string WorkspaceId, DateTime At, string? Text = null, string? Detail = null, string? Model = null,
-    AiUsage? Usage = null, int Attempts = 0, bool ProviderCalled = false, int Redactions = 0, bool Batch = false)
+    AiUsage? Usage = null, int Attempts = 0, bool ProviderCalled = false, int Redactions = 0, bool Batch = false,
+    string? ActionId = null, string? Provider = null, string? ServedModel = null, IReadOnlyList<AiInputRef>? Inputs = null, string? InputHash = null, string? PromptHash = null)
 {
     public bool IsCompleted => Outcome == AiOutcome.Completed;
 }
@@ -74,7 +90,8 @@ public interface IAiClient
 /// <summary>What a provider adapter is asked to do, after every rule has been applied.</summary>
 public sealed record AiProviderRequest(string Model, string Feature, string System, string User, int MaxOutputTokens, bool CacheSystem);
 
-public sealed record AiProviderResponse(string Text, long InputTokens, long OutputTokens, long CacheReadTokens = 0, long CacheWriteTokens = 0);
+/// <param name="ServedModel">The exact model version the provider says answered, when it says (recorded as the model version in the trail).</param>
+public sealed record AiProviderResponse(string Text, long InputTokens, long OutputTokens, long CacheReadTokens = 0, long CacheWriteTokens = 0, string? ServedModel = null);
 
 /// <summary>An adapter failure. <c>Transient</c> failures (timeouts, 429, 5xx, network) are retried a bounded number of times; the others are not.</summary>
 public sealed class AiProviderException(string message, bool transient, Exception? inner = null) : Exception(message, inner)
@@ -104,12 +121,10 @@ public interface IAiKeyStore
 
 public sealed record AiWorkspaceState(bool Paused, bool OptedOut);
 
-/// <summary>The per-workspace kill switch and opt-out. In memory until REOS-184 persists them with their audit rows.</summary>
+/// <summary>The per-workspace kill switch and opt-out, read from the database (REOS-184): they survive a restart, so an opt-out never fails open. Changing them is <see cref="IAiControls"/>.</summary>
 public interface IAiWorkspaceSettings
 {
-    AiWorkspaceState Get(string workspaceId);
-    void SetPaused(string workspaceId, bool paused);
-    void SetOptedOut(string workspaceId, bool optedOut);
+    Task<AiWorkspaceState> GetAsync(string workspaceId, CancellationToken ct = default);
 }
 
 /// <summary>Receives every result, refusals included, for the later metering and audit story. The default does nothing.</summary>

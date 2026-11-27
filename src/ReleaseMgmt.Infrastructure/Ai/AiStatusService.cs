@@ -11,7 +11,7 @@ public sealed record AiModelStatus(string? Small, string? Drafting, bool Draftin
 public sealed record AiStatus(bool ModuleEnabled, bool ModuleEntitled, string Provider, bool KeyPresent, bool KeyRequired, bool GlobalKillSwitch, bool WorkspacePaused, bool WorkspaceOptedOut,
     AiModelStatus Models, IReadOnlyList<AiFeatureRoute> Features, int TimeoutSeconds, int MaxRetries, bool CanCall, string? BlockedBecause);
 
-/// <summary>REOS-183: the read side of the platform for admins, and the two workspace controls (pause, opt out) and the key. Changes are logged, not yet audited in the database (REOS-184).</summary>
+/// <summary>REOS-183: the read side of the platform for admins, and the two workspace controls (pause, opt out) and the key. Changes are made through <see cref="IAiControls"/> (REOS-184), audited and kept in the database.</summary>
 public sealed class AiStatusService(IAiProvider provider, IAiKeyStore keys, IOptionsMonitor<AiOptions> options, IAiWorkspaceSettings workspaces, IModuleGate modules, IModuleEntitlements entitlements,
     IAiClient client)
 {
@@ -20,7 +20,7 @@ public sealed class AiStatusService(IAiProvider provider, IAiKeyStore keys, IOpt
         var o = options.CurrentValue;
         var enabled = await modules.IsEnabledAsync(workspaceId, ModuleKeys.Ai, ct);
         var entitled = (await entitlements.CheckAsync(workspaceId, ModuleKeys.Ai, ct)).Allowed;
-        var ws = workspaces.Get(workspaceId);
+        var ws = await workspaces.GetAsync(workspaceId, ct);
         var small = string.IsNullOrWhiteSpace(o.Models.Small) ? null : o.Models.Small.Trim();
         var drafting = string.IsNullOrWhiteSpace(o.Models.Drafting) ? null : o.Models.Drafting.Trim();
         var routes = AiFeatures.All.Select(f => new AiFeatureRoute(f.Key, f.Name, f.Tier.ToString(), GovernedAiClient.RouteModel(o, f))).ToList();

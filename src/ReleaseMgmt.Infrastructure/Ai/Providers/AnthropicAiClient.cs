@@ -52,7 +52,8 @@ public sealed class AnthropicAiClient(HttpClient http, IAiKeyStore keys, IOption
                 if (block.TryGetProperty("type", out var t) && t.GetString() == "text" && block.TryGetProperty("text", out var tx)) text.Append(tx.GetString());
         long L(JsonElement u, string name) => u.ValueKind == JsonValueKind.Object && u.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : 0;
         message.TryGetProperty("usage", out var usage);
-        return new AiProviderResponse(text.ToString(), L(usage, "input_tokens"), L(usage, "output_tokens"), L(usage, "cache_read_input_tokens"), L(usage, "cache_creation_input_tokens"));
+        return new AiProviderResponse(text.ToString(), L(usage, "input_tokens"), L(usage, "output_tokens"), L(usage, "cache_read_input_tokens"), L(usage, "cache_creation_input_tokens"),
+            message.TryGetProperty("model", out var served) && served.ValueKind == JsonValueKind.String ? served.GetString() : null);
     }
 
     private static AiProviderException Failure(HttpStatusCode status) =>

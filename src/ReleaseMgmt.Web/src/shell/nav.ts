@@ -36,6 +36,7 @@ export const NAV: NavGroup[] = [
       { view: 'ai', label: 'AI assistant', placeholder: 'ai', module: 'ai' },
       { view: 'api-tokens', label: 'API tokens', need: 'admin' },
       { view: 'webhooks', label: 'Webhooks', need: 'admin' },   // REOS-164 (D61)
+      { view: 'ai-inventory', label: 'AI inventory', need: 'audit' },   // REOS-184 (D58): core, not behind the AI module: a reviewer reads what AI did even after it is switched off
     ],
   },
   { id: 'more', label: 'More', items: [{ view: 'work', label: 'My work' }, { view: 'analytics', label: 'Analytics' }, { view: 'importexport', label: 'Imports & exports' }] },

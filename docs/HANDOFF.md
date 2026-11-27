@@ -23,7 +23,7 @@ ReleaseOS is an internal release-management tool for **Release Train Engineers, 
 | Redesign (Figma) | All screens restyled except two placeholders (Service catalog, Environments) |
 | Jira tickets | 154 in project REOS: 131 Done, 6 In Review, 1 Ready, 16 To Do (10 epics and 6 planned stories, see section 10) |
 | Commits | About 270 on `main` |
-| Database | 80 tables, 177 triggers, 48 indexes on `main` |
+| Database | 85 tables, 188 triggers, 55 indexes on `main` |
 | Code | About 27,700 lines of C# (Domain 3.6k, Infrastructure 17.9k, Api 6.2k), about 16,000 lines of TypeScript and CSS, about 30,400 lines of C# tests, 45 Playwright spec files |
 | Last full regression on `main` | Domain 358, DrDrill 2, Infrastructure 374, Api 980 passed; schema oracle 493; web unit 171; Playwright 233; build 0 warnings (on `main` b4c35eb) |
 | CI | GitHub Actions on macOS and Windows; the last confirmed green runs are on `9b921a2` and `fb30a05`; the runs on `d298e6e` and `b4c35eb` had not been checked when this was written |
@@ -192,7 +192,7 @@ Viewer, RTE, ReleaseManager, GovernanceOfficer. The Release Manager can do every
 
 ### 4.5 Database
 
-SQLite, WAL mode, `foreign_keys=ON`, `busy_timeout=5000` on every connection. 80 tables, 177 triggers, 48 indexes on `main`. Fifteen manual upgrade scripts in `db/upgrades/` take an older database to the current schema (001 identity, 002 encrypted webhooks, 003 milestones, 004 workspaces, 005 workspace roles, 006 release model and deployments, 007 telemetry/control/approvals/audit chain, 008 release types per release, 009 clients and segments, 010 release versions, 011 client dates, 012 template governance, 013 API tokens and idempotency keys). `start.py` saves a copy of your database and runs the scripts automatically when a pull changes the schema.
+SQLite, WAL mode, `foreign_keys=ON`, `busy_timeout=5000` on every connection. 85 tables, 188 triggers, 55 indexes on `main`. Fifteen manual upgrade scripts in `db/upgrades/` take an older database to the current schema (001 identity, 002 encrypted webhooks, 003 milestones, 004 workspaces, 005 workspace roles, 006 release model and deployments, 007 telemetry/control/approvals/audit chain, 008 release types per release, 009 clients and segments, 010 release versions, 011 client dates, 012 template governance, 013 API tokens and idempotency keys). `start.py` saves a copy of your database and runs the scripts automatically when a pull changes the schema.
 
 ### 4.6 Background services
 

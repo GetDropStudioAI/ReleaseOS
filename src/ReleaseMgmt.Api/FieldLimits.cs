@@ -53,6 +53,7 @@ public static class FieldLimits
     {
         // Admin (REOS-36)
         [typeof(AiEndpoints.KeyBody)] = new() { ["Key"] = 512 },   // REOS-183: a provider key; write-only
+        [typeof(AiEndpoints.DecisionBody)] = new() { ["Decision"] = Code, ["FinalText"] = 200_000, ["Note"] = 1000 },   // REOS-184: the human decision on an AI draft; the edit is as long as the draft may be
         [typeof(AdminEndpoints.PatchUser)] = new() { ["Handle"] = Handle },
         [typeof(AdminEndpoints.TeamBody)] = new() { ["Handle"] = Handle, ["Name"] = Name, ["MemberIds"] = Id },
         [typeof(AdminEndpoints.TeamPatch)] = new() { ["Name"] = Name, ["MemberIds"] = Id },

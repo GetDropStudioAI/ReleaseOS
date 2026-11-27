@@ -30,6 +30,32 @@ internal sealed class MemoryKeys(string? key = null) : IAiKeyStore
     public Task<bool> ClearKeyAsync(CancellationToken ct = default) { var had = Key is not null; Key = null; return Task.FromResult(had); }
 }
 
+/// <summary>The controls in memory for the governed-client unit tests (the database-backed ones are tested with the real services).</summary>
+internal sealed class MemoryWorkspaces : IAiWorkspaceSettings
+{
+    private readonly Dictionary<string, AiWorkspaceState> _state = [];
+    public Task<AiWorkspaceState> GetAsync(string workspaceId, CancellationToken ct = default) => Task.FromResult(_state.GetValueOrDefault(workspaceId, new AiWorkspaceState(false, false)));
+    public void SetPaused(string workspaceId, bool paused) => _state[workspaceId] = _state.GetValueOrDefault(workspaceId, new AiWorkspaceState(false, false)) with { Paused = paused };
+    public void SetOptedOut(string workspaceId, bool optedOut) => _state[workspaceId] = _state.GetValueOrDefault(workspaceId, new AiWorkspaceState(false, false)) with { OptedOut = optedOut };
+}
+
+/// <summary>An action log that keeps what it was given (and can be made to fail), for the governed-client unit tests.</summary>
+internal sealed class RecordingActionLog : IAiActionLog
+{
+    public List<(AiRequest Request, AiResult Result, string Id)> Recorded { get; } = [];
+    public bool Fail { get; set; }
+    public Task<string> RecordAsync(AiRequest request, AiResult result, CancellationToken ct = default)
+    {
+        if (Fail) throw new InvalidOperationException("the audit trail is down");
+        var id = "act-" + (Recorded.Count + 1);
+        Recorded.Add((request, result, id));
+        return Task.FromResult(id);
+    }
+    public Task<ServiceResult<AiActionView>> DecideAsync(string actionId, string decision, string? finalText, string? note, Actor actor, bool isAdmin, int? expectedVersion, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<AiActionView?> GetAsync(string actionId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<AiActionSummary>> ListAsync(AiActionFilter filter, CancellationToken ct = default) => throw new NotSupportedException();
+}
+
 internal sealed class RecordingSink : IAiUsageSink
 {
     public List<AiResult> Results { get; } = [];
@@ -54,7 +80,8 @@ internal sealed class AiRig
     public FakeAiClient Provider { get; }
     public StubGate Gate { get; } = new(Ws);
     public MemoryKeys Keys { get; } = new();
-    public InMemoryAiWorkspaceSettings Workspaces { get; } = new();
+    public MemoryWorkspaces Workspaces { get; } = new();
+    public RecordingActionLog Actions { get; } = new();
     public RecordingSink Sink { get; } = new();
     public CapturingLogger<GovernedAiClient> Log { get; } = new();
     public TestMonitor<AiOptions> Options { get; }
@@ -67,7 +94,7 @@ internal sealed class AiRig
         configure?.Invoke(o);
         Options = new TestMonitor<AiOptions>(o);
         Provider = provider as FakeAiClient ?? new FakeAiClient();
-        Client = new GovernedAiClient(provider ?? Provider, Keys, Options, Workspaces, Gate, Sink, Clock, Log);
+        Client = new GovernedAiClient(provider ?? Provider, Keys, Options, Workspaces, Gate, Sink, Actions, Clock, Log);
     }
 
     public static AiRequest Req(string feature = AiFeatures.RiskScore, string instruction = "Assess the release", IReadOnlyList<AiContextItem>? context = null, bool cache = false, string ws = Ws) =>

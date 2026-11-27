@@ -128,7 +128,8 @@ public class WorkspaceIsolationTests
             ["dispatches"] = "dsa", ["export-jobs"] = "xa", ["freezes"] = "fa", ["links"] = "lka", ["notifications"] = "na", ["alerts"] = "sya", ["webhook-allowlist"] = "wha",
             ["teams"] = "tma", ["templates"] = "tpa", ["users"] = "ua", ["userId"] = "ua", ["waivers"] = "wva", ["ics-tokens"] = "ica", ["imports"] = "ija",
             ["release-types"] = "rta", ["versions"] = "vera", ["clients"] = "cla", ["client"] = "cla", ["environments"] = "enva", ["services"] = "svca", ["deployments"] = "depa", ["ingest-keys"] = "ika", ["api-tokens"] = "ata", ["webhooks"] = "wsa", ["deliveries"] = "wda", ["approval-requests"] = "apa", ["approval-policies"] = "pola",
-            ["changes"] = "cha", ["meetings"] = "mta", ["itemId"] = "aia",   // REOS-175 CAB module
+            ["changes"] = "cha", ["meetings"] = "mta", ["itemId"] = "aia", ["actions"] = "aca",   // REOS-184: AI actions
+              // REOS-175 CAB module
             ["ciId"] = "cia", ["issueId"] = "kia", ["stepId"] = "sa", ["jobId"] = "ija", ["trainId"] = "ta", ["day"] = "2026-12-24",
             ["audit"] = Scalar(f, "SELECT Id FROM AuditEvents WHERE ReleaseTrainId='ta' AND EntityType='Train'"),   // GET /audit/{id}: one of A's events
         };

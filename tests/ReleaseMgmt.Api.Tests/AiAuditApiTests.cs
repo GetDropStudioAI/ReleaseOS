@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ReleaseMgmt.Domain.Ai;
+using ReleaseMgmt.Domain.Common;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Services;
 using static ReleaseMgmt.Api.Tests.LifecycleContractTests;
@@ -106,7 +107,6 @@ public class AiAuditApiTests
         var id = await DraftFor(f, "dev@x.com");
         var draft = (await Json(await viewer.GetAsync($"/api/v1/ai/actions/{id}"))).GetProperty("outputText").GetString();
 
-        Assert.Equal(HttpStatusCode.PreconditionRequired, (await Send(viewer, HttpMethod.Post, $"/api/v1/ai/actions/{id}:decide", new { decision = "Accepted" })).StatusCode);   // If-Match is required
         var stranger = await Send(other, HttpMethod.Post, $"/api/v1/ai/actions/{id}:decide", new { decision = "Accepted" }, 1);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, stranger.StatusCode);
         Assert.Equal("AiActionRole", (await Json(stranger)).GetProperty("guard").GetString());

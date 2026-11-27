@@ -59,6 +59,92 @@ public sealed class CabServiceTests(TriggerSuiteFixture fx) : IClassFixture<Trig
 
     private static DecisionInput Approve(string? meeting = null, bool retro = false) => new("Approved", "Looks fine", meeting, retro);
 
+    // ---- risk rules (REOS-176) ---------------------------------------------------------------------------------------------------------
+
+    private static RiskFactor Factor(ChangeView c, string rule) => c.Risk!.Factors.Single(f => f.Rule == rule);
+
+    [Fact]
+    public async Task The_risk_level_is_computed_and_stored_with_every_factor_so_the_list_explains_the_level()
+    {
+        var s = Make();
+        var c = await Ok(s.Changes.CreateAsync(Normal(), Rte));
+        Assert.Equal(("Low", 0), (c.RiskLevel, c.Risk!.Score));
+        Assert.Equal(["Emergency", "FreezeWindow", "NoRollbackNote", "PriorFailure", "LargeScope"], c.Risk.Factors.Select(f => f.Rule));
+        Assert.All(c.Risk.Factors, f => Assert.False(f.Applied));
+        Assert.All(c.Risk.Factors, f => Assert.False(string.IsNullOrWhiteSpace(f.Why)));   // an unapplied rule still says what was found
+        Assert.Equal(c.Risk.Score, c.Risk.Factors.Where(f => f.Applied).Sum(f => f.Points));
+        Assert.Equal(c.Risk.Level, ChangeRiskRules.LevelFor(c.Risk.Score));
+        var worst = await Ok(s.Changes.CreateAsync(new("Hotfix", "Emergency"), Rte));   // Emergency 3 + no rollback 2
+        Assert.Equal(("Critical", 5), (worst.RiskLevel, worst.Risk!.Score));
+        Assert.Equal(["Emergency", "NoRollbackNote"], worst.Risk.Factors.Where(f => f.Applied).Select(f => f.Rule));
+        Assert.Equal(worst.Risk.Level, s.K.Text("SELECT RiskLevel FROM ChangeRequests WHERE Id=?", worst.Id));   // what is stored is what is shown
+    }
+
+    [Fact]
+    public async Task A_freeze_window_added_after_drafting_is_found_when_the_change_is_submitted_and_a_product_pattern_must_match()
+    {
+        var s = Make();
+        var c = await Ok(s.Changes.CreateAsync(Normal() with { ReleaseTrainId = "t1" }, Rte));   // t1 ships "Payments API" and "Card Portal"
+        Assert.Equal("Low", c.RiskLevel);
+        s.K.Sql("INSERT INTO FreezeWindows(Id,Name,Kind,StartsAt,EndsAt,ProductPattern,CreatedByUserId) VALUES('fz1','Billing freeze','Freeze',?,?,'Billing*','rm')", Iso(W0.AddHours(-1)), Iso(W0.AddHours(1)));
+        var other = await Ok(s.Changes.SubmitAsync(c.Id, Rte, c.Version));
+        Assert.Equal("Low", other.RiskLevel);   // the window's product pattern covers none of this release's products
+        var d = await Ok(s.Changes.CreateAsync(Normal(title: "Second") with { ReleaseTrainId = "t1" }, Rte));
+        s.K.Sql("INSERT INTO FreezeWindows(Id,Name,Kind,StartsAt,EndsAt,ProductPattern,CreatedByUserId) VALUES('fz2','Payments freeze','Freeze',?,?,'Payments*','rm')", Iso(W0.AddHours(-1)), Iso(W0.AddHours(1)));
+        var sub = await Ok(s.Changes.SubmitAsync(d.Id, Rte, d.Version));
+        Assert.Equal(("High", 3), (sub.RiskLevel, sub.Risk!.Score));
+        Assert.True(Factor(sub, "FreezeWindow").Applied);
+        Assert.Contains("Payments freeze", Factor(sub, "FreezeWindow").Why);
+        Assert.DoesNotContain("Billing freeze", Factor(sub, "FreezeWindow").Why);
+        var later = W0.AddDays(10);   // a window with no product pattern covers every release
+        s.K.Sql("INSERT INTO FreezeWindows(Id,Name,Kind,StartsAt,EndsAt,ProductPattern,CreatedByUserId) VALUES('fz3','Year-end freeze','Freeze',?,?,NULL,'rm')", Iso(later.AddHours(-1)), Iso(later.AddHours(1)));
+        var e = await Ok(s.Changes.CreateAsync(new("Year end", "Normal", RollbackNote: "Undo", PlannedStartAt: later, PlannedEndAt: later.AddHours(1), ReleaseTrainId: "t1"), Rte));
+        Assert.Contains("Year-end freeze", Factor(e, "FreezeWindow").Why);
+        var unlinked = await Ok(s.Changes.CreateAsync(new("No release", "Normal", RollbackNote: "Undo", PlannedStartAt: W0, PlannedEndAt: W0.AddHours(1)), Rte));
+        Assert.DoesNotContain("Payments freeze", Factor(unlinked, "FreezeWindow").Why);   // without a release only windows that cover all products can apply
+        Assert.False(Factor(unlinked, "FreezeWindow").Applied);
+        Assert.Equal(2, s.K.Audits("ChangeRequest", "Submit"));
+    }
+
+    [Fact]
+    public async Task A_prior_failed_release_on_the_same_catalog_service_and_a_large_scope_raise_the_risk_but_other_services_and_old_failures_do_not()
+    {
+        var s = Make();
+        var now = Iso(T0);
+        s.K.Sql("INSERT INTO CatalogServices(Id,ServiceKey,Name,CreatedAt) VALUES('svA','pay','Payments API',?),('svB','mail','Mail',?)", now, now);
+        s.K.Sql("INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,CurrentStatus,CloseCode,ActualEndAt) VALUES('tf','R26.09','2026-10-01',?,?,'Complete','Unsuccessful',?)", now, now, Iso(T0.AddDays(-10)));
+        s.K.Sql("INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt,CurrentStatus,CloseCode,ActualEndAt) VALUES('told','R25.01','2026-01-01',?,?,'Complete','Unsuccessful',?)", now, now, Iso(T0.AddDays(-200)));
+        s.K.Sql("INSERT INTO BundledProducts(Id,ReleaseTrainId,ProductName,VersionTag,ProjectCode,CatalogServiceId) VALUES('f1','tf','Pay','1','P','svA'),('o1','told','Mail','1','M','svB')");
+        s.K.Sql("INSERT INTO BundledProducts(Id,ReleaseTrainId,ProductName,VersionTag,ProjectCode,CatalogServiceId) VALUES('a1','t1','Pay','2','P','svA')");
+        foreach (var t in new[] { "tf", "told" })
+        {
+            var failed = await Ok(s.Changes.CreateAsync(Normal(title: "Earlier " + t) with { ReleaseTrainId = t }, Rte));
+            await Ok(s.Changes.SubmitAsync(failed.Id, Rte, failed.Version));
+        }
+        var c = await Ok(s.Changes.CreateAsync(Normal() with { ReleaseTrainId = "t1" }, Rm));
+        Assert.Equal(("Medium", 2), (c.RiskLevel, c.Risk!.Score));
+        Assert.True(Factor(c, "PriorFailure").Applied);
+        Assert.Contains("CHG-0001", Factor(c, "PriorFailure").Why);
+        Assert.Contains("Payments API", Factor(c, "PriorFailure").Why);
+        for (var i = 0; i < 2; i++) s.K.Sql("INSERT INTO BundledProducts(Id,ReleaseTrainId,ProductName,VersionTag,ProjectCode) VALUES(?,'t1',?,'1','X')", "x" + i, "Extra" + i);
+        var big = await Ok(s.Changes.UpdateAsync(c.Id, new(Title: "Bigger"), Rm, c.Version));   // 5 products now: large scope applies on the next edit
+        Assert.Equal(("High", 4), (big.RiskLevel, big.Risk!.Score));
+        Assert.Contains("5 products", Factor(big, "LargeScope").Why);
+        var mail = await Ok(s.Changes.CreateAsync(Normal(title: "Mail only") with { ReleaseTrainId = "told" }, Rm));
+        Assert.False(Factor(mail, "PriorFailure").Applied);   // no other service of that release failed lately
+    }
+
+    [Fact]
+    public async Task Thresholds_are_settings_with_defaults()
+    {
+        var s = Make();
+        var strict = new ChangeRequestService(s.K.Db, s.K.Time, s.Live, new ChangeRiskOptions { LargeScopeProducts = 2 });
+        var c = await Ok(strict.CreateAsync(Normal() with { ReleaseTrainId = "t1" }, Rte));
+        Assert.True(Factor(c, "LargeScope").Applied);
+        var lax = await Ok(s.Changes.CreateAsync(Normal() with { ReleaseTrainId = "t1" }, Rte));
+        Assert.False(Factor(lax, "LargeScope").Applied);
+    }
+
     // ---- create, read, edit ------------------------------------------------------------------------------------------------------------
 
     [Fact]
@@ -96,7 +182,7 @@ public sealed class CabServiceTests(TriggerSuiteFixture fx) : IClassFixture<Trig
         s.K.Sql("INSERT INTO ReleaseTrains(Id,Title,TargetReleaseDate,CreatedAt,UpdatedAt) VALUES('t9','Other','2026-11-30',?,?)", Iso(T0), Iso(T0));
         foreach (var bad in new[]
         {
-            new NewChange("  ", "Normal"), new NewChange("T", "Major"), new NewChange("T", "Normal", RiskLevel: "Extreme"), new NewChange("T", "Normal", PlannedStartAt: W0),
+            new NewChange("  ", "Normal"), new NewChange("T", "Major"), new NewChange("T", "Normal", PlannedStartAt: W0),
             new NewChange("T", "Normal", PlannedStartAt: W0, PlannedEndAt: W0), new NewChange("T", "Normal", ReleaseTrainId: "nope"), new NewChange("T", "Normal", GoNoGoDecisionId: "nope"),
             new NewChange("T", "Normal", ReleaseTrainId: "t9", GoNoGoDecisionId: "gn1"), new NewChange(new string('x', 201), "Normal"),
         })
@@ -114,17 +200,18 @@ public sealed class CabServiceTests(TriggerSuiteFixture fx) : IClassFixture<Trig
         var s = Make();
         var c = await Ok(s.Changes.CreateAsync(Normal(), Rte));
         s.K.Time.Advance(TimeSpan.FromMinutes(5));
-        var u = await Ok(s.Changes.UpdateAsync(c.Id, new(Title: "Patch gateway v2", RiskLevel: "High", RiskFactors: "Touches card flows"), Rm, 1));
-        Assert.Equal(("Patch gateway v2", "High", 2), (u.Title, u.RiskLevel, u.Version));
+        var u = await Ok(s.Changes.UpdateAsync(c.Id, new(Title: "Patch gateway v2", ChangeType: "Emergency"), Rm, 1));
+        Assert.Equal(("Patch gateway v2", "High", 2), (u.Title, u.RiskLevel, u.Version));   // the level is computed (Emergency = 3 points = High), never keyed in
         Assert.Equal(("rm", Iso(T0.AddMinutes(5))), (s.K.Text("SELECT LastChangedByUserId FROM ChangeRequests WHERE Id=?", c.Id), s.K.Text("SELECT LastChangedAt FROM ChangeRequests WHERE Id=?", c.Id)));
         var stale = await s.Changes.UpdateAsync(c.Id, new(Title: "Late"), Rte, 1);
         Assert.Equal(ResultKind.Conflict, stale.Kind);
         Assert.Equal(2, ((ChangeView)stale.Current!).Version);
         Assert.Equal("Patch gateway v2", s.K.Text("SELECT Title FROM ChangeRequests WHERE Id=?", c.Id));
-        var cleared = await Ok(s.Changes.UpdateAsync(c.Id, new(Clear: ["riskFactors", "window"]), Rte, 2));
-        Assert.Equal((null, null, null), (cleared.RiskFactors, cleared.PlannedStartAt, cleared.PlannedEndAt));
+        var cleared = await Ok(s.Changes.UpdateAsync(c.Id, new(Clear: ["rollbackNote", "window"]), Rte, 2));
+        Assert.Equal((null, null, null), (cleared.RollbackNote, cleared.PlannedStartAt, cleared.PlannedEndAt));
+        Assert.Equal("Critical", cleared.RiskLevel);   // Emergency (3) + no rollback note (2)
         Assert.Equal(CabGuards.ChangeInvalid, await Guard(s.Changes.UpdateAsync(c.Id, new(Clear: ["status"]), Rte, 3)));
-        Assert.Equal(CabGuards.ChangeInvalid, await Guard(s.Changes.UpdateAsync(c.Id, new(RiskLevel: "Nope"), Rte, 3)));
+        Assert.Equal(CabGuards.ChangeInvalid, await Guard(s.Changes.UpdateAsync(c.Id, new(ChangeType: "Nope"), Rte, 3)));
         Assert.Equal(3, s.K.Count("SELECT Version FROM ChangeRequests WHERE Id=?", c.Id));   // refused edits changed nothing
         Assert.Equal(2, s.K.Audits("ChangeRequest", "Update"));
         Assert.Equal(ResultKind.NotFound, (await s.Changes.UpdateAsync("nope", new(Title: "x"), Rte, 1)).Kind);

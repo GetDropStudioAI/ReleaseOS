@@ -1,0 +1,17 @@
+/* Change request screens (REOS-176). Tokens only (docs/ui/tokens.css). Status and risk are chips with a word; nothing here relies on colour alone. */
+.cab-chips { display: flex; flex-wrap: wrap; gap: var(--gap-sm); align-items: center; }
+.cab-filters { display: flex; flex-wrap: wrap; gap: var(--gap-md); align-items: center; }
+.cab-factors { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--gap-sm); }
+.cab-factor { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); gap: var(--gap-md); padding: var(--gap-sm) 0; border-top: var(--border-width) solid var(--color-border-subtle); }
+.cab-factor:first-child { border-top: 0; }
+.cab-factor-name { display: flex; flex-direction: column; gap: var(--gap-xs); font-weight: 600; }
+.cab-factor-why { margin: 0; color: var(--color-text-primary); }
+.cab-factor.off .cab-factor-why { color: var(--color-text-secondary); }
+.cab-sum { margin: 0; font-weight: 600; }
+.cab-rules { margin: 0; padding-left: var(--gap-lg); display: flex; flex-direction: column; gap: var(--gap-sm); }
+.cab-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; }
+.cab-decision { display: flex; flex-direction: column; gap: var(--gap-xs); padding: var(--gap-sm) 0; border-top: var(--border-width) solid var(--color-border-subtle); }
+.cab-decision:first-child { border-top: 0; }
+.cab-decision-head { display: flex; flex-wrap: wrap; gap: var(--gap-sm); align-items: center; }
+.cab-mono { font-family: var(--font-mono); font-size: var(--type-mono-small); }
+@media (max-width: 700px) { .cab-factor { grid-template-columns: minmax(0, 1fr); } }

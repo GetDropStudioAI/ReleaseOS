@@ -13,9 +13,9 @@ test('the Workspace group matches the design in order and labels; the Management
 })
 
 test('a destination with no screen yet opens a placeholder; every other one opens its screen', () => {
-  // REOS-174: only an add-on module's entry is a placeholder (no feature is behind CAB or AI yet); every core destination has its screen.
+  // REOS-174: only an add-on module's entry is a placeholder (the CAB screens exist since REOS-176; nothing is behind AI yet); every core destination has its screen.
   const placeholders = NAV.flatMap(g => g.items).filter(i => i.placeholder)
-  assert.deepEqual(placeholders.map(i => i.view), ['cab', 'ai'])
+  assert.deepEqual(placeholders.map(i => i.view), ['ai'])
   assert.ok(placeholders.every(i => i.module !== undefined))
   assert.equal(placeholderOf('calendar'), undefined)
   assert.equal(pathOf('trains'), '/')

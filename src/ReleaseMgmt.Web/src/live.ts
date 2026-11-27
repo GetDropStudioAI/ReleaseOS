@@ -12,6 +12,13 @@ export function onDeploymentChanged(fn: (deploymentId: string) => void): () => v
   return () => { deploymentListeners.delete(fn) }
 }
 
+/** REOS-176: the CAB screens refetch on a CabChanged push (the module's own event; sent only while the module is on) and after a reconnect (id ''). Payloads are hints, never trusted. */
+const cabListeners = new Set<(changeId: string) => void>()
+export function onCabChanged(fn: (changeId: string) => void): () => void {
+  cabListeners.add(fn)
+  return () => { cabListeners.delete(fn) }
+}
+
 interface Handlers {
   /** A train changed somewhere: refetch (payloads are hints, never trusted). */
   onTrainChanged: (trainId: string, version: number) => void
@@ -45,9 +52,10 @@ export function useLive(enabled: boolean, handlers: Handlers) {
     hub.on('ForecastChanged', (tid: string, rid: string) => h.current.onForecastChanged?.(tid, rid))
     hub.on('SyncAlertRaised', (id: string) => h.current.onSyncAlert?.(id))
     hub.on('ModulesChanged', () => h.current.onModulesChanged?.())
+    hub.on('CabChanged', (id: string) => cabListeners.forEach(fn => fn(id)))
     hub.on('DeploymentChanged', (id: string) => deploymentListeners.forEach(fn => fn(id)))
     hub.onreconnecting(() => setState('reconnecting'))
-    hub.onreconnected(() => { setState('live'); h.current.onResync() })
+    hub.onreconnected(() => { setState('live'); h.current.onResync(); cabListeners.forEach(fn => fn('')) })
     hub.onclose(() => setState('offline'))
     let stopped = false
     hub.start().then(() => { if (!stopped) setState('live') }).catch(() => { if (!stopped) setState('offline') })

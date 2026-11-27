@@ -87,6 +87,8 @@ test('enabling asks first and says what turns on; the entry appears live in anot
   await expect(cabEntry(other)).toHaveCount(0)
 
   await signIn(page, 'mod-admin-rm@example.com', 'ReleaseManager')
+  const versionOf = () => page.evaluate(async () => (await (await fetch('/api/v1/modules')).json() as { key: string; version: number }[]).find(m => m.key === 'cab')!.version)
+  const before = await versionOf()   // another spec may have enabled and disabled the module on this shared server (the CAB screens' spec does)
   await openModules(page)
 
   // Cancel changes nothing
@@ -112,7 +114,7 @@ test('enabling asks first and says what turns on; the entry appears live in anot
   await expect(cabEntry(other)).toBeVisible()              // live: the other session never reloaded
   await cabEntry(other).click()
   await expect(other.getByRole('heading', { name: 'Change advisory board' })).toBeVisible()
-  await expect(other.getByText('This screen is not built yet')).toBeVisible()
+  await expect(other.getByRole('table', { name: 'Risk rules' })).toBeVisible()   // REOS-176: the CAB module's own page, no longer a placeholder
 
   // Disable: asks again and says the data is kept
   await page.getByRole('button', { name: 'Disable CAB module' }).click()
@@ -130,10 +132,7 @@ test('enabling asks first and says what turns on; the entry appears live in anot
   await other.close()
 
   // both changes are in the audit history, versioned
-  const audit = await page.evaluate(async () => {
-    const r = await fetch('/api/v1/modules'); return (await r.json() as { key: string; version: number }[]).find(m => m.key === 'cab')!.version
-  })
-  expect(audit).toBe(2)
+  expect(await versionOf()).toBe(before + 2)
 })
 
 test('the Modules tab and its confirmation dialog have no serious axe violation, light or dark', async ({ page }) => {

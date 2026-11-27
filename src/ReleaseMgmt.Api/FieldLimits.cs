@@ -78,8 +78,8 @@ public static class FieldLimits
         [typeof(ConnectorEndpoints.LinkBody)] = new() { ["EntityType"] = Code, ["EntityId"] = Id, ["SourceSystem"] = Code, ["ExternalKey"] = ExternalKey },
         [typeof(SyncEndpoints.WebhookBody)] = new() { ["Name"] = 80, ["Url"] = WebhookUrlPolicy.MaxUrlLength, ["Kind"] = Code },   // SyncHealthService: a channel name is 1 to 80
         // CAB module (REOS-175/177): the services' own limits
-        [typeof(NewChange)] = new() { ["Title"] = Name, ["ChangeType"] = Code, ["Description"] = 4000, ["RiskLevel"] = Code, ["RiskFactors"] = 4000, ["RequestedByUserId"] = Id, ["ReleaseTrainId"] = Id, ["GoNoGoDecisionId"] = Id, ["RollbackNote"] = 4000 },
-        [typeof(ChangePatch)] = new() { ["Title"] = Name, ["ChangeType"] = Code, ["Description"] = 4000, ["RiskLevel"] = Code, ["RiskFactors"] = 4000, ["ReleaseTrainId"] = Id, ["GoNoGoDecisionId"] = Id, ["RollbackNote"] = 4000, ["Clear"] = Code },
+        [typeof(NewChange)] = new() { ["Title"] = Name, ["ChangeType"] = Code, ["Description"] = 4000, ["RequestedByUserId"] = Id, ["ReleaseTrainId"] = Id, ["GoNoGoDecisionId"] = Id, ["RollbackNote"] = 4000 },
+        [typeof(ChangePatch)] = new() { ["Title"] = Name, ["ChangeType"] = Code, ["Description"] = 4000, ["ReleaseTrainId"] = Id, ["GoNoGoDecisionId"] = Id, ["RollbackNote"] = 4000, ["Clear"] = Code },
         [typeof(CabEndpoints.DecisionBody)] = new() { ["Decision"] = Code, ["Rationale"] = 2000, ["MeetingId"] = Id },
         [typeof(CabEndpoints.MeetingBody)] = new() { ["Title"] = Name, ["ChairUserId"] = Id, ["Location"] = 200 },
         [typeof(CabEndpoints.MeetingPatchBody)] = new() { ["Title"] = Name, ["ChairUserId"] = Id, ["Location"] = 200, ["Minutes"] = 8000 },

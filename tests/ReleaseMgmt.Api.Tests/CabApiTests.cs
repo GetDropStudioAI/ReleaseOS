@@ -81,7 +81,7 @@ public class CabApiTests
         var viewer = await As(f, Roles.Viewer, "v@x.com");
         foreach (var (m, url) in new[]
         {
-            (HttpMethod.Get, "/api/v1/cab/changes"), (HttpMethod.Get, "/api/v1/cab/changes/x"), (HttpMethod.Post, "/api/v1/cab/changes"), (HttpMethod.Post, "/api/v1/cab/changes/x:submit"),
+            (HttpMethod.Get, "/api/v1/cab/changes"), (HttpMethod.Get, "/api/v1/cab/risk-rules"), (HttpMethod.Get, "/api/v1/cab/changes/x"), (HttpMethod.Post, "/api/v1/cab/changes"), (HttpMethod.Post, "/api/v1/cab/changes/x:submit"),
             (HttpMethod.Post, "/api/v1/cab/changes/x/decisions"), (HttpMethod.Get, "/api/v1/cab/meetings"), (HttpMethod.Post, "/api/v1/cab/meetings"), (HttpMethod.Post, "/api/v1/cab/meetings/x/agenda"),
         })
         {
@@ -111,6 +111,19 @@ public class CabApiTests
     // ---- change requests ---------------------------------------------------------------------------------------------------------------
 
     [Fact]
+    public async Task The_risk_rules_are_listed_for_any_signed_in_role_with_the_thresholds_in_force_and_hidden_while_the_module_is_off()
+    {
+        using var w = await Enabled();
+        var j = await Ok(await w.Viewer.GetAsync("/api/v1/cab/risk-rules"));
+        Assert.Equal(["Emergency", "FreezeWindow", "NoRollbackNote", "PriorFailure", "LargeScope"], j.GetProperty("rules").EnumerateArray().Select(r => r.GetProperty("rule").GetString()));
+        Assert.All(j.GetProperty("rules").EnumerateArray(), r => { Assert.NotEmpty(r.GetProperty("label").GetString()!); Assert.NotEmpty(r.GetProperty("points").GetString()!); Assert.NotEmpty(r.GetProperty("description").GetString()!); });
+        Assert.Equal((48, 5, 90), (j.GetProperty("thresholds").GetProperty("nearFreezeHours").GetInt32(), j.GetProperty("thresholds").GetProperty("largeScopeProducts").GetInt32(), j.GetProperty("thresholds").GetProperty("priorFailureLookbackDays").GetInt32()));
+        Assert.Contains("Critical", j.GetProperty("levelRule").GetString());
+        (await Send(w.Rte, HttpMethod.Post, "/api/v1/modules/cab:disable", new { }, 1)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, (await w.Viewer.GetAsync("/api/v1/cab/risk-rules")).StatusCode);
+    }
+
+    [Fact]
     public async Task A_change_is_created_listed_edited_and_moved_with_If_Match_and_every_write_is_audited()
     {
         using var w = await Enabled();
@@ -120,8 +133,13 @@ public class CabApiTests
         var list = await Ok(await w.Viewer.GetAsync("/api/v1/cab/changes?status=Draft"));
         Assert.Single(list.EnumerateArray());
         Assert.Empty((await Ok(await w.Viewer.GetAsync("/api/v1/cab/changes?status=Closed"))).EnumerateArray());
-        var upd = await Ok(await Send(w.Rte, new HttpMethod("PATCH"), $"/api/v1/cab/changes/{Id(ch)}", new { riskLevel = "High", riskFactors = "Card flows" }, 1));
+        var upd = await Ok(await Send(w.Rte, new HttpMethod("PATCH"), $"/api/v1/cab/changes/{Id(ch)}", new { changeType = "Emergency" }, 1));
         Assert.Equal(("High", 2), (upd.GetProperty("riskLevel").GetString(), Ver(upd)));
+        var risk = upd.GetProperty("risk");   // REOS-176: the factors that explain the level travel with it
+        Assert.Equal(3, risk.GetProperty("score").GetInt32());
+        Assert.Equal(5, risk.GetProperty("factors").GetArrayLength());
+        Assert.Contains("Score 0 is Low", risk.GetProperty("levelRule").GetString());
+        Assert.Equal("Emergency", risk.GetProperty("factors").EnumerateArray().First(f => f.GetProperty("applied").GetBoolean()).GetProperty("rule").GetString());
         var stale = await Send(w.Rte, new HttpMethod("PATCH"), $"/api/v1/cab/changes/{Id(ch)}", new { title = "x" }, 1);
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
         Assert.Equal(2, (await Json(stale)).GetProperty("current").GetProperty("version").GetInt32());

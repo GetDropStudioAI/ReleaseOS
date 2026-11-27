@@ -40,6 +40,20 @@ Counts: 18 + 2 + 1 + 2 + 4 + 1 + 1 + 1 = 30.
 
 Counts: 18 + 2 + 1 + 1 = 22.
 
+## REOS-150 (Firefox) and the shared clipboard fix: before and after
+
+Full Firefox run on 2026-11-27 against a fresh host (demo seed, one worker), Playwright 1.63, `E2E_CROSS_BROWSER=1 npx playwright test --project=firefox`: **before 244 passed, 1 skipped, 30 failed (all skipped by key); after 275 passed, 0 skipped, 0 failed (42.2 min).** Every `REOS-150` skip is gone. WebKit could not be run in this container (missing host libraries); the clipboard fix is engine-independent and the WebKit clipboard skips are removed too, so REOS-152's first macOS run is its evidence.
+
+| Cause | Verdict | Fix |
+|---|---|---|
+| Clipboard permissions (21 per engine: `calendar` 18, `audit` 2, `comms` 1) | Test setup | `captureClipboard` / `copiedText` in `specs/support.ts`: grant permissions only on Chromium/Edge and read the real clipboard there; elsewhere record what the page passed to `navigator.clipboard.writeText` / `write`. Firefox and WebKit skips removed from all three specs |
+| `div.os-sidebar-top` a Tab stop | **Product** | `tabIndex={-1}` on the scroll container (UI.md, Tab order across browsers) |
+| Tab never reached "Dark" / "Light" | **Product** | The account panel came *before* its trigger in the DOM, so it was a whole page of Tab stops behind the card (reachable only by wrapping round in Chromium). It now follows the card; CSS still places it above |
+| "Focus cycling among 1 element" (overview, train plan) | Test, not a trap | Headless Firefox does not wrap or leave the page after the last control (Tab does nothing), and a date input is four stops on one element. The walk now tells the end of the order from a trap with Shift+Tab (a real trap still fails), and each walk starts from the top. The keyboard tour's Sync and Inbox steps also start from the top |
+| `redesign-qa.spec.ts:294` unlabelled `0:27:16` | **Product** (data-state dependent, so it can also fail on Chromium) | "To rollback deadline" showed only "Under 30 minutes" or "Passed", dropping the deadline's UTC time, so the countdown had no zone label. It now always carries "Deadline HH:MM UTC" (unit test). Found by reading the code; I did not reproduce the exact 27-minute state |
+| `qa-142.spec.ts:210` timeout | Slow, not wrong | Passes alone in 1.7 min per theme and passed in the full run (1.8 min); no product defect. The file's 10-minute budget (`test.setTimeout(600_000)`) was kept: it is 5x the measured time. The first full run's timeout was not reproduced |
+| `releases.spec.ts:119` timeout | Not reproduced | Passes alone (4.6 s) and in the full run. Skip removed; no cause found, so if it recurs treat it as open |
+
 ## Edge (REOS-151) — not tested here
 
 No result. The `msedge` project (`channel: 'msedge'`) is defined and runs in the `cross-browser` workflow on `windows-latest`, where Edge is installed. Treat its first run as the findings for REOS-151; add them here and skip with `REOS-151` as above.

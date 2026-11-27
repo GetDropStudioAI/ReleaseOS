@@ -27,14 +27,15 @@ interface Shown { tokenId: string; secret: string; how: 'made' | 'rotated' }
 
 const WHO = 'Release Train Engineers and Release Managers'
 
-export function ApiTokens({ me }: { me: Me }) {
+/** `embedded`: drawn inside the Integrations page (REOS-165), which owns the page heading; the standalone page at /api-tokens is unchanged. */
+export function ApiTokens({ me, embedded = false }: { me: Me; embedded?: boolean }) {
   if (!canAdmin(me.roles)) {
     return <div className="os-page"><PageHeading trail={['Management', 'API tokens']} title="API tokens" /><NoPermissionState what="manage API tokens" who={WHO} /></div>
   }
-  return <TokensScreen me={me} />
+  return <TokensScreen me={me} embedded={embedded} />
 }
 
-function TokensScreen({ me }: { me: Me }) {
+function TokensScreen({ me, embedded }: { me: Me; embedded: boolean }) {
   const [rows, setRows] = useState<ApiToken[] | null>(null)
   const [known, setKnown] = useState<string[]>([...KNOWN_SCOPES])
   const [error, setError] = useState<string | null>(null)
@@ -115,10 +116,12 @@ function TokensScreen({ me }: { me: Me }) {
   }
 
   return (
-    <div className="os-page">
-      <PageHeading trail={['Management', 'API tokens']} title="API tokens"
-        description="Tokens call the public API at /api/public/v1. A token acts as the person who made or last rotated it, and its secret is shown once."
-        actions={makeAction} />
+    <div className={embedded ? 'int-embedded' : 'os-page'}>
+      {embedded
+        ? <div className="int-actions">{makeAction}</div>
+        : <PageHeading trail={['Management', 'API tokens']} title="API tokens"
+          description="Tokens call the public API at /api/public/v1. A token acts as the person who made or last rotated it, and its secret is shown once."
+          actions={makeAction} />}
       {error && <ErrorState what="The API tokens" message={error} onRetry={() => void reload()} />}
       {body && (
         <div className="mg-split">

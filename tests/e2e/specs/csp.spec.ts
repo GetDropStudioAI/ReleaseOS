@@ -15,8 +15,7 @@ const SCREENS: { link: RegExp; heading: RegExp; where?: 'bell' | 'card' }[] = [
   { link: /^Templates$/, heading: /^Train templates$/ },
   { link: /^Comm library$/, heading: /^Comm library$/ },
   { link: /^Connectors$/, heading: /^Connectors$/ },
-  { link: /^API tokens$/, heading: /^API tokens$/ },
-  { link: /^Webhooks$/, heading: /^Webhooks$/ },
+  { link: /^Integrations$/, heading: /^Integrations$/ },   // REOS-165: API tokens and Webhooks are its tabs
   { link: /^My work$/, heading: /^My work$/ },
   { link: /^Analytics$/, heading: /^Analytics$/ },
   { link: /^Imports & exports$/, heading: /^Imports & exports$/ },

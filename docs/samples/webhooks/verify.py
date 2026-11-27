@@ -1,6 +1,6 @@
 """Verifies a ReleaseOS webhook delivery (docs/WEBHOOKS.md). Python 3.8+, standard library only:  python3 docs/samples/webhooks/verify.py --selftest
 In a real receiver, call verify() with the RAW request body (bytes exactly as received, not json.dumps of a parsed object) and the three headers."""
-import hashlib, hmac, sys, time
+import hashlib, hmac, json, sys, time
 
 TOLERANCE_SECONDS = 300
 
@@ -18,6 +18,13 @@ def verify(secret: str, timestamp: str, delivery_id: str, raw_body: bytes, signa
     return hmac.compare_digest(f"v1={mac}", signature)             # constant time
 # After verify(): remember delivery_id (for a day or more) and answer 200 without acting when you have seen it: delivery is at least once.
 
+
+if __name__ == "__main__" and "--check" in sys.argv:
+    # --check <file.json>: a captured delivery {secret, timestamp, deliveryId, signature, body, now}; exit 0 and print ok when it verifies (docs/DEVELOPERS.md, the CI test that runs the real signer's output through this).
+    c = json.load(open(sys.argv[sys.argv.index("--check") + 1], encoding="utf-8"))
+    ok = verify(c["secret"], c["timestamp"], c["deliveryId"], c["body"].encode("utf-8"), c["signature"], c.get("now"))
+    print("ok" if ok else "FAILED")
+    sys.exit(0 if ok else 1)
 
 if __name__ == "__main__" and "--selftest" in sys.argv:
     secret, delivery, body, ts = "whsec_test_secret", "7d1c0a52-8d3e-4f5e-9d3b-0c1b6f6e2a11", b'{"id":"evt_1","type":"gate.failed"}', 1792504800

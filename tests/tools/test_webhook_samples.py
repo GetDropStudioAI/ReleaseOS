@@ -23,6 +23,17 @@ for f in sorted(S.iterdir()):
 net = (ROOT / "tests/ReleaseMgmt.Domain.Tests/WebhookCatalogTests.cs").read_text()
 check("whsec_test_secret" in net and "7d1c0a52-8d3e-4f5e-9d3b-0c1b6f6e2a11" in net, "the .NET test uses the same inputs")
 
+# REOS-165: docs/DEVELOPERS.md carries the three samples inline (each block must be the file, byte for byte) and lists exactly the events the code offers.
+dev = (ROOT / "docs/DEVELOPERS.md").read_text()
+for f in sorted(S.iterdir()):
+    m = re.search(r"<!-- sample: docs/samples/webhooks/" + re.escape(f.name) + r" -->\n```[a-z]+\n(.*?)\n```", dev, re.S)
+    check(m is not None and m.group(1) == f.read_text().rstrip(), f"docs/DEVELOPERS.md shows {f.name} exactly as the file is")
+code_events = re.findall(r'new\("([a-z_.]+)", "[^"]+", "[^"]+"\)', (ROOT / "src/ReleaseMgmt.Domain/Services/Webhooks.cs").read_text())
+doc_events = re.findall(r"^\| `([a-z_.]+)` \| [^|]+ \| [^|]+ \|$", dev, re.M)
+check(len(code_events) >= 14 and code_events == doc_events, f"docs/DEVELOPERS.md lists the {len(code_events)} events of the catalogue, in order")
+spec = __import__("json").loads((ROOT / "docs/api/public-v1.openapi.json").read_text())
+check("/me" in spec["paths"] and "/api/public/v1/me" in dev and "/releases" in spec["paths"], "the quickstart calls operations that are in the OpenAPI document")
+
 def run(cmd, label):
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     check(r.returncode == 0 and r.stdout.strip() == "ok", f"{label}: {r.stdout.strip() or r.stderr.strip()[:200]}")

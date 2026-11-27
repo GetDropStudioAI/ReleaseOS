@@ -28,14 +28,15 @@ interface Shown { id: string; secret: string; how: 'made' | 'rotated' }
 const WHO = 'Release Train Engineers and Release Managers'
 const SHOWN_LOG = 100
 
-export function Webhooks({ me }: { me: Me }) {
+/** `embedded`: drawn inside the Integrations page (REOS-165), which owns the page heading; the standalone page at /webhooks is unchanged. */
+export function Webhooks({ me, embedded = false }: { me: Me; embedded?: boolean }) {
   if (!canAdmin(me.roles)) {
     return <div className="os-page"><PageHeading trail={['Management', 'Webhooks']} title="Webhooks" /><NoPermissionState what="manage webhooks" who={WHO} /></div>
   }
-  return <WebhooksScreen />
+  return <WebhooksScreen embedded={embedded} />
 }
 
-function WebhooksScreen() {
+function WebhooksScreen({ embedded }: { embedded: boolean }) {
   const [data, setData] = useState<WebhookOverview | null>(null)
   const [log, setLog] = useState<Delivery[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -156,10 +157,12 @@ function WebhooksScreen() {
   }
 
   return (
-    <div className="os-page">
-      <PageHeading trail={['Management', 'Webhooks']} title="Webhooks"
-        description="ReleaseOS posts signed events (release, gate, approval, deployment and more) to the addresses you add. Each delivery is retried, logged and can be replayed."
-        actions={addAction} />
+    <div className={embedded ? 'int-embedded' : 'os-page'}>
+      {embedded
+        ? <div className="int-actions">{addAction}</div>
+        : <PageHeading trail={['Management', 'Webhooks']} title="Webhooks"
+          description="ReleaseOS posts signed events (release, gate, approval, deployment and more) to the addresses you add. Each delivery is retried, logged and can be replayed."
+          actions={addAction} />}
       {error && <ErrorState what="The webhooks" message={error} onRetry={() => void reload()} />}
       {!data && !error && <LoadingState what="the webhooks" />}
       {allow && <Notice tone={allow.tone} title={allow.title}>{allow.text}</Notice>}

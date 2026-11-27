@@ -1,0 +1,9 @@
+/* Integrations (REOS-165). Layout from mgmt.css and ui.css; tokens only (docs/ui/tokens.css). */
+.int-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--gap-md); }
+.int-embedded { display: flex; flex-direction: column; gap: var(--gap-lg); }
+.int-actions { display: flex; justify-content: flex-end; }
+.int-code { margin: 0; padding: var(--gap-md); border: var(--border-width) solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); font-family: var(--font-mono); font-size: var(--type-mono-small); overflow-x: auto; white-space: pre; }
+.int-docs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--gap-md); }
+.int-docs code { font-family: var(--font-mono); font-size: var(--type-mono-small); }
+.int-page { display: flex; flex-direction: column; gap: var(--gap-lg); }
+.int-steps { margin: 0; padding-left: var(--gap-xl); display: flex; flex-direction: column; gap: var(--gap-sm); }

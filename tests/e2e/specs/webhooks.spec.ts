@@ -49,16 +49,19 @@ async function drop(page: Page, id: string) {
   }, id)
 }
 
-test('the sidebar has Webhooks in the Management group for an RTE and opens the real screen', async ({ page }) => {
+test('the sidebar has Integrations in the Management group for an RTE; Webhooks are its tab and the page /webhooks still opens', async ({ page }) => {
   await signIn(page, 'wh-nav-rte@example.com', 'RTE')
-  await primaryNav(page).getByRole('link', { name: 'Webhooks' }).click()
-  await expect(page).toHaveURL(/\/webhooks$/)
+  await primaryNav(page).getByRole('link', { name: 'Integrations' }).click()
+  await expect(page).toHaveURL(/\/integrations$/)
+  await page.getByRole('tab', { name: 'Webhooks', exact: true }).click()
+  await expect(page.getByRole('button', { name: /^(Add webhook)$/ }).first()).toBeVisible()
+  const names = await primaryNav(page).locator('.os-nav-group-management a').allInnerTexts()
+  expect(names.map(n => n.trim())).toContain('Service catalog')
+  expect(names.map(n => n.trim())).toContain('Integrations')
+  await page.goto('/webhooks')
   await expect(page.getByRole('heading', { level: 1, name: 'Webhooks' })).toBeVisible()
   await expect(page).toHaveTitle('Webhooks · ReleaseOS')
   await expect(page.getByText('This screen is not built yet')).toHaveCount(0)
-  const names = await primaryNav(page).locator('.os-nav-group-management a').allInnerTexts()
-  expect(names.map(n => n.trim())).toContain('Service catalog')
-  expect(names.map(n => n.trim())).toContain('Webhooks')
 })
 
 test('a Release Manager adds a webhook: the secret is shown once and is gone when the panel closes and after a reload; the address is never shown', async ({ page }) => {
@@ -255,11 +258,11 @@ test('a webhook changed by someone else: Pause shows the conflict notice and the
 })
 
 for (const [role, email] of [['Viewer', 'wh-viewer@example.com'], ['GovernanceOfficer', 'wh-gov@example.com']] as const) {
-  test(`a ${role} has no Webhooks item, and /webhooks says they cannot, without calling the API`, async ({ page }) => {
+  test(`a ${role} has no Integrations item, and /webhooks says they cannot, without calling the API`, async ({ page }) => {
     const calls: string[] = []
     page.on('request', r => { if (new URL(r.url()).pathname.startsWith('/api/v1/webhooks')) calls.push(`${r.method()} ${r.url()}`) })
     await signIn(page, email, role)
-    await expect(primaryNav(page).getByRole('link', { name: 'Webhooks' })).toHaveCount(0)
+    await expect(primaryNav(page).getByRole('link', { name: 'Integrations' })).toHaveCount(0)
     await expect(primaryNav(page).getByRole('link', { name: 'Service catalog' })).toBeVisible()
     await page.goto('/webhooks')
     await expect(page.getByRole('heading', { level: 1, name: 'Webhooks' })).toBeVisible()

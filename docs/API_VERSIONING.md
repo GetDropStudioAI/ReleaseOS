@@ -2,6 +2,8 @@
 
 The public API is `/api/public/v1`. Its description is [`docs/api/public-v1.openapi.json`](api/public-v1.openapi.json) (OpenAPI 3.1), generated from the code and served without a token at `GET /api/public/v1/openapi.json`. A contract test (`PublicApiContractTests`) fails when the committed file and the code differ, and when the list of operations and the mapped routes differ. To change the surface: change `PublicApiCatalog`, run `UPDATE_OPENAPI=1 dotnet test --filter PublicApiContractTests`, review the diff of the JSON file against the rules below, commit both.
 
+A step-by-step guide for integrators (tokens, a first call, webhooks and signature samples) is [`docs/DEVELOPERS.md`](DEVELOPERS.md).
+
 ## What it is
 
 | Scope | What a token with it can do |

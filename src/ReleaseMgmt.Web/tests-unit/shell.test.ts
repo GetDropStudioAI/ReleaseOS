@@ -29,22 +29,16 @@ test('a Viewer sees neither the audit log nor the admin pages; an RTE sees both'
   assert.ok(views(['GovernanceOfficer']).includes('audit') && !views(['GovernanceOfficer']).includes('admin'))
 })
 
-test('API tokens (REOS-162) sit in the Management group, in the nav and Jump to for an RTE and a Release Manager only, at /api-tokens', () => {
-  assert.ok(NAV[1].items.some(i => i.view === 'api-tokens' && i.label === 'API tokens' && i.need === 'admin'))
-  assert.equal(pathOf('api-tokens'), '/api-tokens')
-  assert.equal(pageName('api-tokens'), 'API tokens')
+test('Integrations (REOS-165) replace the API tokens and Webhooks items in the Management group: nav and Jump to for an RTE and a Release Manager only, at /integrations; the two pages still open at their own paths', () => {
+  assert.ok(NAV[1].items.some(i => i.view === 'integrations' && i.label === 'Integrations' && i.need === 'admin' && i.module === undefined))   // core, not an add-on module
+  assert.ok(!NAV[1].items.some(i => i.view === 'api-tokens' || i.view === 'webhooks'))
+  assert.equal(pathOf('integrations'), '/integrations')
+  assert.equal(pageName('integrations'), 'Integrations')
+  assert.equal(pathOf('api-tokens'), '/api-tokens'); assert.equal(pageName('api-tokens'), 'API tokens')   // REOS-162: reachable by path, named in the title and breadcrumb
+  assert.equal(pathOf('webhooks'), '/webhooks'); assert.equal(pageName('webhooks'), 'Webhooks')           // REOS-164
   const views = (roles: string[]) => navFor(roles).flatMap(g => g.items.map(i => i.view))
-  for (const r of ['RTE', 'ReleaseManager']) { assert.ok(views([r]).includes('api-tokens'), r); assert.ok(jumpTargets([r]).some(t => t.name === 'API tokens'), r) }
-  for (const r of ['Viewer', 'GovernanceOfficer']) { assert.ok(!views([r]).includes('api-tokens'), r); assert.ok(!jumpTargets([r]).some(t => t.name === 'API tokens'), r) }
-})
-
-test('Webhooks (REOS-164) sit in the Management group, in the nav and Jump to for an RTE and a Release Manager only, at /webhooks', () => {
-  assert.ok(NAV[1].items.some(i => i.view === 'webhooks' && i.label === 'Webhooks' && i.need === 'admin' && i.module === undefined))   // core, not an add-on module (Q-164a)
-  assert.equal(pathOf('webhooks'), '/webhooks')
-  assert.equal(pageName('webhooks'), 'Webhooks')
-  const views = (roles: string[]) => navFor(roles).flatMap(g => g.items.map(i => i.view))
-  for (const r of ['RTE', 'ReleaseManager']) { assert.ok(views([r]).includes('webhooks'), r); assert.ok(jumpTargets([r]).some(t => t.name === 'Webhooks'), r) }
-  for (const r of ['Viewer', 'GovernanceOfficer']) { assert.ok(!views([r]).includes('webhooks'), r); assert.ok(!jumpTargets([r]).some(t => t.name === 'Webhooks'), r) }
+  for (const r of ['RTE', 'ReleaseManager']) { assert.ok(views([r]).includes('integrations'), r); assert.ok(jumpTargets([r]).some(t => t.name === 'Integrations'), r) }
+  for (const r of ['Viewer', 'GovernanceOfficer']) { assert.ok(!views([r]).includes('integrations'), r); assert.ok(!jumpTargets([r]).some(t => t.name === 'Integrations'), r) }
 })
 
 test('pages have names for the breadcrumb and title, and Jump to offers what the person can open', () => {

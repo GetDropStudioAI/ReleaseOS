@@ -24,6 +24,7 @@ public static class AiServiceCollectionExtensions
         services.AddSingleton<IAiUsageSink, NoopAiUsageSink>();
         services.AddSingleton<IAiProvider>(AiProviderFactory.Create);
         services.AddSingleton<IAiClient, GovernedAiClient>();
+        services.AddSingleton<IAiSafeAssistant, AiSafeAssistant>();   // REOS-186: role-scoped retrieval, fenced untrusted text, sanitised output (sources register as IAiRetrievalSource)
         services.AddSingleton<AiStatusService>();
         services.AddSingleton<AiInventoryService>();
         return services;

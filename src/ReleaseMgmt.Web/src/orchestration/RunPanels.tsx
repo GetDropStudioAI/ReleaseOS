@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { RunDetail, RunForecast, RunStepRow, RunSummary } from '../api.ts'
+import { focusOpener } from '../focus.ts'
 import { localClock } from '../shell/clock.ts'
 import { fmtCountdown, fmtMinSec, serverNow } from '../time.ts'
 import { stampOf, stampText } from '../deploy/deployLogic.ts'
@@ -91,7 +92,7 @@ export function StepDrawer({ run, step, fc, paused, pending, error, onAct, onClo
 }) {
   // Closing the drawer gives focus back to what opened it. The opener is read while rendering, before the heading takes focus, so React's development double-mount cannot capture the heading instead.
   const opener = useRef<HTMLElement | null>(null)
-  if (opener.current === null && typeof document !== 'undefined') opener.current = document.activeElement as HTMLElement | null
+  if (opener.current === null && typeof document !== 'undefined') opener.current = focusOpener()
   useEffect(() => () => {
     const o = opener.current
     requestAnimationFrame(() => { const a = document.activeElement; if ((!a || a === document.body || !a.isConnected) && o && o !== document.body && o.isConnected) o.focus() })

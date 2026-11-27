@@ -1521,3 +1521,14 @@ Built to: the two CAB status-move triggers (`trg_CabMeeting_Transition`, `trg_Ch
 - **The e2e Tab walk treats "Tab does nothing at the end, and Shift+Tab walks back out" as the end of the order, not a trap.** Needed for headless Firefox, which does not wrap. A walk that cannot leave one element in either direction still fails.
 - **The rollback card always shows the deadline's UTC time**, beside "Under 30 minutes" or "Passed" (D44).
 - **`qa-142` keeps its 10-minute budget** and `releases:119` has no known cause; neither was skipped.
+
+## Q-152a · REOS-151 / REOS-152 · Edge and Safari results, and what was built for them
+**Built to the following; say if wrong.** Results are in `docs/CROSS_BROWSER_FINDINGS.md`.
+- **Edge needs nothing.** 275 of 275 pass on windows-latest, so no `REOS-151` skip and no Edge-specific code.
+- **A button click does not focus in Safari, so dialogs and drawers remember the last pressed control too** (`focusOpener()` in `focus.ts`, a capture-phase `pointerdown` listener, cleared by any key press). Built to this instead of making every opener focus itself on click, which would touch every screen. Say if you would rather fix it per opener.
+- **The Analytics workspace-scope notice has a Retry**, like every other error state (it had none).
+- **Tab-walking specs are skipped on macOS WebKit only** (`browserName === 'webkit' && process.platform === 'darwin'`), because Safari does not Tab to buttons and links by default. Built to a skip, not to `Alt+Tab` in the spec, because I could not check that on a Mac. Keyboard use of buttons in Safari is therefore not covered by these specs; say if you want an Option+Tab variant.
+- **`a11y-screens.spec.ts` was not edited** (owned by `reos-xb-firefox`): its 4 macOS WebKit failures are the same Tab behaviour and need the same skip or an adaptation there.
+- **`deployments.spec.ts:61` light is skipped on macOS WebKit with `REOS-152`, undiagnosed** (once; dark and Edge pass).
+- **The workflow is not on `main` yet, so it cannot be dispatched** (404). To get the evidence I temporarily added a push trigger for this branch and removed the Firefox job, then restored `cross-browser.yml` exactly as on `reos-xb1`. The run cost one Windows and one macOS job.
+

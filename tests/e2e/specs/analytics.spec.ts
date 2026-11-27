@@ -176,7 +176,8 @@ test('a quick period fills the dates, reloads and is announced', async ({ page }
   expect((Date.parse(to) - Date.parse(from)) / 86_400_000).toBe(30)
 })
 
-test('keyboard: the period, a chart\'s exports and View data are reachable and operable without a mouse', async ({ page }) => {
+test('keyboard: the period, a chart\'s exports and View data are reachable and operable without a mouse', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit' && process.platform === 'darwin', 'REOS-152: Safari on macOS does not Tab to buttons and links unless "Press Tab to highlight each item" is on (Option+Tab otherwise); this spec walks by Tab. Not a product defect; see findings')
   await openAnalytics(page, 'analytics-keys@example.com')
   await page.getByLabel('Period from').focus(); await expect(page.getByLabel('Period from')).toBeFocused()
   await page.getByLabel('to', { exact: true }).focus(); await expect(page.getByLabel('to', { exact: true })).toBeFocused()

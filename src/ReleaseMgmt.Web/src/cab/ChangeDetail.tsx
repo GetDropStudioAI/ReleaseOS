@@ -53,6 +53,8 @@ export function ChangeDetail({ me, id, onBack }: { me: Me; id: string; onBack: (
   useEffect(() => { load() }, [load])
   const editingRef = useRef(false)
   useEffect(() => { editingRef.current = editing }, [editing])
+  const refocus = useRef(false)   // set when an edit closes: the Edit button is focused once React has drawn it again (a single animation frame can fire before that on a slow machine)
+  useEffect(() => { if (!editing && refocus.current && editOpener.current) { refocus.current = false; editOpener.current.focus() } }, [editing, row])
   useEffect(() => onCabChanged(changeId => { if (changeId && changeId !== id) return; if (editingRef.current) setNewer(true); else load() }), [load, id])
   useEffect(() => {
     if (!editing) return
@@ -89,7 +91,7 @@ export function ChangeDetail({ me, id, onBack }: { me: Me; id: string; onBack: (
     })
 
   const startEdit = () => { setForm(formOf(row, utcToZonedInput)); setEditBase(row.version); setNewer(false); setEditing(true) }
-  const backToEdit = () => requestAnimationFrame(() => editOpener.current?.focus())   // the Edit button is drawn again once the form closes
+  const backToEdit = () => { refocus.current = true; requestAnimationFrame(() => { if (editOpener.current) { refocus.current = false; editOpener.current.focus() } }) }   // the Edit button is drawn again once the form closes
   const closeEdit = () => { setEditing(false); setNewer(false); backToEdit() }
   const save = async () => {
     if (!form) return

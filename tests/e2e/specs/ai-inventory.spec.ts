@@ -28,7 +28,7 @@ const detail = (page: Page) => page.getByRole('region', { name: 'Release notes d
 async function openInventory(page: Page) {
   await openPage(page, '/ai-inventory')
   await expect(page.getByRole('heading', { level: 1, name: 'AI inventory' })).toBeVisible()
-  await expect(trail(page).or(page.getByText('No AI action has been recorded yet'))).toBeVisible()
+  await expect(trail(page).or(page.getByText('No AI action has been recorded yet')).first()).toBeVisible()   // an empty trail shows both the table and its empty text: either is enough
 }
 
 test('an RTE finds AI inventory in the sidebar, and it states the kill switches, features, models and data rules in words', async ({ page }) => {

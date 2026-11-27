@@ -29,7 +29,7 @@ export function Sidebar({ me, view, workspace, approvals, modules, plane, onGo, 
   const region = workspace?.region?.toUpperCase()
   return (
     <aside className="os-sidebar" aria-label="Workspace">
-      <div className="os-sidebar-top">
+      <div className="os-sidebar-top" tabIndex={-1}>   {/* a scroll container: Firefox makes it a Tab stop of its own (Chromium does not while it holds focusable children); -1 keeps it scrollable and out of the Tab order, REOS-150 */}
         <div className="os-brand">
           <span className="os-brand-mark" aria-hidden="true"><Layers2 size={18} strokeWidth={1.8} /></span>
           <span className="os-brand-name">ReleaseOS</span>

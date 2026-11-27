@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { RunStepRow } from '../src/api.ts'
 import type { StageSummary } from '../src/orchestration/orchApi.ts'
-import { axisX, bars, clockOf, defaultStage, doneCodesOf, duration, elapsed, lastEvent, orderedStages, runKey, runWord, stageCards, stepSeconds, stepState, strategyFor } from '../src/orchestration/orchLogic.ts'
+import { axisX, bars, clockOf, defaultStage, doneCodesOf, duration, elapsed, lastEvent, orderedStages, rollbackDetail, runKey, runWord, stageCards, stepSeconds, stepState, strategyFor } from '../src/orchestration/orchLogic.ts'
 import { buildPath, normalize, parsePath, ROOT } from '../src/route.ts'
 
 const T = (hm: string) => `2026-10-23T${hm}:00Z`
@@ -136,4 +136,14 @@ test('Rehearsal and Live of a release open inside Orchestration, and old links s
   assert.deepEqual(parsePath('/trains/t1'), { view: 'trains', trainId: 't1', selection: null, mode: 'plan' })
   assert.deepEqual(normalize({ ...ROOT, trainId: 't1', mode: 'live', selection: { kind: 'gate', id: 'g' } }), { view: 'orchestration', trainId: 't1', mode: 'live', selection: null })
   assert.deepEqual(normalize({ ...ROOT, trainId: 't1' }), { ...ROOT, trainId: 't1' })
+})
+
+test('the rollback card always carries the deadline\'s UTC time beside its state, so the countdown is never a time with no zone (REOS-150)', () => {
+  const dl = '2026-11-26T16:30:00Z'
+  const fc = { asOf: dl, windowClosesInSec: 3600, rollbackDeadline: dl }
+  const at = (ms: number) => rollbackDetail(clockOf(fc, ms), fc)
+  assert.equal(at(Date.parse('2026-11-26T14:00:00Z')), 'Deadline 16:30 UTC')
+  assert.equal(at(Date.parse('2026-11-26T16:03:00Z')), 'Under 30 minutes · Deadline 16:30 UTC')
+  assert.equal(at(Date.parse('2026-11-26T16:45:00Z')), 'Passed · Deadline 16:30 UTC')
+  assert.equal(rollbackDetail(clockOf(null, NOW), null), 'No deadline')
 })

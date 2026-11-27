@@ -63,19 +63,43 @@ async function tabTo(page: Page, name: RegExp, max = 80) {
 
 interface Stop { tag: string; name: string; hasName: boolean; visibleIndicator: boolean; hasBox: boolean; key: string }
 
-/** Tab through the page from the top; returns every stop until focus leaves the document or comes round to the first stop. */
-async function tabThrough(page: Page, max = 260): Promise<Stop[]> {
-  // Start at the very top of the document: a view that moves focus to its heading on open (App.tsx) would otherwise start the walk mid-page.
+/** Puts focus at the very top of the document: a view that moves focus to its heading on open (App.tsx) would otherwise start a walk mid-page, and Firefox does not wrap from the last control back to the first. */
+async function toTop(page: Page) {
   await page.evaluate(() => {
     (document.activeElement as HTMLElement | null)?.blur(); window.scrollTo(0, 0)
     let top = document.getElementById('tab-walk-start')
     if (!top) { top = document.createElement('span'); top.id = 'tab-walk-start'; top.tabIndex = -1; document.body.prepend(top) }
     top.focus({ preventScroll: true })
   })
+}
+
+/** Tab through the page from the top; returns every stop until focus leaves the document or comes round to the first stop. */
+async function tabThrough(page: Page, max = 260): Promise<Stop[]> {
+  await toTop(page)
   const stops: Stop[] = []
   for (let i = 0; i < max; i++) {
     await page.keyboard.press('Tab')
-    const s = await page.evaluate((): Stop | null => {
+    const s = await page.evaluate(probeFocus)
+    if (!s) break                                   // left the page (browser chrome) - a full cycle
+    if (stops.length > 2 && s.key === stops[0].key) break   // came round to the start
+    // Firefox quirks, both about one element answering several Tab presses. (1) A date input is four stops (day, month, year, picker) that all report the same
+    // activeElement. (2) Headless Firefox neither wraps nor hands focus to browser chrome after the last control: Tab leaves it where it is. A run of more than
+    // six identical stops is therefore either the end of the tab order or a trap. Tell them apart with Shift+Tab: at the end of the order it walks back out to
+    // another control within a few presses; in a real trap it never leaves (the duplicates are recorded, so the trap check below still fails).
+    let run = 0
+    for (let k = stops.length - 1; k >= 0 && stops[k].key === s.key; k--) run++
+    if (run >= 6) {
+      let out = false
+      for (let k = 0; k < 8 && !out; k++) { await page.keyboard.press('Shift+Tab'); const back = await page.evaluate(probeFocus); out = !back || back.key !== s.key }
+      if (out) break                                // the end of the tab order, not a trap
+    }
+    stops.push(s)
+  }
+  return stops
+}
+
+/** What the focused element is, in the page: null when focus is on the body (outside the page). */
+const probeFocus = (): Stop | null => {
       const el = document.activeElement as HTMLElement | null
       if (!el || el === document.body || el === document.documentElement) return null
       const cs = getComputedStyle(el), r = el.getBoundingClientRect()
@@ -85,12 +109,6 @@ async function tabThrough(page: Page, max = 260): Promise<Stop[]> {
       const label = (el.getAttribute('aria-label') || el.textContent || (el as HTMLInputElement).placeholder || el.getAttribute('title') || (el as HTMLInputElement).labels?.[0]?.textContent || '').replace(/\s+/g, ' ').trim()
       const path = `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''}`
       return { tag: el.tagName.toLowerCase(), name: label.slice(0, 40), hasName: label.length > 0, visibleIndicator: own, hasBox: r.width > 0 && r.height > 0, key: `${path}|${label.slice(0, 40)}|${Math.round(r.x)},${Math.round(r.y + window.scrollY)}` }
-    })
-    if (!s) break                                   // left the page (browser chrome) - a full cycle
-    if (stops.length > 2 && s.key === stops[0].key) break   // came round to the start
-    stops.push(s)
-  }
-  return stops
 }
 
 function checkStops(stops: Stop[], where: string) {
@@ -110,8 +128,7 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(`${scheme} theme`, () => {
     test.use({ colorScheme: scheme })
 
-    test('keyboard-only tour of every view: open with Tab and Enter, axe clean, whole page reachable', async ({ page, browserName }) => {
-      test.skip(browserName === 'firefox', 'REOS-150: Tab walk stalls on one element in Firefox; findings in docs/CROSS_BROWSER_FINDINGS.md')
+    test('keyboard-only tour of every view: open with Tab and Enter, axe clean, whole page reachable', async ({ page }) => {
       await signIn(page, `a11y-tour-${scheme}@example.com`)   // RTE: sees every nav item
       await expect(page.locator('nav[aria-label="Primary"] a')).toHaveCount(VIEWS.length)
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
@@ -128,6 +145,7 @@ for (const scheme of ['light', 'dark'] as const) {
       }
       // Sync health from the control-plane card, then the Inbox from the bell, from the keyboard as well
       for (const [name, link, heading] of [['sync', /Open Sync health/, 'Sync health'], ['inbox', /^Inbox/, 'Inbox']] as const) {
+        await toTop(page)   // from the top of the page, as a keyboard user starts (the previous walk ended at the last control; Firefox does not wrap)
         await tabTo(page, link)
         await page.keyboard.press('Enter')
         await expect(page.locator('main h1').first()).toHaveText(heading)
@@ -153,8 +171,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await scan(page, `inspector with nothing selected, Viewer (${scheme})`)
     })
 
-    test('train workspace in Plan, and Rehearsal and Live mode in Orchestration, gate Inspector and both drawers', async ({ page, browserName }) => {
-      test.skip(browserName === 'firefox', 'REOS-150: Tab walk stalls on one element in Firefox; findings in docs/CROSS_BROWSER_FINDINGS.md')
+    test('train workspace in Plan, and Rehearsal and Live mode in Orchestration, gate Inspector and both drawers', async ({ page }) => {
       await signIn(page, `a11y-train-${scheme}@example.com`)
       const t = await trainByTitle(page, 'Card portal')
       const gate = t.gates.find(g => g.name === 'Compliance Sign-off')!
@@ -214,8 +231,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
 // The manual override (data-theme on <html>, UI.md) is a different code path from prefers-color-scheme: choose it with the keyboard and scan again.
 for (const [os, pick] of [['light', 'Dark'], ['dark', 'Light']] as const) {
-  test(`the ${pick} appearance choice, made from the keyboard on an OS set to ${os}, is axe clean`, async ({ browser, browserName }) => {
-      test.skip(browserName === 'firefox', 'REOS-150: Tab never reaches the appearance button in Firefox; findings in docs/CROSS_BROWSER_FINDINGS.md')
+  test(`the ${pick} appearance choice, made from the keyboard on an OS set to ${os}, is axe clean`, async ({ browser }) => {
     const ctx = await browser.newContext({ colorScheme: os })
     const page = await ctx.newPage()
     await signIn(page, `a11y-theme-${pick.toLowerCase()}@example.com`)

@@ -121,6 +121,16 @@ export function clockOf(fc: { asOf: string; windowClosesInSec: number | null; ro
   return { windowSec, toDeadlineSec, deadlineClose: toDeadlineSec !== null && toDeadlineSec < 1800, deadlinePassed: toDeadlineSec !== null && toDeadlineSec < 0 }
 }
 
+/**
+ * The line under "To rollback deadline". The deadline's own clock time (UTC) is always there when there is one: "Under 30 minutes" and "Passed" used to replace it,
+ * so the countdown beside them was a time with no zone anywhere on the card, in the minutes when people look at it most (D44; found by the REOS-150 Firefox run).
+ */
+export function rollbackDetail(c: Clock, fc: { rollbackDeadline: string | null } | null): string {
+  const at = fc?.rollbackDeadline ? `Deadline ${hm(Date.parse(fc.rollbackDeadline))} UTC` : null
+  const state = c.deadlinePassed ? 'Passed' : c.deadlineClose ? 'Under 30 minutes' : null
+  return [state, at ?? (state ? null : 'No deadline')].filter(Boolean).join(' · ')
+}
+
 export interface BarRow { plan: [number, number]; actual: [number, number] | null; running: boolean; forecast: [number, number] | null; forecastLate: boolean }
 /** x positions (0 to `width`) of one step's bars on the window-scaled axis: planned, actual so far, and the forecast of what is still to come. */
 export function bars(s: RunStepRow, f: { start: string | null; end: string | null } | undefined, win: [number, number], nowMs: number, width: number): BarRow {

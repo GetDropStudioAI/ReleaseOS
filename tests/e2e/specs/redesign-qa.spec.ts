@@ -294,8 +294,7 @@ test('6b live data: a long outage says Offline in words and the deployment monit
   await expect(page.locator('main h1').first()).toHaveText('Deployments')
 })
 
-test('7 times: every clock time on every screen is UTC-labelled; and the shell clock is real UTC', async ({ page, browserName }) => {
-  test.skip(browserName === 'firefox', 'REOS-150: failed in a full Firefox run (unlabelled 0:27:16 on Orchestration), passes alone; see findings')
+test('7 times: every clock time on every screen is UTC-labelled; and the shell clock is real UTC', async ({ page }) => {
   await signIn(page, who())
   const clock = page.getByRole('banner').locator('time')
   await expect(clock).toContainText(/\d\d [A-Z]{3} 20\d\d · \d\d:\d\d UTC/)

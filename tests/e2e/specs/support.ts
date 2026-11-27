@@ -1,4 +1,4 @@
-import { expect, type Page, type Request, type Response } from '@playwright/test'
+import { expect, type BrowserContext, type Page, type Request, type Response } from '@playwright/test'
 
 export async function signIn(page: Page, email: string, role = 'RTE') {
   await page.goto('/')
@@ -93,4 +93,39 @@ export async function approveAsGovernanceOfficer(page: Page, template: { id: str
     const status = await gov.evaluate(async t => (await fetch(`/api/v1/templates/${t.id}:approve`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': String(t.version) }, body: '{}' })).status, template)
     if (status !== 200) throw new Error(`approve failed: ${status}`)
   } finally { await ctx.close() }
+}
+
+/**
+ * Clipboard checks that work on every engine (REOS-150, REOS-152). Playwright grants `clipboard-read`/`clipboard-write` only on Chromium and Edge; Firefox and
+ * WebKit reject those names, so a context that asks for them is never created. There is no way to read the real clipboard on those engines.
+ * Call once per test before the first navigation.
+ *  - Chromium/Edge: the permissions are granted and `copiedText` reads the real clipboard, as before.
+ *  - Other engines: an init script wraps `navigator.clipboard.writeText` and `write`, keeping the plain text the page handed over in `window.__copied`
+ *    (the call still goes through to the browser). The check is therefore "the page asked the browser to copy exactly this text"; whether the OS clipboard
+ *    then holds it is the browser's own business and is only proven on Chromium.
+ */
+export async function captureClipboard(context: BrowserContext, browserName: string) {
+  if (browserName === 'chromium' || browserName === 'msedge') {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    return
+  }
+  await context.addInitScript(() => {
+    const w = window as unknown as { __copied?: string }
+    const c = navigator.clipboard
+    if (!c) return
+    const text = c.writeText?.bind(c)
+    const write = c.write?.bind(c)
+    if (text) c.writeText = async (s: string) => { w.__copied = s; return text(s) }
+    if (write) c.write = async (items: ClipboardItems) => {
+      const first = items[0]
+      if (first?.types.includes('text/plain')) w.__copied = await (await first.getType('text/plain')).text()
+      return write(items)
+    }
+  })
+}
+
+/** The text the page last copied: the real clipboard on Chromium/Edge, the recorded call elsewhere (see `captureClipboard`). */
+export async function copiedText(page: Page, browserName: string): Promise<string> {
+  if (browserName === 'chromium' || browserName === 'msedge') return page.evaluate(() => navigator.clipboard.readText())
+  return page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '')
 }

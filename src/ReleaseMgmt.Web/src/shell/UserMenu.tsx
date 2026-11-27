@@ -80,6 +80,13 @@ export function UserMenu({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: 
   }, [open])
   return (
     <div className="os-user" ref={box}>
+      <button ref={card} type="button" className="os-user-card" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(o => !o)}>
+        <span className="os-avatar" aria-hidden="true">{initials(me.name || me.email)}</span>
+        <span className="os-user-text"><span className="os-user-name">{me.name}</span><span className="os-user-role">{roleName(me.roles[0])}</span></span>
+        <span className="sr-only">, account and appearance</span>
+      </button>
+      {/* After the card in the DOM, so Tab goes from the card into the panel (a disclosure, WAI-ARIA); it is placed above the card by CSS only. It used to come first, which put it
+          a whole page of Tab stops behind the card, and unreachable at all in Firefox, which does not wrap from the last control to the first (REOS-150). */}
       {open && (
         <div id={id} className="os-user-menu" role="group" aria-label="Your account">
           <p className="os-user-menu-label">Appearance</p>
@@ -88,11 +95,6 @@ export function UserMenu({ me, onSignedOut, onStopped }: { me: Me; onSignedOut: 
           <Button onClick={async () => { await logout(); onSignedOut() }}>Sign out</Button>
         </div>
       )}
-      <button ref={card} type="button" className="os-user-card" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(o => !o)}>
-        <span className="os-avatar" aria-hidden="true">{initials(me.name || me.email)}</span>
-        <span className="os-user-text"><span className="os-user-name">{me.name}</span><span className="os-user-role">{roleName(me.roles[0])}</span></span>
-        <span className="sr-only">, account and appearance</span>
-      </button>
     </div>
   )
 }

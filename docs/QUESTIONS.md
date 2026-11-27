@@ -1512,3 +1512,12 @@ Other choices, **say if wrong:**
 
 ## Q-MERGE-2 (2026-11-26): CAB trigger messages are fixed strings
 Built to: the two CAB status-move triggers (`trg_CabMeeting_Transition`, `trg_Change_Transition`) raise a fixed message ("Illegal change request status move" / "Illegal CAB meeting status move"). The branch built the message with `||` (from and to states); SQLite 3.45.1 rejects a non-literal in `RAISE()`, and Postgres needs a literal too (docs/proposals/postgres-port-plan.md). The service still reports the from and to states in its own 422. Tests and upgrade 016 updated to match. Say if wrong.
+
+## Q-150a · REOS-150 (Firefox) · Clipboard checks on other engines, Tab-order fixes
+**Built to the following; say if wrong.**
+- **Clipboard on Firefox and WebKit is checked by the call, not the clipboard.** Playwright cannot grant or read the clipboard there, so the specs record the text the page hands to `navigator.clipboard.writeText` / `write` (the call still goes through) and assert on that, plus the visible "Copied" state they already assert. The real clipboard is read only on Chromium and Edge. Alternative if wrong: assert on a DOM fallback only.
+- **A scroll container with focusable children gets `tabIndex={-1}`** (sidebar) rather than a role or label: it stays scrollable and leaves the Tab order. Alternative: `tabindex=0` with a label, rejected as a pointless extra stop.
+- **The account panel moved after its trigger in the DOM** (a disclosure pattern). No visual change; Tab and screen-reader order now go card, then panel.
+- **The e2e Tab walk treats "Tab does nothing at the end, and Shift+Tab walks back out" as the end of the order, not a trap.** Needed for headless Firefox, which does not wrap. A walk that cannot leave one element in either direction still fails.
+- **The rollback card always shows the deadline's UTC time**, beside "Under 30 minutes" or "Passed" (D44).
+- **`qa-142` keeps its 10-minute budget** and `releases:119` has no known cause; neither was skipped.

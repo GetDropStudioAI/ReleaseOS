@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { signIn } from './support'
+import { captureClipboard, copiedText, signIn } from './support'
 
 // REOS-96 / REOS-134 (REOS-51 underneath): the Portfolio & calendar screen. Week calendar, Month, Timeline and Release list tabs, the filters, the upcoming windows and the
 // capacity panel, and the Subscribe panel for the ICS feed. Every day is a UTC day. The demo data has trains 14, 21 and 35 days after next Friday, each with a 06:00 to
@@ -44,9 +44,8 @@ const allLink = (page: Page) => page.getByLabel('All trains link')
 
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`${scheme} theme`, () => {
-    test.use({ colorScheme: scheme, permissions: ['clipboard-read', 'clipboard-write'] })
-    test.skip(({ browserName }) => browserName === 'firefox', 'REOS-150: Firefox has no clipboard-read permission, so the context cannot be created')
-    test.skip(({ browserName }) => browserName === 'webkit', 'REOS-152: WebKit has no clipboard-write permission, so the context cannot be created')
+    test.use({ colorScheme: scheme })
+    test.beforeEach(async ({ context, browserName }) => { await captureClipboard(context, browserName) })   // real clipboard on Chromium/Edge, the recorded copy elsewhere
 
     test('week calendar: UTC range, today marked in words, a window card with its status, a click opens the release', async ({ page }) => {
       await signIn(page, `cal-${scheme}@example.com`)
@@ -219,7 +218,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('button', { name: 'Plan release' })).toHaveCount(0)
     })
 
-    test('Subscribe: the link is shown once, copy works, rotate replaces it and kills the old one, revoke kills the new one', async ({ page }) => {
+    test('Subscribe: the link is shown once, copy works, rotate replaces it and kills the old one, revoke kills the new one', async ({ page, browserName }) => {
       await signIn(page, `cal-sub-${scheme}-${Date.now()}@example.com`)
       await openPortfolio(page)
       const sub = page.getByRole('region', { name: 'Your new calendar link' })
@@ -236,7 +235,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
       await page.getByRole('button', { name: 'Copy' }).first().click()
       await expect(page.getByRole('button', { name: '✓ Copied' })).toBeVisible()
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url1)
+      expect(await copiedText(page, browserName)).toBe(url1)
 
       const live = await feedStatus(page, url1)                                        // anonymous: no cookie is sent
       expect(live.status).toBe(200)

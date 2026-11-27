@@ -303,7 +303,9 @@ public class EndpointRoleMatrixTests
         POST /api/v1/cab/meetings/{id}:start                     Plan
         POST /api/v1/cab/meetings/{id}:complete                  Plan
         POST /api/v1/cab/meetings/{id}:cancel                    Plan
+        GET /api/v1/cab/meetings/{id}/presence                   Read
         POST /api/v1/cab/meetings/{id}/agenda                    Plan
+        POST /api/v1/cab/meetings/{id}/agenda/{itemId}:move      Plan
         PATCH /api/v1/cab/meetings/{id}/agenda/{itemId}          Plan
         DELETE /api/v1/cab/meetings/{id}/agenda/{itemId}         Plan
         POST /api/v1/cab/meetings/{id}/attendees                 Plan

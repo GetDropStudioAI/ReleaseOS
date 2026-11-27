@@ -1,0 +1,27 @@
+/* CAB workbench (REOS-179). Tokens only (docs/ui/tokens.css). Status, flags and presence are chips with a word; nothing here relies on colour alone. */
+.wb-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--gap-lg); align-items: start; }
+.wb-col { display: flex; flex-direction: column; gap: var(--gap-lg); min-width: 0; }
+.wb-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.wb-sub { margin: var(--gap-md) 0 var(--gap-xs); font-size: var(--type-small); font-weight: 600; color: var(--color-text-secondary); }
+.wb-sub:first-child { margin-top: 0; }
+.wb-item { display: flex; flex-direction: column; gap: var(--gap-xs); padding: var(--gap-sm); border-top: var(--border-width) solid var(--color-border-subtle); }
+.wb-item:first-child { border-top: 0; }
+.wb-item.selected { background: var(--color-bg-accent-faint); box-shadow: inset 2px 0 0 var(--color-accent-fill); }
+.wb-item-main { display: flex; flex-direction: column; gap: var(--gap-xs); width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.wb-item-head { display: flex; gap: var(--gap-sm); align-items: baseline; }
+.wb-pos { min-width: 1.5rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.wb-key { font-family: var(--font-mono); font-size: var(--type-mono-small); }
+.wb-chips { display: flex; flex-wrap: wrap; gap: var(--gap-xs); align-items: center; }
+.wb-item-actions { display: flex; flex-wrap: wrap; gap: var(--gap-xs); }
+.wb-people { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.wb-person { display: flex; flex-wrap: wrap; gap: var(--gap-sm); align-items: center; justify-content: space-between; padding: var(--gap-sm) 0; border-top: var(--border-width) solid var(--color-border-subtle); }
+.wb-person:first-child { border-top: 0; }
+.wb-person-name { display: flex; flex-direction: column; min-width: 0; }
+.wb-flags { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--gap-sm); }
+.wb-flag { display: flex; flex-direction: column; gap: var(--gap-xs); }
+.wb-timer { display: flex; flex-wrap: wrap; gap: var(--gap-sm); align-items: center; }
+.wb-clock { font-family: var(--font-mono); font-size: var(--type-title); font-variant-numeric: tabular-nums; min-width: 5.5rem; }
+.wb-verdicts { display: flex; flex-wrap: wrap; gap: var(--gap-sm); align-items: flex-start; }
+.wb-record { display: flex; flex-direction: column; gap: var(--gap-xs); padding: var(--gap-sm) 0; border-top: var(--border-width) solid var(--color-border-subtle); }
+.wb-record:first-child { border-top: 0; }
+@media (max-width: 900px) { .wb-grid { grid-template-columns: minmax(0, 1fr); } }

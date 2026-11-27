@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ReleaseMgmt.Api.Auth;
+using ReleaseMgmt.Api.Realtime;
 using ReleaseMgmt.Domain.Services;
 using ReleaseMgmt.Infrastructure.Services;
 
@@ -17,6 +18,7 @@ public static class CabEndpoints
     public sealed record MeetingPatchBody(string? Title, DateTime? StartsAt, DateTime? EndsAt, string? ChairUserId, string? Location, string? Minutes, bool ClearLocation = false, bool ClearMinutes = false);
     public sealed record AgendaBody(string? ChangeRequestId, string? Notes);
     public sealed record AgendaPatchBody(string? Notes, int? SequenceOrder);
+    public sealed record AgendaMoveBody(int Position);
     public sealed record InviteBody(string? UserId, string? Role);
     public sealed record AttendanceBody(string? Attendance);
 
@@ -53,11 +55,23 @@ public static class CabEndpoints
         cab.MapPost("/meetings/{id}:complete", (string id, ClaimsPrincipal u, HttpRequest r, CabService s, CancellationToken ct) => s.CompleteAsync(id, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         cab.MapPost("/meetings/{id}:cancel", (string id, ClaimsPrincipal u, HttpRequest r, CabService s, CancellationToken ct) => s.CancelAsync(id, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
 
+        // GET /cab/meetings/{id}/presence -> { userIds: [...] } the meeting's invitees (and the chair) who have a live connection open in this workspace right now (REOS-179). Changes are pushed as CabPresence.
+        cab.MapGet("/meetings/{id}/presence", async (string id, HttpContext http, CabService s, HubConnections hubs, CancellationToken ct) =>
+        {
+            if (await s.GetAsync(id, ct) is not { } m) return Results.NotFound(new { message = "meeting not found" });
+            var ws = http.User.FindFirstValue(WorkspaceResolution.Claim);
+            var connected = hubs.Snapshot().Where(e => e.UserId is not null && e.WorkspaceId == ws).Select(e => e.UserId!).ToHashSet();
+            return Results.Ok(new { userIds = m.Attendees.Select(a => a.Person.Id).Where(connected.Contains).ToList() });
+        }).RequireAuthorization(Policies.Read);
+
         // agenda: add and remove carry the meeting's version; editing an item carries the item's
         cab.MapPost("/meetings/{id}/agenda", (string id, AgendaBody b, ClaimsPrincipal u, HttpRequest r, CabService s, CancellationToken ct) =>
             s.AddAgendaItemAsync(id, b.ChangeRequestId ?? "", b.Notes, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         cab.MapPatch("/meetings/{id}/agenda/{itemId}", (string id, string itemId, AgendaPatchBody b, ClaimsPrincipal u, HttpRequest r, CabService s, CancellationToken ct) =>
             s.UpdateAgendaItemAsync(id, itemId, b.Notes, b.SequenceOrder, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
+        // POST /cab/meetings/{id}/agenda/{itemId}:move { position } -> the meeting (REOS-179): one item to a position, the rest renumbered in the same transaction; carries the meeting's version
+        cab.MapPost("/meetings/{id}/agenda/{itemId}:move", (string id, string itemId, AgendaMoveBody b, ClaimsPrincipal u, HttpRequest r, CabService s, CancellationToken ct) =>
+            s.MoveAgendaItemAsync(id, itemId, b.Position, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
         cab.MapDelete("/meetings/{id}/agenda/{itemId}", (string id, string itemId, ClaimsPrincipal u, HttpRequest r, CabService s, CancellationToken ct) =>
             s.RemoveAgendaItemAsync(id, itemId, ActorOf(u), r.IfMatch(), ct).ToHttpAsync()).RequireAuthorization(Policies.Plan);
 

@@ -11,7 +11,7 @@ import './cab.css'
 const ALL = ''
 
 /** The change request list (REOS-176): type, status, risk (as a word), planned window in UTC with the person's own time beside it, requester and release. Select a row to open the change. */
-export function ChangeList({ me, onOpen, onNew }: { me: Me; onOpen: (id: string) => void; onNew: () => void }) {
+export function ChangeList({ me, onOpen, onNew, onMeetings }: { me: Me; onOpen: (id: string) => void; onNew: () => void; onMeetings?: () => void }) {
   const [rows, setRows] = useState<ChangeRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rules, setRules] = useState<RiskRules | null>(null)
@@ -37,7 +37,7 @@ export function ChangeList({ me, onOpen, onNew }: { me: Me; onOpen: (id: string)
   return (
     <div className="os-page">
       <PageHeading trail={['Workspace', 'Change advisory board']} title="Change advisory board" description="Change requests, each with a risk level you can read the reasons for."
-        actions={plan ? <Button variant="primary" onClick={onNew}>New change request</Button> : undefined} />
+        actions={<span className="mg-actions">{onMeetings && <Button onClick={onMeetings}>CAB meetings</Button>}{plan && <Button variant="primary" onClick={onNew}>New change request</Button>}</span>} />
       {!plan && <ReadOnlyNotice>{canDecide(me) ? 'You can read change requests and record decisions on them. An RTE or Release Manager raises and edits them.' : 'You can read change requests. An RTE or Release Manager raises and edits them.'}</ReadOnlyNotice>}
       <Panel title="Change requests" subtitle="Newest first" meta={rows ? summary(rows) : undefined}>
         <div className="mg-stack">

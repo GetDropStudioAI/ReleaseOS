@@ -21,6 +21,8 @@ public sealed class TrainsHub(TimeProvider time, HubConnections connections) : H
     public const string SyncAlertRaised = "SyncAlertRaised";
     public const string DeploymentChanged = "DeploymentChanged";
     public const string ModulesChanged = "ModulesChanged";
+    public const string CabPresence = "CabPresence";
+    private const string GateKey = "ModuleGate";
 
     /// <summary>REOS-105: a connection joins its workspace's group (and its own group within it) and hears only that workspace's changes.</summary>
     public static string WorkspaceGroup(string workspaceId) => "ws:" + workspaceId;
@@ -30,6 +32,7 @@ public sealed class TrainsHub(TimeProvider time, HubConnections connections) : H
     /// Its workspace is the one the request resolved (<see cref="WorkspaceResolution"/>; the <c>workspace</c> query value names it).</summary>
     public override async Task OnConnectedAsync()
     {
+        Context.Items[GateKey] = Context.GetHttpContext()?.RequestServices.GetService<IModuleGate>();   // REOS-179: the request's services may be gone by the time the connection closes
         connections.Add(Context);   // REOS-63: closed on sign-out, refused session, deactivation, and by the periodic re-check
         if (Context.User?.FindFirst(WorkspaceResolution.Claim)?.Value is { } ws && ws != WorkspaceResolution.Nowhere)
         {
@@ -38,12 +41,24 @@ public sealed class TrainsHub(TimeProvider time, HubConnections connections) : H
         }
         await Clients.Caller.SendAsync(ServerTime, time.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
         await base.OnConnectedAsync();
+        await PresenceChangedAsync();
     }
 
-    public override Task OnDisconnectedAsync(Exception? exception)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
         connections.Remove(Context.ConnectionId);
-        return base.OnDisconnectedAsync(exception);
+        await base.OnDisconnectedAsync(exception);
+        await PresenceChangedAsync();
+    }
+
+    /// <summary>REOS-179: tells the workspace that someone connected or left, so an open CAB workbench redraws who is connected. A hint only (clients ask the API), and sent only while the CAB module is on.</summary>
+    private async Task PresenceChangedAsync()
+    {
+        if (Context.User?.FindFirst(WorkspaceResolution.Claim)?.Value is not { } ws || ws == WorkspaceResolution.Nowhere) return;
+        // not Context.ConnectionAborted: on a disconnect it is already cancelled, and the leaving is exactly what the others need to hear
+        var gate = Context.Items[GateKey] as IModuleGate;   // kept from the connect: the request (and its services) may already be disposed when a connection closes
+        if (gate is null || !await gate.IsEnabledAsync(ws, ModuleKeys.Cab, CancellationToken.None)) return;
+        await Clients.Group(WorkspaceGroup(ws)).SendAsync(CabPresence);
     }
 }
 

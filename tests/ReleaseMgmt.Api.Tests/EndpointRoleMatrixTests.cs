@@ -283,6 +283,10 @@ public class EndpointRoleMatrixTests
         DELETE /api/v1/ai/key                                    Admin
         GET /api/v1/ai/preflight                                 Read
         GET /api/v1/cab/risk-rules                               Read
+        GET /api/v1/cab/conflict-rules                           Read
+        GET /api/v1/cab/changes/{id}/conflicts                   Read
+        GET /api/v1/cab/meetings/{id}/conflicts                  Read
+        GET /api/v1/cab/calendar                                 Read
         GET /api/v1/ai/inventory                                 AuditRead
         GET /api/v1/ai/actions                                   AuditRead
         GET /api/v1/ai/actions/{id}                              Read

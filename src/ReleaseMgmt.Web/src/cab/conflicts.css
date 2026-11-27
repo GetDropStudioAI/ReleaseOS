@@ -1,0 +1,14 @@
+/* Conflict views (REOS-180). Tokens only (docs/ui/tokens.css). A conflict is words and a diamond shape; colour only repeats it. */
+.cab-conflicts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--gap-sm); }
+.cab-conflict { display: flex; flex-direction: column; gap: var(--gap-xs); padding: var(--gap-sm) 0; border-top: var(--border-width) solid var(--color-border-subtle); }
+.cab-conflict:first-child { border-top: 0; }
+.cab-conflict-head { display: flex; flex-wrap: wrap; gap: var(--gap-sm); align-items: center; font-weight: 600; }
+.cab-conflict-marker { font-family: var(--font-mono); color: var(--color-text-primary); }
+.cab-conflict-why, .cab-conflict-when { margin: 0; color: var(--color-text-primary); }
+.cab-conflict-label { color: var(--color-text-secondary); }
+.cab-conflict-group { margin: 0 0 var(--gap-xs); font: var(--type-caption) var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-secondary); }
+.cab-badge.off { color: var(--color-text-secondary); font-size: var(--type-small); }
+.cab-cal-name { display: inline-flex; gap: var(--gap-sm); align-items: baseline; }
+.cab-cal-conflicts { display: flex; flex-direction: column; gap: var(--gap-xs); align-items: flex-start; }
+.cab-cal-why { margin: 0; padding-left: var(--gap-lg); font-size: var(--type-small); color: var(--color-text-secondary); }
+.cab-cal-blackouts { margin: 0; }

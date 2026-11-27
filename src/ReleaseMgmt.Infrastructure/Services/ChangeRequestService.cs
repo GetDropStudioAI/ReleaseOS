@@ -37,8 +37,9 @@ public sealed record DecisionInput(string? Decision, string? Rationale = null, s
 /// <para>Separation of duties (REOS-177): the service checks first and answers 422 with a readable message; the same three rules are triggers in <c>db/schema.sql</c> as the backstop.
 /// A refused attempt is audited (<c>DecisionRefused</c>, <c>CloseRefused</c>) in its own transaction, because the refused call itself rolls back.</para>
 /// </summary>
-public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, ChangeRiskOptions? risk = null) : ServiceBase(dbf, time, realtime)
+public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, ChangeRiskOptions? risk = null, ChangeConflictService? conflicts = null) : ServiceBase(dbf, time, realtime)
 {
+    private readonly ChangeConflictService? _conflicts = conflicts;   // REOS-180: approving over a conflict needs a reason
     private readonly ChangeRiskOptions _risk = risk ?? new();
     private const string Entity = "ChangeRequest";
     internal const string ModuleEvent = "CabChanged";
@@ -381,6 +382,19 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
                 }
             }
 
+            // REOS-180: a conflict warns and never blocks, but approving over one needs a reason (the rationale). Derived now, not stored; the audit row names the rules that fired.
+            string[]? overConflicts = null;
+            if (kind == CabDecisionKinds.Approved && !d.Retroactive && _conflicts is not null)
+            {
+                var found = await _conflicts.ForDecisionAsync(db, c, ct);
+                if (found.Count > 0)
+                {
+                    if (!ChangeConflictRules.ReasonIsEnough(d.Rationale))
+                        return ServiceResult<ChangeView>.Fail(new GuardFailure(ChangeConflictGuards.NeedsReason, ChangeConflictRules.NeedsReasonText(found.Count, found.Select(x => x.RuleLabel))));
+                    overConflicts = [.. found.Select(x => x.Rule).Distinct()];
+                }
+            }
+
             var now = Now;
             var decision = new CabDecisions { Id = Ids.New(), ChangeRequestId = c.Id, MeetingId = meetingId, Decision = kind, Retroactive = d.Retroactive, Rationale = Blank(d.Rationale), DecidedByUserId = actor.UserId, DecidedAt = now };
             db.Set<CabDecisions>().Add(decision);
@@ -392,7 +406,9 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
                 c.DecidedByUserId = actor.UserId; c.DecidedAt = now;
                 c.Version++; c.LastChangedByUserId = actor.UserId; c.LastChangedAt = now;
             }
-            Audit(db, actor, c.ReleaseTrainId, Entity, c.Id, d.Retroactive ? "RetroactiveReview" : "Decide", before, new { decision = kind, retroactive = d.Retroactive, meetingId, decisionId = decision.Id, status = c.Status, version = c.Version });
+            object after = overConflicts is null ? new { decision = kind, retroactive = d.Retroactive, meetingId, decisionId = decision.Id, status = c.Status, version = c.Version }
+                : new { decision = kind, retroactive = d.Retroactive, meetingId, decisionId = decision.Id, status = c.Status, version = c.Version, overConflicts };
+            Audit(db, actor, c.ReleaseTrainId, Entity, c.Id, d.Retroactive ? "RetroactiveReview" : "Decide", before, after);
             await db.SaveChangesAsync(ct);
             return ServiceResult<ChangeView>.Ok((await ViewsAsync(db, [c], ct))[0]);
         }, ct);

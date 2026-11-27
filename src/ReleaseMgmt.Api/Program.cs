@@ -110,6 +110,7 @@ builder.Services.AddSingleton<ModuleService>();    // REOS-174 (D56, D57, D63) a
 builder.Services.AddSingleton<IModuleGate>(sp => sp.GetRequiredService<ModuleService>());
 builder.Services.AddAiPlatform(builder.Configuration);   // REOS-183 (D58): the one governed place every AI call goes through
 builder.Services.AddSingleton(ChangeRiskConfig.From(builder.Configuration));   // REOS-176: Cab:Risk:* thresholds of the visible risk rules (Q-176)
+builder.Services.AddSingleton<ChangeConflictService>();   // REOS-180: derived conflicts, freeze/blackout/overlap
 builder.Services.AddSingleton<ChangeRequestService>();   // REOS-175/177 (D56, D63) CAB module: change requests and separation of duties
 builder.Services.AddSingleton<CabService>();   // REOS-175 CAB meetings, agenda, attendees
 ClientScheduleKinds.OffsetFrom(builder.Configuration[ClientScheduleKinds.OffsetKey]);   // REOS-119 (RT4): a bad Release:OnDemandOffsetDays stops the start
@@ -282,7 +283,7 @@ api.MapShell();   // REOS-94
 api.MapWorkspaceAdmin();   // REOS-106
 api.MapModules();   // REOS-174
 api.MapAi();   // REOS-183
-api.MapCab();   // REOS-175/177: behind RequireModule("cab")
+api.MapCab(); api.MapCabConflicts();   // REOS-180 conflicts, same guard; REOS-175/177: behind RequireModule("cab")
 api.MapTemplates();   // REOS-38
 api.MapTrainCreation();   // REOS-80
 api.MapAudit();

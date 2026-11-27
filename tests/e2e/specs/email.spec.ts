@@ -44,9 +44,9 @@ test('notification settings: the inbox is always on, email and the team webhook 
   await expect(email.locator('option')).toHaveText(['Off', 'Immediately', 'In the daily digest'])
 
   await email.selectOption('Daily')
-  await expect(page.getByRole('status').filter({ hasText: 'Approval requested, email: in the daily digest. Saved.' })).toBeVisible()
+  await expect(page.locator('.em-saved').filter({ hasText: 'Approval requested, email: in the daily digest. Saved.' })).toBeVisible()
   await page.getByRole('combobox', { name: 'Email for Escalation, level 2' }).selectOption('Off')
-  await expect(page.getByRole('status').filter({ hasText: 'Escalation, level 2, email: off. Saved.' })).toBeVisible()
+  await expect(page.locator('.em-saved').filter({ hasText: 'Escalation, level 2, email: off. Saved.' })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('combobox', { name: 'Email for Approval requested' })).toHaveValue('Daily')
   await expect(page.getByRole('combobox', { name: 'Email for Escalation, level 2' })).toHaveValue('Off')
@@ -57,7 +57,7 @@ test('notification settings: the inbox is always on, email and the team webhook 
   // put it back so the shared database ends as it began
   await page.getByRole('combobox', { name: 'Email for Approval requested' }).selectOption('Immediate')
   await page.getByRole('combobox', { name: 'Email for Escalation, level 2' }).selectOption('Immediate')
-  await expect(page.getByRole('status').filter({ hasText: 'Escalation, level 2, email: immediately. Saved.' })).toBeVisible()
+  await expect(page.locator('.em-saved').filter({ hasText: 'Escalation, level 2, email: immediately. Saved.' })).toBeVisible()
 })
 
 test('a stale settings screen is told, in words, that the choice changed elsewhere, and shows it as it is now', async ({ page }) => {
@@ -79,7 +79,7 @@ test('a Viewer reaches their own notification settings from the Inbox, and has n
   await expect(page.getByRole('heading', { level: 1, name: 'Notification settings' })).toBeVisible()
   await expect(page).toHaveURL(/\/notification-settings$/)
   await page.getByRole('combobox', { name: 'Email for Decision made' }).selectOption('Off')
-  await expect(page.getByRole('status').filter({ hasText: 'Decision made, email: off. Saved.' })).toBeVisible()
+  await expect(page.locator('.em-saved').filter({ hasText: 'Decision made, email: off. Saved.' })).toBeVisible()
   await page.goto('/integrations')
   await expect(page.getByText('You cannot manage integrations')).toBeVisible()
   await expect(page.getByRole('tablist')).toHaveCount(0)

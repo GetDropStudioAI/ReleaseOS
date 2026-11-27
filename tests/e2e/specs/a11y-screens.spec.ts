@@ -39,6 +39,7 @@ const VIEWS: { link: RegExp; ready: (p: Page) => Promise<void>; name: string }[]
   { name: 'library', link: /^Comm library$/, ready: h1('Comm library') },
   { name: 'connectors', link: /^Connectors$/, ready: h1('Connectors') },
   { name: 'integrations', link: /^Integrations$/, ready: h1('Integrations') },   // REOS-165: API tokens and Webhooks are its tabs; /api-tokens and /webhooks have their own specs
+  { name: 'ai-inventory', link: /^AI inventory$/, ready: h1('AI inventory') },
   { name: 'work', link: /^My work$/, ready: h1('My work') },
   { name: 'analytics', link: /^Analytics$/, ready: h1('Analytics') },
   { name: 'importexport', link: /^Imports & exports$/, ready: h1('Imports & exports') },

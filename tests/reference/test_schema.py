@@ -266,12 +266,13 @@ INSERT INTO FreezeWindows(Id,Name,StartsAt,EndsAt,CreatedByUserId,WorkspaceId) V
 """)
 assert_true(db6.execute("SELECT Name, Slug FROM Workspaces WHERE Id='default'").fetchone() == ('Default', 'default'), "the default workspace exists in a new database")
 assert_true(db6.execute("SELECT WorkspaceId FROM ReleaseTrains WHERE Id='t1'").fetchone() == ('default',), "a root row written without a workspace lands in the default one")
-roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('Workspaces','WorkspaceMembers','WorkspaceModules')")
+roots = [t for (t,) in db6.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('Workspaces','WorkspaceMembers','WorkspaceModules','AiWorkspaceSettings')")
          if 'WorkspaceId' in [c[1] for c in db6.execute(f"PRAGMA table_info({t})")]]
 assert_true(sorted(roots) == sorted(['Teams','Holidays','TrainTemplates','CommTemplateLibrary','ReleaseTrains','FreezeWindows','SyncAlerts','WebhookDestinations',
             'Notifications','ImportJobs','ExportJobs','IcsTokens','ConnectorState','AuditEvents',
             'ReleaseTypes','ReleaseVersions','Environments','CatalogServices','Clients','ReleaseClientDates','IngestKeys','Deployments','MetricSamples','MetricRollups','ThresholdBreaches','DeploymentControlActions',
-            'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys','WebhookSubscriptions','WebhookDeliveries','WebhookDeliveryAttempts','ChangeRequests','CabMeetings']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
+            'ApprovalPolicies','Approvals','ApiTokens','IdempotencyKeys','WebhookSubscriptions','WebhookDeliveries','WebhookDeliveryAttempts','ChangeRequests','CabMeetings',
+            'AiActions']), "WorkspaceId on every root table, and only there", str(sorted(roots)))
 moving = [t for t in roots if t != 'AuditEvents' and not db6.execute(f"SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_Ws_{t}_Update'").fetchone()]
 assert_true(moving == [], "every root table but the append-only audit log refuses a change of workspace", str(moving))
 check(db6, "INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w3','X','Payments-EU',?)", False, "workspace slug with capitals", (NOW,), expect="CHECK")
@@ -1097,6 +1098,70 @@ db14.execute(CR, cr('e3', typ='Emergency', req='dev', status='Submitted'))
 db14.execute("UPDATE ChangeRequests SET Status='Implemented' WHERE Id='e3'")
 check(db14, D, False, "a deferred retroactive review (a review is a verdict)", ('r5', 'e3', None, 'Deferred', 1, 'gov1', NOW), expect="CHECK")
 assert_true(db14.execute("SELECT Decision, Retroactive FROM CabDecisions WHERE ChangeRequestId='e2'").fetchone() == ('Rejected', 1), "the retroactive review is on record")
+
+# ---- AI audit trail and inventory (REOS-184, D58): one immutable record per AI-assisted action, the human decision added once ----
+print("\nAI actions: the audit trail of every AI-assisted action, and the persisted workspace controls (D58, REOS-184)")
+db17 = db_fresh()
+db17.executescript(f"""
+INSERT INTO Users(Id,Email,DisplayName,Role) VALUES('out','out@x.com','Outsider','Viewer');
+INSERT INTO Workspaces(Id,Name,Slug,CreatedAt) VALUES('w2','EU','eu','{NOW}');
+INSERT INTO WorkspaceMembers(WorkspaceId,UserId,Role,AddedAt) VALUES('w2','out','Viewer','{NOW}');
+""")
+H17 = lambda c: c * 64
+AIA = ("INSERT INTO AiActions(Id,WorkspaceId,Feature,Provider,Model,PromptTemplateVersion,PromptHash,InputRefsJson,InputHash,Outcome,Detail,OutputText,OutputHash,RequestedByUserId,RequestedAt,Decision,FinalText,FinalHash,DecidedByUserId,DecidedAt) "
+       "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+def ai(i, ws='default', feature='release-notes-draft', outcome='Completed', out='Draft text', ohash=None, req='rte', decision='Pending', final=None, fhash=None, by=None, at=None, inh=None, detail=None, model='small-model'):
+    if outcome == 'Completed' and ohash is None: ohash = H17('a')
+    return (i, ws, feature, 'fake', model, 'release-notes/1', H17('b'), '[{"label":"Gate evidence","class":"ReleaseData","sha256":"' + H17('c') + '","chars":120}]',
+            inh if inh is not None else (H17('d') if outcome in ('Completed', 'TimedOut', 'ProviderError') else None), outcome, detail, out if outcome == 'Completed' else None,
+            ohash if outcome == 'Completed' else None, req, NOW, decision, final, fhash, by, at)
+check(db17, AIA, True, "a completed AI action waiting for a human decision", ai('a1'))
+assert_true(db17.execute("SELECT Decision, Version, Batch, Redactions FROM AiActions WHERE Id='a1'").fetchone() == ('Pending', 1, 0, 0), "a new action is Pending, version 1")
+check(db17, AIA, True, "a refused call is recorded with no output and nothing to decide", ai('a2', outcome='ModuleOff', decision='NotApplicable', detail='The AI module is off in this workspace'))
+check(db17, AIA, True, "a system (scheduled) request has no person", ai('a3', req=None))
+check(db17, AIA, False, "a feature name with capitals", ai('ax', feature='Risk Score'), expect="CHECK")
+check(db17, AIA, False, "an outcome outside the ten", ai('ax', outcome='Maybe'), expect="CHECK")
+check(db17, AIA, False, "a completed call with no output", ai('ax', out=None) if False else ai('ax', out='x', ohash=None)[:11] + (None, None) + ai('ax')[13:], expect="CHECK")
+check(db17, AIA, False, "a refused call that carries an output", ai('ax', outcome='Blocked', decision='NotApplicable')[:11] + ('leaked draft', H17('a')) + ai('ax')[13:], expect="CHECK")
+check(db17, AIA, False, "a refused call that is waiting for a decision", ai('ax', outcome='NoKey', decision='Pending'), expect="CHECK")
+check(db17, AIA, False, "a completed call marked not applicable", ai('ax', decision='NotApplicable'), expect="CHECK")
+check(db17, AIA, False, "a model call with no input hash", ai('ax', inh='', outcome='Completed')[:8] + (None,) + ai('ax')[9:], expect="CHECK")
+check(db17, AIA, False, "an output hash that is not 64 hex characters", ai('ax', ohash='xyz'), expect="CHECK")
+check(db17, AIA, False, "an action by a person who is not in the workspace", ai('ax', req='out'), expect="person who asked is not a member")
+check(db17, AIA, True, "the same person in the workspace they belong to", ai('a4', ws='w2', req='out'))
+# the human decision, added once
+check(db17, "UPDATE AiActions SET Decision='Accepted', DecidedByUserId='rm', DecidedAt=? WHERE Id='a1'", True, "the draft is accepted as it stands", (NOW,))
+check(db17, "UPDATE AiActions SET Decision='Rejected', DecidedByUserId='rm', DecidedAt=? WHERE Id='a1'", False, "an accepted action changed to rejected", (NOW,), expect="decision on an AI action is final")
+check(db17, "UPDATE AiActions SET DecisionNote='later' WHERE Id='a1'", False, "a note added after the decision", expect="decision on an AI action is final")
+db17.execute(AIA, ai('a5'))
+check(db17, "UPDATE AiActions SET Decision='Edited', DecidedByUserId='rm', DecidedAt=? WHERE Id='a5'", False, "an edit with no edited text", (NOW,), expect="CHECK")
+check(db17, "UPDATE AiActions SET Decision='Edited', FinalText='Draft text', FinalHash=?, DecidedByUserId='rm', DecidedAt=? WHERE Id='a5'", False, "an edit that is the draft unchanged", (H17('a'), NOW), expect="CHECK")
+check(db17, "UPDATE AiActions SET Decision='Edited', FinalText='Edited text', FinalHash=?, DecidedByUserId='rm', DecidedAt=? WHERE Id='a5'", True, "the draft is edited by a human: both are on record", (H17('e'), NOW))
+assert_true(db17.execute("SELECT OutputText, FinalText FROM AiActions WHERE Id='a5'").fetchone() == ('Draft text', 'Edited text'), "the draft and the human edit are both kept")
+db17.execute(AIA, ai('a6'))
+check(db17, "UPDATE AiActions SET Decision='Accepted', DecidedByUserId='rm' WHERE Id='a6'", False, "a decision with no time", expect="CHECK")
+check(db17, "UPDATE AiActions SET Decision='Accepted', DecidedAt=? WHERE Id='a6'", False, "a decision with no decider", (NOW,), expect="CHECK")
+check(db17, "UPDATE AiActions SET Decision='Accepted', FinalText='x', FinalHash=?, DecidedByUserId='rm', DecidedAt=? WHERE Id='a6'", False, "an accepted action that carries edited text", (H17('e'), NOW), expect="CHECK")
+check(db17, "UPDATE AiActions SET Decision='Accepted', DecidedByUserId='out', DecidedAt=? WHERE Id='a6'", False, "a decider from another workspace", (NOW,), expect="person who decided is not a member")
+check(db17, "UPDATE AiActions SET Decision='Rejected', DecisionNote='Wrong release', DecidedByUserId='rm', DecidedAt=? WHERE Id='a6'", True, "the draft is rejected with a note", (NOW,))
+# the record itself never changes
+db17.execute(AIA, ai('a7'))
+check(db17, "UPDATE AiActions SET OutputText='Better draft' WHERE Id='a7'", False, "the model's output rewritten while pending", expect="record does not change")
+check(db17, "UPDATE AiActions SET Model='other-model' WHERE Id='a7'", False, "the model rewritten", expect="record does not change")
+check(db17, "UPDATE AiActions SET InputHash=? WHERE Id='a7'", False, "the input hash rewritten", (H17('f'),), expect="record does not change")
+check(db17, "UPDATE AiActions SET RequestedByUserId='rm' WHERE Id='a7'", False, "the requester rewritten", expect="record does not change")
+check(db17, "UPDATE AiActions SET WorkspaceId='w2' WHERE Id='a7'", False, "an action moved to another workspace", expect="cannot move to another workspace")
+check(db17, "UPDATE AiActions SET Detail='x' WHERE Id='a2'", False, "a refused action changed", expect="decision on an AI action is final")
+check(db17, "DELETE FROM AiActions WHERE Id='a7'", False, "an AI action deleted", expect="kept for the record")
+check(db17, "DELETE FROM AiActions WHERE Id='a1'", False, "a decided AI action deleted", expect="kept for the record")
+check(db17, "INSERT INTO AuditEvents(OccurredAt,EntityType,EntityId,Action,AfterJson) VALUES(?,'AiAction','a7','Generated','{}')", True, "the audit row an AI action is chained through", (NOW,))
+# the workspace controls
+check(db17, "INSERT INTO AiWorkspaceSettings(WorkspaceId,Paused,OptedOut,LastChangedByUserId,LastChangedAt) VALUES('default',1,0,'rte',?)", True, "the workspace is paused", (NOW,))
+check(db17, "INSERT INTO AiWorkspaceSettings(WorkspaceId,Paused) VALUES('default',0)", False, "two settings rows for one workspace", expect="UNIQUE")
+check(db17, "INSERT INTO AiWorkspaceSettings(WorkspaceId,Paused) VALUES('nope',0)", False, "settings for a workspace that does not exist", expect="FOREIGN KEY")
+check(db17, "INSERT INTO AiWorkspaceSettings(WorkspaceId,OptedOut) VALUES('w2',2)", False, "an opt-out that is not 0 or 1", expect="CHECK")
+check(db17, "UPDATE AiWorkspaceSettings SET Paused=0, OptedOut=1, Version=2 WHERE WorkspaceId='default'", True, "the controls change (they are mutable, audited by the service)")
+check(db17, "DELETE FROM Workspaces WHERE Id='w2'", False, "a workspace with AI actions deleted", expect="FOREIGN KEY")
 
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

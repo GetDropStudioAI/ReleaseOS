@@ -92,6 +92,8 @@ public static class ModelMap
         b.Entity<CabAgendaItems>(e => { e.ToTable("CabAgendaItems"); e.HasKey(e => e.Id);  });
         b.Entity<CabAttendees>(e => { e.ToTable("CabAttendees"); e.HasKey(e => new { e.MeetingId, e.UserId });  });
         b.Entity<CabDecisions>(e => { e.ToTable("CabDecisions"); e.HasKey(e => e.Id);  });
+        b.Entity<AiActions>(e => { e.ToTable("AiActions"); e.HasKey(e => e.Id);  });
+        b.Entity<AiWorkspaceSettings>(e => { e.ToTable("AiWorkspaceSettings"); e.HasKey(e => e.WorkspaceId);  });
 
         // Foreign keys (from REFERENCES): let EF order dependent inserts and deletes
         b.Entity<WorkspaceMembers>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
@@ -310,5 +312,11 @@ public static class ModelMap
         b.Entity<CabDecisions>().HasOne<ChangeRequests>().WithMany().HasForeignKey(e => e.ChangeRequestId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CabDecisions>().HasOne<CabMeetings>().WithMany().HasForeignKey(e => e.MeetingId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
         b.Entity<CabDecisions>().HasOne<Users>().WithMany().HasForeignKey(e => e.DecidedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiActions>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiActions>().HasOne<Users>().WithMany().HasForeignKey(e => e.RequestedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiActions>().HasOne<Users>().WithMany().HasForeignKey(e => e.DecidedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiActions>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiWorkspaceSettings>().HasOne<Workspaces>().WithMany().HasForeignKey(e => e.WorkspaceId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<AiWorkspaceSettings>().HasOne<Users>().WithMany().HasForeignKey(e => e.LastChangedByUserId).HasPrincipalKey(p => p.Id).OnDelete(DeleteBehavior.NoAction);
     }
 }

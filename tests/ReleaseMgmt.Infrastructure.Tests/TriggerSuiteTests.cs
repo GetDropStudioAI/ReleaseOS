@@ -349,12 +349,12 @@ public class TriggerSuiteTests(TriggerSuiteFixture fx) : IClassFixture<TriggerSu
         var dw = Rows(db6, "SELECT Name, Slug FROM Workspaces WHERE Id='default'").Single();
         AssertTrue((string)dw[0]! == "Default" && (string)dw[1]! == "default", "the default workspace exists in a new database");
         AssertTrue((string)Rows(db6, "SELECT WorkspaceId FROM ReleaseTrains WHERE Id='t1'").Single()[0]! == "default", "a root row written without a workspace lands in the default one");
-        var roots = Rows(db6, "SELECT m.name FROM sqlite_master m WHERE m.type='table' AND m.name NOT IN ('Workspaces','WorkspaceMembers','WorkspaceModules') AND m.name NOT LIKE '__EF%' AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name='WorkspaceId')")
+        var roots = Rows(db6, "SELECT m.name FROM sqlite_master m WHERE m.type='table' AND m.name NOT IN ('Workspaces','WorkspaceMembers','WorkspaceModules','AiWorkspaceSettings') AND m.name NOT LIKE '__EF%' AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name='WorkspaceId')")
             .Select(r => (string)r[0]!).Order().ToList();
         string[] expectedRoots = ["Teams", "Holidays", "TrainTemplates", "CommTemplateLibrary", "ReleaseTrains", "FreezeWindows", "SyncAlerts", "WebhookDestinations",
             "Notifications", "ImportJobs", "ExportJobs", "IcsTokens", "ConnectorState", "AuditEvents",
             "ReleaseTypes", "ReleaseVersions", "Environments", "Clients", "ReleaseClientDates", "CatalogServices", "IngestKeys", "Deployments", "MetricSamples", "MetricRollups", "ThresholdBreaches", "DeploymentControlActions",
-            "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "WebhookDeliveryAttempts", "ChangeRequests", "CabMeetings"];
+            "ApprovalPolicies", "Approvals", "ApiTokens", "IdempotencyKeys", "WebhookSubscriptions", "WebhookDeliveries", "WebhookDeliveryAttempts", "ChangeRequests", "CabMeetings", "AiActions"];
         AssertTrue(roots.SequenceEqual(expectedRoots.Order()), "WorkspaceId on every root table, and only there", string.Join(",", roots));
         var moving = roots.Where(t => t != "AuditEvents" && Count(db6, "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name=?", $"trg_Ws_{t}_Update") == 0).ToList();
         AssertTrue(moving.Count == 0, "every root table but the append-only audit log refuses a change of workspace", string.Join(",", moving));

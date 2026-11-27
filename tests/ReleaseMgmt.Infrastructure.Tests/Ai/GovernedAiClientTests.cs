@@ -324,7 +324,7 @@ public class GovernedAiClientTests
     public async Task A_failing_usage_sink_never_loses_the_result()
     {
         var rig = new AiRig();
-        var client = new GovernedAiClient(rig.Provider, rig.Keys, rig.Options, rig.Workspaces, rig.Gate, new ThrowingSink(), rig.Clock, rig.Log);
+        var client = new GovernedAiClient(rig.Provider, rig.Keys, rig.Options, rig.Workspaces, rig.Gate, new ThrowingSink(), rig.Actions, rig.Clock, rig.Log);
         Assert.True((await client.CompleteAsync(AiRig.Req())).IsCompleted);
         Assert.Contains(rig.Log.Lines, l => l.Contains("usage sink failed"));
     }

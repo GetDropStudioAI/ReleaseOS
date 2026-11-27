@@ -382,6 +382,36 @@ for sql, want, label in [
     except sqlite3.IntegrityError as e:
         check(want is not None and want in str(e), label)
 
+# Upgrade 017 (REOS-184): AiActions and AiWorkspaceSettings are new and EMPTY, the 5 AI audit triggers are live, nothing else changes
+t17 = baseline_db()
+for s in SCRIPTS:
+    if s.name.startswith("017_"):
+        before17 = shape(t17)
+        rows17 = {t: t17.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("Users", "ReleaseTrains", "AuditEvents", "SyncAlerts", "ChangeRequests")}
+    t17.executescript(s.read_text())
+check(all(t17.execute(f"SELECT COUNT(*) FROM {t}").fetchone() == (0,) for t in ("AiActions", "AiWorkspaceSettings")), "017: the AI tables start empty (no pause or opt-out is invented by the script)")
+check({t: t17.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in rows17} == rows17, "017: existing rows are untouched")
+check(t17.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND (name LIKE 'trg_Ws_AiActions_%' OR name LIKE 'trg_AiAction_%')").fetchone() == (5,), "017: the five AI audit triggers exist")
+t17.executescript("""
+INSERT OR IGNORE INTO WorkspaceMembers (WorkspaceId, UserId, Role, AddedAt) VALUES ('default', 'u1', 'GovernanceOfficer', '2026-11-26T00:00:00Z');
+INSERT INTO AiActions (Id, Feature, Provider, Model, PromptTemplateVersion, InputHash, Outcome, OutputText, OutputHash, RequestedByUserId, RequestedAt)
+    VALUES ('a1', 'release-notes-draft', 'fake', 'small-model', 'release-notes/1', printf('%064d', 1), 'Completed', 'Draft', printf('%064d', 2), 'u1', '2026-11-26T00:00:00Z');
+""")
+for sql, want, label in [
+    ("UPDATE AiActions SET OutputText = 'Rewritten' WHERE Id = 'a1'", "record does not change", "017: the model's output cannot be rewritten"),
+    ("UPDATE AiActions SET Decision = 'Accepted', DecidedByUserId = 'u1', DecidedAt = '2026-11-26T01:00:00Z' WHERE Id = 'a1'", None, "017: the human decision is added"),
+    ("UPDATE AiActions SET Decision = 'Rejected' WHERE Id = 'a1'", "decision on an AI action is final", "017: a decision is final"),
+    ("DELETE FROM AiActions WHERE Id = 'a1'", "kept for the record", "017: an AI action cannot be deleted"),
+    ("INSERT INTO AiWorkspaceSettings (WorkspaceId, Paused) VALUES ('default', 1)", None, "017: the workspace pause is stored"),
+    ("INSERT INTO AiWorkspaceSettings (WorkspaceId, Paused) VALUES ('default', 0)", "UNIQUE", "017: one settings row per workspace"),
+]:
+    try:
+        t17.execute(sql); check(want is None, label)
+    except sqlite3.IntegrityError as e:
+        check(want is not None and want in str(e), label)
+after17 = shape(t17)
+check({k: v for k, v in after17.items() if k in before17} == before17, "017: no existing table, index or trigger changes")
+
 again = baseline_db()
 for s in SCRIPTS:
     again.executescript(s.read_text())

@@ -51,7 +51,7 @@ public class EndpointRoleMatrixTests
     // Endpoints mapped only when the host environment is Development.
     private static readonly HashSet<string> DevOnly =
     [
-        "POST /auth/dev-login", "POST /api/v1/dev/live-drill", "POST /api/v1/dev/sync/connector", "POST /api/v1/dev/sync/raise", "POST /api/v1/dev/sync/reset",
+        "POST /auth/dev-login", "POST /api/v1/dev/live-drill", "POST /api/v1/dev/ai/draft", "POST /api/v1/dev/sync/connector", "POST /api/v1/dev/sync/raise", "POST /api/v1/dev/sync/reset",
     ];
 
     private static readonly Dictionary<string, string> Matrix = Parse("""
@@ -175,6 +175,7 @@ public class EndpointRoleMatrixTests
         POST /api/v1/connectors/{source}:sync                    Admin
         POST /api/v1/connectors/{source}:test                    Admin
         POST /api/v1/dev/live-drill                              Plan
+        POST /api/v1/dev/ai/draft                                Read
         POST /api/v1/dev/sync/connector                          Admin
         POST /api/v1/dev/sync/raise                              Admin
         POST /api/v1/dev/sync/reset                              Admin
@@ -282,6 +283,10 @@ public class EndpointRoleMatrixTests
         DELETE /api/v1/ai/key                                    Admin
         GET /api/v1/ai/preflight                                 Read
         GET /api/v1/cab/risk-rules                               Read
+        GET /api/v1/ai/inventory                                 AuditRead
+        GET /api/v1/ai/actions                                   AuditRead
+        GET /api/v1/ai/actions/{id}                              Read
+        POST /api/v1/ai/actions/{id}:decide                      Read
         GET /api/v1/cab/changes                                  Read
         GET /api/v1/cab/changes/{id}                             Read
         POST /api/v1/cab/changes                                 Plan

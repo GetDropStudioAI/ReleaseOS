@@ -35,6 +35,7 @@ export const NAV: NavGroup[] = [
       { view: 'cab', label: 'Change advisory board', module: 'cab' },   // REOS-174 gates it, REOS-176 builds the change request screens (src/cab)
       { view: 'ai', label: 'AI assistant', placeholder: 'ai', module: 'ai' },
       { view: 'integrations', label: 'Integrations', need: 'admin' },   // REOS-165: API tokens (REOS-162) and webhooks (REOS-164) in one page; /api-tokens and /webhooks still open on their own
+      { view: 'ai-inventory', label: 'AI inventory', need: 'audit' },   // REOS-184 (D58): core, not behind the AI module: a reviewer reads what AI did even after it is switched off
     ],
   },
   { id: 'more', label: 'More', items: [{ view: 'work', label: 'My work' }, { view: 'analytics', label: 'Analytics' }, { view: 'importexport', label: 'Imports & exports' }] },

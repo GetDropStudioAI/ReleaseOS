@@ -141,7 +141,7 @@ public class AnthropicAiClientTests
         var o = rig.Options.CurrentValue; o.Provider = "anthropic";
         await rig.Keys.SetKeyAsync(Key);
         var provider = new AnthropicAiClient(new HttpClient(handler), rig.Keys, rig.Options, rig.Clock);
-        var client = new GovernedAiClient(provider, rig.Keys, rig.Options, rig.Workspaces, rig.Gate, rig.Sink, rig.Clock, rig.Log);
+        var client = new GovernedAiClient(provider, rig.Keys, rig.Options, rig.Workspaces, rig.Gate, rig.Sink, rig.Actions, rig.Clock, rig.Log);
         var ok = await client.CompleteAsync(AiRig.Req(instruction: $"my key is {Key}"));
         fail = true;
         var bad = await client.CompleteAsync(AiRig.Req());

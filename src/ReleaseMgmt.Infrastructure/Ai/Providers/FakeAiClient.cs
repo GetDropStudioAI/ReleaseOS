@@ -40,6 +40,6 @@ public sealed class FakeAiClient : IAiProvider
         var text = $"[fake:{r.Model}:{r.Feature}] {r.User.Length} characters received";
         var input = (r.System.Length + r.User.Length + 3) / 4;
         var cached = r.CacheSystem ? (r.System.Length + 3) / 4 : 0;
-        return new AiProviderResponse(text, input - cached, (text.Length + 3) / 4, CacheReadTokens: 0, CacheWriteTokens: cached);
+        return new AiProviderResponse(text, input - cached, (text.Length + 3) / 4, CacheReadTokens: 0, CacheWriteTokens: cached, ServedModel: r.Model);
     }
 }

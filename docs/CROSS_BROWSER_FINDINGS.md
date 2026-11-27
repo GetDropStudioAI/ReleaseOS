@@ -10,7 +10,7 @@ Input for REOS-150 (Firefox), REOS-151 (Edge) and REOS-152 (WebKit/Safari). Noth
 | chromium (baseline, the per-PR gate) | 274 passed, 1 skipped, 0 failed (26.5 min) | the skip is an existing data-condition skip in `analytics.spec.ts`/`redesign-qa.spec.ts`, not a browser skip |
 | firefox 155 | 244 passed, 1 skipped, **30 failed** (49 min) | |
 | webkit (Playwright build) | 252 passed, 1 skipped, **22 failed** (31 min) | Linux WebKit is not Safari: macOS runs in CI will say more |
-| msedge | **not run** | Edge cannot be installed or tested in a Linux container. It is Chromium-based, so a large difference is not expected, but nothing here says so. The first run of the `cross-browser` workflow on `windows-latest` is the evidence for REOS-151 |
+| msedge | **275 passed, 0 failed, 0 skipped** (windows-latest, see the Edge section) | not run in the Linux container; the `cross-browser` workflow run on 2026-11-27 is the evidence |
 
 Each failure below is a spec failure (light and dark theme variants counted separately). Every one of them is currently skipped with its ticket key in the spec, so the `cross-browser` job is green and a *new* regression shows up. Remove the skip when the story fixes the cause.
 
@@ -40,9 +40,22 @@ Counts: 18 + 2 + 1 + 2 + 4 + 1 + 1 + 1 = 30.
 
 Counts: 18 + 2 + 1 + 1 = 22.
 
-## Edge (REOS-151) — not tested here
+## Edge (REOS-151) — 275 passed, 0 failed
 
-No result. The `msedge` project (`channel: 'msedge'`) is defined and runs in the `cross-browser` workflow on `windows-latest`, where Edge is installed. Treat its first run as the findings for REOS-151; add them here and skip with `REOS-151` as above.
+`cross-browser (msedge on windows-latest)`, run 45911834177 (branch `reos-xb-webkit-edge`, 2026-11-26/27, Edge on the Windows runner, Playwright `channel: 'msedge'`): **275 passed, 0 failed, 0 skipped (30.7 min)**. No Edge-only skip exists in any spec, so every spec ran, clipboard ones included (Edge is Chromium and takes the clipboard permissions). Nothing to fix and nothing skipped with `REOS-151`. The Windows log shows a `ConnectionAbortedError [WinError 10053]` from `start.py`'s health endpoint at the end of the run (the harness closing a polling connection at shutdown); no test was affected.
+
+## Safari evidence: macOS WebKit (REOS-152) — 238 passed, 16 failed, 21 skipped
+
+Same run, `cross-browser (webkit on macos-latest)` (Playwright's WebKit build on Apple silicon; closer to Safari than the Linux build, but still not Safari itself). The 21 skips are the clipboard skips (owned by `reos-xb-firefox`). The 16 failures, three causes:
+
+| Spec (line) | Failures | Cause | Status |
+|---|---|---|---|
+| `train-close:29`, `deployments:185`, `gallery:69`, `orchestration:139`, `redesign-qa:341`, `synchealth:30` (light, dark) | 7 | After Escape the button that opened the dialog or drawer is not focused (`toBeFocused`, received `inactive`). **Product defect**: Safari does not focus a button when it is clicked, so `document.activeElement` was `<body>` when the dialog opened and focus could not be given back | **Fixed** with `focusOpener()` in `focus.ts` (falls back to the control last pressed with a pointer), used by `ConfirmDialog`, `useRestoreFocus`, `InspectorFrame` and `StepDrawer`. `safari-focus.spec.ts` emulates Safari's click on every engine; it fails without the fix and passes with it. **Not yet re-run on macOS** (the temporary trigger is reverted), so the nightly run is the proof |
+| `analytics:179`, `gallery:33`, `importexport:129` (light, dark) | 4 | The spec walks by Tab to buttons and links. Safari on macOS does not Tab to them unless "Press Tab to highlight each item" is on (Option+Tab otherwise). Not a product defect | Skipped on macOS WebKit with `REOS-152`; keyboard access in Safari is **untested** by these specs |
+| `a11y-screens:111` (light, dark) and `:215` (Dark, Light choice) | 4 | Same Tab behaviour (`Tab never reached /^Overview$/ in 80 presses`, `/account and appearance/`) | **Not touched**: `a11y-screens.spec.ts` belongs to `reos-xb-firefox`. Until it skips or adapts them the macOS WebKit job stays red on these 4 |
+| `deployments:61` (light only) | 1 | `locator.fill` on the filter search box timed out at 60 s; the dark run and Edge pass; Linux WebKit passed it | Skipped on macOS WebKit, light only, with `REOS-152`. **Not diagnosed** (trace is in artifact `playwright-webkit`, run 45911834177); may be a one-off |
+
+The Linux-WebKit finding `redesign-qa.spec.ts:212` (Analytics error state without Retry) was fixed earlier on this branch: the scope notice "Your workspaces could not be loaded" had no Retry, and the check passed or failed on whether the main error state (which has one) had rendered yet. It now has Retry, the skip is gone, and the spec passes on Linux WebKit (12 passed, 1 existing data skip) and on macOS (no longer in the failure list).
 
 ## What is common to REOS-150 and REOS-152
 

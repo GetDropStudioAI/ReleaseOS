@@ -13,6 +13,9 @@ import {
 } from './cabLogic.ts'
 import { ChangeEditor, type Choice } from './ChangeEditor.tsx'
 import { RiskPanel } from './RiskPanels.tsx'
+import { ConflictsPanel } from './ConflictPanels.tsx'   // REOS-180
+import { needsReason, reasonHint } from './conflictLogic.ts'
+import type { Conflict as ChangeConflict } from './conflictsApi.ts'
 import './cab.css'
 
 interface Conflict { current: ChangeRow; redo: (version: number) => void }
@@ -39,6 +42,7 @@ export function ChangeDetail({ me, id, onBack }: { me: Me; id: string; onBack: (
   const [confirm, setConfirm] = useState<'cancel' | 'reject' | null>(null)
   const [decision, setDecision] = useState('Approved')
   const [rationale, setRationale] = useState('')
+  const [conflicts, setConflicts] = useState<ChangeConflict[]>([])   // REOS-180: what the change collides with; approving over any of it needs a reason
   const { run, pending } = useAction()
   const editOpener = useRef<HTMLButtonElement>(null)
 
@@ -49,6 +53,8 @@ export function ChangeDetail({ me, id, onBack }: { me: Me; id: string; onBack: (
   useEffect(() => { load() }, [load])
   const editingRef = useRef(false)
   useEffect(() => { editingRef.current = editing }, [editing])
+  const refocus = useRef(false)   // set when an edit closes: the Edit button is focused once React has drawn it again (a single animation frame can fire before that on a slow machine)
+  useEffect(() => { if (!editing && refocus.current && editOpener.current) { refocus.current = false; editOpener.current.focus() } }, [editing, row])
   useEffect(() => onCabChanged(changeId => { if (changeId && changeId !== id) return; if (editingRef.current) setNewer(true); else load() }), [load, id])
   useEffect(() => {
     if (!editing) return
@@ -85,7 +91,7 @@ export function ChangeDetail({ me, id, onBack }: { me: Me; id: string; onBack: (
     })
 
   const startEdit = () => { setForm(formOf(row, utcToZonedInput)); setEditBase(row.version); setNewer(false); setEditing(true) }
-  const backToEdit = () => requestAnimationFrame(() => editOpener.current?.focus())   // the Edit button is drawn again once the form closes
+  const backToEdit = () => { refocus.current = true; requestAnimationFrame(() => { if (editOpener.current) { refocus.current = false; editOpener.current.focus() } }) }   // the Edit button is drawn again once the form closes
   const closeEdit = () => { setEditing(false); setNewer(false); backToEdit() }
   const save = async () => {
     if (!form) return
@@ -129,6 +135,7 @@ export function ChangeDetail({ me, id, onBack }: { me: Me; id: string; onBack: (
               onSave={() => void save()} onCancel={closeEdit} />
           )}
           <RiskPanel risk={row.risk} level={row.riskLevel} legacy={row.riskFactors} />
+          <ConflictsPanel changeId={row.id} version={row.version} onLoaded={setConflicts} />
           <Panel title="Decisions" subtitle="Each person's decision is kept as it was recorded">
             {row.decisions.length === 0 ? <p className="mg-note">No decision has been recorded.</p> : row.decisions.map(d => (
               <div key={d.id} className="cab-decision">
@@ -173,9 +180,10 @@ export function ChangeDetail({ me, id, onBack }: { me: Me; id: string; onBack: (
             <Panel title={retro ? 'Record a review' : 'Record a decision'} subtitle={retro ? 'A second person reviews an Emergency change after it was implemented' : 'The CAB approves, rejects or defers'}>
               <div className="mg-form">
                 <Field label="Decision"><SelectInput value={decision} onChange={e => setDecision(e.target.value)} options={[{ value: 'Approved', label: retro ? 'Approved (review passed)' : 'Approved' }, { value: 'Rejected', label: retro ? 'Rejected (review failed)' : 'Rejected' }, ...(retro ? [] : [{ value: 'Deferred', label: 'Deferred' }])]} /></Field>
-                <Field label="Rationale" hint={decision === 'Rejected' ? 'Required for a rejection.' : 'Optional.'}><textarea className="mg-input" rows={3} value={rationale} maxLength={2000} onChange={e => setRationale(e.target.value)} /></Field>
+                <Field label="Rationale" hint={decision === 'Rejected' ? 'Required for a rejection.' : decision === 'Approved' && !retro && conflicts.length > 0 ? 'Required: why you are approving over the conflicts shown (at least 20 characters).' : 'Optional.'}><textarea className="mg-input" rows={3} value={rationale} maxLength={2000} onChange={e => setRationale(e.target.value)} /></Field>
                 <div className="mg-actions">
                   {verdict && self ? <DisabledAction variant="primary" reason={self}>{retro ? 'Record review' : 'Record decision'}</DisabledAction>
+                    : !retro && needsReason(decision, conflicts, rationale) ? <DisabledAction variant="primary" reason={reasonHint(conflicts)}>Record decision</DisabledAction>
                     : decision === 'Rejected' && !rationale.trim() ? <DisabledAction variant="primary" reason="A rejection needs a rationale.">{retro ? 'Record review' : 'Record decision'}</DisabledAction>
                     : decision === 'Rejected' ? <Button variant="destructive" disabled={!!pending} onClick={() => setConfirm('reject')}>{retro ? 'Record review' : 'Record decision'}</Button>
                     : <Button variant="primary" disabled={!!pending} onClick={() => void decide()}>{pending === 'Recording…' ? pending : retro ? 'Record review' : 'Record decision'}</Button>}

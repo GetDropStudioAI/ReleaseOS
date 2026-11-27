@@ -15,6 +15,7 @@ import { sortTypes, typeLabel, type ReleaseTypeRow } from './mgmt/releaseTypesLo
 import { segmentLabel } from './mgmt/clientsLogic'
 import { browserZone } from './shell/clock'
 import { serverNow } from './time'
+import { ChangeCalendarOverlay } from './cab/ConflictPanels'   // REOS-180: the CAB module's changes and blackout days; renders nothing while the module is off
 import { Button, DataTable, EmptyState, ErrorState, FilterSelect, LoadingState, Notice, PageHeading, Panel, PropertyList, StatusChip, TabPanel, Tabs, TwoLine, type Column } from './ui'
 
 /**
@@ -330,6 +331,8 @@ export function Calendar({ onOpen, onPlan, trainId: current }: { me: Me; onOpen?
           </Panel>
         </TabPanel>
       )}
+
+      <ChangeCalendarOverlay from={first} to={last} onOpenChange={id => { window.history.pushState(null, '', `/cab/${encodeURIComponent(id)}`); window.dispatchEvent(new PopStateEvent('popstate')) }} />
 
       <div className="os-cal-lower">
         <Panel title="Upcoming release windows" subtitle={`Next ${UPCOMING_DAYS} days · sorted by scheduled start`} meta={<button type="button" className="os-link os-link-button" onClick={() => setTab('list')}>View portfolio →</button>}>

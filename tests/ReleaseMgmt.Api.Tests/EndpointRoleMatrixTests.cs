@@ -281,6 +281,7 @@ public class EndpointRoleMatrixTests
         PUT /api/v1/ai/key                                       Admin
         DELETE /api/v1/ai/key                                    Admin
         GET /api/v1/ai/preflight                                 Read
+        GET /api/v1/cab/risk-rules                               Read
         GET /api/v1/cab/changes                                  Read
         GET /api/v1/cab/changes/{id}                             Read
         POST /api/v1/cab/changes                                 Plan

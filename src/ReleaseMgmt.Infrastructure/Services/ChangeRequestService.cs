@@ -14,13 +14,18 @@ public sealed record ChangeDecisionView(string Id, string Decision, bool Retroac
 public sealed record ChangeView(string Id, string Key, string Title, string? Description, string ChangeType, string Status, string RiskLevel, string? RiskFactors,
     NamedRef RequestedBy, NamedRef CreatedBy, ReleaseRef? Release, string? GoNoGoDecisionId, string? PlannedStartAt, string? PlannedEndAt, string? RollbackNote,
     string? SubmittedAt, NamedRef? DecidedBy, string? DecidedAt, string? ImplementedAt, string? ClosedAt, string CreatedAt, string? LastChangedAt, int Version,
-    IReadOnlyList<ChangeDecisionView> Decisions, bool NeedsReview);
+    IReadOnlyList<ChangeDecisionView> Decisions, bool NeedsReview, RiskView? Risk = null, GoNoGoRef? GoNoGo = null);
 
-public sealed record NewChange(string? Title, string? ChangeType, string? Description = null, string? RiskLevel = null, string? RiskFactors = null, string? RequestedByUserId = null,
+/// <summary>REOS-176: the risk level with every rule that was checked and what it found (<c>Applied</c> ones add <c>Points</c>; the level is the band of the score). <c>LevelRule</c> says the bands in words.</summary>
+public sealed record RiskView(string Level, int Score, string LevelRule, IReadOnlyList<RiskFactor> Factors);
+
+public sealed record GoNoGoRef(string Id, string Decision, string DecidedAt);
+
+public sealed record NewChange(string? Title, string? ChangeType, string? Description = null, string? RequestedByUserId = null,
     string? ReleaseTrainId = null, string? GoNoGoDecisionId = null, DateTime? PlannedStartAt = null, DateTime? PlannedEndAt = null, string? RollbackNote = null);
 
-/// <summary>Null leaves a field as it is; <see cref="Clear"/> names the optional fields to empty (description, riskFactors, releaseTrainId, goNoGoDecisionId, window, rollbackNote).</summary>
-public sealed record ChangePatch(string? Title = null, string? ChangeType = null, string? Description = null, string? RiskLevel = null, string? RiskFactors = null,
+/// <summary>Null leaves a field as it is; <see cref="Clear"/> names the optional fields to empty (description, releaseTrainId, goNoGoDecisionId, window, rollbackNote).</summary>
+public sealed record ChangePatch(string? Title = null, string? ChangeType = null, string? Description = null,
     string? ReleaseTrainId = null, string? GoNoGoDecisionId = null, DateTime? PlannedStartAt = null, DateTime? PlannedEndAt = null, string? RollbackNote = null, IReadOnlyList<string>? Clear = null);
 
 public sealed record DecisionInput(string? Decision, string? Rationale = null, string? MeetingId = null, bool Retroactive = false);
@@ -32,8 +37,9 @@ public sealed record DecisionInput(string? Decision, string? Rationale = null, s
 /// <para>Separation of duties (REOS-177): the service checks first and answers 422 with a readable message; the same three rules are triggers in <c>db/schema.sql</c> as the backstop.
 /// A refused attempt is audited (<c>DecisionRefused</c>, <c>CloseRefused</c>) in its own transaction, because the refused call itself rolls back.</para>
 /// </summary>
-public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null) : ServiceBase(dbf, time, realtime)
+public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf, TimeProvider time, IRealtimePublisher? realtime = null, ChangeRiskOptions? risk = null) : ServiceBase(dbf, time, realtime)
 {
+    private readonly ChangeRiskOptions _risk = risk ?? new();
     private const string Entity = "ChangeRequest";
     internal const string ModuleEvent = "CabChanged";
     private readonly IRealtimePublisher? _realtime = realtime;
@@ -41,7 +47,7 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
 
     internal static string Iso(DateTime t) => t.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
     private static GuardFailure Bad(string m) => new(CabGuards.ChangeInvalid, m);
-    private static readonly string[] Clearable = ["description", "riskFactors", "releaseTrainId", "goNoGoDecisionId", "window", "rollbackNote"];
+    private static readonly string[] Clearable = ["description", "releaseTrainId", "goNoGoDecisionId", "window", "rollbackNote"];
 
     // ---- reads -----------------------------------------------------------------------------------------------------------------------
 
@@ -72,6 +78,8 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
         NamedRef Who(string id) => new(id, names.GetValueOrDefault(id, id));
         var trainIds = rows.Select(r => r.ReleaseTrainId).OfType<string>().Distinct().ToList();
         var trains = await db.Set<ReleaseTrains>().AsNoTracking().Where(t => trainIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id, t => t.Title, ct);
+        var goIds = rows.Select(r => r.GoNoGoDecisionId).OfType<string>().Distinct().ToList();
+        var gos = await db.Set<GoNoGoDecisions>().AsNoTracking().Where(g => goIds.Contains(g.Id)).ToDictionaryAsync(g => g.Id, ct);
         return [.. rows.Select(r =>
         {
             var ds = decisions[r.Id].ToList();
@@ -82,8 +90,68 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
                 r.DecidedByUserId is { } db2 ? Who(db2) : null, r.DecidedAt is { } da ? Iso(da) : null, r.ImplementedAt is { } ia ? Iso(ia) : null, r.ClosedAt is { } ca ? Iso(ca) : null,
                 Iso(r.CreatedAt), r.LastChangedAt is { } lc ? Iso(lc) : null, r.Version,
                 [.. ds.Select(d => new ChangeDecisionView(d.Id, d.Decision, d.Retroactive, d.MeetingId, d.Rationale, Who(d.DecidedByUserId), Iso(d.DecidedAt)))],
-                r.ChangeType == ChangeTypes.Emergency && r.Status == ChangeStatuses.Implemented && !reviewed);
+                r.ChangeType == ChangeTypes.Emergency && r.Status == ChangeStatuses.Implemented && !reviewed,
+                ParseRisk(r), r.GoNoGoDecisionId is { } g && gos.TryGetValue(g, out var go) ? new GoNoGoRef(go.Id, go.Decision, Iso(go.DecidedAt)) : null);
         })];
+    }
+
+    // ---- risk (REOS-176) -------------------------------------------------------------------------------------------------------------
+
+    private sealed record StoredRisk(int Score, List<RiskFactor> Factors);
+
+    /// <summary>The stored factors, or null for a row that predates the rules (its RiskFactors is free text, shown as it is).</summary>
+    private static RiskView? ParseRisk(ChangeRequests r)
+    {
+        if (r.RiskFactors is not { Length: > 0 } text || text[0] != '{') return null;
+        try
+        {
+            var stored = System.Text.Json.JsonSerializer.Deserialize<StoredRisk>(text, Json);
+            return stored is null ? null : new RiskView(r.RiskLevel, stored.Score, ChangeRiskRules.LevelRuleText, stored.Factors);
+        }
+        catch (System.Text.Json.JsonException) { return null; }   // not ours: shown as free text by the view's RiskFactors
+    }
+
+    /// <summary>
+    /// Runs the five rules for the change as it now stands and stores the level and the factors (as JSON in RiskFactors) on the row, so the list and the detail can never disagree. Called on
+    /// create, on every edit of a Draft and again on submit (a freeze window may have been added meanwhile). A change with no release is matched only by windows that cover all products.
+    /// </summary>
+    private async Task ApplyRiskAsync(ReleaseDbContext db, ChangeRequests c, CancellationToken ct)
+    {
+        var ws = Memberships.WorkspaceOf(db);
+        var products = c.ReleaseTrainId is null ? [] : await db.Set<BundledProducts>().AsNoTracking().Where(p => p.ReleaseTrainId == c.ReleaseTrainId).Select(p => new { p.ProductName, p.CatalogServiceId }).ToListAsync(ct);
+        var freezes = new List<RiskFreeze>();
+        if (c.PlannedStartAt is { } s && c.PlannedEndAt is { } e)
+        {
+            var near = TimeSpan.FromHours(_risk.NearFreezeHours);
+            var lo = s - near; var hi = e + near;
+            var windows = await db.Set<FreezeWindows>().AsNoTracking().Where(f => f.WorkspaceId == ws && f.StartsAt < hi && f.EndsAt > lo).OrderBy(f => f.StartsAt).ToListAsync(ct);
+            foreach (var f in windows)
+            {
+                var pattern = f.ProductPattern;   // the same GLOB predicate FreezeService uses; a window with no pattern covers every product
+                if (pattern is null || (c.ReleaseTrainId is not null && await db.Set<BundledProducts>().AnyAsync(p => p.ReleaseTrainId == c.ReleaseTrainId && EF.Functions.Glob(p.ProductName, pattern), ct)))
+                    freezes.Add(new RiskFreeze(f.Name, f.Kind, f.StartsAt, f.EndsAt));
+            }
+        }
+        var failures = new List<RiskPriorFailure>();
+        var services = products.Select(p => p.CatalogServiceId).OfType<string>().Distinct().ToList();
+        if (c.ReleaseTrainId is not null && services.Count > 0)
+        {
+            var since = Now.AddDays(-_risk.PriorFailureLookbackDays);
+            var others = await (from o in db.Set<ChangeRequests>().AsNoTracking()
+                                join t in db.Set<ReleaseTrains>().AsNoTracking() on o.ReleaseTrainId equals t.Id
+                                where o.WorkspaceId == ws && o.Id != c.Id && o.ReleaseTrainId != c.ReleaseTrainId && o.Status != ChangeStatuses.Cancelled && o.Status != ChangeStatuses.Draft
+                                    && (t.CloseCode == "Unsuccessful" || t.CurrentStatus == "Aborted")
+                                select new { o.ChangeKey, TrainId = t.Id, t.Title, t.CloseCode, t.CurrentStatus, At = t.ActualEndAt ?? t.LastChangedAt ?? t.CreatedAt }).ToListAsync(ct);
+            foreach (var o in others.Where(x => x.At >= since))
+            {
+                var shared = await db.Set<BundledProducts>().AsNoTracking().Where(p => p.ReleaseTrainId == o.TrainId && p.CatalogServiceId != null && services.Contains(p.CatalogServiceId))
+                    .Join(db.Set<CatalogServices>().AsNoTracking(), p => p.CatalogServiceId, sv => sv.Id, (p, sv) => sv.Name).FirstOrDefaultAsync(ct);
+                if (shared is not null) failures.Add(new RiskPriorFailure(o.ChangeKey, shared, o.Title, o.CurrentStatus == "Aborted" ? "Aborted" : "Unsuccessful", o.At));
+            }
+        }
+        var a = ChangeRiskRules.Assess(new RiskInput(c.ChangeType, c.PlannedStartAt, c.PlannedEndAt, c.RollbackNote, c.ReleaseTrainId is not null, products.Count, freezes, failures), _risk);
+        c.RiskLevel = a.Level;
+        c.RiskFactors = System.Text.Json.JsonSerializer.Serialize(new StoredRisk(a.Score, [.. a.Factors]), Json);
     }
 
     private static object Snapshot(ChangeRequests c) => new
@@ -99,8 +167,7 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
         var f = new List<GuardFailure>();
         if (c.Title.Length is 0 or > 200) f.Add(Bad("A title is 1 to 200 characters"));
         if (!ChangeTypes.All.Contains(c.ChangeType)) f.Add(Bad("Type must be Standard, Normal or Emergency"));
-        if (!ChangeRiskLevels.All.Contains(c.RiskLevel)) f.Add(Bad("Risk level must be Low, Medium, High or Critical"));
-        if (c.Description is { Length: > 4000 } || c.RiskFactors is { Length: > 4000 } || c.RollbackNote is { Length: > 4000 }) f.Add(Bad("Description, risk factors and rollback note are at most 4000 characters"));
+        if (c.Description is { Length: > 4000 } || c.RollbackNote is { Length: > 4000 }) f.Add(Bad("Description and rollback note are at most 4000 characters"));
         if ((c.PlannedStartAt is null) != (c.PlannedEndAt is null)) f.Add(new(CabGuards.ChangeInvalid, "A planned window needs both a start and an end"));
         else if (c.PlannedStartAt is { } s && c.PlannedEndAt is { } e && e <= s) f.Add(Bad("The planned window must end after it starts"));
         if (await Memberships.RoleOf(db, requester, ct) is null) f.Add(new(CabGuards.CabNotMember, "The requester is not a member of this workspace"));
@@ -134,7 +201,7 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
             var c = new ChangeRequests
             {
                 Id = Ids.New(), ChangeKey = await NextKeyAsync(db, ct), Title = (n.Title ?? "").Trim(), Description = Blank(n.Description), ChangeType = n.ChangeType ?? "",
-                RiskLevel = n.RiskLevel ?? ChangeRiskLevels.Medium, RiskFactors = Blank(n.RiskFactors), RequestedByUserId = requester, CreatedByUserId = actor.UserId,
+                RequestedByUserId = requester, CreatedByUserId = actor.UserId,
                 ReleaseTrainId = Blank(n.ReleaseTrainId), GoNoGoDecisionId = Blank(n.GoNoGoDecisionId), PlannedStartAt = n.PlannedStartAt, PlannedEndAt = n.PlannedEndAt, RollbackNote = Blank(n.RollbackNote),
                 CreatedAt = now, LastChangedByUserId = actor.UserId, LastChangedAt = now,
             };
@@ -142,6 +209,7 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
                 c.ReleaseTrainId = await db.Set<GoNoGoDecisions>().Where(d => d.Id == c.GoNoGoDecisionId).Select(d => d.ReleaseTrainId).SingleOrDefaultAsync(ct);
             var f = await CheckAsync(db, c, requester, ct);
             if (f.Count > 0) return ServiceResult<ChangeView>.Fail(f);
+            await ApplyRiskAsync(db, c, ct);
             db.Set<ChangeRequests>().Add(c);
             Audit(db, actor, c.ReleaseTrainId, Entity, c.Id, "Create", null, Snapshot(c));
             await db.SaveChangesAsync(ct);
@@ -169,21 +237,19 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
             if (p.Title is not null) c.Title = p.Title.Trim();
             if (p.ChangeType is not null) c.ChangeType = p.ChangeType;
             if (p.Description is not null) c.Description = Blank(p.Description);
-            if (p.RiskLevel is not null) c.RiskLevel = p.RiskLevel;
-            if (p.RiskFactors is not null) c.RiskFactors = Blank(p.RiskFactors);
             if (p.ReleaseTrainId is not null) c.ReleaseTrainId = Blank(p.ReleaseTrainId);
             if (p.GoNoGoDecisionId is not null) c.GoNoGoDecisionId = Blank(p.GoNoGoDecisionId);
             if (p.RollbackNote is not null) c.RollbackNote = Blank(p.RollbackNote);
             if (p.PlannedStartAt is not null) c.PlannedStartAt = p.PlannedStartAt;
             if (p.PlannedEndAt is not null) c.PlannedEndAt = p.PlannedEndAt;
             if (clear.Contains("description")) c.Description = null;
-            if (clear.Contains("riskFactors")) c.RiskFactors = null;
             if (clear.Contains("releaseTrainId")) c.ReleaseTrainId = null;
             if (clear.Contains("goNoGoDecisionId")) c.GoNoGoDecisionId = null;
             if (clear.Contains("rollbackNote")) c.RollbackNote = null;
             if (clear.Contains("window")) { c.PlannedStartAt = null; c.PlannedEndAt = null; }
             var f = await CheckAsync(db, c, c.RequestedByUserId, ct);
             if (f.Count > 0) { db.Entry(c).State = EntityState.Unchanged; return ServiceResult<ChangeView>.Fail(f); }
+            await ApplyRiskAsync(db, c, ct);
             c.Version++; c.LastChangedByUserId = actor.UserId; c.LastChangedAt = Now;
             Audit(db, actor, c.ReleaseTrainId, Entity, c.Id, "Update", before, Snapshot(c));
             await db.SaveChangesAsync(ct);
@@ -195,9 +261,14 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
     // ---- status moves (only here: CLAUDE.md rule 2) ------------------------------------------------------------------------------------
 
     public Task<ServiceResult<ChangeView>> SubmitAsync(string id, Actor actor, int? expectedVersion, CancellationToken ct = default) =>
-        MoveAsync(id, ChangeStatuses.Submitted, "Submit", actor, expectedVersion, (_, c) =>
-            Task.FromResult<GuardFailure?>(string.IsNullOrWhiteSpace(c.RollbackNote) ? new(CabGuards.ChangeNeedsRollbackNote, "A change is submitted with a rollback note: how it is undone if it goes wrong")
-                : c.ChangeType != ChangeTypes.Emergency && c.PlannedStartAt is null ? new(CabGuards.ChangeNeedsWindow, "A Standard or Normal change is submitted with a planned window (start and end, UTC)") : null),
+        MoveAsync(id, ChangeStatuses.Submitted, "Submit", actor, expectedVersion,
+            async Task<GuardFailure?> (db, c) =>
+            {
+                if (string.IsNullOrWhiteSpace(c.RollbackNote)) return new GuardFailure(CabGuards.ChangeNeedsRollbackNote, "A change is submitted with a rollback note: how it is undone if it goes wrong");
+                if (c.ChangeType != ChangeTypes.Emergency && c.PlannedStartAt is null) return new GuardFailure(CabGuards.ChangeNeedsWindow, "A Standard or Normal change is submitted with a planned window (start and end, UTC)");
+                await ApplyRiskAsync(db, c, ct);   // the rules are run again as it goes to the CAB: a freeze window or a failed release may have appeared since it was drafted
+                return null;
+            },
             c => c.SubmittedAt = Now, ct);
 
     public Task<ServiceResult<ChangeView>> CancelAsync(string id, Actor actor, int? expectedVersion, CancellationToken ct = default) =>
@@ -232,12 +303,12 @@ public sealed class ChangeRequestService(IDbContextFactory<ReleaseDbContext> dbf
                 return ServiceResult<ChangeView>.Fail(new GuardFailure(CabGuards.IllegalChangeTransition, $"A change request cannot move from {c.Status} to {to}"));
             if (c.Status == ChangeStatuses.Submitted && to == ChangeStatuses.Implemented && c.ChangeType != ChangeTypes.Emergency)
                 return ServiceResult<ChangeView>.Fail(new GuardFailure(CabGuards.OnlyEmergencyBeforeApproval, "Only an Emergency change can be implemented before it is approved"));
+            var before = Snapshot(c);
             if (extra is not null && await extra(db, c) is { } f)
             {
                 if (SeparationGuards.Contains(f.Guard)) refused = (c.ReleaseTrainId, f);
                 return ServiceResult<ChangeView>.Fail(f);
             }
-            var before = Snapshot(c);
             c.Status = to; stamp?.Invoke(c);
             c.Version++; c.LastChangedByUserId = actor.UserId; c.LastChangedAt = Now;
             Audit(db, actor, c.ReleaseTrainId, Entity, c.Id, action, before, Snapshot(c));

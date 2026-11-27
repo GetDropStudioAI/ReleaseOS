@@ -32,7 +32,7 @@ export const NAV: NavGroup[] = [
       { view: 'templates', label: 'Templates' },
       { view: 'library', label: 'Comm library' },
       { view: 'connectors', label: 'Connectors', need: 'admin' },
-      { view: 'cab', label: 'Change advisory board', placeholder: 'cab', module: 'cab' },   // REOS-174: no feature behind it yet (REOS-158); the entry shows the gating works
+      { view: 'cab', label: 'Change advisory board', module: 'cab' },   // REOS-174 gates it, REOS-176 builds the change request screens (src/cab)
       { view: 'ai', label: 'AI assistant', placeholder: 'ai', module: 'ai' },
       { view: 'integrations', label: 'Integrations', need: 'admin' },   // REOS-165: API tokens (REOS-162) and webhooks (REOS-164) in one page; /api-tokens and /webhooks still open on their own
     ],

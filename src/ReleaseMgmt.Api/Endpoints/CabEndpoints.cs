@@ -26,6 +26,9 @@ public static class CabEndpoints
     {
         var cab = api.MapGroup("/cab").RequireModule(ModuleKeys.Cab);
 
+        // GET /cab/risk-rules -> { rules: [{ rule, label, points, description }], levelRule, thresholds: { nearFreezeHours, largeScopeProducts, priorFailureLookbackDays } } (REOS-176: the visible rule set)
+        cab.MapGet("/risk-rules", (ChangeRiskOptions o) => Results.Ok(ChangeRiskRules.Catalogue(o))).RequireAuthorization(Policies.Read);
+
         // ---- change requests ----
         // GET /cab/changes?status=&type=&releaseId= -> [ChangeView]
         cab.MapGet("/changes", async (string? status, string? type, string? releaseId, ChangeRequestService s, CancellationToken ct) => Results.Ok(await s.ListAsync(status, type, releaseId, ct))).RequireAuthorization(Policies.Read);
